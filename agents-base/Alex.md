@@ -13,6 +13,10 @@ permission:
     "git log*": allow
     "ls *": allow
     "cat *": allow
+    "bash *doctor*": ask
+    "bash *update*": ask
+    "bash *install*": ask
+    "bash *setup*": ask
     "*": deny
   task:
     "*": allow
