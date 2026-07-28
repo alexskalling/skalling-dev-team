@@ -462,7 +462,7 @@ Los comandos se adaptan al stack detectado en `project.yaml`.
 - Bundle de memoria del proyecto: `.opencode/context/`.
 - Cambios SDD: `.opencode/changes/`.
 - Skills disponibles: `~/.config/opencode/skills/`.
-- Comandos: `/skalling-init`, `/skalling-status`, `/skalling-refresh`, `/skalling-doctor`, `/skalling-forget`.
+- Comandos: `/skalling-init`, `/skalling-status`, `/skalling-refresh`, `/skalling-doctor`, `/skalling-forget`, `/skalling-update`.
 - R16: commits requieren permiso del usuario y mensajes descriptivos en español.
 
 ---

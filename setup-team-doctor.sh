@@ -200,6 +200,13 @@ check_global_install() {
     else
         warn "Falta skalling-data/ (se crea en Fase 11)"
     fi
+
+    # Script update.sh
+    if [[ -x "$OPENCODE_DIR/../skalling-dev-team/scripts/update.sh" ]]; then
+        ok "update.sh disponible"
+    else
+        warn "update.sh no encontrado o no ejecutable"
+    fi
 }
 
 check_project_install() {

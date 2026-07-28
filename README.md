@@ -109,6 +109,7 @@ Todos disponibles en cualquier proyecto después de instalar:
 | `/skalling-doctor` | Health check de la instalación |
 | `/skalling-forget` | Purgar concept docs obsoletos |
 | `/skalling-merge` | Asistir en resolución de conflictos en `.opencode/` |
+| `/skalling-update` | Buscar actualizaciones de Skalling, mostrar changelog e instalar |
 
 ## Arquitectura
 
@@ -127,7 +128,7 @@ Todos disponibles en cualquier proyecto después de instalar:
 │   └── lib/lib-os.sh                        # Detección de OS + helpers portables
 ├── agents-base/                            # 8 agentes (Alex.md + 7 subagents)
 ├── constitution/constitucion.md            # 15 reglas universales (R1-R15)
-├── command/                                # 6 comandos /skalling-*
+├── command/                                # 7 comandos /skalling-*
 ├── skills-base/                            # 12 skills core + 4 skalling-*
 ├── templates/                              # SDD + OKF + project.yaml + gitattributes
 ├── data/                                   # stack-detectors + skills-by-stack
@@ -137,7 +138,7 @@ Todos disponibles en cualquier proyecto después de instalar:
 %USERPROFILE%\.config\opencode\             # Instalación global (Windows)
 ├── agents/                                 # 8 agentes
 ├── skills/                                 # 12 skills core
-├── command/                                # 6 comandos
+├── command/                                # 7 comandos
 ├── constitucion.md                         # Constitución universal
 ├── templates/                              # SDD + OKF
 └── skalling-data/                          # Stack detectors

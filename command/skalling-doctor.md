@@ -60,6 +60,7 @@ Errores comunes:
 - `Falta constitución` → sugiere correr `install-global.sh`.
 - `Frontmatter no abre/cierra con ---` → bug en algún agente.
 - `REGLA #13 violada` → falta `design-system.md` en bundle OKF de proyecto frontend.
+- `Script update.sh` → falta o no es ejecutable.
 - `Esperados 8 agentes, encontré N` → instalación parcial.
 
 ### 5. Sugerir acciones

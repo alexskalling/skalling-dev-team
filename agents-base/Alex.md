@@ -177,5 +177,6 @@ Todos los comandos `/skalling-*` están disponibles globalmente:
 - `/skalling-doctor` — health check.
 - `/skalling-forget` — purgar concept docs obsoletos.
 - `/skalling-merge` — asistir en resolución de conflictos en `.opencode/`.
+- `/skalling-update` — buscar actualizaciones de Skalling, mostrar changelog e instalar.
 
 Para más detalle sobre constitución, ciclo, resolución de conflictos, escalación y permisos por agente, ver `constitucion/constitucion.md`.
