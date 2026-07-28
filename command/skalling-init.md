@@ -157,14 +157,21 @@ okf:
 
 Si el stack detectado incluye UI (React, Vue, Svelte, Next.js, Astro, Flutter, React Native, SwiftUI, etc.):
 
-1. Preguntar: *"Detecté stack frontend. R13 exige `design-system.md` en el bundle OKF. ¿Querés que lo cree ahora con Impeccable, o preferís uno manual?"*
-   - A) Sí, corré `npx impeccable document` para auto-generar y convertirlo a design-system.md.
-   - B) Lo creo manual, después lo guardo en `.opencode/context/proyecto/design-system.md`.
-   - C) Ya tengo uno, lo voy a copiar después.
+1. Preguntar: *"Detecté stack frontend. R13 exige `design-system.md` en el bundle OKF. ¿Cómo lo creamos?"*
+   - A) Con Impeccable: instala el skill y usa `/impeccable init` + `/impeccable document` (requiere Node 22+)
+   - B) Template manual (siempre funciona)
+   - C) Ya tengo uno, lo copio después
 
-2. Si A → intentar correr `npx impeccable document`. Si falla (sin Node 22+, sin Impeccable), fallback a B. Si genera DESIGN.md, convertirlo a `.opencode/context/proyecto/design-system.md` (el DESIGN.md original es efímero).
+2. **Si A**: El flujo correcto de Impeccable es:
+   a. **`npx impeccable install`** — instala el skill de Impeccable en el AI harness
+   b. **`/impeccable init`** — escanea el proyecto, hace 2-3 preguntas y crea `PRODUCT.md` (estrategia: plataforma, usuarios, posicionamiento)
+      - Al final, Impeccable pregunto si querés correr `/impeccable document`
+   c. **Si acepta** → `/impeccable document` escanea colores, tipografía, componentes del proyecto y genera `DESIGN.md` (formato Google Stitch, 6 secciones fijas). Para proyectos sin código todavía, usar `/impeccable document --seed`
+   d. Copiar `DESIGN.md` a `.opencode/context/proyecto/design-system.md` (fuente de verdad del proyecto)
+   e. Opcional: copiar datos relevantes de `PRODUCT.md` a `.opencode/context/proyecto/que-es.md`
+   f. Si install o init fallan (no Node 22+, no hay red) → avisar y fallback a B
 
-3. Si B → crear `.opencode/context/proyecto/design-system.md` con estructura mínima según R13.
+3. **Si B** → crear `.opencode/context/proyecto/design-system.md` con estructura mínima según R13.
 
 ### 4.4 — Instalar skills stack-specific
 

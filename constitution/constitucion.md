@@ -107,7 +107,7 @@ Se activa cuando el proyecto tiene:
 - Cualquier interfaz de usuario visible.
 
 ### Enforcement
-- **Bootstrap** (`/skalling-init`): si detecta frontend y no existe `design-system.md`, lo crea (auto-generado con Impeccable `/impeccable document` o template manual).
+- **Bootstrap** (`/skalling-init`): si detecta frontend y no existe `design-system.md`, lo crea (con Impeccable: `npx impeccable install` → `/impeccable init` → `/impeccable document`, o con template manual).
 - **Luz** (quality gate): rechaza cualquier feature visual si el código no es coherente con el `design-system.md`.
 - **Pau** (documentalista): mantiene `.opencode/context/proyecto/design-system.md` como fuente de verdad.
 

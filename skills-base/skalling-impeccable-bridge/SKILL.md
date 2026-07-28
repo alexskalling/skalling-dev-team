@@ -80,8 +80,8 @@ After Impeccable finishes:
 If the project has UI but no `.opencode/context/proyecto/design-system.md`:
 
 1. Tell the user: *"Detecté stack frontend pero no hay design-system.md en el bundle OKF. La constitución R13 lo exige."*
-2. Suggest: *"¿Lo creo con Impeccable (`/impeccable document`) o desde el template manual?"*
-3. If user agrees, run the creation and apply Impeccable afterwards.
+2. Suggest: *"¿Lo creo con Impeccable? Primero corro `/impeccable init` para crear el contexto, después `/impeccable document` para el sistema visual. O preferís template manual."*
+3. If user agrees, run `npx impeccable install` (si no está instalado), luego `/impeccable init` (crea PRODUCT.md + ofrece correr document), luego `/impeccable document` (genera DESIGN.md), y copiar DESIGN.md a `.opencode/context/proyecto/design-system.md`.
 
 ## When NOT to Activate
 
