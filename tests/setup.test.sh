@@ -146,7 +146,7 @@ test_constitution() {
     echo ""
     echo "── Test 4: Constitución completa ──"
 
-    local rules=(R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14)
+    local rules=(R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 R16)
     for r in "${rules[@]}"; do
         # Match "### R<n>" or "## R<n>" or "## [emoji] R<n>" formats
         if grep -qE "^(##|###) .*${r} " "$REPO_ROOT/constitution/constitucion.md"; then
@@ -156,9 +156,9 @@ test_constitution() {
         fi
     done
 
-    # REGLA #13 (DESIGN.md) específica
+    # REGLA #13 (design-system.md) específica
     assert_file_contains "$REPO_ROOT/constitution/constitucion.md" "REGLA #13" "REGLA #13 mencionada"
-    assert_file_contains "$REPO_ROOT/constitution/constitucion.md" "DESIGN.md" "DESIGN.md mencionada"
+    assert_file_contains "$REPO_ROOT/constitution/constitucion.md" "design-system.md" "design-system.md mencionada en R13"
 
     # REGLA #14 (Ponytail) específica
     assert_file_contains "$REPO_ROOT/constitution/constitucion.md" "Ponytail" "R14 Ponytail mencionada"

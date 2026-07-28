@@ -97,7 +97,7 @@ Cada proyecto tiene su propio bundle OKF en `.opencode/context/`. **Nunca** se c
 
 ## 🎨 R13 — DESIGN.md Obligatorio para Interfaz Gráfica
 
-> **Todo proyecto con interfaz gráfica debe tener un `DESIGN.md` versionado.**
+> **Todo proyecto con interfaz gráfica debe tener un `design-system.md` en el bundle OKF.**
 
 ### Aplicación
 Se activa cuando el proyecto tiene:
@@ -107,14 +107,13 @@ Se activa cuando el proyecto tiene:
 - Cualquier interfaz de usuario visible.
 
 ### Enforcement
-- **Bootstrap** (`/skalling-init`): si detecta frontend y no existe `DESIGN.md`, lo crea (auto-generado con Impeccable `/impeccable document` o template manual).
-- **Luz** (quality gate): rechaza cualquier feature visual si el código no es coherente con el `DESIGN.md`.
-- **Pau** (documentalista): sincroniza `DESIGN.md` ↔ `docs/design/DESIGN.md` ↔ `.opencode/context/proyecto/design-system.md`.
+- **Bootstrap** (`/skalling-init`): si detecta frontend y no existe `design-system.md`, lo crea (auto-generado con Impeccable `/impeccable document` o template manual).
+- **Luz** (quality gate): rechaza cualquier feature visual si el código no es coherente con el `design-system.md`.
+- **Pau** (documentalista): mantiene `.opencode/context/proyecto/design-system.md` como fuente de verdad.
 
 ### Ubicación
-- **Fuente de verdad**: `docs/design/DESIGN.md` (commiteado al repo).
-- **Mirror bundle OKF**: `.opencode/context/proyecto/design-system.md` (link + resumen).
-- **Output Impeccable**: `DESIGN.md` en formato Google Stitch (portable).
+- **Fuente de verdad**: `.opencode/context/proyecto/design-system.md` (NO commiteado al repo, solo en bundle OKF).
+- **Output Impeccable**: `DESIGN.md` en formato Google Stitch (portable, se convierte a `design-system.md`).
 
 ### Estructura mínima
 ```yaml
@@ -122,7 +121,7 @@ Se activa cuando el proyecto tiene:
 type: Concept
 title: Design System del proyecto
 description: Sistema visual y reglas de diseño UI
-resource: docs/design/DESIGN.md
+resource: .opencode/context/proyecto/design-system.md
 tags: [design, ui, design-system]
 timestamp: YYYY-MM-DDTHH:MM:SSZ
 agent: pau
@@ -131,22 +130,7 @@ confidence: 1.0
 
 # Design System
 
-[Link a docs/design/DESIGN.md]
-
-## Modos de uso (Impeccable)
-- Persuade (landing): captar atención
-- Operate (dashboard):完成任务
-- Read (docs): construir comprensión
-- Experience (portfolio): dejar que el trabajo guíe
-
-## Tokens
-- Colores: [referencia]
-- Tipografía: [referencia]
-- Espaciado: [referencia]
-- Componentes: [referencia]
-
-## Anti-references
-[Qué NO hacer: AI beige, italic serif en h1, side-tabs, status-chip soup, etc.]
+[Tokens, colores, tipografía, componentes, anti-references]
 ```
 
 ---
@@ -234,7 +218,7 @@ supersedes: [path a versión anterior]   # opcional, OKF v0.2
 - Vite.
 
 ### Si el stack tiene UI (cualquier framework frontend)
-- **REGLA #13 activa**: `DESIGN.md` obligatorio.
+- **REGLA #13 activa**: `design-system.md` obligatorio en bundle OKF.
 - Impeccable se recomienda (Fase 12).
 - `npx impeccable detect <src>` corre como quality gate.
 
@@ -422,6 +406,42 @@ D) Lo explico yo con mis palabras
 
 ---
 
+## 🛡️ R16 — Consentimiento del Usuario y Commits Claros
+
+> **Ningún cambio se commitea al repositorio sin aprobación explícita del usuario.**
+> Los mensajes de commit deben ser claros, descriptivos y en español.
+
+### Reglas de Commit
+
+1. **Permiso obligatorio**: antes de hacer `git add`, `git commit`, `git push` o cualquier operación que modifique el repo, el agente debe pedir confirmación al usuario. No se asume consentimiento tácito.
+
+2. **Mensajes descriptivos**: el mensaje de commit debe explicar QUÉ se hizo y POR QUÉ, en español. Prohibido:
+   - Mensajes genéricos como "fix", "update", "wip", "changes", "actualización"
+   - Mensajes vacíos o auto-generados sin revisión
+   - Spanglish o mezcla de idiomas
+
+3. **Formato recomendado**:
+   ```
+   <tipo>: <qué se hizo>
+
+   <por qué o contexto adicional si aplica>
+   ```
+
+   Tipos válidos: `feat`, `fix`, `refactor`, `docs`, `style`, `chore`, `perf`, `test`
+
+4. **Scope antes del commit**: el agente debe mostrar al usuario un resumen de los archivos que van a commiteares y esperar confirmación:
+   ```
+   Archivos a commite:
+   - src/componentes/boton.tsx (modificado)
+   - tests/boton.test.ts (nuevo)
+
+   ¿Procedo con el commit? Mensaje propuesto: "feat: agrega botón con variante outline"
+   ```
+
+5. **Incumplimiento**: si un agente commitea sin permiso o con mensaje pobre, se considera violación de la constitución y debe revertirse.
+
+---
+
 ## 🛠️ Comandos del Proyecto (referencia)
 
 Los comandos se adaptan al stack detectado en `project.yaml`.
@@ -443,8 +463,9 @@ Los comandos se adaptan al stack detectado en `project.yaml`.
 - Cambios SDD: `.opencode/changes/`.
 - Skills disponibles: `~/.config/opencode/skills/`.
 - Comandos: `/skalling-init`, `/skalling-status`, `/skalling-refresh`, `/skalling-doctor`, `/skalling-forget`.
+- R16: commits requieren permiso del usuario y mensajes descriptivos en español.
 
 ---
 
 *Última actualización: 2026-07-28*
-*Versión: skalling-constitution-v1*
+*Versión: skalling-constitution-v2*

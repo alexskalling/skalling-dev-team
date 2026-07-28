@@ -59,7 +59,7 @@ Errores comunes:
 - `bash >= 4 requerido` → sugiere upgrade o usar bash explícito.
 - `Falta constitución` → sugiere correr `install-global.sh`.
 - `Frontmatter no abre/cierra con ---` → bug en algún agente.
-- `REGLA #13 violada` → falta `docs/design/DESIGN.md` en proyecto frontend.
+- `REGLA #13 violada` → falta `design-system.md` en bundle OKF de proyecto frontend.
 - `Esperados 8 agentes, encontré N` → instalación parcial.
 
 ### 5. Sugerir acciones
@@ -72,8 +72,8 @@ Errores detectados:
 ✗ Frontmatter no abre con --- en alexa.md
   → Solución: ese archivo es de una instalación previa. Borrar o renombrar.
 
-✗ Frontend detectado pero falta docs/design/DESIGN.md (REGLA #13)
-  → Solución: correr /impeccable document o crear manualmente desde template.
+✗ Frontend detectado pero falta design-system.md en bundle OKF (REGLA #13)
+  → Solución: correr /impeccable document o crear manualmente en .opencode/context/proyecto/design-system.md.
 
 ⚠ Bash 3.2 detectado (recomendado >= 4)
   → Solución: bash 3.2 funciona pero algunas features avanzadas no.
@@ -92,7 +92,7 @@ Resumí los findings en una tabla simple:
 | Skills | ... |
 | Constitución | ... |
 | Templates | ... |
-| REGLA #13 (frontend) | ... |
+| REGLA #13 (design-system.md) | ... |
 
 ## Exit codes
 

@@ -131,7 +131,7 @@ check_global_install() {
             err "Falta sección Reglas Base en constitución"
         fi
         if grep -q "R13" "$OPENCODE_DIR/constitucion.md"; then
-            ok "REGLA #13 (DESIGN.md) presente"
+            ok "REGLA #13 (design-system.md) presente"
         else
             warn "REGLA #13 no encontrada en constitución"
         fi
@@ -253,15 +253,15 @@ check_project_install() {
         info "Sin project.yaml (se crea en /skalling-init)"
     fi
 
-    # REGLA #13: DESIGN.md si frontend
+    # REGLA #13: design-system.md si frontend
     if [[ -f "$PROJECT_DIR/.opencode/project.yaml" ]] && grep -q "language:" "$PROJECT_DIR/.opencode/project.yaml" 2>/dev/null; then
         local is_frontend
         is_frontend="$(grep -E "(react|vue|svelte|nextjs|astro|nuxt|flutter|react-native|swift)" "$PROJECT_DIR/.opencode/project.yaml" 2>/dev/null || true)"
         if [[ -n "$is_frontend" ]]; then
-            if [[ -f "$PROJECT_DIR/docs/design/DESIGN.md" ]]; then
-                ok "DESIGN.md presente (REGLA #13 OK)"
+            if [[ -f "$PROJECT_DIR/.opencode/context/proyecto/design-system.md" ]]; then
+                ok "design-system.md presente (REGLA #13 OK)"
             else
-                err "Frontend detectado pero falta docs/design/DESIGN.md (REGLA #13)"
+                err "Frontend detectado pero falta design-system.md en bundle OKF (REGLA #13)"
             fi
         fi
     fi

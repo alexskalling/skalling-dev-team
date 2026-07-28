@@ -263,9 +263,9 @@ Verificado por Jhon después de cada tarea. Iron Law: código sin test = borrar.
 - **Clean Architecture**: dependencias hacia el centro, dominio sin imports externos
 - **Ponytail Ladder (R14)**: 7 peldaños desde YAGNI hasta "el mínimo que funcione"
 
-### Frontend: DESIGN.md obligatorio (REGLA #13)
+### Frontend: design-system.md obligatorio (REGLA #13)
 
-Si el stack tiene UI (React, Vue, Flutter, etc.), `docs/design/DESIGN.md` es obligatorio. Lo crea Impeccable (via bridge) o template manual. Luz corre `npx impeccable detect src/` como quality gate.
+Si el stack tiene UI (React, Vue, Flutter, etc.), debe existir `.opencode/context/proyecto/design-system.md` en el bundle OKF. Lo crea Impeccable (via bridge) o template manual. NO se commitea al repo. Luz corre `npx impeccable detect src/` como quality gate.
 
 ### Agnóstico de stack
 

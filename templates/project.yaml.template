@@ -56,7 +56,7 @@ frontend:
   has_ui: false
   ui_framework: ""
   design_system_required: false
-  design_md_path: "docs/design/DESIGN.md"
+  design_md_path: ".opencode/context/proyecto/design-system.md"
 
 # ────────────────────────────────────────────────────────────────────────────
 # MEMORIA OKF

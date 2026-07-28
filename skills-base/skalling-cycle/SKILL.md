@@ -58,7 +58,7 @@ Usuario → Alex → Pol → Sol → Teo ↔ Jhon (per task)
 ### Phase 6 — Pau (documentalist)
 - ONE TIME per plan, after Luz passes.
 - Updates `docs/` (public) and `.opencode/context/` (OKF bundle).
-- Syncs DESIGN.md if frontend.
+- Actualiza design-system.md en OKF bundle si frontend.
 
 ## Fast-Track (when to skip)
 
