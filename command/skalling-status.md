@@ -51,10 +51,10 @@ tail -30 .opencode/context/log.md
 
 ```bash
 if grep -q "has_ui: true" .opencode/project.yaml 2>/dev/null; then
-    if [ -f docs/design/DESIGN.md ]; then
-        echo "  ✓ DESIGN.md presente"
+    if [ -f .opencode/context/proyecto/design-system.md ]; then
+        echo "  ✓ design-system.md presente"
     else
-        echo "  ⚠ REGLA #13 violada: DESIGN.md falta"
+        echo "  ⚠ REGLA #13 violada: falta design-system.md en bundle OKF"
     fi
 fi
 ```
@@ -96,7 +96,7 @@ Presentá los resultados en este formato, una sección a la vez:
    Test runner: [T]
 
 🎨 Frontend (REGLA #13)
-   [✓ DESIGN.md presente | ⚠ falta]
+   [✓ design-system.md presente | ⚠ falta]
 
 📋 Últimas 5 entradas del log
    [fecha] — [acción]
@@ -111,4 +111,4 @@ Presentá los resultados en este formato, una sección a la vez:
 Si detectás errores o warnings:
 1. Sugerí correr `/skalling-doctor` para detalle completo.
 2. Si el bundle OKF está vacío, sugerí `/skalling-init` o `/skalling-refresh`.
-3. Si DESIGN.md falta en frontend, sugerí crearlo con `/impeccable document`.
+3. Si design-system.md falta en frontend, sugerí crearlo con `/impeccable document`

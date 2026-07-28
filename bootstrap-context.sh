@@ -52,7 +52,7 @@ done
 
 OPENCODE_DIR="$PROJECT_DIR/.opencode"
 CONTEXT_DIR="$OPENCODE_DIR/context"
-DOCS_DESIGN_DIR="$PROJECT_DIR/docs/design"
+DOCS_DESIGN_DIR="$CONTEXT_DIR/proyecto"
 
 c_green='\033[32m'
 c_yellow='\033[33m'
@@ -126,7 +126,7 @@ generate_bundle() {
     for dir in stack proyecto decisiones trabajo-en-curso preferencias problemas-conocidos; do
         run mkdir -p "$CONTEXT_DIR/$dir"
     done
-    run mkdir -p "$DOCS_DESIGN_DIR"
+    # design-system.md se crea en CONTEXT_DIR/proyecto/ (R13, solo OKF bundle)
 
     local project_name="${PROJECT_DIR##*/}"
 
@@ -251,7 +251,7 @@ generate_project_yaml() {
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
-# REGLA #13 — DESIGN.md
+# REGLA #13 — design-system.md
 # ──────────────────────────────────────────────────────────────────────────────
 
 check_design_md() {
@@ -260,12 +260,12 @@ check_design_md() {
         return 0
     fi
 
-    if [[ -f "$DOCS_DESIGN_DIR/DESIGN.md" ]]; then
-        ok "DESIGN.md presente (REGLA #13 OK)"
+    if [[ -f "$CONTEXT_DIR/proyecto/design-system.md" ]]; then
+        ok "design-system.md presente (REGLA #13 OK)"
         return 0
     fi
 
-    warn "REGLA #13: Frontend detectado pero falta docs/design/DESIGN.md"
+    warn "REGLA #13: Frontend detectado pero falta design-system.md en bundle OKF"
     log "  Sugerencia: correr /impeccable document o crear manualmente."
 }
 
@@ -298,7 +298,7 @@ main() {
     cat <<EOF
   Bundle OKF: $CONTEXT_DIR
   Project YAML: $OPENCODE_DIR/project.yaml
-  DESIGN.md:   $([[ -f "$DOCS_DESIGN_DIR/DESIGN.md" ]] && echo "✓ presente" || echo "⚠ frontend requiere uno")
+  design-system.md: $([[ -f "$CONTEXT_DIR/proyecto/design-system.md" ]] && echo "✓ presente" || echo "⚠ frontend requiere uno")
 
   Próximo paso: abrí opencode y empezá a trabajar.
 EOF

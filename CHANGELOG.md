@@ -5,6 +5,11 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 ## [Unreleased]
 
 ### Added
+- **Comando `/skalling-update`**: busca cambios en el repo remoto, muestra changelog, pide permiso y actualiza la instalación.
+- **`scripts/update.sh`**: script bash para el update automático con confirmación del usuario.
+- **R16**: commits requieren permiso explícito del usuario y mensajes descriptivos en español.
+- **R13**: DESIGN.md reubicado de `docs/design/` a `.opencode/context/proyecto/design-system.md` (no se commitea).
+- **Detección de intención de Alex**: tabla expandida con consulta directa, auditoría a Luz, operaciones git y catch-all con opciones.
 - **Fase 13**: Regla R14 — Escalera de Ponytail (integrada de [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail))
 - **Fase 12**: Bridge skill `skalling-impeccable-bridge` para integrar con [Impeccable](https://impeccable.style/)
 - **Fase 11**: Comandos `/skalling-status`, `/skalling-refresh`, `/skalling-doctor`, `/skalling-forget`, `/skalling-merge`

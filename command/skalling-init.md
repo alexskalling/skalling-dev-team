@@ -59,7 +59,7 @@ Una sola pregunta a la vez:
 - .opencode/project.yaml (config detectada)
 - .opencode/skills/ (skills específicas del stack)
 - .opencode/changes/ (vacío, listo para SDD)
-- [Si frontend] docs/design/DESIGN.md (cumple REGLA #13)
+- [Si frontend] design-system.md en bundle OKF (cumple REGLA #13)
 
 A) Sí, dale
 B) Esperá, primero leeme el README y decime qué entendiste
@@ -153,20 +153,18 @@ okf:
   schema: okf-v0.1+skalling-extensions
 ```
 
-### 4.3 — REGLA #13: DESIGN.md obligatorio si hay UI
+### 4.3 — REGLA #13: design-system.md obligatorio si hay UI
 
 Si el stack detectado incluye UI (React, Vue, Svelte, Next.js, Astro, Flutter, React Native, SwiftUI, etc.):
 
-1. Preguntar: *"Detecté stack frontend. La constitución (R13) exige `DESIGN.md`. ¿Querés que lo cree ahora con Impeccable, o tenés uno manual?"*
-   - A) Sí, corré `npx impeccable document` para auto-generar.
-   - B) Lo creo desde el template manual de Skalling.
-   - C) Ya tengo uno en otro lado, lo voy a copiar después.
+1. Preguntar: *"Detecté stack frontend. R13 exige `design-system.md` en el bundle OKF. ¿Querés que lo cree ahora con Impeccable, o preferís uno manual?"*
+   - A) Sí, corré `npx impeccable document` para auto-generar y convertirlo a design-system.md.
+   - B) Lo creo manual, después lo guardo en `.opencode/context/proyecto/design-system.md`.
+   - C) Ya tengo uno, lo voy a copiar después.
 
-2. Si A → intentar correr `npx impeccable document`. Si falla (sin Node 22+, sin Impeccable), fallback a B.
+2. Si A → intentar correr `npx impeccable document`. Si falla (sin Node 22+, sin Impeccable), fallback a B. Si genera DESIGN.md, convertirlo a `.opencode/context/proyecto/design-system.md` (el DESIGN.md original es efímero).
 
-3. Si B → copiar template de `~/.config/opencode/templates/design/DESIGN.template.md` a `docs/design/DESIGN.md`.
-
-4. Pau crea `design-system.md` en `.opencode/context/proyecto/` linkeando al archivo.
+3. Si B → crear `.opencode/context/proyecto/design-system.md` con estructura mínima según R13.
 
 ### 4.4 — Instalar skills stack-specific
 
@@ -184,7 +182,7 @@ Correr mentalmente las validaciones:
 - project.yaml válido
 - Skills referenciadas existen
 - Constitución accesible
-- Si frontend: DESIGN.md existe
+- Si frontend: design-system.md en bundle OKF
 
 ## Paso 5 — Resumen final
 
@@ -193,7 +191,7 @@ Bootstrap completo:
 ✓ Bundle OKF creado con [N] concept docs
 ✓ project.yaml con stack [X]
 ✓ Skills instaladas: [lista]
-✓ [Si frontend] DESIGN.md: [creado | pendiente manual]
+✓ [Si frontend] design-system.md: [creado | pendiente manual]
 ✓ Doctor: [OK | warnings: ...]
 
 Skalling está listo. ¿Qué necesitás?

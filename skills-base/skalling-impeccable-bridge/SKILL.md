@@ -1,6 +1,6 @@
 ---
 name: skalling-impeccable-bridge
-description: Bridge between Skalling and the Impeccable frontend design skill. Trigger: Teo working on UI components, Luz auditing visual changes, user asks for /polish /impeccable /audit /typeset /distill, project has a DESIGN.md and UI is being touched.
+description: Bridge between Skalling and the Impeccable frontend design skill. Trigger: Teo working on UI components, Luz auditing visual changes, user asks for /polish /impeccable /audit /typeset /distill, project has a design-system.md in OKF bundle and UI is being touched.
 ---
 
 # Skalling Impeccable Bridge
@@ -12,7 +12,7 @@ This skill is the Skalling wrapper for [Impeccable](https://impeccable.style/), 
 - **Teo is creating/modifying UI components** → load this before touching code.
 - **Luz is auditing changes with visual impact** → load this for the audit.
 - **User says**: `/polish`, `/impeccable`, `/audit`, `/typeset`, `/distill`, `/colorize`, "improve the design", "remove AI tells", "this looks generic".
-- **Project has a `docs/design/DESIGN.md`** and UI files are being touched.
+- **Project has a `design-system.md` en el bundle OKF** and UI files are being touched.
 
 ## What to Do
 
@@ -42,7 +42,7 @@ Before activating any Impeccable command, read:
 # From .opencode/context/proyecto/publico-objetivo.md (if exists)
 - Who uses this UI?
 
-# From docs/design/DESIGN.md (if exists)
+# From .opencode/context/proyecto/design-system.md (if exists)
 - Existing design tokens, components, conventions.
 
 # From .opencode/context/preferencias/*.md
@@ -64,22 +64,22 @@ Before activating any Impeccable command, read:
 
 When invoking Impeccable, inject:
 - The PRODUCT.md brief (or extract from `.opencode/context/proyecto/que-es.md`).
-- The DESIGN.md rules (or note "no DESIGN.md exists — create one").
+- The design-system.md rules (or note "no design-system.md exists — create one").
 - The team's preferences from `.opencode/context/preferencias/`.
 
-### Step 5 — Log + sync DESIGN.md
+### Step 5 — Log + sync design-system.md
 
 After Impeccable finishes:
 1. Append to `.opencode/context/log.md` what was changed.
-2. If `DESIGN.md` was created or modified by Impeccable:
-   - Copy to `docs/design/DESIGN.md` (committed, source of truth).
-   - Update `.opencode/context/proyecto/design-system.md` with summary + link.
+2. If Impeccable generated a `DESIGN.md`:
+   - Convert it to `.opencode/context/proyecto/design-system.md` (source of truth, NOT committed).
+   - The `DESIGN.md` output is ephemeral — only `design-system.md` persists.
 
-## REGLA #13 — DESIGN.md enforcement
+## REGLA #13 — design-system.md enforcement
 
-If the project has UI but no `docs/design/DESIGN.md`:
+If the project has UI but no `.opencode/context/proyecto/design-system.md`:
 
-1. Tell the user: *"Detecté stack frontend pero no hay DESIGN.md. La constitución R13 lo exige."*
+1. Tell the user: *"Detecté stack frontend pero no hay design-system.md en el bundle OKF. La constitución R13 lo exige."*
 2. Suggest: *"¿Lo creo con Impeccable (`/impeccable document`) o desde el template manual?"*
 3. If user agrees, run the creation and apply Impeccable afterwards.
 
@@ -94,7 +94,7 @@ If the project has UI but no `docs/design/DESIGN.md`:
 
 - ❌ Don't use Impeccable commands blindly — match them to actual intent.
 - ❌ Don't skip reading OKF context — Impeccable works better with product brief.
-- ❌ Don't modify DESIGN.md without informing the user (it's the source of truth).
+- ❌ Don't modify design-system.md without informing the user (it's the source of truth).
 - ❌ Don't run Impeccable on non-UI code — it's wasted tokens.
 
 ## Degraded Mode (no Impeccable available)
@@ -103,7 +103,7 @@ If Impeccable can't be installed:
 
 1. Notify user clearly: "Impeccable no disponible. Continúo sin detector automático de AI slop."
 2. Apply Skalling's manual design checks:
-   - Code is consistent with DESIGN.md (if exists).
+   - Code is consistent with design-system.md (if exists).
    - No generic UI patterns (status-chip soup, italic serif h1, etc.).
    - Visual hierarchy clear.
 3. Recommend user install Impeccable later for better coverage.
