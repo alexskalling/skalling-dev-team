@@ -151,6 +151,33 @@ Todos disponibles en cualquier proyecto después de instalar:
 └── project.yaml                            # Stack detectado
 ```
 
+## CI/CD
+
+El repo incluye `.github/workflows/tests.yml` con 4 jobs:
+- **test**: corre los 153 tests en Linux/macOS/Windows × bash 3/4/5
+- **lint**: shellcheck sobre todos los scripts bash
+- **validate-yaml**: valida `data/*.yaml` y JSON schemas
+- **test-cross-platform**: smoke test en ubuntu/macos/windows
+
+**Estado**: el archivo está en el filesystem local pero NO en el commit inicial (`e895453`) porque el PAT por defecto no tiene scope `workflow` para pushearlo.
+
+**Cómo activarlo** (elegí una):
+
+```bash
+# Opción 1: Regenerar el PAT con scope "workflow" en
+# https://github.com/settings/tokens → Regenerate token
+# Después:
+git add .github/workflows/tests.yml
+git commit -m "ci: add GitHub Actions workflow"
+git push origin main
+
+# Opción 2: Subir vía web UI
+# https://github.com/alexskalling/skalling-dev-team/new/main/.github/workflows/tests.yml
+# Pegar el contenido de .github/workflows/tests.yml local
+```
+
+Sin el workflow, los tests corren local con `bash tests/setup.test.sh`.
+
 ## Compatibilidad
 
 | OS | Soporte | Notas |
