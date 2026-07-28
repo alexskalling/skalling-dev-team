@@ -1,0 +1,322 @@
+# Stack Detectors — Skalling
+#
+# Data file (no código). Define cómo detectar el stack de un proyecto
+# leyendo archivos de manifiesto. Cada detector es agnóstico del lenguaje.
+#
+# Formato:
+#   - files: lista de archivos que disparan este detector (alguno presente)
+#   - language: lenguaje principal detectado
+#   - runtime: versión o runtime usado
+#   - framework: lista de frameworks que busca en dependencias
+#   - test_runner: lista de test runners que busca
+#   - package_manager: heurística basada en lockfiles
+#   - linter: lista de linters
+#   - formatter: lista de formatters
+#
+# El agente de bootstrap (Alex en /skalling-init) lee este archivo
+# y aplica los detectores. El usuario puede agregar custom detectors
+# abajo de `custom:` sin tocar código.
+
+detectors:
+  # ──────────────────────────────────────────────────────────────────────────
+  # JavaScript / TypeScript
+  # ──────────────────────────────────────────────────────────────────────────
+  - id: typescript
+    files:
+      - package.json
+    language: typescript
+    runtime: node
+    requires_tsconfig: true
+    framework:
+      - pattern: '"next"\s*:'
+        value: nextjs
+      - pattern: '"react"\s*:'
+        value: react
+      - pattern: '"vue"\s*:'
+        value: vue
+      - pattern: '"svelte"\s*:'
+        value: svelte
+      - pattern: '"astro"\s*:'
+        value: astro
+      - pattern: '"nuxt"\s*:'
+        value: nuxt
+      - pattern: '"express"\s*:'
+        value: express
+      - pattern: '"fastify"\s*:'
+        value: fastify
+    test_runner:
+      - pattern: '"vitest"\s*:'
+        value: vitest
+      - pattern: '"jest"\s*:'
+        value: jest
+      - pattern: '"mocha"\s*:'
+        value: mocha
+      - pattern: '"playwright"\s*:'
+        value: playwright
+      - pattern: '"cypress"\s*:'
+        value: cypress
+    package_manager:
+      - lockfile: pnpm-lock.yaml
+        value: pnpm
+      - lockfile: yarn.lock
+        value: yarn
+      - lockfile: bun.lockb
+        value: bun
+      - default: npm
+    linter:
+      - pattern: '"eslint"\s*:'
+        value: eslint
+      - pattern: '"biome"\s*:'
+        value: biome
+      - pattern: '"standard"\s*:'
+        value: standard
+    formatter:
+      - pattern: '"prettier"\s*:'
+        value: prettier
+      - pattern: '"biome"\s*:'
+        value: biome
+
+  - id: deno
+    files:
+      - deno.json
+      - deno.jsonc
+    language: typescript
+    runtime: deno
+    framework: []
+    test_runner:
+      - default: deno-test
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Python
+  # ──────────────────────────────────────────────────────────────────────────
+  - id: python-pyproject
+    files:
+      - pyproject.toml
+    language: python
+    runtime: python
+    framework:
+      - pattern: 'fastapi'
+        value: fastapi
+      - pattern: 'django'
+        value: django
+      - pattern: 'flask'
+        value: flask
+      - pattern: 'starlette'
+        value: starlette
+    test_runner:
+      - pattern: 'pytest'
+        value: pytest
+      - default: unittest
+    package_manager:
+      - pattern: '\[tool\.uv'
+        value: uv
+      - pattern: '\[tool\.poetry'
+        value: poetry
+      - default: pip
+    linter:
+      - pattern: 'ruff'
+        value: ruff
+      - pattern: 'flake8'
+        value: flake8
+      - pattern: 'pylint'
+        value: pylint
+    formatter:
+      - pattern: '\[tool\.black'
+        value: black
+      - pattern: 'ruff'
+        value: ruff-format
+
+  - id: python-requirements
+    files:
+      - requirements.txt
+    language: python
+    runtime: python
+    framework:
+      - pattern: 'fastapi'
+        value: fastapi
+      - pattern: 'django'
+        value: django
+      - pattern: 'flask'
+        value: flask
+    test_runner:
+      - pattern: 'pytest'
+        value: pytest
+    package_manager:
+      - default: pip
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Rust
+  # ──────────────────────────────────────────────────────────────────────────
+  - id: rust
+    files:
+      - Cargo.toml
+    language: rust
+    runtime: rust-stable
+    framework:
+      - pattern: 'actix-web'
+        value: actix-web
+      - pattern: 'axum'
+        value: axum
+      - pattern: 'rocket'
+        value: rocket
+    test_runner:
+      - default: cargo-test
+    package_manager:
+      - default: cargo
+    formatter:
+      - default: rustfmt
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Go
+  # ──────────────────────────────────────────────────────────────────────────
+  - id: go
+    files:
+      - go.mod
+    language: go
+    runtime: go-1.22
+    framework:
+      - pattern: 'gin-gonic/gin'
+        value: gin
+      - pattern: 'labstack/echo'
+        value: echo
+      - pattern: 'gofiber/fiber'
+        value: fiber
+      - pattern: 'go-chi/chi'
+        value: chi
+    test_runner:
+      - default: go-test
+    package_manager:
+      - default: go-modules
+    formatter:
+      - default: gofmt
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # JVM (Java / Kotlin)
+  # ──────────────────────────────────────────────────────────────────────────
+  - id: java-maven
+    files:
+      - pom.xml
+    language: java
+    runtime: jdk-21
+    framework:
+      - pattern: 'spring-boot'
+        value: spring-boot
+      - pattern: 'quarkus'
+        value: quarkus
+      - pattern: 'micronaut'
+        value: micronaut
+    test_runner:
+      - default: junit5
+
+  - id: kotlin-gradle
+    files:
+      - build.gradle
+      - build.gradle.kts
+    language: kotlin
+    framework:
+      - pattern: 'spring-boot'
+        value: spring-boot
+      - pattern: 'ktor'
+        value: ktor
+    test_runner:
+      - default: junit5
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # .NET (C#)
+  # ──────────────────────────────────────────────────────────────────────────
+  - id: dotnet
+    files_glob:
+      - "*.csproj"
+      - "*.sln"
+    language: csharp
+    runtime: dotnet-8
+    framework:
+      - pattern: 'Microsoft\.AspNetCore'
+        value: aspnetcore
+    test_runner:
+      - default: xunit
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Ruby
+  # ──────────────────────────────────────────────────────────────────────────
+  - id: ruby
+    files:
+      - Gemfile
+    language: ruby
+    runtime: ruby-3.3
+    framework:
+      - pattern: 'rails'
+        value: rails
+      - pattern: 'sinatra'
+        value: sinatra
+    test_runner:
+      - pattern: 'rspec'
+        value: rspec
+      - default: minitest
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # PHP
+  # ──────────────────────────────────────────────────────────────────────────
+  - id: php
+    files:
+      - composer.json
+    language: php
+    runtime: php-8.3
+    framework:
+      - pattern: 'laravel/framework'
+        value: laravel
+      - pattern: 'symfony/framework-bundle'
+        value: symfony
+    test_runner:
+      - default: phpunit
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Elixir
+  # ──────────────────────────────────────────────────────────────────────────
+  - id: elixir
+    files:
+      - mix.exs
+    language: elixir
+    runtime: elixir-1.17
+    framework:
+      - pattern: 'phoenix'
+        value: phoenix
+    test_runner:
+      - default: exunit
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Swift
+  # ──────────────────────────────────────────────────────────────────────────
+  - id: swift
+    files:
+      - Package.swift
+    language: swift
+    runtime: swift-5.10
+    framework:
+      - pattern: 'vapor'
+        value: vapor
+    test_runner:
+      - default: xctest
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Dart / Flutter
+  # ──────────────────────────────────────────────────────────────────────────
+  - id: flutter
+    files:
+      - pubspec.yaml
+    language: dart
+    runtime: dart-3.4
+    framework:
+      - pattern: 'flutter:'
+        value: flutter
+    test_runner:
+      - default: flutter-test
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Custom (el usuario puede agregar)
+  # ──────────────────────────────────────────────────────────────────────────
+custom: []
+  # - id: mi-stack-custom
+  #   files: [mi-manifesto.yml]
+  #   language: ruby
+  #   ...

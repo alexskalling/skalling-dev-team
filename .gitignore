@@ -1,0 +1,27 @@
+# Build artifacts
+node_modules/
+dist/
+build/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Backups (creados por install-global.sh)
+.skalling-backups/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Test artifacts
+coverage/
+.nyc_output/

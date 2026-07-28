@@ -1,0 +1,94 @@
+# Project Configuration — Auto-generado por Skalling
+
+# Este archivo es generado por `/skalling-init` y actualizado por `/skalling-refresh`.
+# NO editar manualmente — Skalling lo regenera cuando cambia el stack.
+
+schema: skalling-project-v1
+detected_at: YYYY-MM-DDTHH:MM:SSZ
+detected_by: alex-init
+
+# ────────────────────────────────────────────────────────────────────────────
+# STACK
+# ────────────────────────────────────────────────────────────────────────────
+stack:
+  language: [typescript | javascript | python | rust | go | java | kotlin | csharp | ruby | php | elixir | swift | dart]
+  runtime: [node-22 | python-3.12 | rust-stable | go-1.22 | jdk-21 | dotnet-8 | ruby-3.3 | php-8.3 | elixir-1.17 | swift-5.10 | dart-3.4]
+  framework: [nextjs | react | vue | svelte | astro | nuxt | express | fastify | fastapi | django | flask | actix-web | axum | gin | spring-boot | quarkus | aspnetcore | rails | sinatra | laravel | symfony | phoenix | vapor | flutter | ""]
+  package_manager: [npm | pnpm | yarn | bun | pip | uv | poetry | cargo | go-modules | maven | gradle | dotnet | bundler | composer | mix | swiftpm | pub]
+  test_runner: [vitest | jest | mocha | playwright | pytest | unittest | cargo-test | go-test | junit5 | rspec | phpunit | exunit | xctest | flutter-test]
+  linter: [eslint | biome | ruff | flake8 | clippy | golangci-lint | detekt | rubocop | phpstan | credo | swiftlint | dartanalyzer | ""]
+  formatter: [prettier | biome | black | ruff-format | rustfmt | gofmt | ktlint | rubocop | prettier-php | mix-format | swift-format | dart-format]
+
+# ────────────────────────────────────────────────────────────────────────────
+# MÓDULOS TOP-LEVEL
+# ────────────────────────────────────────────────────────────────────────────
+modules:
+  - src/
+  - tests/
+  - docs/
+
+# ────────────────────────────────────────────────────────────────────────────
+# TESTING
+# ────────────────────────────────────────────────────────────────────────────
+strict_tdd: true
+testing:
+  unit:
+    available: true
+    command: "npm test"
+    note: "Vitest configurado en package.json"
+  integration:
+    available: false
+    command: ""
+    note: ""
+  e2e:
+    available: false
+    command: ""
+    note: ""
+  coverage:
+    available: true
+    command: "npm test -- --coverage"
+    threshold: 80
+
+# ────────────────────────────────────────────────────────────────────────────
+# FRONTEND (solo si aplica — activa REGLA #13)
+# ────────────────────────────────────────────────────────────────────────────
+frontend:
+  has_ui: false
+  ui_framework: ""
+  design_system_required: false
+  design_md_path: "docs/design/DESIGN.md"
+
+# ────────────────────────────────────────────────────────────────────────────
+# MEMORIA OKF
+# ────────────────────────────────────────────────────────────────────────────
+okf:
+  bundle_path: .opencode/context
+  schema: okf-v0.1+skalling-extensions
+  types_in_use:
+    - Concept
+    - Decision
+    - Preference
+    - Workaround
+    - WorkInProgress
+    - Context
+
+# ────────────────────────────────────────────────────────────────────────────
+# SKILLS STACK-SPECIFIC INSTALADAS
+# ────────────────────────────────────────────────────────────────────────────
+skills_installed:
+  core:
+    - test-driven-development
+    - systematic-debugging
+    - verification-before-completion
+    - writing-plans
+    - code-review-excellence
+    - doc-coauthoring
+    - brainstorming
+    - find-skills
+  skalling_own:
+    - skalling-cycle
+    - skalling-handoff
+    - skalling-ponytail
+    - skalling-impeccable-bridge
+  stack_specific: []
+  external_premium: []

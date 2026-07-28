@@ -1,0 +1,173 @@
+# Skills by Stack — Skalling
+#
+# Data file (no código). Define qué skills recomendar según el stack detectado.
+# El bootstrap (Alex en /skalling-init) lee este archivo y sugiere skills.
+#
+# Categorías:
+#   - frontend: UI work (Impeccable, design skills)
+#   - backend: lógica de servidor
+#   - testing: herramientas de test
+#   - infrastructure: deploy, CI
+#   - any: aplica a todos los stacks
+#
+# Cada skill tiene:
+#   - name: nombre (sin path, solo nombre)
+#   - reason: por qué aplica a este stack
+#   - install: comando para instalar (si aplica)
+#   - optional: bool, si es opt-in o default
+
+# ──────────────────────────────────────────────────────────────────────────
+# SKILLS CORE (siempre instaladas por install-global.sh)
+# ──────────────────────────────────────────────────────────────────────────
+core:
+  - name: skalling-cycle
+    reason: Conoce el ciclo agentico de Skalling.
+    always: true
+  - name: skalling-handoff
+    reason: Schema y validación de handoffs entre agentes.
+    always: true
+  - name: skalling-ponytail
+    reason: Escalera de pereza para evitar over-engineering.
+    always: true
+  - name: skalling-impeccable-bridge
+    reason: Bridge hacia Impeccable (sólo activa en proyectos frontend).
+    always: true
+  - name: test-driven-development
+    reason: TDD con red-green-refactor (Anthropic skill).
+    always: true
+  - name: systematic-debugging
+    reason: Debugging sistemático sin parches aleatorios.
+    always: true
+  - name: verification-before-completion
+    reason: Evidencia antes de declarar completo.
+    always: true
+  - name: writing-plans
+    reason: Estructura para escribir planes de implementación.
+    always: true
+  - name: code-review-excellence
+    reason: Best practices de code review.
+    always: true
+  - name: doc-coauthoring
+    reason: Co-escribir documentación con el usuario.
+    always: true
+  - name: brainstorming
+    reason: Lluvia de ideas estructurada.
+    always: true
+  - name: find-skills
+    reason: Buscar skills adicionales en skills.sh.
+    always: true
+
+# ──────────────────────────────────────────────────────────────────────────
+# SKILLS POR STACK
+# ──────────────────────────────────────────────────────────────────────────
+
+# Cualquier proyecto frontend (UI)
+frontend:
+  - name: impeccable
+    reason: Detector de AI slop + comandos de diseño (52k stars).
+    install: "npx impeccable install"
+    optional: false
+    requires: [node >= 22]
+
+# Frameworks específicos
+react:
+  - name: shadcn-ui
+    reason: Componentes accesibles copy-paste.
+    optional: true
+  - name: tailwind-design-system
+    reason: Sistema de diseño con Tailwind.
+    optional: true
+
+nextjs:
+  - name: skalling-impeccable-bridge
+    reason: Frontend → Impeccable activado.
+    optional: false
+  - name: next-cache-components
+    reason: Estrategia de cache para Next.js 15+.
+    optional: true
+
+vue:
+  - name: skalling-impeccable-bridge
+    reason: Frontend → Impeccable activado.
+    optional: false
+
+svelte:
+  - name: skalling-impeccable-bridge
+    reason: Frontend → Impeccable activado.
+    optional: false
+
+flutter:
+  - name: skalling-impeccable-bridge
+    reason: Frontend → Impeccable activado.
+    optional: false
+
+react-native:
+  - name: skalling-impeccable-bridge
+    reason: Frontend → Impeccable activado.
+    optional: false
+
+swiftui:
+  - name: skalling-impeccable-bridge
+    reason: Frontend → Impeccable activado.
+    optional: false
+
+astro:
+  - name: skalling-impeccable-bridge
+    reason: Frontend → Impeccable activado.
+    optional: false
+
+nuxt:
+  - name: skalling-impeccable-bridge
+    reason: Frontend → Impeccable activado.
+    optional: false
+
+# ──────────────────────────────────────────────────────────────────────────
+# TESTING
+# ──────────────────────────────────────────────────────────────────────────
+
+testing-vitest:
+  - name: vitest
+    reason: Vitest como test runner.
+    optional: true
+
+testing-pytest:
+  - name: vitest  # placeholder, should be pytest-specific skill
+    reason: Pytest como test runner.
+    optional: true
+
+testing-e2e:
+  - name: webapp-testing
+    reason: E2E con Playwright/Cypress.
+    optional: true
+
+# ──────────────────────────────────────────────────────────────────────────
+# BACKEND ESPECÍFICOS
+# ──────────────────────────────────────────────────────────────────────────
+
+backend-python-fastapi:
+  - name: firecrawl
+    reason: Web scraping (si el backend consume HTML externo).
+    optional: true
+
+backend-rust:
+  # No hay skills específicas; built-in alcanzan
+  []
+
+# ──────────────────────────────────────────────────────────────────────────
+# INFRASTRUCTURE
+# ──────────────────────────────────────────────────────────────────────────
+
+infrastructure:
+  - name: vercel-composition-patterns
+    reason: Si deployas a Vercel.
+    optional: true
+
+# ──────────────────────────────────────────────────────────────────────────
+# CUSTOM (usuario puede agregar)
+# ──────────────────────────────────────────────────────────────────────────
+custom: []
+  # - stack: mi-stack-custom
+  #   skills:
+  #     - name: mi-skill
+  #       reason: Por qué aplica
+  #       install: "npm install mi-skill"

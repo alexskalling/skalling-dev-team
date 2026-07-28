@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skalling.dev/schemas/handoff-v1.json",
+  "title": "Skalling Handoff",
+  "description": "Schema for handoffs between agents in the Skalling cycle",
+  "type": "object",
+  "required": ["from", "to", "task", "summary", "next_action"],
+  "properties": {
+    "from": {
+      "type": "string",
+      "enum": ["ALEX", "POL", "JES", "SOL", "TEO", "JHON", "LUZ", "PAU"],
+      "description": "Agent handing off"
+    },
+    "to": {
+      "type": "string",
+      "enum": ["ALEX", "POL", "JES", "SOL", "TEO", "JHON", "LUZ", "PAU"],
+      "description": "Agent receiving"
+    },
+    "task": {
+      "type": "string",
+      "minLength": 5,
+      "description": "Task description (one line)"
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 10,
+      "description": "What was done in this task"
+    },
+    "artifacts": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Files created or modified"
+    },
+    "tests_passed": {
+      "type": "boolean",
+      "description": "Whether tests are green"
+    },
+    "coverage": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Code coverage percentage"
+    },
+    "next_action": {
+      "type": "string",
+      "minLength": 5,
+      "description": "What the receiving agent should do next"
+    },
+    "ladder_rung_used": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 7,
+      "description": "Which rung of the Ponytail ladder was used (1-7, lower is lazier)"
+    },
+    "ladder_reason": {
+      "type": "string",
+      "description": "Why that rung was chosen (only required for rungs 1-3)"
+    },
+    "blockers": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Issues that block progress"
+    },
+    "iteracion": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Iteration number in the loop (Teo-Jhon, Jhon-Luz, etc.)"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the handoff was issued"
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["APPROVED", "REJECTED"],
+      "description": "For approval gates (Jhon, Luz)"
+    },
+    "rejection_reasons": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "If REJECTED, list of specific reasons"
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "from": "TEO",
+      "to": "JHON",
+      "task": "Verificar tests módulo auth/login",
+      "summary": "Implementado LoginUseCase con TDD. 8 tests pasan.",
+      "artifacts": ["/src/auth/application/login.ts", "/tests/auth/application/login.test.ts"],
+      "tests_passed": true,
+      "coverage": 92,
+      "ladder_rung_used": 4,
+      "ladder_reason": "Usé bcrypt porque stdlib no tiene hashing de passwords",
+      "next_action": "Ejecutar suite completa del módulo auth"
+    },
+    {
+      "from": "JHON",
+      "to": "LUZ",
+      "task": "Auditoría final del plan auth",
+      "summary": "Regresión completa en verde. Coverage 87% en application/.",
+      "tests_passed": true,
+      "coverage": 87,
+      "next_action": "Auditar clean code, seguridad, e impeccable (frontend)",
+      "verdict": "APPROVED",
+      "timestamp": "2026-07-28T16:00:00Z"
+    }
+  ]
+}
