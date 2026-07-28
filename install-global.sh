@@ -100,6 +100,17 @@ run() {
     fi
 }
 
+# Helper: elimina symlink roto en una ruta (no toca archivos reales).
+# Útil cuando apps externas dejan symlinks colgados.
+remove_broken_symlink() {
+    local path="$1"
+    if [[ -L "$path" && ! -e "$path" ]]; then
+        local target; target="$(readlink "$path" 2>/dev/null || echo '?')"
+        log WARN "Symlink roto en $path -> $target. Eliminando."
+        rm -f "$path"
+    fi
+}
+
 check_bash_version() {
     local major="${BASH_VERSINFO[0]}"
     if [[ "$major" -lt 4 ]]; then
@@ -175,6 +186,8 @@ prune_old_backups() {
 
 install_agents() {
     log INFO "Instalando 8 agentes en $AGENTS_DIR"
+
+    remove_broken_symlink "$AGENTS_DIR"
     run mkdir -p "$AGENTS_DIR"
 
     local agent_count=0
@@ -189,6 +202,8 @@ install_agents() {
 
 install_skills_core() {
     log INFO "Instalando skills core en $SKILLS_DIR"
+
+    remove_broken_symlink "$SKILLS_DIR"
     run mkdir -p "$SKILLS_DIR"
 
     # Las skills core son las listadas en data/skills-by-stack.yaml bajo "core:".
@@ -213,6 +228,8 @@ install_skills_core() {
 
 install_commands() {
     log INFO "Instalando comandos /skalling-* en $COMMAND_DIR"
+
+    remove_broken_symlink "$COMMAND_DIR"
     run mkdir -p "$COMMAND_DIR"
 
     local cmd_count=0
@@ -231,6 +248,10 @@ install_constitution() {
     if [[ -f "$CONSTITUTION_FILE" && "$FORCE" == false ]]; then
         log WARN "Constitución existente preservada (usá --force para sobrescribir)"
         return 0
+    fi
+    if [[ -L "$CONSTITUTION_FILE" && ! -e "$CONSTITUTION_FILE" ]]; then
+        log WARN "Symlink roto en $CONSTITUTION_FILE. Eliminando."
+        rm -f "$CONSTITUTION_FILE"
     fi
     run cp "$SCRIPT_DIR/constitution/constitucion.md" "$CONSTITUTION_FILE"
     log OK "Constitución instalada"

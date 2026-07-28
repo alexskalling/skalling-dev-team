@@ -568,6 +568,19 @@ test_tier2_fixes() {
         fail "lib-os.sh NO tiene skalling_check_bundle_size"
     fi
 
+    # FIX TIER 14: install-global.sh tiene remove_broken_symlink
+    if grep -q "remove_broken_symlink" "$REPO_ROOT/install-global.sh"; then
+        pass "install-global.sh maneja symlinks rotos"
+    else
+        fail "install-global.sh NO maneja symlinks rotos"
+    fi
+
+    if grep -q "remove_broken_symlink\|Symlink roto\|symlink roto" "$REPO_ROOT/setup.sh"; then
+        pass "setup.sh maneja symlinks rotos"
+    else
+        fail "setup.sh NO maneja symlinks rotos"
+    fi
+
     # FIX T2.9: project.yaml NO usa placeholder [true-or-false]
     if grep -q "\[true-or-false\]" "$REPO_ROOT/templates/project.yaml.template"; then
         fail "project.yaml.template todavía usa [true-or-false]"
