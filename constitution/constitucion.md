@@ -112,7 +112,7 @@ Se activa cuando el proyecto tiene:
 - **Pau** (documentalista): mantiene `.opencode/context/proyecto/design-system.md` como fuente de verdad.
 
 ### Ubicación
-- **Fuente de verdad**: `.opencode/context/proyecto/design-system.md` (NO commiteado al repo, solo en bundle OKF).
+- **Fuente de verdad**: `.opencode/context/proyecto/design-system.md` (commiteado al repo, forma parte del bundle OKF).
 - **Output Impeccable**: `DESIGN.md` en formato Google Stitch (portable, se convierte a `design-system.md`).
 
 ### Estructura mínima

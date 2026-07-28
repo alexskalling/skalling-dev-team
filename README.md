@@ -125,7 +125,7 @@ Para cosas chicas (un typo, un color, un texto) Alex puede mandarte directo a Te
 | R10 | Manejo de errores explícito — nada de try/catch vacíos |
 | R11 | Sin código muerto — nada de console.log, variables sin usar |
 | R12 | Cada proyecto tiene su propia memoria |
-| R13 | Si hay interfaz gráfica, necesita un archivo de diseño (no se sube al repo) |
+| R13 | Si hay interfaz gráfica, necesita un archivo de diseño en `.opencode/context/` |
 | R14 | Siempre la solución más simple posible (Escalera de Ponytail) |
 | R15 | Reglas para trabajar en equipo sin pisarse |
 | R16 | No se hace commit sin preguntarte antes |
