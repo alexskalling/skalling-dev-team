@@ -1,329 +1,401 @@
-# Skalling — Equipo Agentico para OpenCode
+# Skalling — Tu equipo de agentes para OpenCode
 
-Un equipo de **8 agentes especializados** que se instala una vez y trabaja en cualquier proyecto.
+**Skalling** es un equipo de 8 agentes de inteligencia artificial que trabajan juntos para ayudarte a programar mejor. Se instala una vez y funciona en cualquier proyecto, sin importar el lenguaje o framework que uses.
 
-> "Un orquestador (Alex) + 7 especialistas (Pol, Jes, Sol, Teo, Jhon, Luz, Pau) que ejecutan un ciclo disciplinado: SDD → TDD → Quality Gate → Docs, con memoria persistente por proyecto."
+Piensa en Skalling como tener un equipo completo de desarrollo a tu lado: un líder que organiza, un analista que cuestiona, un arquitecto que planifica, un programador que construye, un tester que verifica, un auditor que revisa calidad y seguridad, y un documentalista que guarda todo el conocimiento.
 
-## ¿Qué es?
+---
 
-Skalling convierte OpenCode en un **equipo de trabajo agentico** con:
+## Contenido
 
-- **Alex** — Orquestador, detecta intención y rutea
-- **Pol** — Spec author, interroga para entender el "por qué"
-- **Jes** — Profesora-investigadora, explica e investiga
-- **Sol** — Estratega, desglosa specs en tareas (SDD)
-- **Teo** — Ingeniero, implementa con TDD y la Escalera de Ponytail
-- **Jhon** — Guardián de tests, verifica cobertura y regresión
-- **Luz** — Auditora, calidad + seguridad + Impeccable (frontend)
-- **Pau** — Documentalista, mantiene memoria OKF y docs
+- [¿Cómo funciona?](#cómo-funciona)
+- [Los 8 agentes](#los-8-agentes)
+- [Instalación rápida](#instalación-rápida)
+- [Primeros pasos en un proyecto](#primeros-pasos-en-un-proyecto)
+- [Comandos disponibles](#comandos-disponibles)
+- [El ciclo de trabajo](#el-ciclo-de-trabajo)
+- [Las reglas del equipo (constitución)](#las-reglas-del-equipo-constitución)
+- [Estructura del proyecto](#estructura-del-proyecto)
+- [Características principales](#características-principales)
+- [Sistemas operativos compatibles](#sistemas-operativos-compatibles)
+- [Tests](#tests)
+- [Health check](#health-check)
+- [Cómo contribuir](#cómo-contribuir)
 
-## Quick Start
+---
 
-### 1. Instalación (una vez por máquina)
+## ¿Cómo funciona?
 
-#### macOS / Linux / WSL2
+Cuando trabajas con OpenCode y tienes Skalling instalado, todo empieza con **Alex**, el agente orquestador. Alex recibe tu mensaje, detecta qué necesitas (aprender algo nuevo, construir una feature, arreglar un bug, pedir una auditoría, etc.) y deriva el trabajo al agente correcto.
+
+El flujo normal para construir algo nuevo es:
+
+```
+Tú → Alex → Pol → Sol → Teo ↔ Jhon → Luz → Pau
+```
+
+Cada agente hace su parte y pasa el trabajo al siguiente. Nadie salta pasos. Nadie hace el trabajo de otro. Esto asegura que todo lo que se construye está bien pensado, bien probado y bien documentado.
+
+---
+
+## Los 8 agentes
+
+### 🎯 Alex — El Orquestador (punto de entrada)
+Es quien recibe tu mensaje primero. Detecta tu intención y decide qué hacer:
+- Si preguntas algo → te responde directo
+- Si necesitas aprender o investigar → llama a Jes
+- Si quieres construir algo → inicia el ciclo con Pol
+- Si tienes un bug → envía a Teo directo (fast-track)
+- Si pides una auditoría → llama a Luz directamente
+- Si pides un commit → pide tu permiso antes de hacerlo
+- Si no entiende tu intención → pregunta con opciones
+
+**Nunca asume. Siempre confirma antes de actuar.**
+
+### ❓ Pol — El Cuestionador (spec author)
+Antes de construir cualquier cosa, Pol te hace preguntas para entender bien qué necesitas. Una pregunta a la vez. No avanza hasta que confirmes. Su objetivo es evitar que el equipo construya algo incorrecto o innecesario.
+
+### 📚 Jes — La Investigadora (teacher/researcher)
+Si necesitas aprender un concepto, entender cómo funciona algo o investigar un tema, Jes te explica con el nivel de detalle que pidas. Busca información actualizada en internet antes de responder.
+
+### ☀️ Sol — La Estratega (planner)
+Toma lo que Pol validó contigo y lo convierte en un plan detallado: qué archivos tocar, en qué orden, cómo probarlo. Sus planes son tan precisos que Teo puede ejecutarlos sin ambigüedades.
+
+### 🔧 Teo — El Ingeniero (implementador)
+Escribe el código siguiendo TDD (Test-Driven Development): primero escribe el test, luego el código para que pase, luego refactoriza. No escribe una línea de lógica sin un test que falle primero. Aplica la Escalera de Ponytail: siempre busca la solución más simple posible.
+
+### 🧪 Jhon — El Guardián de Tests (test verifier)
+Después de cada tarea de Teo, Jhon ejecuta los tests y verifica que todo pase. También corre la suite completa al final del plan para asegurar que nada se rompió. Sin su aprobación, Luz no puede empezar.
+
+### 🛡️ Luz — La Auditora (QA & security)
+Una vez que Jhon aprueba la regresión completa, Luz revisa el código completo: calidad, seguridad, rendimiento, duplicación, complejidad. Para proyectos con interfaz gráfica, ejecuta `npx impeccable detect` para detectar "AI slop" visual. Si encuentra problemas, devuelve el código a Teo.
+
+### 📖 Pau — La Documentalista (memory keeper)
+Cuando Luz aprueba todo, Pau documenta los cambios. Actualiza tanto la documentación pública (`docs/`) como la memoria interna del equipo (`.opencode/context/`). Sin el Quality Gate PASSED de Luz, Pau no documenta nada.
+
+---
+
+## Instalación rápida
+
+### macOS / Linux / WSL2
+
+Abre una terminal y ejecuta:
 
 ```bash
-git clone https://github.com/tu-usuario/skalling-dev-team.git ~/skalling-dev-team
+git clone https://github.com/alexskalling/skalling-dev-team.git ~/skalling-dev-team
 bash ~/skalling-dev-team/install-global.sh
 ```
 
-Eso copia los 8 agentes, 12 skills core, 5 comandos y la constitución a `~/.config/opencode/`.
+Esto copia los 8 agentes, los comandos, las skills y la constitución a `~/.config/opencode/`. Una vez instalado, Skalling está disponible en cualquier proyecto donde abras OpenCode.
 
-#### Windows (PowerShell)
+### Windows (PowerShell)
 
 ```powershell
-# Opción A: PowerShell wrapper (delega a Git Bash o WSL)
-git clone https://github.com/tu-usuario/skalling-dev-team.git $HOME\skalling-dev-team
+git clone https://github.com/alexskalling/skalling-dev-team.git $HOME\skalling-dev-team
 .\skalling-dev-team\install-global.ps1
-
-# Opción B: Git Bash directo (recomendado)
-#   1. Abrí Git Bash
-#   2. cd /c/Users/TU_USUARIO/skalling-dev-team
-#   3. bash install-global.sh
 ```
 
-**Requisitos en Windows:**
-- Windows 10+ (64-bit)
-- Una de estas opciones de bash:
-  - **Git Bash** (descarga desde https://git-scm.com/download/win) — más simple
-  - **WSL2** (`wsl --install` en PowerShell admin, luego reiniciar) — más completo
-- OpenCode para Windows
+**Requisitos:** Windows 10+ y Git Bash o WSL2. Lee [la guía de Windows](https://git-scm.com/download/win) para instalar Git Bash.
 
-Los scripts bash están adaptados para Windows via `scripts/lib/lib-os.sh` (detección de OS + paths portables). Los wrappers PowerShell delegan a bash.
+---
 
-### 2. Setup por proyecto (solo si querés team-sharing vía git)
+## Primeros pasos en un proyecto
 
-#### macOS / Linux / WSL2 / Git Bash
-
-```bash
-cd ~/Proyectos/mi-proyecto
-bash ~/skalling-dev-team/setup.sh
-```
-
-#### Windows (PowerShell)
-
-```powershell
-cd C:\Proyectos\mi-proyecto
-.\skalling-dev-team\setup.ps1
-
-# O desde Git Bash:
-cd /c/Proyectos/mi-proyecto
-bash /c/Users/TU_USUARIO/skalling-dev-team/setup.sh
-```
-
-Esto commitea los agentes al repo (overridable por proyecto). Si trabajás solo, **no necesitás este paso** — los agentes globales ya están disponibles.
-
-### 3. Bootstrap de un proyecto
-
-Abrí OpenCode en cualquier proyecto:
+### 1. Abre OpenCode en tu proyecto
 
 ```bash
 cd ~/Proyectos/mi-proyecto
 opencode
 ```
 
-Alex detecta el estado y sugiere:
+### 2. Inicializa Skalling
+
+La primera vez, Alex te sugerirá ejecutar `/skalling-init`. Este comando:
+
+- Detecta el stack tecnológico (lenguaje, framework, test runner, etc.)
+- Crea el bundle de memoria del proyecto (`.opencode/context/`)
+- Instala skills específicas para tu stack
+- Genera `project.yaml` con la configuración detectada
+- Si tu proyecto tiene interfaz gráfica, te preguntará si quieres crear un `design-system.md`
+
+### 3. Empieza a trabajar
+
+Ya puedes pedirle a Alex lo que necesites:
 
 ```
-Veo que este proyecto no tiene Skalling. ¿Corro /skalling-init?
+"necesito un login con JWT"
+"explicame cómo funciona React Server Components"
+"auditá la seguridad del módulo auth"
+"cómo vamos con el proyecto?"
 ```
 
-O ejecutalo directo:
+Alex clasificará tu intención y derivará al agente correcto automáticamente.
 
-```
-/skalling-init
-```
+---
 
-Esto detecta el stack (Next.js, Python, Rust, Go, etc.), crea el bundle OKF de memoria, instala skills stack-specific, y genera `project.yaml`.
+## Comandos disponibles
 
-## Comandos `/skalling-*`
-
-Todos disponibles en cualquier proyecto después de instalar:
+Después de instalar, estos comandos están disponibles en cualquier proyecto:
 
 | Comando | Qué hace |
 |---|---|
-| `/skalling-init` | Bootstrap del proyecto (3 modos: nuevo / virgen / actualizar) |
-| `/skalling-status` | Ver bundle OKF, memoria, trabajo en curso |
-| `/skalling-refresh` | Re-detectar stack y actualizar |
-| `/skalling-doctor` | Health check de la instalación |
-| `/skalling-forget` | Purgar concept docs obsoletos |
-| `/skalling-merge` | Asistir en resolución de conflictos en `.opencode/` |
-| `/skalling-update` | Buscar actualizaciones de Skalling, mostrar changelog e instalar |
+| `/skalling-init` | Inicializa Skalling en el proyecto actual (detecta stack, crea memoria) |
+| `/skalling-status` | Muestra el estado actual: memoria, trabajo en curso, stack |
+| `/skalling-refresh` | Vuelve a detectar el stack y actualiza la configuración |
+| `/skalling-doctor` | Revisa que la instalación esté sana (bash, agentes, skills, constitución) |
+| `/skalling-forget` | Limpia concept docs obsoletos de la memoria |
+| `/skalling-merge` | Ayuda a resolver conflictos en archivos de `.opencode/` |
+| `/skalling-update` | Busca actualizaciones de Skalling en el repo, muestra cambios y las instala si confirmas |
 
-## Arquitectura
+---
+
+## El ciclo de trabajo
+
+Skalling sigue un ciclo disciplinado de 6 fases para construir features:
 
 ```
-~/skalling-dev-team/                            # El installer (este repo)
-├── install-global.sh                       # Una vez: copia a ~/.config/opencode/
-├── install-global.ps1                      # Wrapper PowerShell (Windows)
-├── setup.sh                                # Per-project (team-sharing vía git)
-├── setup.ps1                               # Wrapper PowerShell (Windows)
-├── setup-team-doctor.sh                    # Health check
-├── setup-team-doctor.ps1                   # Wrapper PowerShell (Windows)
-├── bootstrap-context.sh                    # Detecta stack y genera bundle OKF
-├── bootstrap-context.ps1                   # Wrapper PowerShell (Windows)
+FASE 0: Tú pides algo → Alex clasifica tu intención
+FASE 1: Pol te hace preguntas para entender bien el qué y por qué
+FASE 2: Sol crea un plan detallado con tareas precisas
+FASE 3: Teo implementa cada tarea con TDD → Jhon verifica los tests
+        (se repite hasta completar todas las tareas del plan)
+FASE 4: Jhon ejecuta la suite completa de regresión
+FASE 5: Luz audita calidad, seguridad y limpieza del código
+FASE 6: Pau documenta los cambios (docs + memoria interna)
+```
+
+### Fast-track (atajo para cambios simples)
+
+Para cambios triviales (un typo, un color, un texto), Alex puede enviarte directo a Teo sin pasar por Pol ni Sol:
+
+```
+Tú → Alex → Teo (sin plan formal)
+```
+
+### Auditoría directa
+
+Si solo necesitas una revisión de código o seguridad, Alex puede llamar a Luz directamente, sin pasar por todo el ciclo de construcción:
+
+```
+Tú → Alex → Luz (sin Pol/Sol/Teo/Jhon)
+```
+
+---
+
+## Las reglas del equipo (constitución)
+
+Skalling opera con 16 reglas llamadas **R1 a R16**. Estas reglas las sigue cada agente automáticamente:
+
+| Regla | Qué dice |
+|---|---|
+| **R1** | Todo el código en español (variables, funciones, commits) |
+| **R2** | Cero comentarios en el código — el código se explica solo |
+| **R3** | Tipado estricto — nada de `any` |
+| **R4** | TDD obligatorio — test antes que código |
+| **R5** | Calidad total — nadie salta pasos del ciclo |
+| **R6** | Spec-Driven Development — plan escrito antes de construir |
+| **R7** | Clean Architecture — dependencias hacia el centro |
+| **R8** | Nombres descriptivos — nada de abreviaciones crípticas |
+| **R9** | Funciones pequeñas — máximo 30 líneas |
+| **R10** | Manejo de errores explícito — nada de try/catch vacíos |
+| **R11** | Sin código muerto — nada de console.log, variables sin usar |
+| **R12** | Memoria por proyecto — cada proyecto tiene su propio contexto |
+| **R13** | DESIGN.md obligatorio si hay interfaz gráfica (en `.opencode/context/`, no se commitea) |
+| **R14** | Escalera de Ponytail — siempre la solución más simple |
+| **R15** | Resolución de conflictos colaborativos para trabajo en equipo |
+| **R16** | Commits requieren permiso del usuario y mensajes descriptivos en español |
+
+---
+
+## Estructura del proyecto
+
+### El repo de Skalling (donde se instala)
+
+```
+~/skalling-dev-team/
+├── install-global.sh                 # Instalación global (una vez por máquina)
+├── install-global.ps1                # Para Windows PowerShell
+├── setup.sh                          # Setup por proyecto (para compartir en equipo)
+├── setup.ps1                         # Para Windows PowerShell
+├── setup-team-doctor.sh              # Health check de la instalación
+├── bootstrap-context.sh              # Detecta stack y crea memoria del proyecto
+├── bootstrap-context.ps1             # Para Windows PowerShell
 ├── scripts/
-│   ├── merge-helper.sh                     # Asistente de resolución de conflictos
-│   └── lib/lib-os.sh                        # Detección de OS + helpers portables
-├── agents-base/                            # 8 agentes (Alex.md + 7 subagents)
-├── constitution/constitucion.md            # 15 reglas universales (R1-R15)
-├── command/                                # 7 comandos /skalling-*
-├── skills-base/                            # 12 skills core + 4 skalling-*
-├── templates/                              # SDD + OKF + project.yaml + gitattributes
-├── data/                                   # stack-detectors + skills-by-stack
-└── tests/setup.test.sh                     # 118 tests del installer
-
-~/.config/opencode/                         # Instalación global (Unix)
-%USERPROFILE%\.config\opencode\             # Instalación global (Windows)
-├── agents/                                 # 8 agentes
-├── skills/                                 # 12 skills core
-├── command/                                # 7 comandos
-├── constitucion.md                         # Constitución universal
-├── templates/                              # SDD + OKF
-└── skalling-data/                          # Stack detectors
-
-<proyecto>/.opencode/                       # Por proyecto (auto-creado)
-├── .gitattributes                          # Estrategias de merge R15
-├── agents/                                 # (opcional, override)
-├── skills/                                 # Skills stack-specific
-├── context/                                # Bundle OKF (memoria)
-├── changes/                                # SDD artifacts
-└── project.yaml                            # Stack detectado
+│   ├── merge-helper.sh               # Ayuda a resolver conflictos
+│   ├── update.sh                     # Actualiza Skalling desde el repo
+│   └── lib/lib-os.sh                 # Detecta el sistema operativo
+├── agents-base/                      # Los 8 agentes (Alex.md + 7 subagentes)
+├── constitution/
+│   └── constitucion.md               # Las 16 reglas del equipo
+├── command/                          # 7 comandos /skalling-*
+├── skills-base/                      # Skills que los agentes pueden cargar
+├── templates/                        # Plantillas para planes, memoria, config
+├── data/                             # Detectores de stack y skills por stack
+└── tests/
+    └── setup.test.sh                 # 150+ tests del instalador
 ```
 
-## CI/CD
+### Lo que se instala en tu máquina
 
-El repo incluye `.github/workflows/tests.yml` con 4 jobs:
-- **test**: corre los 153 tests en Linux/macOS/Windows × bash 3/4/5
-- **lint**: shellcheck sobre todos los scripts bash
-- **validate-yaml**: valida `data/*.yaml` y JSON schemas
-- **test-cross-platform**: smoke test en ubuntu/macos/windows
-
-**Estado**: el archivo está en el filesystem local pero NO en el commit inicial (`e895453`) porque el PAT por defecto no tiene scope `workflow` para pushearlo.
-
-**Cómo activarlo** (elegí una):
-
-```bash
-# Opción 1: Regenerar el PAT con scope "workflow" en
-# https://github.com/settings/tokens → Regenerate token
-# Después:
-git add .github/workflows/tests.yml
-git commit -m "ci: add GitHub Actions workflow"
-git push origin main
-
-# Opción 2: Subir vía web UI
-# https://github.com/alexskalling/skalling-dev-team/new/main/.github/workflows/tests.yml
-# Pegar el contenido de .github/workflows/tests.yml local
+```
+~/.config/opencode/                   # Instalación global
+├── agents/                           # 8 agentes
+├── skills/                           # Skills core
+├── command/                          # 7 comandos
+├── constitucion.md                   # Las reglas
+├── templates/                        # Plantillas
+├── scripts/                          # Scripts de utilidad
+└── skalling-data/                    # Datos de detección
 ```
 
-Sin el workflow, los tests corren local con `bash tests/setup.test.sh`.
+### Lo que se crea en cada proyecto
 
-## Compatibilidad
+```
+tu-proyecto/.opencode/
+├── .gitattributes                    # Estrategias de merge para trabajo en equipo
+├── agents/                           # (opcional) Agentes personalizados por proyecto
+├── skills/                           # Skills específicas del stack
+├── context/                          # Memoria del proyecto (bundle OKF)
+├── changes/                          # Planes y artefactos de features
+└── project.yaml                      # Stack detectado automáticamente
+```
 
-| OS | Soporte | Notas |
-|---|---|---|
-| **macOS** | ✓ Nativo | bash default, funciona out-of-the-box |
-| **Linux** | ✓ Nativo | bash, tar, sed, etc. disponibles |
-| **WSL2** | ✓ Nativo | Recomendado en Windows para mejor experiencia |
-| **Git Bash** | ✓ Nativo | Funciona out-of-the-box, paths Unix-style |
-| **Windows PowerShell** | ✓ Vía wrapper | Wrappers `.ps1` delegan a Git Bash/WSL |
-| **Windows cmd.exe** | ✗ | No soportado (PowerShell mínimo) |
+---
 
-## Características
+## Características principales
 
 ### Memoria persistente por proyecto (OKF)
 
-Cada proyecto tiene su propio bundle de memoria en formato [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf):
+Cada proyecto tiene su propia memoria en `.opencode/context/`. Los agentes la consultan para recordar decisiones, preferencias, trabajo en curso y problemas conocidos. Nunca empiezan desde cero.
 
 ```
 .opencode/context/
-├── README.md           # Descripción del bundle
-├── index.md            # Navegación root
-├── log.md              # Historial cronológico
-├── stack/              # Lenguaje, framework, runtime
-├── proyecto/           # Qué es y para quién
-├── decisiones/         # ADRs
-├── trabajo-en-curso/   # Features activas
-├── preferencias/       # Convenciones del equipo
+├── index.md          # Navegación principal
+├── log.md            # Historial de cambios
+├── stack/            # Lenguaje, framework, runtime
+├── proyecto/         # Descripción del proyecto
+├── decisiones/       # Decisiones técnicas (ADRs)
+├── trabajo-en-curso/ # Features activas
+├── preferencias/     # Convenciones del equipo
 └── problemas-conocidos/ # Workarounds
 ```
 
-Portable, estándar abierto, navegable como grafo.
+### Trabajo en equipo (R15)
 
-### Collaborative memory (R15 — manejo de conflictos)
+Si trabajas con otros desarrolladores, Skalling instala reglas de merge para que los archivos de `.opencode/` no generen conflictos. Cada tipo de archivo tiene su estrategia: algunos se auto-merged, otros requieren decisión manual.
 
-Cuando dos devs trabajan en paralelo y commitean cambios en `.opencode/`, git necesita saber cómo manejar cada archivo. Skalling instala `.opencode/.gitattributes` con estrategias por tipo:
+### Spec-Driven Development
 
-| Archivo | Estrategia | Comportamiento |
+Para features nuevas, el ciclo produce 4 artefactos en `.opencode/changes/<feature>/`:
+
+1. **`proposal.md`** — Qué se va a hacer y por qué
+2. **`specs/*.md`** — Especificaciones detalladas (Given/When/Then)
+3. **`design.md`** — Arquitectura y decisiones técnicas
+4. **`tasks.md`** — Lista de tareas granular para implementar
+
+### TDD obligatorio (R4)
+
+Los agentes no escriben código de lógica de negocio sin un test que falle primero. El ciclo es:
+
+```
+RED:    escribir el test → verificar que falla
+GREEN:  escribir el código mínimo para que pase
+REFACTOR: limpiar el código con el test como seguridad
+```
+
+### Escalera de Ponytail (R14)
+
+Antes de escribir cualquier solución, los agentes preguntan:
+
+1. ¿Realmente necesita existir? → si no, skip
+2. ¿Ya existe en el proyecto? → reusar
+3. ¿Lo resuelve la librería estándar? → usarla
+4. ¿Lo resuelve una función nativa de la plataforma? → usarla
+5. ¿Una dependencia ya instalada lo hace? → usarla
+6. ¿Se puede resolver en una línea? → una línea
+7. Recién entonces: el mínimo que funcione
+
+### Sin bloqueos silenciosos
+
+Si un agente se traba o llega al límite de iteraciones, escala a Alex, quien te notifica con opciones para resolverlo.
+
+---
+
+## Sistemas operativos compatibles
+
+| Sistema | Soporte | Notas |
 |---|---|---|
-| `log.md`, `index.md`, `README.md` | `merge=union` | Auto-merge (concatena ambos lados) |
-| `workflow.json` | `merge=lock` | Bloquea merge — requiere coordinación |
-| `constitucion.md` | `merge=lock` | Cambios requieren consenso |
-| `project.yaml` | `merge=union` | Regenerable con `/skalling-refresh` |
-| `decisiones/*`, `trabajo-en-curso/*`, etc. | Manual | Cada uno resuelve su conflicto |
+| **macOS** | ✅ Completo | Funciona out-of-the-box con la terminal |
+| **Linux** | ✅ Completo | bash, sed, git disponibles |
+| **WSL2** | ✅ Completo | Recomendado en Windows |
+| **Git Bash** | ✅ Completo | Funciona con paths Unix-style |
+| **PowerShell** | ✅ Vía wrapper | Los `.ps1` delegan a Git Bash o WSL |
+| **cmd.exe** | ❌ No soportado | Usa PowerShell o Git Bash |
 
-Cuando hay un merge en curso:
-
-```bash
-bash scripts/merge-helper.sh
-```
-
-Detecta conflictos, da sugerencias por tipo de archivo, y propone resolución. Si el conflicto es irresoluble (constitución, decisiones contradictorias), escala al equipo.
-
-Recomendaciones para devs:
-- **Un feature por branch** (minimiza conflictos).
-- **Sufijo de autor en ADRs**: `2026-07-28-titulo-JPM.md`.
-- **Git worktrees** para features grandes.
-- **NO aceptar ours/theirs sin leer**.
-
-### SDD formal (Spec-Driven Development)
-
-Cada feature sigue un ciclo de 4 artefactos:
-
-1. **`proposal.md`** — Qué, por qué, rollback
-2. **`specs/*.md`** — Given/When/Then + RFC 2119 keywords
-3. **`design.md`** — Arquitectura, ADRs, diagramas
-4. **`tasks.md`** — Granular por fase, TDD-friendly
-
-Ubicación: `.opencode/changes/<feature-slug>/`
-
-### TDD obligatorio
-
-```
-RED:    escribir test → verificar que falla
-GREEN:  implementar lo mínimo para pasar
-REFACTOR: limpiar con test como red de seguridad
-```
-
-Verificado por Jhon después de cada tarea. Iron Law: código sin test = borrar.
-
-### Clean Code + Clean Architecture + Ponytail
-
-- **Clean Code**: cero comentarios, nombres descriptivos, funciones < 30 líneas
-- **Clean Architecture**: dependencias hacia el centro, dominio sin imports externos
-- **Ponytail Ladder (R14)**: 7 peldaños desde YAGNI hasta "el mínimo que funcione"
-
-### Frontend: design-system.md obligatorio (REGLA #13)
-
-Si el stack tiene UI (React, Vue, Flutter, etc.), debe existir `.opencode/context/proyecto/design-system.md` en el bundle OKF. Lo crea Impeccable (via bridge) o template manual. NO se commitea al repo. Luz corre `npx impeccable detect src/` como quality gate.
-
-### Agnóstico de stack
-
-Soporta 13+ lenguajes: TypeScript, JavaScript, Python, Rust, Go, Java, Kotlin, C#, Ruby, PHP, Elixir, Swift, Dart/Flutter. La detección es data-driven (`data/stack-detectors.yaml`).
-
-### Idempotente
-
-- Re-ejecutable sin romper nada
-- Backup tar.gz con dedup + prune (mantiene últimos 5)
-- Per-file diff con confirmación antes de sobrescribir customizaciones
+---
 
 ## Tests
 
+Para verificar que todo funciona correctamente:
+
 ```bash
+cd ~/skalling-dev-team
 bash tests/setup.test.sh
 ```
 
-130+ tests verifican:
-- Estructura del installer
-- 8 agentes con frontmatter correcto
-- 15 reglas en constitución (R1-R15)
-- 6 comandos presentes
-- Templates SDD + OKF + JSON Schema válido
-- Skills skalling-* propios
-- Data files YAML
-- Stack detection data-driven
-- Syntax de scripts
-- Bootstrap end-to-end en proyecto mock
-- install-global.sh dry-run
-- Regresión Tier 1 (5 fixes críticos)
-- OS detection cross-platform
+Esto corre 150+ tests que verifican:
+- Que los 8 agentes existen con su configuración correcta
+- Que las 16 reglas de la constitución están presentes
+- Que los 7 comandos están instalados
+- Que las plantillas y schemas son válidos
+- Que los scripts tienen sintaxis correcta
+- Que el bootstrap funciona de principio a fin
+- Que la detección de stack funciona en diferentes escenarios
+- Que los scripts funcionan en todos los sistemas operativos soportados
 
-## Health Check
+---
+
+## Health check
+
+Si algo no funciona como esperas:
 
 ```bash
+cd ~/skalling-dev-team
 bash setup-team-doctor.sh
 ```
 
-Verifica:
-- Ambiente (bash, opencode, node, git)
-- Instalación global (constitución, agentes, skills, comandos)
-- Instalación per-project (bundle OKF, project.yaml, REGLA #13)
-- Frontmatter de cada agente
+O desde OpenCode:
 
-## Documentación adicional
+```
+/skalling-doctor
+```
 
-- [`CONTRIBUTING.md`](./CONTRIBUTING.md) — Cómo contribuir (Conventional Commits, PR rules)
-- [`constitution/constitucion.md`](./constitution/constitucion.md) — Las 14 reglas
-- [`data/stack-detectors.yaml`](./data/stack-detectors.yaml) — Cómo se detecta cada stack
-- [`data/skills-by-stack.yaml`](./data/skills-by-stack.yaml) — Skills recomendadas por stack
-- [`templates/handoff.schema.json`](./templates/handoff.schema.json) — Schema JSON de handoffs
+Esto revisa: bash version, opencode en PATH, node disponible, agentes instalados, skills presentes, constitución válida, comandos disponibles, y el estado del proyecto actual.
 
-## Stack tecnológico del installer
+---
 
-- Bash 3.2+ compatible (probado en macOS default + Linux)
-- OpenCode como target
-- Sin dependencias externas más allá de bash + opencode + node (para Impeccable opcional)
+## Cómo contribuir
+
+Lee [`CONTRIBUTING.md`](./CONTRIBUTING.md) para saber cómo:
+
+- Reportar bugs
+- Proponer mejoras
+- Agregar un nuevo comando `/skalling-*`
+- Agregar un detector de stack
+- Enviar pull requests
+
+Todo commit debe seguir el formato de **Conventional Commits** y estar en español.
+
+---
+
+## Stack tecnológico del instalador
+
+- **Bash 3.2+** (probado en macOS, Linux, Git Bash, WSL)
+- **OpenCode** como plataforma objetivo
+- **Node.js** (solo necesario para Impeccable, opcional)
+- Sin dependencias externas más allá de bash + opencode
+
+---
 
 ## Licencia
 
