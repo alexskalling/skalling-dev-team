@@ -175,7 +175,16 @@ Para cada match:
 2. Si acepta → copiar de `~/.config/opencode/skills/<nombre>/` a `.opencode/skills/<nombre>/`
 3. Loggear en `.opencode/context/log.md`
 
-### 4.5 — Doctor
+### 4.5 — Buscar skills adicionales con find-skills
+
+Después de instalar las skills stack-specific, ejecutá `/skalling-find-skills` para buscar skills de la comunidad que puedan servir para el stack detectado:
+
+1. Cargá la skill `find-skills` y ejecutá su flujo de descubrimiento
+2. Mostrale al usuario las skills encontradas: *"También encontré estas skills de la comunidad que pueden servir para [stack]: [lista]. ¿Querés ver alguna?"*
+3. Si elige alguna → instalarla en `.opencode/skills/<nombre>/`
+4. Si dice que no → seguir de largo
+
+### 4.6 — Doctor
 
 Correr mentalmente las validaciones:
 - Bundle OKF parseable
@@ -191,6 +200,7 @@ Bootstrap completo:
 ✓ Bundle OKF creado con [N] concept docs
 ✓ project.yaml con stack [X]
 ✓ Skills instaladas: [lista]
+✓ Skills comunitarias revisadas: [encontradas | no encontradas]
 ✓ [Si frontend] design-system.md: [creado | pendiente manual]
 ✓ Doctor: [OK | warnings: ...]
 
