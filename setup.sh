@@ -199,6 +199,16 @@ copy_with_diff_check() {
 
 step_create_directories() {
     log INFO "Creando estructura de directorios en $OPENCODE_DIR"
+
+    # Detectar symlinks rotos en .opencode/ (heredados de instalaciones anteriores o apps externas)
+    for path in "$AGENTS_DEST_DIR" "$SKILLS_DEST_DIR" "$CHANGES_DEST_DIR" "$CONTEXT_DIR" "$STATE_DIR"; do
+        if [[ -L "$path" && ! -e "$path" ]]; then
+            local target; target="$(readlink "$path" 2>/dev/null || echo '?')"
+            log WARN "Symlink roto en $path -> $target. Eliminando."
+            rm -f "$path"
+        fi
+    done
+
     run mkdir -p "$AGENTS_DEST_DIR"
     run mkdir -p "$SKILLS_DEST_DIR"
     run mkdir -p "$CHANGES_DEST_DIR"
