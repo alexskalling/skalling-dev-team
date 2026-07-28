@@ -1,10 +1,20 @@
-# Tests del installer
+# Tests del instalador
 
-Tests que validan la instalación y comportamiento de Skalling.
+Todos los tests están en un solo archivo: `setup.test.sh` (150+ pruebas).
 
-## Pendiente (Fase 6 del plan)
+## Qué prueban
 
-- `tests/setup.test.sh` — ejecuta install-global.sh con HOME mockeada, valida estructura, parsea frontmatter, ejecuta bootstrap, corre doctor.
-- `tests/agent-frontmatter.test.sh` — valida que cada agente tenga `mode`, `permission`, `description` correctos.
-- `tests/constitution.test.sh` — valida que constitución tenga todas las reglas R1-R13.
-- `tests/okf-template.test.sh` — valida que cada template OKF tenga frontmatter válido.
+- Que los 8 agentes tengan frontmatter correcto (`mode`, `permission`, etc.)
+- Que la constitución tenga las 16 reglas (R1-R16)
+- Que los 7 comandos estén presentes
+- Que los scripts tengan sintaxis bash válida
+- Que el bootstrap funcione de principio a fin
+- Que la detección de lenguajes funcione en diferentes stacks
+- Que el instalador sea portable (macOS, Linux, WSL, Git Bash)
+- Regresión Tier 1 (fixes críticos)
+
+## Cómo correrlos
+
+```bash
+bash tests/setup.test.sh
+```
