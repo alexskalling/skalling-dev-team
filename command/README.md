@@ -1,4 +1,4 @@
-# Skalling Init — Setup del proyecto
+# Comandos de Skalling
 
 Al ejecutarse en un proyecto, este comando:
 1. Detecta el estado (nuevo / virgen / ya inicializado).

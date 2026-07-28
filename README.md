@@ -138,16 +138,25 @@ Para cosas chicas (un typo, un color, un texto) Alex puede mandarte directo a Te
 
 ```
 skalling-dev-team/
+├── VERSION                           # Versión actual
+├── CHANGELOG.md                      # Historial de cambios
+├── CONTRIBUTING.md                   # Cómo contribuir
 ├── install-global.sh                 # Instalador (Mac/Linux)
 ├── install-global.ps1                # Instalador (Windows)
 ├── setup.sh                          # Para compartir con el equipo
 ├── setup.ps1                         # PowerShell
 ├── setup-team-doctor.sh              # Health check
+├── setup-team-doctor.ps1             # Health check (Windows)
 ├── bootstrap-context.sh              # Prepara un proyecto nuevo
+├── bootstrap-context.ps1             # Prepara un proyecto nuevo (Windows)
 ├── scripts/
 │   ├── merge-helper.sh               # Resuelve conflictos
 │   ├── update.sh                     # Actualiza Skalling
-│   └── lib/lib-os.sh                 # Detecta SO
+│   └── lib/
+│       ├── lib-os.sh                 # Detecta SO
+│       └── lib-stack-detect.sh       # Detecta lenguajes y skills
+├── .github/
+│   └── workflows/tests.yml           # CI (GitHub Actions)
 ├── agents-base/                      # Los 8 agentes (archivos .md)
 ├── constitution/
 │   └── constitucion.md               # Las 16 reglas
@@ -156,7 +165,8 @@ skalling-dev-team/
 ├── templates/                        # Plantillas
 ├── data/                             # Detectores de lenguajes
 └── tests/
-    └── setup.test.sh                 # 150+ pruebas
+    ├── setup.test.sh                 # 150+ pruebas
+    └── README.md                     # Info de los tests
 ```
 
 ### Lo que se instala globalmente

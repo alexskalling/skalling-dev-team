@@ -131,7 +131,7 @@ testing-vitest:
     optional: true
 
 testing-pytest:
-  - name: vitest  # placeholder, should be pytest-specific skill
+  - name: pytest
     reason: Pytest como test runner.
     optional: true
 
