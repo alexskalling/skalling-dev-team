@@ -97,6 +97,41 @@ Minimal handoff:
 
 If exhausted, Alex notifies user with options.
 
+## Pipeline Mode (Parallelization)
+
+**Para acelerar desarrollos, Sol puede planificar la SIGUIENTE feature mientras Teo ejecuta la actual.**
+
+```
+Fase 3 (Teo↔Jhon)     Fase 2 (Sol planificando)
+─────────────────     ─────────────────────────
+Tarea 1 → Jhon        Sol recibe proposal de Pol
+Tarea 2 → ...         Sol escribe design/tasks
+Tarea 3 → ...
+```
+
+**Reglas del Pipeline:**
+1. Sol puede planificar `feature_N+1` mientras Teo ejecuta `feature_N`
+2. Alex activa a Sol para siguiente feature SOLO si:
+   - Teo está en fase 3 o superior (ya pasó Sol para feature actual)
+   - Pol ya validó el proposal de la siguiente feature
+3. El pipeline NO salta fases — cada feature sigue: Pol → Sol → Teo ↔ Jhon → Luz → Pau
+4. Teo recibe el plan completo de Sol con project_context antes de empezar
+
+**Activación del pipeline:**
+```
+Usuario pide "feature B" mientras "feature A" está en desarrollo
+↓
+Alex detecta: Teo ocupado en A, Pol idle
+↓
+Alex invoca a Pol para validar feature B (si no está validado)
+↓
+Pol valida → Alex invoca a Sol para planear B
+↓
+Sol planifica B → guarda en .opencode/changes/feature-b/
+↓
+Cuando A termina → Teo recibe plan de B con project_context
+```
+
 ## What You (any agent) Should Never Do
 
 - Skip the cycle without fast-track justification.
@@ -104,3 +139,4 @@ If exhausted, Alex notifies user with options.
 - Override another agent's decision.
 - Close the cycle without all approvals.
 - Invoke Pau directly (always goes through Luz).
+- Derivar a Teo/Luz sin project_context en el handoff (causa: Teo responde vacío).

@@ -80,6 +80,26 @@
       "type": "array",
       "items": { "type": "string" },
       "description": "If REJECTED, list of specific reasons"
+    },
+    "project_context": {
+      "type": "object",
+      "description": "Context about the project (REQUIRED for handoffs to Teo, Luz, any engineering agent)",
+      "properties": {
+        "stack": {
+          "type": "object",
+          "description": "Tech stack detected from project.yaml",
+          "properties": {
+            "language": { "type": "string" },
+            "framework": { "type": "string" },
+            "runtime": { "type": "string" },
+            "package_manager": { "type": "string" },
+            "test_runner": { "type": "string" }
+          }
+        },
+        "has_ui": { "type": "boolean" },
+        "design_system_exists": { "type": "boolean" },
+        "okf_bundle_valid": { "type": "boolean" }
+      }
     }
   },
   "additionalProperties": false,

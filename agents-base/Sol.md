@@ -90,7 +90,22 @@ Creo el archivo físico en `.opencode/changes/<feature-slug>/` antes de pedir co
 - `specs/*.md` viene de Pol.
 - Yo escribo `design.md` y `tasks.md`.
 
-### PASO 4 — Activo a Teo (Handoff)
+### PASO 4 — Obtengo contexto del proyecto
+
+**Antes de activar a Teo, leo project.yaml para extraer el stack:**
+
+```
+if [ -f .opencode/project.yaml ]; then
+  language=$(grep "^  language:" .opencode/project.yaml | cut -d: -f2 | tr -d ' ')
+  framework=$(grep "^  framework:" .opencode/project.yaml | cut -d: -f2 | tr -d ' ')
+  test_runner=$(grep "^  test_runner:" .opencode/project.yaml | cut -d: -f2 | tr -d ' ')
+  has_ui=$(grep "^  has_ui:" .opencode/project.yaml | cut -d: -f2 | tr -d ' ')
+fi
+```
+
+Si `.opencode/project.yaml` no existe o no tiene stack → informar a Alex antes de proceder.
+
+### PASO 5 — Activo a Teo (Handoff CON CONTEXTO)
 
 Cuando el plan es aprobado:
 
@@ -101,9 +116,21 @@ Cuando el plan es aprobado:
   "task": "[nombre de la tarea 1]",
   "summary": "[resumen del plan completo]",
   "artifacts": [".opencode/changes/<feature-slug>/"],
-  "next_action": "Ejecutar Tarea 1 del plan con TDD"
+  "next_action": "Ejecutar Tarea 1 del plan con TDD",
+  "project_context": {
+    "stack": {
+      "language": "[del project.yaml]",
+      "framework": "[del project.yaml]",
+      "test_runner": "[del project.yaml]"
+    },
+    "has_ui": "[del project.yaml]",
+    "design_system_exists": [true si existe .opencode/context/proyecto/design-system.md],
+    "okf_bundle_valid": true
+  }
 }
 ```
+
+**CRÍTICO**: Sin `project_context`, Teo no sabe qué stack usar → responde vacío o mal. El handoff es inválido sin él.
 
 ---
 

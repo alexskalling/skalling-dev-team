@@ -56,6 +56,15 @@ core:
   - name: find-skills
     reason: Buscar skills adicionales en skills.sh.
     always: true
+  - name: skalling-routing
+    reason: Routing adaptativo según scope y complejidad (INLINE/SDD/FAST-TRACK).
+    always: true
+  - name: skalling-receipt
+    reason: Formaliza verificación en receipts verificables.
+    always: true
+  - name: skalling-memory
+    reason: Memoria estilo Engram con archivos .jsonl locales.
+    always: true
 
 # ──────────────────────────────────────────────────────────────────────────
 # SKILLS POR STACK

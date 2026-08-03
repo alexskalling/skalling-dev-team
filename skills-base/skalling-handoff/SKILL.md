@@ -92,6 +92,39 @@ Optional but recommended:
 - `ladder_rung_used`, `ladder_reason` (when work involved implementation)
 - `verdict`, `rejection_reasons` (for approval gates)
 
+## Project Context Handoff (CRITICAL for Teo, Luz)
+
+**Every handoff to Teo, Luz, or any engineering agent MUST include project context.**
+
+This prevents the "empty response" problem where agents lose context of the project.
+
+```json
+{
+  "from": "SOL",
+  "to": "TEO",
+  "task": "Implementar módulo auth",
+  "summary": "Plan approved: auth con JWT",
+  "next_action": "Ejecutar Tarea 1 del plan",
+  "project_context": {
+    "stack": {
+      "language": "typescript",
+      "framework": "nextjs",
+      "test_runner": "vitest"
+    },
+    "has_ui": true,
+    "design_system_exists": true,
+    "okf_bundle_valid": true
+  },
+  "artifacts": [".opencode/changes/auth-jwt/"]
+}
+```
+
+**Project context fields:**
+- `stack`: language, framework, runtime, package_manager, test_runner
+- `has_ui`: boolean — triggers UI considerations
+- `design_system_exists`: boolean — if true, must follow design-system.md
+- `okf_bundle_valid`: boolean — if false, agent should flag context corruption
+
 ## Common Mistakes
 
 - ❌ Missing `next_action` — the receiving agent doesn't know what to do.
@@ -99,6 +132,7 @@ Optional but recommended:
 - ❌ Handing off with `tests_passed: true` but no actual test run.
 - ❌ Skipping `ladder_reason` when rung is 1-3 (lazy choices need justification).
 - ❌ Self-handoff (TEO → TEO) — never happens, always different agents.
+- ❌ **Handoff a Teo/Luz sin project_context** — agente trabaja sin contexto del proyecto
 
 ## Validation Tools
 

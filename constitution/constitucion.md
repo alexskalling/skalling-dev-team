@@ -259,10 +259,37 @@ Los frontmatter de los agentes **no incluyen `model:`**. Heredan del provider gl
 }
 ```
 
+### Handoff a Agentes de Ingeniería (OBLIGATORIO)
+
+**Cuando el receptor es Teo, Luz, o cualquier agente de ingeniería, el handoff DEBE incluir `project_context`:**
+
+```json
+{
+  "from": "SOL",
+  "to": "TEO",
+  "task": "Implementar módulo auth",
+  "summary": "Plan approved: auth con JWT",
+  "next_action": "Ejecutar Tarea 1 del plan",
+  "project_context": {
+    "stack": {
+      "language": "typescript",
+      "framework": "nextjs",
+      "test_runner": "vitest"
+    },
+    "has_ui": true,
+    "design_system_exists": true,
+    "okf_bundle_valid": true
+  }
+}
+```
+
+**Sin `project_context`, el agente receptor no tiene contexto del proyecto → responde vacío.**
+
 ### Reglas
 1. El agente receptor debe confirmar recepción.
 2. Si hay errores, el handoff incluye razón específica.
 3. El handoff se registra en `.opencode/state/workflow.json`.
+4. **Handoff a Teo/Luz SIN project_context es inválido** — agente debe solicitar contexto antes de proceder.
 
 ---
 
