@@ -8,13 +8,15 @@ Skalling es un equipo de **8 agentes de IA** que trabajan juntos adentro de [Ope
 
 **Alex** — Orquestador. Es tu punto de entrada. Detecta tu intención y deriva al agente correcto.
 
-- Si preguntás algo → responde directo
-- Si querés aprender o investigar → deriva a Jes
-- Si querés construir algo nuevo → arranca el ciclo con Pol
-- Si hay un bug → manda a Teo directo (fast-track)
-- Si pedís una auditoría → manda a Luz directo
-- Si pedís un commit → pide permiso primero, nunca asume
-- Si no entiende qué querés → pregunta con opciones
+Usa **Decision Tree** con 6 rutas:
+- **INLINE** (1-3 archivos, scope claro) → Teo directo
+- **INTERVENTION** (bug aislado) → Teo surgical
+- **FAST-TRACK** (UI trivial, typo, config) → Teo sin plan
+- **SDD** (4+ archivos, scope ambiguo) → Pol → Sol → Teo
+- **DIRECT** (auditoría/seguridad) → Luz directo
+- **RESEARCH** (aprendizaje) → Jes
+
+Carga memorias relevantes al inicio de sesión (`skalling-memory`).
 
 **Pol** — Spec Author. Te hace preguntas para entender bien qué necesitás. Una por una, no avanza sin tu confirmación. Su objetivo: evitar que el equipo construya cualquier cosa incorrecta o innecesaria.
 
@@ -161,7 +163,7 @@ skalling-dev-team/
 ├── constitution/
 │   └── constitucion.md               # Las 16 reglas
 ├── command/                          # Los 7 comandos /skalling-*
-├── skills-base/                      # Habilidades de los agentes
+├── skills-base/                      # Habilidades de los agentes (7 skalling-* core)
 ├── templates/                        # Plantillas
 ├── data/                             # Detectores de lenguajes
 └── tests/
@@ -216,6 +218,24 @@ bash tests/setup.test.sh
 ```
 
 150+ pruebas que verifican agentes, reglas, comandos, scripts, detección de lenguajes y instalación completa.
+
+---
+
+## Memoria y Token Reduction
+
+Skalling usa **skalling-memory** (estilo Engram) para reducir contexto:
+
+```
+.opencode/context/
+├── DECISIONS.jsonl    # Decisiones arquitectónicas
+├── PATTERNS.jsonl     # Patrones reutilizables
+├── PREFERENCES.jsonl  # Preferencias del equipo
+├── REJECTIONS.jsonl   # Qué no funcionó y por qué
+```
+
+**Ahorro: ~90% tokens** (de ~8000 a ~700 por tarea).
+
+Los receipts (`skalling-receipt`) formalizan cada verificación con evidence antes de claims.
 
 ---
 
