@@ -4,6 +4,24 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-08-04
+
+### Added
+- **Concept template What/Why/Where/Learned**: reescrito `templates/okf/concept.template.md` con 4 secciones obligatorias; Pau rechaza docs nuevos sin las 4 secciones (PASO 4 de validación previa al archivo).
+- **Memory Protocol snippet**: snippet canónico en `templates/agents/snippets/memory-protocol.md` inyectado en los 8 agentes (`## 🧠 Memory Protocol`) con comment block `SINCRONIZADO CON` para mantenimiento; Pau tiene bloque de consolidación extendido.
+- **Conflict detection en Pol**: nueva FASE 5 en `agents-base/Pol.md` que lee concept docs y trabajo-en-curso antes de cerrar la proposal, con 3 escenarios (sin conflictos, con conflictos marcados en `## ⚠️ Conflictos detectados`, bundle corrupto salta el check sin bloquear).
+- **`/skalling-forget` con consolidación**: comando reescrito para invocar `mem-review` primero y ofrecer opciones A/B/C/D por candidato (archivar, marcar superseded, consolidar, mantener); log en `.opencode/context/log.md`.
+- **`scripts/mem-review.sh`**: nuevo script diagnóstico (duplicados → WIP zombie >30d → stale >6m → superseded) basado en `scripts/lib/lib-memory-check.sh`.
+- **`scripts/lib/lib-memory-check.sh`**: helper sourceable con 6 funciones (`skalling_parse_yaml_field`, `skalling_find_orphans`, `skalling_find_zombie_wip`, `skalling_find_duplicates`, `skalling_find_stale`, `skalling_find_superseded`); umbrales configurables via `SKALLING_WIP_ZOMBIE_DAYS` (default 30) y `SKALLING_STALE_MONTHS` (default 6).
+- **Sección Memoria en `setup-team-doctor.sh`**: nueva función `check_memory_health()` con 5 chequeos del bundle OKF (huérfanos, WIP zombie, duplicados, stale, superseded vigente).
+
+### Changed
+- Doctor: output con nueva fila "Memoria (bundle OKF)" y 5 chequeos automáticos.
+- Tests: cobertura completa de las nuevas features (8 tests nuevos, 268 PASS total en regresión).
+
+### Security
+- Ningún cambio de superficie de seguridad.
+
 ## [0.2.2] — 2026-08-03
 
 ### Fixed
@@ -111,7 +129,8 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 - Templates OKF (6 tipos: Concept, Decision, Preference, Workaround, WorkInProgress, Context)
 - `setup.sh` inicial (legacy, sin idempotencia)
 
-[Unreleased]: https://github.com/tu-usuario/skalling-dev-team/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/tu-usuario/skalling-dev-team/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/tu-usuario/skalling-dev-team/releases/tag/v0.3.0
 [0.2.2]: https://github.com/tu-usuario/skalling-dev-team/releases/tag/v0.2.2
 [0.2.1]: https://github.com/tu-usuario/skalling-dev-team/releases/tag/v0.2.1
 [0.1.0]: https://github.com/tu-usuario/skalling-dev-team/releases/tag/v0.1.0

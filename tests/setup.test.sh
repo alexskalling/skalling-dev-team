@@ -636,6 +636,67 @@ test_tier3_fixes() {
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
+# TEST TIER 4: Memory improvements (Fase 7 — cierre v0.3.0)
+# ──────────────────────────────────────────────────────────────────────────────
+
+test_tier4_memory_improvements() {
+    echo ""
+    echo "── Test Tier 4: Memory improvements (helpers + doctor) ──"
+
+    assert_file_exists "$REPO_ROOT/scripts/lib/lib-memory-check.sh" "scripts/lib/lib-memory-check.sh existe"
+    if [[ -x "$REPO_ROOT/scripts/lib/lib-memory-check.sh" ]]; then
+        pass "scripts/lib/lib-memory-check.sh es ejecutable"
+    else
+        fail "scripts/lib/lib-memory-check.sh NO es ejecutable"
+    fi
+
+    assert_file_exists "$REPO_ROOT/scripts/mem-review.sh" "scripts/mem-review.sh existe"
+    if [[ -x "$REPO_ROOT/scripts/mem-review.sh" ]]; then
+        pass "scripts/mem-review.sh es ejecutable"
+    else
+        fail "scripts/mem-review.sh NO es ejecutable"
+    fi
+
+    local expected_funcs=(
+        "skalling_parse_yaml_field"
+        "skalling_find_orphans"
+        "skalling_find_zombie_wip"
+        "skalling_find_duplicates"
+        "skalling_find_stale"
+        "skalling_find_superseded"
+    )
+    local helper="$REPO_ROOT/scripts/lib/lib-memory-check.sh"
+    for fn in "${expected_funcs[@]}"; do
+        if grep -qE "^${fn}\(\)" "$helper"; then
+            pass "helper define ${fn}()"
+        else
+            fail "helper NO define ${fn}()"
+        fi
+    done
+
+    if grep -q "install_memory_helpers" "$REPO_ROOT/install-global.sh"; then
+        pass "install-global.sh invoca install_memory_helpers"
+    else
+        fail "install-global.sh NO invoca install_memory_helpers"
+    fi
+
+    local doctor="$REPO_ROOT/setup-team-doctor.sh"
+    if grep -qE "^check_memory_health\(\)" "$doctor"; then
+        pass "doctor define check_memory_health()"
+    else
+        fail "doctor NO define check_memory_health()"
+    fi
+    if grep -q "check_memory_health" "$doctor"; then
+        local inv_count; inv_count="$(grep -c "check_memory_health" "$doctor")"
+        if [[ "$inv_count" -ge 2 ]]; then
+            pass "doctor invoca check_memory_health (${inv_count} refs)"
+        else
+            fail "doctor NO invoca check_memory_health (${inv_count} refs)"
+        fi
+    fi
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
 # TEST FUNCIONAL: Validar JSON schema real con un handoff
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -850,6 +911,7 @@ test_lib_os_detection
 test_tier1_fixes
 test_tier2_fixes
 test_tier3_fixes
+test_tier4_memory_improvements
 test_handoff_schema_validation
 
 echo ""

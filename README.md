@@ -2,7 +2,7 @@
 
 Skalling es un equipo de **8 agentes de IA** que trabajan juntos adentro de [OpenCode](https://opencode.ai). Cada agente tiene un rol específico y siguen un ciclo ordenado para construir software bien hecho.
 
-**Versión actual: 0.2.2**
+**Versión actual: 0.3.0**
 
 ---
 
@@ -169,7 +169,7 @@ skalling-dev-team/
 ├── templates/                        # Plantillas
 ├── data/                             # Detectores de lenguajes
 └── tests/
-    ├── setup.test.sh                 # 150+ pruebas
+    ├── setup.test.sh                 # 268+ pruebas
     └── README.md                     # Info de los tests
 ```
 
@@ -219,7 +219,7 @@ cd ~/skalling-dev-team
 bash tests/setup.test.sh
 ```
 
-150+ pruebas que verifican agentes, reglas, comandos, scripts, detección de lenguajes y instalación completa.
+268+ pruebas que verifican agentes, reglas, comandos, scripts, detección de lenguajes, instalación completa, helpers de memoria y doctor.
 
 ---
 
@@ -238,6 +238,8 @@ Skalling usa **skalling-memory** (estilo Engram) para reducir contexto:
 **Ahorro: ~90% tokens** (de ~8000 a ~700 por tarea).
 
 Los receipts (`skalling-receipt`) formalizan cada verificación con evidence antes de claims.
+
+**Memoria del proyecto**: Skalling ahora estructura la memoria con un template de 4 secciones (What/Why/Where/Learned) para concept docs, un snippet de Memory Protocol en cada agente que fuerza el guardado de decisiones y marcado de contradicciones, detección de conflictos en Pol antes de cerrar proposals, y herramientas de salud (`mem-review`, sección de memoria en el doctor) que detectan huérfanos, WIP zombie, duplicados y docs stale o superseded.
 
 ---
 

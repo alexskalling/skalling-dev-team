@@ -26,7 +26,7 @@ skalling_log_os
 # ──────────────────────────────────────────────────────────────────────────────
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKALLING_VERSION="0.2.2"
+SKALLING_VERSION="0.3.0"
 INSTALL_DATE="$(date +%Y-%m-%dT%H:%M:%S%z)"
 
 OPENCODE_DIR="$SKALLING_OPENCODE_DIR"
@@ -278,6 +278,27 @@ install_merge_helper() {
     fi
 }
 
+install_memory_helpers() {
+    log INFO "Instalando helpers de memoria en $OPENCODE_DIR/scripts"
+    run mkdir -p "$OPENCODE_DIR/scripts/lib"
+
+    if [[ -f "$SCRIPT_DIR/scripts/lib/lib-memory-check.sh" ]]; then
+        run cp "$SCRIPT_DIR/scripts/lib/lib-memory-check.sh" "$OPENCODE_DIR/scripts/lib/lib-memory-check.sh"
+        run chmod +x "$OPENCODE_DIR/scripts/lib/lib-memory-check.sh"
+        log OK "lib-memory-check.sh instalado"
+    else
+        log WARN "lib-memory-check.sh no encontrado, skip"
+    fi
+
+    if [[ -f "$SCRIPT_DIR/scripts/mem-review.sh" ]]; then
+        run cp "$SCRIPT_DIR/scripts/mem-review.sh" "$OPENCODE_DIR/scripts/mem-review.sh"
+        run chmod +x "$OPENCODE_DIR/scripts/mem-review.sh"
+        log OK "mem-review.sh instalado"
+    else
+        log WARN "mem-review.sh no encontrado, skip"
+    fi
+}
+
 install_data_files() {
     log INFO "Instalando data files (stack-detectors, skills-by-stack) en $DATA_DIR"
     run mkdir -p "$DATA_DIR"
@@ -345,6 +366,7 @@ do_install() {
     install_constitution
     install_templates
     install_merge_helper
+    install_memory_helpers
     install_gitattributes_template
     install_data_files
 
