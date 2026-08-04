@@ -26,7 +26,7 @@ skalling_log_os
 # ──────────────────────────────────────────────────────────────────────────────
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKALLING_VERSION="0.6.0"
+SKALLING_VERSION="0.6.1"
 INSTALL_DATE="$(date +%Y-%m-%dT%H:%M:%S%z)"
 
 OPENCODE_DIR="$SKALLING_OPENCODE_DIR"
@@ -296,6 +296,18 @@ install_memory_helpers() {
         log OK "mem-review.sh instalado"
     else
         log WARN "mem-review.sh no encontrado, skip"
+    fi
+
+    if [[ -f "$SCRIPT_DIR/scripts/skalling-drift.sh" ]]; then
+        run cp "$SCRIPT_DIR/scripts/skalling-drift.sh" "$OPENCODE_DIR/scripts/skalling-drift.sh"
+        run chmod +x "$OPENCODE_DIR/scripts/skalling-drift.sh"
+        log OK "skalling-drift.sh instalado"
+    fi
+
+    if [[ -f "$SCRIPT_DIR/scripts/spec-memory-link.sh" ]]; then
+        run cp "$SCRIPT_DIR/scripts/spec-memory-link.sh" "$OPENCODE_DIR/scripts/spec-memory-link.sh"
+        run chmod +x "$OPENCODE_DIR/scripts/spec-memory-link.sh"
+        log OK "spec-memory-link.sh instalado"
     fi
 }
 
