@@ -202,7 +202,7 @@ check_global_install() {
     fi
 
     # Script update.sh
-    if [[ -x "$OPENCODE_DIR/../skalling-dev-team/scripts/update.sh" ]]; then
+    if [[ -x "$SCRIPT_DIR/scripts/update.sh" ]]; then
         ok "update.sh disponible"
     else
         warn "update.sh no encontrado o no ejecutable"

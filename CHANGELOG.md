@@ -4,6 +4,12 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-08-03
+
+### Fixed
+- **Falso positivo de `update.sh` en `setup-team-doctor.sh`**: el check usaba una ruta hardcodeada (`$OPENCODE_DIR/../skalling-dev-team/scripts/update.sh`) que asumía el repo viviendo en `~/.config/skalling-dev-team/`. Ahora usa `$SCRIPT_DIR/scripts/update.sh`, basada en la ubicación real del script
+- **Banner del instalador**: `install-global.sh` mostraba v0.1.0 hardcodeado. Ahora `SKALLING_VERSION="0.2.2"`
+
 ## [0.2.1] — 2026-08-03
 
 ### Added
@@ -105,6 +111,7 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 - Templates OKF (6 tipos: Concept, Decision, Preference, Workaround, WorkInProgress, Context)
 - `setup.sh` inicial (legacy, sin idempotencia)
 
-[Unreleased]: https://github.com/tu-usuario/skalling-dev-team/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/tu-usuario/skalling-dev-team/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/tu-usuario/skalling-dev-team/releases/tag/v0.2.2
 [0.2.1]: https://github.com/tu-usuario/skalling-dev-team/releases/tag/v0.2.1
 [0.1.0]: https://github.com/tu-usuario/skalling-dev-team/releases/tag/v0.1.0
