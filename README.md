@@ -2,6 +2,8 @@
 
 Skalling es un equipo de **8 agentes de IA** que trabajan juntos adentro de [OpenCode](https://opencode.ai). Cada agente tiene un rol específico y siguen un ciclo ordenado para construir software bien hecho.
 
+**Versión actual: 0.2.1**
+
 ---
 
 ## Los 8 agentes
@@ -127,7 +129,7 @@ Para cosas chicas (un typo, un color, un texto) Alex puede mandarte directo a Te
 | R10 | Manejo de errores explícito — nada de try/catch vacíos |
 | R11 | Sin código muerto — nada de console.log, variables sin usar |
 | R12 | Cada proyecto tiene su propia memoria |
-| R13 | Si hay interfaz gráfica, necesita un archivo de diseño en `.opencode/context/` |
+| R13 | Si hay interfaz gráfica, necesita un `design-system.md` en `.opencode/context/proyecto/` |
 | R14 | Siempre la solución más simple posible (Escalera de Ponytail) |
 | R15 | Reglas para trabajar en equipo sin pisarse |
 | R16 | No se hace commit sin preguntarte antes |

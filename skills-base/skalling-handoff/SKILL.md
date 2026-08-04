@@ -48,6 +48,8 @@ Every agent-to-agent transition in Skalling uses a structured JSON handoff. This
 
 ## Approval Handoff (Jhon → Luz, Luz → Pau)
 
+El handoff de aprobación a Luz **DEBE incluir `project_context`** (Luz valida según stack y `has_ui`):
+
 ```json
 {
   "from": "JHON",
@@ -56,6 +58,16 @@ Every agent-to-agent transition in Skalling uses a structured JSON handoff. This
   "summary": "Regresión completa en verde. 22 tests, coverage 87%.",
   "tests_passed": true,
   "coverage": 87,
+  "project_context": {
+    "stack": {
+      "language": "typescript",
+      "framework": "nextjs",
+      "test_runner": "vitest"
+    },
+    "has_ui": true,
+    "design_system_exists": true,
+    "okf_bundle_valid": true
+  },
   "verdict": "APPROVED",
   "next_action": "Auditar clean code + seguridad + Impeccable (frontend)"
 }

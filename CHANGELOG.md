@@ -4,6 +4,31 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-08-03
+
+### Added
+- **Auditoría de Luz aplicada a los 8 agentes**: agentes reescritos con protocolos de escalación, evidencia de verificación y consistencia entre prompts y permisos
+- **Teo**: receipts con evidencia (`verification`: comando exacto, exit code y output real) en todo handoff a Jhon; límite de 3 iteraciones en el loop Teo ↔ Jhon (escala a Alex, nunca bloquea en silencio); skills de UI condicionadas al stack del proyecto (solo carga si el framework lo requiere)
+- **Alex**: protocolo de escalación con límites por fase (Teo↔Jhon 3, Jhon↔Luz 3, Luz↔Pau 2) y notificación al usuario con opciones A/B/C/D; relay de preguntas subagente → usuario (una a la vez, espera la respuesta y la reinyecta); receipts por ruta (`skalling-receipt`); protocolo R16.4 (muestra archivos y mensaje antes del commit); protocolo de negativa fundamentada ante pedidos que violan la constitución
+- **Pol**: relay mode (devuelve preguntas a Alex en formato A/B/C/D, nunca espera respuesta directa del usuario); límite de 3 rondas de preguntas por feature (propone con lo que hay y marca suposiciones); triviales → fast-track a Teo sin plan
+- **Pau**: dueña del design-system (R13 — fuente de verdad en `.opencode/context/proyecto/design-system.md`); schema OKF completo (catálogo de 6 tipos + frontmatter obligatorio); ownership de archive (mueve changes completados a `.opencode/changes/archive/<YYYY-MM>/`)
+- **Jhon**: `project_context` obligatorio en handoff a Luz; validación de receipts de Teo antes de re-ejecutar; umbral de coverage 80%
+- **Sol**: pipeline mode (planifica la feature N+1 mientras Teo ejecuta la N)
+- **Luz**: chequeo R13 (coherencia con `design-system.md`); checklist de evidencia con exit codes esperados (eslint, tsc, prettier, npm audit, impeccable); `websearch` para verificar CVEs reales antes de aprobar/rechazar dependencias
+- **Jes**: PASO 0 — lee el bundle OKF (concept docs) antes de explicar; usa `websearch` para afirmar hechos externos
+- `templates/handoff.schema.json`: campo `verification` (type, command, output_summary, exit_code, tests_total/passed/failed)
+
+### Changed
+- Los 8 agentes (`agents-base/*.md`) reescritos según las recomendaciones de la auditoría de Luz
+- **Teo**: R16 — commits requieren consentimiento explícito del usuario; permisos `git add*`/`git commit*` en `ask` (antes solo `git push*`)
+- **Alex**: Session Start Protocol lee concept docs del bundle OKF (YAML) en lugar de memorias `.jsonl`; permisos ampliados a `.opencode/changes/**/receipts/*.json`
+- **Jes**: contradicciones resueltas — la tabla gana: pregunta conceptual → responde directo; hecho externo → busca primero
+- **Pol**: sin límite de rondas → máximo 3 (nunca bloquea el ciclo por perfeccionismo)
+- **Sol**: lee `.opencode/project.yaml` con la herramienta de lectura (no bash — permiso `bash: deny`); granularidad de tareas ~30 min (unidad verificable por Jhon); archiving delegado a Pau (antes lo hacía Sol)
+- **Luz**: valida `project_context` del handoff de Jhon antes de arrancar; veredictos con exit code real de cada comando ejecutado
+- `skills-base/skalling-handoff/SKILL.md`: ejemplo de Approval Handoff corregido con `project_context`
+- **README**: simplificado y reescrito en lenguaje simple (antes técnico y extenso)
+
 ## [0.2.0] — 2026-08-03
 
 ### Added
@@ -80,5 +105,6 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 - Templates OKF (6 tipos: Concept, Decision, Preference, Workaround, WorkInProgress, Context)
 - `setup.sh` inicial (legacy, sin idempotencia)
 
-[Unreleased]: https://github.com/tu-usuario/skalling-dev-team/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/tu-usuario/skalling-dev-team/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/tu-usuario/skalling-dev-team/releases/tag/v0.2.1
 [0.1.0]: https://github.com/tu-usuario/skalling-dev-team/releases/tag/v0.1.0

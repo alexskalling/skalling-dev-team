@@ -100,6 +100,31 @@
         "design_system_exists": { "type": "boolean" },
         "okf_bundle_valid": { "type": "boolean" }
       }
+    },
+    "verification": {
+      "type": "object",
+      "description": "Verification evidence (skalling-receipt): exact command, exit code and output summary. REQUIRED for handoffs to Jhon and Luz.",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["test", "build", "lint", "security", "manual"]
+        },
+        "command": {
+          "type": "string",
+          "description": "Exact command that was run"
+        },
+        "output_summary": {
+          "type": "string",
+          "description": "Summary of the command output (last lines)"
+        },
+        "exit_code": {
+          "type": "integer",
+          "description": "Exit code of the command (0 = pass)"
+        },
+        "tests_total": { "type": "integer" },
+        "tests_passed": { "type": "integer" },
+        "tests_failed": { "type": "integer" }
+      }
     }
   },
   "additionalProperties": false,
