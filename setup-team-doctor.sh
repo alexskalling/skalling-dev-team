@@ -26,7 +26,7 @@ source "$(dirname "$0")/scripts/lib/lib-os.sh"
 skalling_log_os
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKALLING_VERSION="0.6.1"
+SKALLING_VERSION="0.6.2"
 
 OPENCODE_DIR="$SKALLING_OPENCODE_DIR"
 PROJECT_DIR="$(pwd)"

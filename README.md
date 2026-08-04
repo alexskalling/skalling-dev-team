@@ -2,21 +2,23 @@
 
 Skalling es un equipo de **8 agentes de IA** que trabajan juntos adentro de [OpenCode](https://opencode.ai). Cada agente tiene un rol específico y siguen un ciclo ordenado para construir software bien hecho.
 
-**Versión actual: 0.6.0**
+**Versión actual: 0.6.2**
 
 ---
 
 ## Los 8 agentes
 
-**Alex** — Orquestador. Es tu punto de entrada. Detecta tu intención y deriva al agente correcto.
+**Alex** — Orquestador. Es tu punto de entrada. Detecta tu intención y delega directamente al agente correcto según su rol, sin pedir permiso previo cuando el destino está claro.
 
-Usa **Decision Tree** con 6 rutas:
+Usa una **tabla de despacho intención → agente → permiso** junto con un **Decision Tree** de 6 rutas:
 - **INLINE** (1-3 archivos, scope claro) → Teo directo
 - **INTERVENTION** (bug aislado) → Teo surgical
 - **FAST-TRACK** (UI trivial, typo, config) → Teo sin plan
 - **SDD** (4+ archivos, scope ambiguo) → Pol → Sol → Teo
 - **DIRECT** (auditoría/seguridad) → Luz directo
 - **RESEARCH** (aprendizaje) → Jes
+
+Si la intención es ambigua, pregunta qué querés lograr; nunca te pide elegir qué agente usar.
 
 Carga memorias relevantes al inicio de sesión (`skalling-memory`).
 

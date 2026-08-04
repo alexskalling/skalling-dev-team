@@ -4,6 +4,16 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.6.2] — 2026-08-04
+
+### Changed
+- **Refactor de Alex (orquestador)**: delegación directa por rol. Eliminada la fricción de pedir permiso antes de delegar a otros agentes. Nueva tabla de despacho intención → agente → permiso en `agents-base/Alex.md`. Catch-all refactorizado para preguntar QUÉ quiere el usuario, no QUÉ agente.
+- **Anti-patrones explícitos en Alex**: ya no pregunta "¿te parece bien?" antes de delegar, ni ofrece opciones de agente, ni repite el trabajo del equipo.
+- **R16 reforzado**: Alex escribe el mensaje del commit en español siguiendo Conventional Commits.
+
+### Fixed
+- Bundle global: install-global.sh ahora copia `scripts/spec-memory-link.sh` y `scripts/skalling-drift.sh` (v0.6.1 ya había intentado el fix pero quedó incompleto hasta aquí).
+
 ## [0.6.0] — 2026-08-04
 
 ### Added
@@ -166,7 +176,9 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 - Templates OKF (6 tipos: Concept, Decision, Preference, Workaround, WorkInProgress, Context)
 - `setup.sh` inicial (legacy, sin idempotencia)
 
-[Unreleased]: https://github.com/alexskalling/skalling-dev-team/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/alexskalling/skalling-dev-team/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/alexskalling/skalling-dev-team/compare/v0.6.1...v0.6.2
+[0.6.1]: https://github.com/alexskalling/skalling-dev-team/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/alexskalling/skalling-dev-team/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/alexskalling/skalling-dev-team/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/alexskalling/skalling-dev-team/compare/v0.3.0...v0.4.0
