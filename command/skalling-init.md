@@ -200,6 +200,43 @@ Correr mentalmente las validaciones:
 - Constitución accesible
 - Si frontend: design-system.md en bundle OKF
 
+### 4.7 — Code Intelligence (opt-in)
+
+Preguntá al usuario:
+
+> "¿Querés instalar codebase-memory-mcp para indexar este proyecto en un grafo de conocimiento estructural? (Sí/No, default No)"
+
+**Si dice No** → saltar este paso y seguir normal.
+
+**Si dice Sí** → instalar con verificación de integridad:
+```bash
+VERSION="v0.1.0"  # TODO: actualizar cuando sepas la última estable
+INSTALLER="/tmp/codebase-memory-mcp-install.sh"
+CHECKSUMS_URL="https://github.com/DeusData/codebase-memory-mcp/releases/download/${VERSION}/checksums.txt"
+
+curl -fsSL "https://raw.githubusercontent.com/DeusData/codebase-memory-mcp/${VERSION}/install.sh" -o "$INSTALLER"
+curl -fsSL "$CHECKSUMS_URL" -o /tmp/codebase-memory-mcp-checksums.txt
+
+EXPECTED_SHA="$(grep "$(basename $INSTALLER)" /tmp/codebase-memory-mcp-checksums.txt | awk '{print $1}')"
+ACTUAL_SHA="$(shasum -a 256 "$INSTALLER" | awk '{print $1}')"
+if [[ "$EXPECTED_SHA" != "$ACTUAL_SHA" ]]; then
+    echo "ERROR: checksum no coincide, abortando" >&2
+    exit 1
+fi
+
+bash "$INSTALLER"
+```
+
+Después de instalar, verificar que el MCP server quedó configurado:
+```bash
+grep -q "codebase-memory-mcp" ~/.config/opencode/opencode.jsonc
+```
+
+- Si la verificación pasa → informar al usuario: "codebase-memory-mcp instalado. El snippet en los agentes ya está activo. Indexá este proyecto con `codebase-memory-mcp index` cuando quieras."
+- Si la verificación de checksum falla → **error** (no warning). Es superficie de seguridad: no instalamos binarios no verificados.
+
+**Si ya está instalado** (`command -v codebase-memory-mcp` retorna 0): saltar pregunta, reportar "Ya instalado en este sistema, paso saltado".
+
 ## Paso 5 — Resumen final
 
 ```

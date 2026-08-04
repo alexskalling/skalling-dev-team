@@ -33,6 +33,7 @@ PROJECT_DIR="$(pwd)"
 GLOBAL_ONLY=false
 STRICT=false
 WARN_COUNT=0
+WARN_ENV_COUNT=0
 ERROR_COUNT=0
 OK_COUNT=0
 
@@ -62,10 +63,11 @@ c_red='\033[31m'
 c_blue='\033[36m'
 c_reset='\033[0m'
 
-ok()   { OK_COUNT=$((OK_COUNT+1));   printf "  ${c_green}✓${c_reset} %s\n" "$*"; }
-warn() { WARN_COUNT=$((WARN_COUNT+1)); printf "  ${c_yellow}⚠${c_reset} %s\n" "$*" >&2; }
-err()  { ERROR_COUNT=$((ERROR_COUNT+1)); printf "  ${c_red}✗${c_reset} %s\n" "$*" >&2; }
-info() { printf "  ${c_blue}ℹ${c_reset} %s\n" "$*"; }
+ok()        { OK_COUNT=$((OK_COUNT+1));        printf "  ${c_green}✓${c_reset} %s\n" "$*"; }
+warn()      { WARN_COUNT=$((WARN_COUNT+1));      printf "  ${c_yellow}⚠${c_reset} %s\n" "$*" >&2; }
+warn_env()  { WARN_ENV_COUNT=$((WARN_ENV_COUNT+1)); printf "  ${c_yellow}⚠${c_reset} %s\n" "$*" >&2; }
+err()       { ERROR_COUNT=$((ERROR_COUNT+1));    printf "  ${c_red}✗${c_reset} %s\n" "$*" >&2; }
+info()      { printf "  ${c_blue}ℹ${c_reset} %s\n" "$*"; }
 
 section() {
     echo ""
@@ -83,14 +85,14 @@ check_ambiente() {
     if [[ "$major" -ge 4 ]]; then
         ok "bash $BASH_VERSION"
     else
-        warn "bash $BASH_VERSION — los scripts funcionan pero bash >= 4 es recomendado (algunas features avanzadas no disponibles)"
+        warn_env "bash $BASH_VERSION — los scripts funcionan pero bash >= 4 es recomendado (algunas features avanzadas no disponibles)"
     fi
 
     if command -v opencode >/dev/null 2>&1; then
         local v; v="$(opencode --version 2>/dev/null || echo 'unknown')"
         ok "opencode $v"
     else
-        warn "opencode no está en PATH (Skalling funcionará cuando lo instales)"
+        warn_env "opencode no está en PATH (Skalling funcionará cuando lo instales)"
     fi
 
     if command -v node >/dev/null 2>&1; then
@@ -98,16 +100,16 @@ check_ambiente() {
         if [[ "$nv" =~ v(2[2-9]|[3-9][0-9])\. ]]; then
             ok "node $nv (>= 22)"
         else
-            warn "node $nv — Impeccable requiere >= 22"
+            warn_env "node $nv — Impeccable requiere >= 22"
         fi
     else
-        warn "node no está en PATH (necesario para Impeccable)"
+        warn_env "node no está en PATH (necesario para Impeccable)"
     fi
 
     if command -v git >/dev/null 2>&1; then
         ok "git $(git --version | awk '{print $3}')"
     else
-        warn "git no está en PATH"
+        warn_env "git no está en PATH"
     fi
 }
 
@@ -357,6 +359,20 @@ check_project_install() {
     fi
 }
 
+check_inteligencia_codigo() {
+    section "Code Intelligence (opt-in)"
+    if command -v codebase-memory-mcp >/dev/null 2>&1; then
+        info "codebase-memory-mcp instalado ($(codebase-memory-mcp --version 2>/dev/null || echo 'versión desconocida'))"
+        if grep -q "codebase-memory-mcp" ~/.config/opencode/opencode.jsonc 2>/dev/null; then
+            info "MCP server configurado en opencode.jsonc"
+        else
+            info "MCP server NO configurado — corré /skalling-init paso 4.7 o instalá manualmente"
+        fi
+    else
+        info "codebase-memory-mcp NO instalado (opt-in — instalá con /skalling-init paso 4.7 si querés)"
+    fi
+}
+
 # ──────────────────────────────────────────────────────────────────────────────
 # MAIN
 # ──────────────────────────────────────────────────────────────────────────────
@@ -372,11 +388,15 @@ main() {
     if [[ "$GLOBAL_ONLY" == false ]]; then
         check_project_install
     fi
+    check_inteligencia_codigo
 
     echo ""
     printf "${c_blue}━━━ Resumen ━━━${c_reset}\n"
     printf "  ${c_green}OK:${c_reset}       %d\n" "$OK_COUNT"
     printf "  ${c_yellow}Warnings:${c_reset} %d\n" "$WARN_COUNT"
+    if [[ "$WARN_ENV_COUNT" -gt 0 ]]; then
+        printf "  ${c_yellow}Env:${c_reset}      %d (no promovido por --strict)\n" "$WARN_ENV_COUNT"
+    fi
     if [[ "$ERROR_COUNT" -gt 0 ]]; then
         printf "  ${c_red}Errors:${c_reset}   %d\n" "$ERROR_COUNT"
     fi
@@ -389,7 +409,7 @@ main() {
 
     if [[ "$WARN_COUNT" -gt 0 && "$STRICT" == true ]]; then
         echo ""
-        warn "Modo strict activo: warnings tratados como error."
+        warn "Modo strict activo: warnings de proyecto promovidos a error."
         exit 1
     fi
 
