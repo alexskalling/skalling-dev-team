@@ -4,6 +4,23 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-08-04
+
+### Added
+- **Codebase-memory-mcp como feature opt-in**: integración con [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) (servidor MCP de inteligencia estructural de código). NO es dependencia dura — se ofrece como paso 4.7 en `/skalling-init`.
+- **Snippet canónico `templates/agents/snippets/code-intelligence.md`**: single source con guía de cuándo usar las 5 tools (`trace_path`, `get_architecture`, `search_graph`, `find_dead_code`, `detect_changes`).
+- **Inyección en los 8 agentes**: sección `## 🔍 Code Intelligence` agregada antes de `## 🧠 Memory Protocol`, con comment block `SINCRONIZADO CON:`.
+- **Paso 4.7 en `/skalling-init`**: pregunta al usuario si quiere instalar codebase-memory-mcp; 3 ramas (Sí/No/ya-instalado).
+- **`check_code_intelligence()` en el doctor**: verifica instalación y configuración del MCP server como info (no bloquea).
+
+### Changed
+- `command/skalling-init.md`: paso 4.7 nuevo.
+- `setup-team-doctor.sh`: nueva función informativa de Code Intelligence.
+- Tests: 3 archivos de prueba nuevos (`tests/code-intelligence.test.sh` con 44 asserts + `tests/doctor-code-intelligence.test.sh` con 13 asserts + `tests/doctor-strict-environment.test.sh` con 7 asserts = 64 asserts nuevos, 345 PASS total).
+
+### Security
+- El comando de instalación verifica SHA-256 contra `checksums.txt` del tag fijo antes de ejecutar; aborta con `exit 1` si el checksum no coincide.
+
 ## [0.3.0] — 2026-08-04
 
 ### Added
@@ -129,7 +146,8 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 - Templates OKF (6 tipos: Concept, Decision, Preference, Workaround, WorkInProgress, Context)
 - `setup.sh` inicial (legacy, sin idempotencia)
 
-[Unreleased]: https://github.com/tu-usuario/skalling-dev-team/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/alexskalling/skalling-dev-team/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/alexskalling/skalling-dev-team/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/tu-usuario/skalling-dev-team/releases/tag/v0.3.0
 [0.2.2]: https://github.com/tu-usuario/skalling-dev-team/releases/tag/v0.2.2
 [0.2.1]: https://github.com/tu-usuario/skalling-dev-team/releases/tag/v0.2.1
