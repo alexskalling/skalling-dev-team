@@ -1,118 +1,67 @@
 ---
-description: Purge obsolete concept docs from the OKF memory bundle. Identifies stale entries, asks confirmation, archives or deletes.
+description: Revisa y consolida hallazgos del bundle OKF con decisiones supervisadas y trazables.
 ---
 
 # Skalling Forget
 
-Purgar concept docs obsoletos del bundle OKF. Es el "olvido" de la memoria persistente.
+Revisar y consolidar memoria obsoleta sin aplicar cambios automáticos.
 
-## Cuándo usar
+## Flujo obligatorio
 
-- Después de muchos meses, hay muchos concept docs sin referenciar.
-- Decisiones superseded por otras (ya tienen `supersedes:` linkeando a la nueva).
-- Concept docs que ya no aplican (feature removida, tecnología migrada, etc.).
-- Como parte de mantenimiento semestral.
+### PASO 1 — Ejecutar mem-review primero
 
-## Política de olvido (de la constitución)
-
-- Cada 6 meses, Pau revisa entries sin referenciar.
-- `supersedes` linkea a versiones anteriores (la vieja queda pero marcada).
-- Pau purga duplicados cuando los detecta.
-
-## Pasos
-
-### 1. Identificar candidatos
-
-Buscar concept docs que matcheen estos criterios:
+Antes de presentar o modificar cualquier candidato, ejecutar:
 
 ```bash
-# 1. Marcados como superseded
-grep -l "^supersedes:" .opencode/context/**/*.md 2>/dev/null
-
-# 2. Workarounds con "Cómo removerlo" completo
-grep -l "^- \[x\]" .opencode/context/problemas-conocidos/*.md 2>/dev/null
-
-# 3. WorkInProgress con todas las tareas marcadas
-# (todos los checkboxes en [x])
-
-# 4. Concept docs sin referenciar en 6+ meses
-# (heurística: timestamp anterior a 6 meses)
-find .opencode/context -name "*.md" -newer /tmp/6months_ago.txt 2>/dev/null
+bash scripts/mem-review.sh --target "$(pwd)" --dry-run
 ```
 
-### 2. Presentar al usuario
+Mostrar el resultado completo al usuario en este orden:
 
-Por cada candidato, mostrar:
+1. Duplicados
+2. WIP zombie (>30 días)
+3. Stale (>6 meses sin referencia)
+4. Superseded
 
-```
-Candidato a purga:
+Aunque una categoría no tenga hallazgos, mostrar su encabezado vacío.
 
-📄 .opencode/context/decisiones/2025-01-15-usar-mongodb.md
-   Tipo: Decision
-   Creado: 2025-01-15 (hace 18 meses)
-   Superseded by: 2026-06-20-usar-postgres.md
-   Estado: marcado como superseded
+### PASO 2 — Decidir por cada hallazgo
 
+Presentar cada path individualmente. No decidir categorías en bloque:
+
+```text
 A) Archivar (mover a .opencode/context/archive/)
-B) Borrar definitivamente
-C) Conservar (no purgar)
-D) Ver contenido antes de decidir
+B) Marcar como superseded (agregar superseded: true y superseded_by: <otro>)
+C) Consolidar con otro doc (combinar contenido y eliminar el duplicado)
+D) Mantener (ignorar el hallazgo)
 ```
 
-### 3. Aplicar decisión
+Solicitar confirmación explícita antes de A, B o C. Preferir archivar sobre eliminar. Para B, solicitar y validar el path de `superseded_by`. Para C, mostrar ambos documentos y el contenido consolidado antes de reemplazar o eliminar.
 
-**A) Archivar**:
-```bash
-mkdir -p .opencode/context/archive/YYYY-MM/
-mv .opencode/context/decisiones/2025-01-15-usar-mongodb.md \
-   .opencode/context/archive/2025-01/
+### PASO 3 — Aplicar y registrar
+
+Después de cada decisión, appendar una línea a `.opencode/context/log.md`:
+
+```text
+[YYYY-MM-DD] forget action: A on path1.md
 ```
 
-**B) Borrar**:
-```bash
-rm .opencode/context/decisiones/2025-01-15-usar-mongodb.md
-```
+Reemplazar fecha, letra y path por la decisión real. También registrar D para mantener trazabilidad.
 
-**C) Conservar**: no hacer nada, pasar al siguiente.
+### PASO 4 — Validar
 
-### 4. Loggear la purga
-
-Append a `.opencode/context/log.md`:
-
-```markdown
-## YYYY-MM-DD HH:MM — Purga de memoria
-**Por:** alex (forget)
-**Archivados:** [lista]
-**Borrados:** [lista]
-**Conservados:** [lista]
-**Razón:** mantenimiento semestral / superseded / ...
-```
-
-### 5. Actualizar índices
-
-Si alguna carpeta queda vacía después de la purga, marcar en su `index.md`:
-
-```markdown
-> ⚠ Esta carpeta está vacía. Pau la llenará en próximos bootstraps.
-```
-
-### 6. Validar
-
-Correr doctor para confirmar estructura sana:
+Ejecutar:
 
 ```bash
 bash setup-team-doctor.sh --strict
 ```
 
-## Advertencias
+Si el doctor detecta errores o warnings, advertir al usuario y cerrar con estado condicional: no declarar una consolidación sana hasta resolverlos o hasta que el usuario acepte mantenerlos.
 
-- **Nunca** borrar concept docs sin confirmación del usuario.
-- **Nunca** borrar la constitución (es universal, no es memoria del proyecto).
-- **Nunca** borrar `index.md`, `README.md`, `log.md`.
-- **Preferir archivar sobre borrar** (la historia es valiosa).
+## Protecciones
 
-## Lo que NO hace
-
-- No toca `.opencode/changes/` (los SDD son tuyos).
-- No toca `docs/` (la doc pública es tuyos).
-- No toca `.opencode/state/` (es el estado del workflow, no memoria).
+- Nunca borrar la constitución.
+- Nunca borrar `index.md`, `README.md` ni `log.md`.
+- Nunca tocar `.opencode/changes/`, `docs/` ni `.opencode/state/`.
+- Nunca modificar un candidato sin confirmación individual.
+- Preferir archivar sobre borrar porque la historia es valiosa.

@@ -146,7 +146,43 @@ Criterio de éxito: [cómo se mide]
 Procede con el Plan de Acción.
 ```
 
-### FASE 5 — Si el usuario quiere saltarse el análisis
+### FASE 5 — Chequeo de conflictos con memoria existente (OBLIGATORIO)
+
+Antes de cerrar el `proposal.md`, **siempre** chequeo si la propuesta contradice memoria existente. Esta fase corre entre la confirmación del usuario (FASE 4) y la firma de cierre.
+
+1. **Leo concept docs relevantes** en `.opencode/context/concept/` filtrando por palabras clave del feature (prefiero `confidence >= 0.8` y filtrar por tags antes de abrir archivos completos).
+2. **Leo trabajo-en-curso activo** en `.opencode/context/trabajo-en-curso/` para detectar features en curso que se solapen con la propuesta.
+3. **Si encuentro contradicción**, agrego al final del `proposal.md`, **después de `## Success Criteria` y antes de `## Stakeholders`**:
+   ```markdown
+   ## ⚠️ Conflictos detectados
+   - **Concept doc contradicho**: [path al doc]
+   - **Razón de contradicción**: [qué dice el concept doc vs qué propone la feature]
+   - **Propuesta de resolución**: [A: supersedes / B: cambiar feature / C: explayar ambas]
+   ```
+   Y escalo a Alex para presentar al usuario con opciones (no decido solo).
+
+   La sección `## ⚠️ Conflictos detectados` debe aparecer con sus tres campos estructurados (Concept doc contradicho, Razón de contradicción, Propuesta de resolución) por cada contradicción encontrada.
+4. **Si NO encuentro contradicción**, agrego una nota breve:
+   ```markdown
+   ## ✅ Sin conflictos con memoria existente
+   - Revisado: YYYY-MM-DD
+   - Áreas consultadas: decisiones/, preferencias/, problemas-conocidos/
+   - Concept docs relevantes leídos: [lista con paths]
+   ```
+5. **Si el bundle está corrupto** (archivos no parseables, sin index.md, etc.), agrego nota breve `Bundle corrupto, saltando check` y **continúo** sin bloquear el flujo (no escalo a Alex en este caso — el flujo continúa y el usuario decide).
+
+**Regla absoluta**: el `proposal.md` SIEMPRE debe tener una de estas tres marcas:
+- `## ⚠️ Conflictos detectados`
+- `## ✅ Sin conflictos con memoria existente`
+- Nota breve `Bundle corrupto, saltando check`
+
+Sin ninguna de las tres, la propuesta queda incompleta y debe rechazarse.
+
+**Para fast-track e inline**: el chequeo formal NO se aplica (no hay proposal). Alex hace un chequeo visual rápido y pregunta al usuario si detecta una contradicción obvia antes de derivar a Teo.
+
+**MAY delegar**: si el bundle es muy grande (>50 concept docs relevantes), puedo delegar el resumen a Jes. Pero YO mantengo la responsabilidad del veredicto final.
+
+### FASE 6 — Si el usuario quiere saltarse el análisis
 
 Si Alex me reinyecta "Pol, suficiente, procede con lo pedido" o similar → respeto la decisión e invoco a Sol con lo que hay, aclarando que el requerimiento no fue validado completamente.
 

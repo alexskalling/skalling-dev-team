@@ -209,6 +209,79 @@ check_global_install() {
     fi
 }
 
+check_memory_health() {
+    section "Memoria (bundle OKF)"
+
+    local context_dir="$PROJECT_DIR/.opencode/context"
+    [[ -d "$context_dir" ]] || return 0
+
+    source "$SCRIPT_DIR/scripts/lib/lib-memory-check.sh"
+
+    local findings
+    findings="$(skalling_find_orphans "$context_dir")"
+    if [[ -n "$findings" ]]; then
+        while IFS= read -r file; do
+            warn "Concept doc huérfano: $file (no referenciado desde ningún index.md)"
+        done <<< "$findings"
+    else
+        ok "Sin concept docs huérfanos"
+    fi
+
+    local zombie_days="${SKALLING_WIP_ZOMBIE_DAYS:-30}"
+    findings="$(skalling_find_zombie_wip "$context_dir" "$zombie_days")"
+    if [[ -n "$findings" ]]; then
+        while IFS= read -r file; do
+            warn "Trabajo-en-curso zombie (>${zombie_days} días): $file — corré /skalling-forget"
+        done <<< "$findings"
+    else
+        ok "Sin trabajo-en-curso zombie"
+    fi
+
+    findings="$(skalling_find_duplicates "$context_dir")"
+    if [[ -n "$findings" ]]; then
+        while IFS= read -r file; do
+            [[ -n "$file" ]] && err "Duplicado obvio por title: $file"
+        done <<< "$findings"
+    else
+        ok "Sin duplicados obvios"
+    fi
+
+    local stale_months="${SKALLING_STALE_MONTHS:-6}"
+    findings="$(skalling_find_stale "$context_dir" "$stale_months")"
+    if [[ -n "$findings" ]]; then
+        while IFS= read -r file; do
+            warn "Concept doc stale (>${stale_months} meses sin referenciar): $file"
+        done <<< "$findings"
+    else
+        ok "Sin concept docs stale"
+    fi
+
+    findings="$(skalling_find_superseded "$context_dir")"
+    local superseded_in_index=""
+    if [[ -n "$findings" ]]; then
+        while IFS= read -r file; do
+            local name
+            name="$(basename "$file")"
+            if find "$context_dir" -name "index.md" -exec grep -lF "$name" {} + 2>/dev/null | grep -q .; then
+                superseded_in_index+="${file}"$'\n'
+            fi
+        done <<< "$findings"
+    fi
+    if [[ -n "$superseded_in_index" ]]; then
+        while IFS= read -r file; do
+            [[ -n "$file" ]] && warn "Concept doc superseded pero vigente en index.md: $file"
+        done <<< "$superseded_in_index"
+    else
+        ok "Sin concept docs superseded vigentes en index.md"
+    fi
+
+    if [[ -f "$context_dir/log.md" ]]; then
+        ok "log.md presente"
+    else
+        info "Sin log.md (se crea en próximo forget o consolidación)"
+    fi
+}
+
 check_project_install() {
     section "Instalación Per-Project ($PROJECT_DIR)"
 
@@ -271,6 +344,10 @@ check_project_install() {
                 err "Frontend detectado pero falta design-system.md en bundle OKF (REGLA #13)"
             fi
         fi
+    fi
+
+    if [[ -d "$PROJECT_DIR/.opencode/context" ]]; then
+        check_memory_health
     fi
 
     # Changes (SDD)

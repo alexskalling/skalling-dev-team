@@ -1,88 +1,26 @@
 ---
-description: Run health check on Skalling installation. Validates bash, opencode, agents, skills, constitution, project structure.
+description: Run health check on Skalling installation. Validates bash, opencode, agents, skills, constitution, project structure and OKF memory.
 ---
 
 # Skalling Doctor
 
-Wrapper del comando shell `setup-team-doctor.sh`. Corre validación completa de la instalación de Skalling.
+Wrapper de `setup-team-doctor.sh` para validar la instalación global, el proyecto y la salud del bundle OKF.
 
-## Cuándo usar
-
-- Después de instalar Skalling.
-- Después de actualizar.
-- Si algo no funciona y querés diagnosticar.
-- Periódicamente (semanalmente) como health check.
-
-## Pasos
-
-### 1. Localizar el script
-
-Buscar `setup-team-doctor.sh` en:
-- `skalling-dev-team/setup-team-doctor.sh` (si Skalling vive en un subdirectorio del proyecto).
-- `~/.config/opencode/setup-team-doctor.sh` (si se instaló global).
-- Cualquier path donde el usuario haya clonado el repo.
-
-### 2. Ofrecer opciones de scope
-
-Preguntar al usuario (opcional, depende del contexto):
-
-```
-¿Qué scope querés chequear?
-
-A) Solo instalación global (~/.config/opencode/)
-B) Global + este proyecto
-C) Solo este proyecto
-```
-
-Default: **B** (lo más útil).
-
-### 3. Ejecutar
+## Uso
 
 ```bash
-# Solo global
 bash <path-to>/setup-team-doctor.sh --global-only
-
-# Global + proyecto
 bash <path-to>/setup-team-doctor.sh --project "$(pwd)"
-
-# Modo strict (warnings como errors)
-bash <path-to>/setup-team-doctor.sh --strict
+bash <path-to>/setup-team-doctor.sh --strict --project "$(pwd)"
 ```
 
-### 4. Interpretar resultado
+## Interpretación
 
-- **Exit 0 + 0 errors + 0 warnings**: todo OK.
-- **Exit 0 + warnings**: issues menores, revisar pero no bloquea.
-- **Exit 1 + errors**: problemas críticos, requiere acción.
-
-Errores comunes:
-- `bash >= 4 requerido` → sugiere upgrade o usar bash explícito.
-- `Falta constitución` → sugiere correr `install-global.sh`.
-- `Frontmatter no abre/cierra con ---` → bug en algún agente.
-- `REGLA #13 violada` → falta `design-system.md` en bundle OKF de proyecto frontend.
-- `Script update.sh` → falta o no es ejecutable.
-- `Esperados 8 agentes, encontré N` → instalación parcial.
-
-### 5. Sugerir acciones
-
-Por cada error, dar un paso concreto:
-
-```
-Errores detectados:
-
-✗ Frontmatter no abre con --- en alexa.md
-  → Solución: ese archivo es de una instalación previa. Borrar o renombrar.
-
-✗ Frontend detectado pero falta design-system.md en bundle OKF (REGLA #13)
-  → Solución: correr /impeccable document o crear manualmente en .opencode/context/proyecto/design-system.md.
-
-⚠ Bash 3.2 detectado (recomendado >= 4)
-  → Solución: bash 3.2 funciona pero algunas features avanzadas no.
-```
+- Exit `0` sin warnings: instalación saludable.
+- Exit `0` con warnings: findings no bloqueantes cuando no se usa `--strict`.
+- Exit `1`: errores, o warnings bajo `--strict`.
 
 ## Salida
-
-Resumí los findings en una tabla simple:
 
 | Categoría | Estado |
 |---|---|
@@ -94,8 +32,19 @@ Resumí los findings en una tabla simple:
 | Constitución | ... |
 | Templates | ... |
 | REGLA #13 (design-system.md) | ... |
+| Memoria (bundle OKF) | huérfanos / WIP zombie / stale / superseded / duplicados |
 
-## Exit codes
+## Acciones sugeridas para memoria
 
-- `0` → todo OK (o solo warnings si `--strict` no se usó).
-- `1` → errors detectados.
+- **Concept docs huérfanos:** agregar la referencia correcta a un `index.md` o revisar el documento con `/skalling-forget`.
+- **Trabajo-en-curso zombie:** archivar o consolidar el WIP de más de 30 días con `/skalling-forget`.
+- **Concept docs stale:** revisar vigencia de documentos no referenciados durante más de 6 meses.
+- **Concept docs superseded:** quitar del `index.md` vigente y archivar cuando corresponda.
+- **Duplicados por título:** consolidar los documentos; se reportan como error.
+
+## Otros findings frecuentes
+
+- Falta constitución: ejecutar `install-global.sh`.
+- Frontmatter inválido: corregir delimitadores YAML del agente.
+- REGLA #13 violada: crear `.opencode/context/proyecto/design-system.md`.
+- Instalación parcial: reinstalar agentes, skills, comandos o templates faltantes.
