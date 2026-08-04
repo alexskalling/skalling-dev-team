@@ -26,7 +26,7 @@ source "$(dirname "$0")/scripts/lib/lib-os.sh"
 skalling_log_os
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKALLING_VERSION="0.4.0"
+SKALLING_VERSION="0.5.0"
 
 OPENCODE_DIR="$SKALLING_OPENCODE_DIR"
 PROJECT_DIR="$(pwd)"
@@ -356,6 +356,12 @@ check_project_install() {
     if [[ -d "$PROJECT_DIR/.opencode/changes" ]]; then
         local changes; changes="$(find "$PROJECT_DIR/.opencode/changes" -name "proposal.md" 2>/dev/null | wc -l | tr -d ' ')"
         ok "$changes SDD changes (proposal.md)"
+    fi
+
+    if [[ -f "$SCRIPT_DIR/scripts/skalling-drift.sh" ]]; then
+        info "Drift detection disponible: bash scripts/skalling-drift.sh <plan-archivado>"
+    else
+        info "Drift detection no instalado"
     fi
 }
 

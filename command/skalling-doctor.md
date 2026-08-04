@@ -33,6 +33,7 @@ bash <path-to>/setup-team-doctor.sh --strict --project "$(pwd)"
 | Templates | ... |
 | REGLA #13 (design-system.md) | ... |
 | Memoria (bundle OKF) | huérfanos / WIP zombie / stale / superseded / duplicados |
+| Drift detection | ℹ info (manual vía `bash scripts/skalling-drift.sh`) |
 
 ## Acciones sugeridas para memoria
 
@@ -43,6 +44,8 @@ bash <path-to>/setup-team-doctor.sh --strict --project "$(pwd)"
 - **Duplicados por título:** consolidar los documentos; se reportan como error.
 
 ## Otros findings frecuentes
+
+Drift detection solo informa si la herramienta está disponible. La ejecución manual se realiza con `bash scripts/skalling-drift.sh <plan-archivado>`; el doctor no analiza planes archivados automáticamente ni modifica su exit code.
 
 - Falta constitución: ejecutar `install-global.sh`.
 - Frontmatter inválido: corregir delimitadores YAML del agente.

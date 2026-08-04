@@ -4,6 +4,15 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-08-04
+
+### Added
+- **`scripts/skalling-drift.sh`**: CLI de solo lectura para detectar drift entre claims declarados en specs archivadas y el estado actual del repositorio.
+- **Verificadores declarativos**: soporte para existencia de archivos, conteo no recursivo y presencia de texto literal mediante claims `archivo`, `count` y `contiene`.
+- **Validación defensiva**: rechazo de claims malformados, paths absolutos, traversal y espacios, con límites de bloque y advertencias no bloqueantes.
+- **`tests/skalling-drift.test.sh`**: cobertura autocontenida de casos exitosos, drift mixto, errores de entrada, TTY, límites, portabilidad Bash 3.2 e identificadores R1.
+- **Integración con doctor**: línea informativa azul y no bloqueante que indica cómo ejecutar drift detection manualmente, documentada en `command/skalling-doctor.md`.
+
 ## [0.4.0] — 2026-08-04
 
 ### Added
@@ -146,7 +155,8 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 - Templates OKF (6 tipos: Concept, Decision, Preference, Workaround, WorkInProgress, Context)
 - `setup.sh` inicial (legacy, sin idempotencia)
 
-[Unreleased]: https://github.com/alexskalling/skalling-dev-team/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/alexskalling/skalling-dev-team/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/alexskalling/skalling-dev-team/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/alexskalling/skalling-dev-team/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/tu-usuario/skalling-dev-team/releases/tag/v0.3.0
 [0.2.2]: https://github.com/tu-usuario/skalling-dev-team/releases/tag/v0.2.2
