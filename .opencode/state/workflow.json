@@ -1,0 +1,10 @@
+{
+  "fase_actual": "TEO",
+  "agente_activo": "Teo",
+  "tarea_actual": "Fase 1 — Concept Template (1.1, 1.2, 1.3)",
+  "iteracion": 1,
+  "historial": [
+    { "fase": "POL", "resultado": "aprobado", "timestamp": "2026-08-04T03:31:33Z" },
+    { "fase": "SOL", "resultado": "aprobado", "timestamp": "2026-08-04T03:31:33Z" }
+  ]
+}

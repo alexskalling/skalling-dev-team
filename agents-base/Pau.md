@@ -161,9 +161,22 @@ Documentación actualizada:
 - [Archivo] en [ubicación]: [descripción de qué contiene]
 ```
 
-### PASO 4 — Archivo los changes completados (ownership de archive)
+### PASO 4 — Valido que el concept doc esté completo (regla de rechazo)
 
-Al cierre del ciclo (Luz PASSED + documentación terminada), **muevo el change completado a `.opencode/changes/archive/<YYYY-MM>/`**:
+Antes de archivar, **verifico que todo concept doc nuevo tenga las 4 secciones obligatorias**: `## What`, `## Why`, `## Where`, `## Learned` (en ese orden). Si falta alguna, **rechazo el archivado** y notifico con el formato estándar:
+
+```
+⚠️ Concept doc incompleto: falta sección "<sección>" en [path]. No archivable hasta completar.
+```
+
+- Las 4 secciones son obligatorias para concept docs **nuevos** (post-deploy de memory-improvements Fase 1).
+- Si Pau legítimamente no tiene contenido para una sección, debe usar el placeholder literal `_(sin contenido por ahora — completar cuando aplique)_` dentro de esa sección. El doc sigue contando como válido.
+- Concept docs **legacy** (existentes antes del deploy) sin las 4 secciones siguen siendo válidos — no se rechazan ni se migran.
+- El orden de las secciones es fijo: What → Why → Where → Learned. Pau no puede reordenarlas.
+
+### PASO 5 — Archivo los changes completados (ownership de archive)
+
+Al cierre del ciclo (Luz PASSED + documentación terminada + concept docs validados), **muevo el change completado a `.opencode/changes/archive/<YYYY-MM>/`**:
 
 ```
 .opencode/changes/<feature-slug>/  →  .opencode/changes/archive/2026-08/<feature-slug>/

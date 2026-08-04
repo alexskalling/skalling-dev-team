@@ -11,24 +11,20 @@ confidence: 0.0-1.0
 
 # [Nombre del Concepto]
 
-## Qué es
+## What
 
-[Una o dos oraciones. Qué es, qué rol cumple, por qué existe.]
+[Una o dos oraciones. Qué es, qué rol cumple.]
 
-## Cómo se usa
+## Why
 
-[Si aplica: cómo el código del proyecto lo usa, ejemplos de invocación.]
+[Qué dolor motivó la existencia de este concepto. No la feature, el dolor.]
 
-## Donde vive en el código
+## Where
 
 - `path/to/file.ts` — [qué hace]
 - `path/to/related.ts` — [cómo se relaciona]
 
-## Versiones / Migraciones
+## Learned
 
-[Si aplica: historia del concepto, cambios importantes.]
-
-## Links relacionados
-
-- [Concept relacionado 1](./otro-concept.md)
-- [Decisión que lo motivó](../decisiones/2026-XX-XX-titulo.md)
+[Workaround, decisión forzada, gotcha descubierto durante implementación.
+Si no hay nada útil, usar: _(sin contenido por ahora — completar cuando aplica)_]
