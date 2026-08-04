@@ -34,6 +34,7 @@ bash <path-to>/setup-team-doctor.sh --strict --project "$(pwd)"
 | REGLA #13 (design-system.md) | ... |
 | Memoria (bundle OKF) | huérfanos / WIP zombie / stale / superseded / duplicados |
 | Drift detection | ℹ info (manual vía `bash scripts/skalling-drift.sh`) |
+| Spec ↔ Memory link | ℹ info (manual vía `bash scripts/spec-memory-link.sh`) |
 
 ## Acciones sugeridas para memoria
 
@@ -46,6 +47,8 @@ bash <path-to>/setup-team-doctor.sh --strict --project "$(pwd)"
 ## Otros findings frecuentes
 
 Drift detection solo informa si la herramienta está disponible. La ejecución manual se realiza con `bash scripts/skalling-drift.sh <plan-archivado>`; el doctor no analiza planes archivados automáticamente ni modifica su exit code.
+
+Spec ↔ Memory link también es solo informativo y de ejecución manual: `bash scripts/spec-memory-link.sh <origen> <destino>` lo invoca Pau como parte de su PASO 5 de archivado. El doctor no ejecuta el script ni modifica su exit code.
 
 - Falta constitución: ejecutar `install-global.sh`.
 - Frontmatter inválido: corregir delimitadores YAML del agente.

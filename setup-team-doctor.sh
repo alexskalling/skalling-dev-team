@@ -26,7 +26,7 @@ source "$(dirname "$0")/scripts/lib/lib-os.sh"
 skalling_log_os
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKALLING_VERSION="0.5.0"
+SKALLING_VERSION="0.6.0"
 
 OPENCODE_DIR="$SKALLING_OPENCODE_DIR"
 PROJECT_DIR="$(pwd)"
@@ -362,6 +362,12 @@ check_project_install() {
         info "Drift detection disponible: bash scripts/skalling-drift.sh <plan-archivado>"
     else
         info "Drift detection no instalado"
+    fi
+
+    if [[ -f "$SCRIPT_DIR/scripts/spec-memory-link.sh" ]]; then
+        info "Spec ↔ Memory link disponible: bash scripts/spec-memory-link.sh <origen> <destino>"
+    else
+        info "Spec ↔ Memory link NO instalado (feature pendiente, ver .opencode/changes/spec-memory-link/)"
     fi
 }
 

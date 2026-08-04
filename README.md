@@ -2,7 +2,7 @@
 
 Skalling es un equipo de **8 agentes de IA** que trabajan juntos adentro de [OpenCode](https://opencode.ai). Cada agente tiene un rol específico y siguen un ciclo ordenado para construir software bien hecho.
 
-**Versión actual: 0.5.0**
+**Versión actual: 0.6.0**
 
 ---
 
@@ -61,6 +61,10 @@ Requiere Windows 10+ y Git Bash o WSL2.
 ### Drift detection
 
 Drift detection contrasta los claims `archivo`, `count` y `contiene` declarados bajo `## Verificación` en las specs de un plan archivado con el estado actual del repositorio. Es una comprobación manual y de solo lectura: ejecutá `bash scripts/skalling-drift.sh <plan-archivado>` desde cualquier directorio para obtener el detalle de aprobados y fallidos; el doctor solo informa que la herramienta está disponible y no la ejecuta automáticamente.
+
+### Spec ↔ Memory link
+
+Pau enlaza cada concept doc (`docs/`, `.opencode/context/concept/*.md`) a la spec archivada que lo originó. Cuando archiva un plan, corre `bash scripts/spec-memory-link.sh <dir-origen> <dir-destino>` antes del `git mv`: el script detecta los concept docs mencionados en `proposal.md`, `design.md`, `tasks.md` y `specs/*.md`, y les agrega un footer `## Spec original` con el link relativo al path final del plan. La operación es idempotente (segundo run preserva) y portable con Bash 3.2. El doctor solo informa la disponibilidad del script — no lo ejecuta automáticamente.
 
 ---
 

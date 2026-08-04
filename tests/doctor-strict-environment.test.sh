@@ -12,6 +12,24 @@ PRUEBAS_FALLIDAS=()
 aprobar() { APROBADOS=$((APROBADOS+1)); printf "  \033[32m✓\033[0m %s\n" "$*"; }
 rechazar() { FALLADOS=$((FALLADOS+1)); PRUEBAS_FALLIDAS+=("$*"); printf "  \033[31m✗\033[0m %s\n" "$*" >&2; }
 
+FIXTURE="$(mktemp -d)"
+GLOBAL_LIMPIO="$FIXTURE/global-limpio"
+PROYECTO_LIMPIO="$FIXTURE/proyecto-limpio"
+GLOBAL_TMP="$FIXTURE/global-con-warning"
+PROYECTO_TMP="$FIXTURE/proyecto-con-warning"
+trap 'rm -rf "$FIXTURE"' EXIT
+
+mkdir -p "$GLOBAL_LIMPIO/agents" "$GLOBAL_LIMPIO/skills/core" "$GLOBAL_LIMPIO/command" "$GLOBAL_LIMPIO/templates" "$GLOBAL_LIMPIO/skalling-data" "$PROYECTO_LIMPIO/.opencode"
+printf '%s\n' '# Constitución' '' '## 🏛️ Reglas Base' '' 'R13 design-system.md' > "$GLOBAL_LIMPIO/constitucion.md"
+printf '%s\n' '# Comando de fixture' > "$GLOBAL_LIMPIO/command/skalling-fixture.md"
+for agente in Alex Pol Jes Sol Teo Jhon Luz Pau; do
+    if [[ "$agente" == "Alex" ]]; then
+        printf '%s\n' '---' 'mode: primary' "name: $agente" '---' > "$GLOBAL_LIMPIO/agents/${agente}.md"
+    else
+        printf '%s\n' '---' 'mode: subagent' "name: $agente" '---' > "$GLOBAL_LIMPIO/agents/${agente}.md"
+    fi
+done
+
 echo "═══════════════════════════════════════════════════"
 echo "  Doctor --strict: warnings de entorno excluidos"
 echo "═══════════════════════════════════════════════════"
@@ -26,7 +44,7 @@ echo ""
 echo "── Test 1: comportamiento bajo --strict con bash actual ──"
 
 set +e
-SALIDA_ESTRICTA="$(bash "$DOCTOR" --project "$(pwd)" --strict 2>&1)"
+SALIDA_ESTRICTA="$(SKALLING_OPENCODE_DIR="$GLOBAL_LIMPIO" bash "$DOCTOR" --project "$PROYECTO_LIMPIO" --strict 2>&1)"
 CODIGO_SALIDA_ESTRICTO=$?
 set -e
 
@@ -80,10 +98,6 @@ fi
 
 echo ""
 echo "── Test 3: --strict SÍ falla con warnings de proyecto ──"
-
-PROYECTO_TMP="$(mktemp -d)"
-GLOBAL_TMP="$(mktemp -d)"
-trap 'rm -rf "$PROYECTO_TMP" "$GLOBAL_TMP"' EXIT
 
 mkdir -p "$GLOBAL_TMP/agents" "$GLOBAL_TMP/skills" "$GLOBAL_TMP/command" "$GLOBAL_TMP/templates" "$GLOBAL_TMP/skalling-data"
 mkdir -p "$PROYECTO_TMP/.opencode/context"

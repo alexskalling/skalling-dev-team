@@ -4,6 +4,17 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-08-04
+
+### Added
+- **`scripts/spec-memory-link.sh`**: CLI de Pau para enlazar concept docs (`docs/`, `.opencode/context/concept/*.md`) a la spec archivada que los originó. Detecta paths literales en `proposal.md`, `design.md`, `tasks.md` y `specs/*.md` mediante el regex `\.opencode/context/concept/[A-Za-z0-9._-]+\.md`, descarta matches con traversal/espacios/nombre vacío, valida existencia, deduplica y aplica un footer `## Spec original` con link relativo hardcodeado (`../../changes/archive/<YYYY-MM>/<slug>/`) al path final del plan. Escritura atómica con `mktemp` + `mv`; idempotente (segundo run preserva el primero); portable con Bash 3.2.
+- **`tests/spec-memory-link.test.sh`**: cobertura autocontenida de estructura, argv inválido, detección por archivo, regex con/sin prefijo repo, deduplicación, validación de path, cálculo de path relativo, formato exacto del footer, idempotencia 2-run y 3-run, preservación del primero, errores por archivo, integración con Pau, integración informativa del doctor, portabilidad Bash 3.2 e identificadores R1.
+- **Integración informativa del doctor**: línea `ℹ` (azul, no bloqueante) sobre la disponibilidad de `scripts/spec-memory-link.sh` agregada al final de la sección de instalación per-project; mantiene el exit code 0 normal y bajo `--strict` mientras no haya otros findings propios.
+- **Documentación**: nuevo párrafo en `README.md` describiendo Spec ↔ Memory link y fila en la tabla de salida de `command/skalling-doctor.md` con nota sobre ejecución manual.
+
+### Changed
+- `agents-base/Pau.md`: PASO 5 extendido con sub-paso explícito de invocar el script antes del `git mv`, y reporte final al usuario listando los concept docs enlazados (omitiendo la sección si la lista está vacía). Permisos y resto del PASO 5 intactos.
+
 ## [0.5.0] — 2026-08-04
 
 ### Added
@@ -155,7 +166,8 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 - Templates OKF (6 tipos: Concept, Decision, Preference, Workaround, WorkInProgress, Context)
 - `setup.sh` inicial (legacy, sin idempotencia)
 
-[Unreleased]: https://github.com/alexskalling/skalling-dev-team/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/alexskalling/skalling-dev-team/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/alexskalling/skalling-dev-team/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/alexskalling/skalling-dev-team/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/alexskalling/skalling-dev-team/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/tu-usuario/skalling-dev-team/releases/tag/v0.3.0

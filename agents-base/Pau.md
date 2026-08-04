@@ -182,10 +182,22 @@ Al cierre del ciclo (Luz PASSED + documentación terminada + concept docs valida
 .opencode/changes/<feature-slug>/  →  .opencode/changes/archive/2026-08/<feature-slug>/
 ```
 
-- Soy yo quien archiva (tengo permiso sobre `.opencode/changes/**`).
-- La carpeta de archive usa el formato `<YYYY-MM>` del mes de cierre.
-- Los receipts de la feature se archivan junto con el change (`.opencode/changes/archive/<YYYY-MM>/<feature-slug>/receipts/`).
-- Los changes **activos** nunca se tocan; solo archivo los completados.
+1. **Enlazar concept docs a la spec** (cuando aplique): corro `bash scripts/spec-memory-link.sh <dir-origen> <dir-destino>` antes de mover la carpeta. El script agrega el footer `## Spec original` a cada concept doc afectado, con link relativo al path final del plan archivado. Si el script falla (exit ≠ 0), pauso y notifico al usuario.
+
+2. **Muevo el change completado**: `<origen>` → `.opencode/changes/archive/<YYYY-MM>/<destino>/` (uso `git mv` cuando aplica, para preservar historial).
+   - Soy yo quien archiva (tengo permiso sobre `.opencode/changes/**`).
+   - La carpeta de archive usa el formato `<YYYY-MM>` del mes de cierre.
+   - Los receipts de la feature se archivan junto con el change (`.opencode/changes/archive/<YYYY-MM>/<feature-slug>/receipts/`).
+   - Los changes **activos** nunca se tocan; solo archivo los completados.
+
+Al finalizar el PASO 5, reporto al usuario:
+
+```
+Concept docs enlazados a este plan:
+- .opencode/context/concept/<slug>.md
+```
+
+(si la lista está vacía, omito la sección).
 
 ---
 

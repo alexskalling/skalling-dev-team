@@ -1623,16 +1623,16 @@ test_release_y_doctor() {
     echo ""
     echo "── Test 5: versión, documentación e integración doctor ──"
 
-    if grep -q '0.5.0' "$ROOT/VERSION"; then
-        pass "VERSION declara 0.5.0"
+    if grep -q '0.6.0' "$ROOT/VERSION"; then
+        pass "VERSION declara 0.6.0"
     else
-        fail "VERSION no declara 0.5.0"
+        fail "VERSION no declara 0.6.0"
     fi
 
-    if grep -q 'SKALLING_VERSION="0.5.0"' "$ROOT/setup-team-doctor.sh"; then
-        pass "doctor declara SKALLING_VERSION 0.5.0"
+    if grep -q 'SKALLING_VERSION="0.6.0"' "$ROOT/setup-team-doctor.sh"; then
+        pass "doctor declara SKALLING_VERSION 0.6.0"
     else
-        fail "doctor no declara SKALLING_VERSION 0.5.0"
+        fail "doctor no declara SKALLING_VERSION 0.6.0"
     fi
 
     if grep -q 'info "Drift detection disponible:' "$ROOT/setup-team-doctor.sh"; then
@@ -1647,10 +1647,10 @@ test_release_y_doctor() {
         fail "comando doctor no documenta drift detection manual"
     fi
 
-    if grep -q '^## \[0.5.0\]' "$ROOT/CHANGELOG.md" && grep -q 'scripts/skalling-drift.sh' "$ROOT/CHANGELOG.md" && grep -q 'tests/skalling-drift.test.sh' "$ROOT/CHANGELOG.md"; then
-        pass "CHANGELOG 0.5.0 cubre script y tests"
+    if grep -q '^## \[0.6.0\]' "$ROOT/CHANGELOG.md" && grep -q 'scripts/skalling-drift.sh' "$ROOT/CHANGELOG.md" && grep -q 'tests/skalling-drift.test.sh' "$ROOT/CHANGELOG.md"; then
+        pass "CHANGELOG 0.6.0 cubre script y tests"
     else
-        fail "CHANGELOG 0.5.0 incompleto"
+        fail "CHANGELOG 0.6.0 incompleto"
     fi
 
     if grep -qi 'drift detection' "$ROOT/README.md" && grep -q 'scripts/skalling-drift.sh' "$ROOT/README.md"; then
