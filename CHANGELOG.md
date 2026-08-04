@@ -17,7 +17,7 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ### Changed
 - Doctor: output con nueva fila "Memoria (bundle OKF)" y 5 chequeos automáticos.
-- Tests: cobertura completa de las nuevas features (8 tests nuevos, 268 PASS total en regresión).
+- Tests: cobertura completa de las nuevas features (8 tests nuevos, 281 PASS total en regresión).
 
 ### Security
 - Ningún cambio de superficie de seguridad.
