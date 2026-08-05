@@ -236,24 +236,34 @@ grep -q "codebase-memory-mcp" ~/.config/opencode/opencode.jsonc
 **SIEMPRE** verificar que la DB del proyecto existe, sin importar el estado (A/B/C):
 
 ```bash
+# Resolver la raíz de instalación (funciona en repo y en global ~/.config/opencode)
+SK_ROOT="${SKALLING_ROOT:-}"
+if [ -z "$SK_ROOT" ] || [ ! -f "$SK_ROOT/scripts/teamdb-init.sh" ]; then
+  [ -f "$HOME/.config/opencode/scripts/teamdb-init.sh" ] && SK_ROOT="$HOME/.config/opencode"
+fi
+if [ -z "$SK_ROOT" ] || [ ! -f "$SK_ROOT/scripts/teamdb-init.sh" ]; then
+  echo "WARN: teamdb-init.sh no encontrado (ni repo ni ~/.config/opencode)" >&2
+fi
+
 # Verificar si team.db existe
 if [ ! -f ".opencode/context/team.db" ]; then
   echo "team.db no existe. Creando..."
-  bash "$(dirname "$SKALLING_ROOT")/scripts/teamdb-init.sh" .
+  bash "$SK_ROOT/scripts/teamdb-init.sh" .
   
   # Si hay .jsonl legacy, migrar
   if [ -f ".opencode/context/DECISIONS.jsonl" ] || [ -d ".opencode/context/concept" ]; then
-    bash "$(dirname "$SKALLING_ROOT")/scripts/teamdb-migrate.sh" .
+    bash "$SK_ROOT/scripts/teamdb-migrate.sh" .
   fi
 fi
 
 # Migrar y verificar schema (idempotente y NO destructivo: teamdb-init.sh aplica
 # las migrations 002/003/004 y valida version 0.7.2. NUNCA borrar la DB.)
-bash "$(dirname "$SKALLING_ROOT")/scripts/teamdb-init.sh" .
+bash "$SK_ROOT/scripts/teamdb-init.sh" .
 
-# Activar hooks git
+# Activar hooks git (el installer los deja en $SK_ROOT/hooks; en el repo viven en scripts/hooks)
 if [ -d ".git" ]; then
-  HOOKS_SRC="$(dirname "$SKALLING_ROOT")/scripts/hooks"
+  HOOKS_SRC="$SK_ROOT/hooks"
+  [ -d "$HOOKS_SRC" ] || HOOKS_SRC="$SK_ROOT/scripts/hooks"
   cp "$HOOKS_SRC/pre-commit" .git/hooks/pre-commit 2>/dev/null
   cp "$HOOKS_SRC/post-merge" .git/hooks/post-merge 2>/dev/null
   chmod +x .git/hooks/pre-commit .git/hooks/post-merge 2>/dev/null

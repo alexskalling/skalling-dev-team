@@ -145,11 +145,32 @@ else
     "ver=$VER_PROJ actor=$HAS_ACTOR history=$HAS_HISTORY"
 fi
 
-# Hooks
-if echo "$OUT" | grep -qE "hooks/(pre-commit|post-merge)"; then
-  assert_pass "dry-run menciona hooks/pre-commit o hooks/post-merge"
+# Hooks instalados de verdad (end-to-end, no solo dry-run)
+export HOME="$FAKE_HOME"
+bash "$ROOT/install-global.sh" >/dev/null 2>&1
+export HOME="$HOME_BAK"
+INST_HOOKS="$FAKE_HOME/.config/opencode/hooks"
+if [ -x "$INST_HOOKS/pre-commit" ] && [ -x "$INST_HOOKS/post-merge" ]; then
+  assert_pass "hooks instalados en \$OPENCODE_DIR/hooks y ejecutables"
 else
-  assert_fail "dry-run menciona hooks/pre-commit o hooks/post-merge" "no aparece"
+  assert_fail "hooks instalados en \$OPENCODE_DIR/hooks y ejecutables" "ls: $(ls "$INST_HOOKS" 2>/dev/null)"
+fi
+
+# skalling-init.md debe resolver $SK_ROOT (no $(dirname "$SKALLING_ROOT")) y buscar hooks en $SK_ROOT/hooks
+if grep -q '\$(dirname "\$SKALLING_ROOT")' "$ROOT/command/skalling-init.md"; then
+  assert_fail "skalling-init.md sin referencias \$(dirname \$SKALLING_ROOT)"
+else
+  assert_pass "skalling-init.md sin referencias \$(dirname \$SKALLING_ROOT)"
+fi
+if grep -q 'HOOKS_SRC="\$SK_ROOT/hooks"' "$ROOT/command/skalling-init.md"; then
+  assert_pass "skalling-init.md busca hooks en \$SK_ROOT/hooks (ruta del installer)"
+else
+  assert_fail "skalling-init.md busca hooks en \$SK_ROOT/hooks (ruta del installer)"
+fi
+if grep -q '\$SK_ROOT/scripts/teamdb-init.sh' "$ROOT/command/skalling-init.md"; then
+  assert_pass "skalling-init.md usa \$SK_ROOT/scripts/teamdb-init.sh"
+else
+  assert_fail "skalling-init.md usa \$SK_ROOT/scripts/teamdb-init.sh"
 fi
 
 # Verificar que NO hay `|| true` silenciador cerca de hooks
