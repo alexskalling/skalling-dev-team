@@ -68,3 +68,12 @@
 
 # Doc pública: manual merge si hay conflicto (es código, no se auto-mergea)
 /docs/**/*.md text eol=lf
+
+# ────────────────────────────────────────────────────────────────────────────
+# TEAMDB SQL DUMPS — append-friendly
+# ────────────────────────────────────────────────────────────────────────────
+
+# data_*.sql: dumps de sqlite (conceptos/decisiones/etc). Cada INSERT es
+# idempotente, así que union = "conservar ambas líneas de INSERT".
+# El import filtra duplicados y maneja conflictos con warnings.
+.opencode/context/teamdb/data_*.sql merge=union

@@ -26,7 +26,7 @@ source "$(dirname "$0")/scripts/lib/lib-os.sh"
 skalling_log_os
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKALLING_VERSION="0.6.2"
+SKALLING_VERSION="$(grep '__version__' "$SCRIPT_DIR/VERSION" | sed 's/.*"\(.*\)".*/\1/')"
 
 OPENCODE_DIR="$SKALLING_OPENCODE_DIR"
 PROJECT_DIR="$(pwd)"
@@ -385,6 +385,48 @@ check_inteligencia_codigo() {
     fi
 }
 
+check_teamdb() {
+    section "teamdb (libSQL)"
+
+    # team.db global
+    local global_db="$HOME/.config/opencode/team.db"
+    if [[ -f "$global_db" ]]; then
+        ok "team.db global presente"
+        local gver
+        gver="$(sqlite3 -separator $'\t' "$global_db" "SELECT value FROM schema_meta WHERE key='version'" 2>/dev/null || echo "")"
+        if [[ "$gver" == "$SKALLING_VERSION" ]]; then
+            ok "team.db global schema v$gver (match con VERSION)"
+        else
+            warn "team.db global schema v${gver:-?} vs VERSION=$SKALLING_VERSION (rebuild con install-global.sh)"
+        fi
+    else
+        info "team.db global no existe (se crea con install-global.sh)"
+    fi
+
+    # team.db per-project
+    local project_db="$PROJECT_DIR/.opencode/context/team.db"
+    if [[ -f "$project_db" ]]; then
+        ok "team.db proyecto presente"
+        local pver
+        pver="$(sqlite3 -separator $'\t' "$project_db" "SELECT value FROM schema_meta WHERE key='version'" 2>/dev/null || echo "")"
+        if [[ "$pver" == "$SKALLING_VERSION" ]]; then
+            ok "team.db proyecto schema v$pver (match con VERSION)"
+        else
+            warn "team.db proyecto schema v${pver:-?} vs VERSION=$SKALLING_VERSION"
+        fi
+        # Verificar audit log triggers
+        local trigger_count
+        trigger_count="$(sqlite3 -separator $'\t' "$project_db" "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name LIKE '%audit%'" 2>/dev/null || echo "0")"
+        if [[ "$trigger_count" -ge 12 ]]; then
+            ok "audit log triggers activos ($trigger_count)"
+        else
+            warn "audit log triggers faltantes ($trigger_count/12) — rebuild con teamdb-init.sh"
+        fi
+    else
+        info "team.db proyecto no existe (se crea con bootstrap-context.sh)"
+    fi
+}
+
 # ──────────────────────────────────────────────────────────────────────────────
 # MAIN
 # ──────────────────────────────────────────────────────────────────────────────
@@ -401,6 +443,7 @@ main() {
         check_project_install
     fi
     check_inteligencia_codigo
+    check_teamdb
 
     echo ""
     printf "${c_blue}━━━ Resumen ━━━${c_reset}\n"

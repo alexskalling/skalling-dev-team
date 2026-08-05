@@ -15,5 +15,7 @@ sqlite3 "$local_db" ".dump concepts" > "$OUT/data_concepts.sql" 2>/dev/null || t
 sqlite3 "$local_db" ".dump decisions" > "$OUT/data_decisions.sql" 2>/dev/null || true
 sqlite3 "$local_db" ".dump preferences" > "$OUT/data_preferences.sql" 2>/dev/null || true
 sqlite3 "$local_db" ".dump known_problems" > "$OUT/data_problems.sql" 2>/dev/null || true
+sqlite3 "$local_db" ".dump memory_links" > "$OUT/data_memory_links.sql" 2>/dev/null || true
+sqlite3 "$local_db" ".dump memory_tags" > "$OUT/data_memory_tags.sql" 2>/dev/null || true
 
 echo "exported: $OUT"

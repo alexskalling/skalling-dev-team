@@ -29,6 +29,22 @@ teamdb_query_project() {
   sqlite3 -separator $'\t' "$db" "$1"
 }
 
+teamdb_write_project() {
+  teamdb_check_sqlite3 || return 1
+  local db="$1"; shift
+  [ -f "$db" ] || { echo "[ERROR] DB no existe: $db" >&2; return 1; }
+  local lock_path="${db}.lock"
+
+  if command -v flock >/dev/null 2>&1; then
+    (
+      flock -w 5 200 || { echo "[ERROR] No lock $lock_path" >&2; return 1; }
+      sqlite3 "$db" "$1"
+    ) 200>"$lock_path"
+  else
+    sqlite3 "$db" "$1"
+  fi
+}
+
 teamdb_with_lock() {
   local lock_path="$1"
   shift

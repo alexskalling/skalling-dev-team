@@ -1,0 +1,36 @@
+{
+  "receipt_id": "rcpt_20260805102800",
+  "timestamp": "2026-08-05T10:28:00-03:00",
+  "route": "FAST-TRACK",
+  "verdict": "PASS",
+  "task": "Auditoría Luz teamdb v0.7.0 — 14 fixes aplicados",
+  "summary": "C1 SQL injection, C2 audit triggers (12), C3 flock, H4 import idempotente, H5 migration eliminada, H6 VERSION dinámico, M7 CHANGELOG 30 tests, M8 doctor teamdb, M9 .gitattributes sql, M10 23 tests nuevos, L11 export memory_tags/links, L12 hooks auto-activate, L13 wip-tree escape, L14 post-merge errores visibles",
+  "verification": {
+    "type": "test",
+    "command": "bash tests/teamdb.test.sh",
+    "output_summary": "PASS=53 FAIL=0 (baseline 30 + 23 nuevos para fixes)",
+    "exit_code": 0,
+    "tests_total": 53,
+    "tests_passed": 53,
+    "tests_failed": 0
+  },
+  "artifacts": [
+    "CHANGELOG.md",
+    "bootstrap-context.sh",
+    "install-global.sh",
+    "scripts/hooks/post-merge",
+    "scripts/lib/lib-teamdb.sh",
+    "scripts/teamdb-export.sh",
+    "scripts/teamdb-import.sh",
+    "scripts/teamdb-migrate.sh",
+    "scripts/wip-tree.sh",
+    "setup-team-doctor.sh",
+    "sql/project-schema.sql",
+    "sql/migrations/001_add_wip_hierarchy.sql (deleted)",
+    "templates/gitattributes.template",
+    "tests/teamdb.test.sh"
+  ],
+  "coverage": "N/A (bash script tests)",
+  "ladder_rung_used": 4,
+  "ladder_reason": "Reusar teamdb_query_project/wrap con flock (dependencia ya instalada: bash flock builtin)"
+}

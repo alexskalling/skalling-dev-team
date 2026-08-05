@@ -152,3 +152,59 @@ CREATE TRIGGER wip_au AFTER UPDATE ON work_in_progress BEGIN
   INSERT INTO wip_fts(wip_fts, rowid, title, body_md) VALUES('delete', old.id, old.title, old.body_md);
   INSERT INTO wip_fts(rowid, title, body_md) VALUES (new.id, new.title, new.body_md);
 END;
+
+-- ────────────────────────────────────────────────────────────────────────────
+-- AUDIT LOG TRIGGERS — registran INSERT/UPDATE/DELETE de las tablas críticas
+-- ────────────────────────────────────────────────────────────────────────────
+
+CREATE TRIGGER concepts_audit_ai AFTER INSERT ON concepts BEGIN
+  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details)
+  VALUES (datetime('now'), 'system', 'insert', 'concepts', new.id, json_object('slug', new.slug));
+END;
+CREATE TRIGGER concepts_audit_au AFTER UPDATE ON concepts BEGIN
+  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details)
+  VALUES (datetime('now'), 'system', 'update', 'concepts', new.id, json_object('slug', new.slug));
+END;
+CREATE TRIGGER concepts_audit_ad AFTER DELETE ON concepts BEGIN
+  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details)
+  VALUES (datetime('now'), 'system', 'delete', 'concepts', old.id, json_object('slug', old.slug));
+END;
+
+CREATE TRIGGER decisions_audit_ai AFTER INSERT ON decisions BEGIN
+  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details)
+  VALUES (datetime('now'), 'system', 'insert', 'decisions', new.id, json_object('slug', new.slug));
+END;
+CREATE TRIGGER decisions_audit_au AFTER UPDATE ON decisions BEGIN
+  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details)
+  VALUES (datetime('now'), 'system', 'update', 'decisions', new.id, json_object('slug', new.slug));
+END;
+CREATE TRIGGER decisions_audit_ad AFTER DELETE ON decisions BEGIN
+  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details)
+  VALUES (datetime('now'), 'system', 'delete', 'decisions', old.id, json_object('slug', old.slug));
+END;
+
+CREATE TRIGGER wip_audit_ai AFTER INSERT ON work_in_progress BEGIN
+  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details)
+  VALUES (datetime('now'), 'system', 'insert', 'work_in_progress', new.id, json_object('slug', new.slug, 'type', new.type));
+END;
+CREATE TRIGGER wip_audit_au AFTER UPDATE ON work_in_progress BEGIN
+  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details)
+  VALUES (datetime('now'), 'system', 'update', 'work_in_progress', new.id, json_object('slug', new.slug, 'status', new.status));
+END;
+CREATE TRIGGER wip_audit_ad AFTER DELETE ON work_in_progress BEGIN
+  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details)
+  VALUES (datetime('now'), 'system', 'delete', 'work_in_progress', old.id, json_object('slug', old.slug));
+END;
+
+CREATE TRIGGER problems_audit_ai AFTER INSERT ON known_problems BEGIN
+  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details)
+  VALUES (datetime('now'), 'system', 'insert', 'known_problems', new.id, json_object('slug', new.slug));
+END;
+CREATE TRIGGER problems_audit_au AFTER UPDATE ON known_problems BEGIN
+  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details)
+  VALUES (datetime('now'), 'system', 'update', 'known_problems', new.id, json_object('slug', new.slug));
+END;
+CREATE TRIGGER problems_audit_ad AFTER DELETE ON known_problems BEGIN
+  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details)
+  VALUES (datetime('now'), 'system', 'delete', 'known_problems', old.id, json_object('slug', old.slug));
+END;

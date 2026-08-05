@@ -26,7 +26,7 @@ skalling_log_os
 # ──────────────────────────────────────────────────────────────────────────────
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKALLING_VERSION="0.6.2"
+SKALLING_VERSION="$(grep '__version__' "$SCRIPT_DIR/VERSION" | sed 's/.*"\(.*\)".*/\1/')"
 INSTALL_DATE="$(date +%Y-%m-%dT%H:%M:%S%z)"
 
 OPENCODE_DIR="$SKALLING_OPENCODE_DIR"

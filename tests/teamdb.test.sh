@@ -115,5 +115,125 @@ assert "wip-tree muestra feature" "echo \"$out\" | grep -q 'feature: Mi Feature'
 assert "wip-tree muestra task" "echo \"$out\" | grep -q 'task: Mi Task'"
 
 rm -rf "$TEST_DEMO"
+
+# ────────────────────────────────────────────────────────────────────────────
+# FIX C1 — SQL injection en teamdb-migrate.sh (comillas + SQLi attempts)
+# ────────────────────────────────────────────────────────────────────────────
+
+TEST_SQLI=$(mktemp -d)
+mkdir -p "$TEST_SQLI/.opencode/context"
+printf '%s\n' '{"topic":"quote-test","decision":"It'"'"'s a \"good\" approach"}' > "$TEST_SQLI/.opencode/context/DECISIONS.jsonl"
+printf '%s\n' '{"topic":"sqli-attempt","decision":"evil'"'"'; DROP TABLE x; --"}' > "$TEST_SQLI/.opencode/context/DECISIONS.jsonl"
+bash "$SKALLING_ROOT/scripts/teamdb-migrate.sh" "$TEST_SQLI" >/dev/null 2>&1 || true
+DB_SQLI="$TEST_SQLI/.opencode/context/team.db"
+assert "migrate sobrevive comillas dobles" "[ -f '$DB_SQLI' ]"
+assert "migrate comillas simples OK" "sqlite3 '$DB_SQLI' 'SELECT 1 FROM decisions WHERE slug=\"quote-test\"'"
+assert "migrate SQLi attempt como string" "sqlite3 '$DB_SQLI' 'SELECT 1 FROM decisions WHERE slug=\"sqli-attempt\"'"
+assert "tabla decisions no destruida" "sqlite3 '$DB_SQLI' 'SELECT 1 FROM decisions LIMIT 1'"
+rm -rf "$TEST_SQLI"
+
+# ────────────────────────────────────────────────────────────────────────────
+# FIX C2 — audit log triggers (12 triggers: 4 tablas × 3 acciones)
+# ────────────────────────────────────────────────────────────────────────────
+
+TEST_AUDIT=$(mktemp -d)
+mkdir -p "$TEST_AUDIT/.opencode/context"
+DB_AUDIT="$TEST_AUDIT/.opencode/context/team.db"
+sqlite3 "$DB_AUDIT" < "$SKALLING_ROOT/sql/project-schema.sql"
+trigger_count=$(sqlite3 "$DB_AUDIT" "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name LIKE '%audit%'")
+assert "audit triggers presentes (12)" "[ \"$trigger_count\" = '12' ]"
+
+sqlite3 "$DB_AUDIT" "INSERT INTO concepts (slug,title,body_md,updated_at) VALUES ('audit-test','Audit','test',datetime('now'))"
+sqlite3 "$DB_AUDIT" "INSERT INTO decisions (slug,title,body_md,decided_at) VALUES ('audit-dec','Decision','d',datetime('now'))"
+sqlite3 "$DB_AUDIT" "INSERT INTO work_in_progress (slug,type,title,status,created_at,updated_at) VALUES ('audit-wip','task','WIP','open',datetime('now'),datetime('now'))"
+sqlite3 "$DB_AUDIT" "INSERT INTO known_problems (slug,title,symptom_md,discovered_at) VALUES ('audit-prob','Problem','p',datetime('now'))"
+audit_count=$(sqlite3 "$DB_AUDIT" "SELECT COUNT(*) FROM audit_log")
+assert "audit_log captura 4 inserts" "[ \"$audit_count\" = '4' ]"
+
+sqlite3 "$DB_AUDIT" "UPDATE concepts SET body_md='updated' WHERE slug='audit-test'"
+sqlite3 "$DB_AUDIT" "DELETE FROM concepts WHERE slug='audit-test'"
+audit_count=$(sqlite3 "$DB_AUDIT" "SELECT COUNT(*) FROM audit_log WHERE action IN ('update','delete')")
+assert "audit_log captura update+delete" "[ \"$audit_count\" = '2' ]"
+rm -rf "$TEST_AUDIT"
+
+# ────────────────────────────────────────────────────────────────────────────
+# FIX H4 — import en DB existente (extrae solo INSERTs, no rompe)
+# ────────────────────────────────────────────────────────────────────────────
+
+TEST_IMPORT=$(mktemp -d)
+mkdir -p "$TEST_IMPORT/.opencode/context"
+bash "$SKALLING_ROOT/scripts/teamdb-init.sh" "$TEST_IMPORT" >/dev/null 2>&1
+DB="$TEST_IMPORT/.opencode/context/team.db"
+sqlite3 "$DB" "INSERT INTO concepts (slug,title,body_md,updated_at) VALUES ('existing','Existing','old',datetime('now'))"
+bash "$SKALLING_ROOT/scripts/teamdb-export.sh" "$TEST_IMPORT" >/dev/null 2>&1
+sqlite3 "$DB" "INSERT INTO concepts (slug,title,body_md,updated_at) VALUES ('new','New','new',datetime('now'))"
+import_out=$(bash "$SKALLING_ROOT/scripts/teamdb-import.sh" "$TEST_IMPORT" 2>&1)
+assert "import en DB existente no rompe" "[ -f '$DB' ]"
+assert "import reporta success" "echo \"$import_out\" | grep -q 'imported:'"
+count=$(sqlite3 "$DB" "SELECT COUNT(*) FROM concepts WHERE slug IN ('existing','new')")
+assert "conceptos preservados tras import" "[ \"$count\" = '2' ]"
+rm -rf "$TEST_IMPORT"
+
+# ────────────────────────────────────────────────────────────────────────────
+# FIX C3 — flock wrappea teamdb_write_project
+# ────────────────────────────────────────────────────────────────────────────
+
+TEST_FLOCK=$(mktemp -d)
+mkdir -p "$TEST_FLOCK/.opencode/context"
+bash "$SKALLING_ROOT/scripts/teamdb-init.sh" "$TEST_FLOCK" >/dev/null 2>&1
+DB="$TEST_FLOCK/.opencode/context/team.db"
+assert "teamdb_write_project definida" "grep -q 'teamdb_write_project' '$SKALLING_ROOT/scripts/lib/lib-teamdb.sh'"
+assert "teamdb_write_project usa flock" "grep -q 'flock' '$SKALLING_ROOT/scripts/lib/lib-teamdb.sh'"
+source "$SKALLING_ROOT/scripts/lib/lib-teamdb.sh"
+teamdb_write_project "$DB" "INSERT INTO concepts (slug,title,body_md,updated_at) VALUES ('flock-test','Flock','test',datetime('now'))"
+count=$(sqlite3 "$DB" "SELECT COUNT(*) FROM concepts WHERE slug='flock-test'")
+assert "teamdb_write_project ejecuta INSERT" "[ \"$count\" = '1' ]"
+rm -rf "$TEST_FLOCK"
+
+# ────────────────────────────────────────────────────────────────────────────
+# FIX L11 — memory_links y memory_tags funcionan
+# ────────────────────────────────────────────────────────────────────────────
+
+TEST_ML=$(mktemp -d)
+mkdir -p "$TEST_ML/.opencode/context"
+DB="$TEST_ML/.opencode/context/team.db"
+sqlite3 "$DB" < "$SKALLING_ROOT/sql/project-schema.sql"
+sqlite3 "$DB" "INSERT INTO concepts (slug,title,body_md,updated_at) VALUES ('a','A','a',datetime('now'))"
+sqlite3 "$DB" "INSERT INTO concepts (slug,title,body_md,updated_at) VALUES ('b','B','b',datetime('now'))"
+sqlite3 "$DB" "INSERT INTO memory_links (from_table,from_id,to_table,to_id,link_type) VALUES ('concepts',1,'concepts',2,'uses')"
+count=$(sqlite3 "$DB" "SELECT COUNT(*) FROM memory_links")
+assert "memory_links INSERT funciona" "[ \"$count\" = '1' ]"
+
+sqlite3 "$DB" "INSERT INTO tags (name,color) VALUES ('urgent','red')"
+sqlite3 "$DB" "INSERT INTO memory_tags (memory_table,memory_id,tag_id) VALUES ('concepts',1,1)"
+count=$(sqlite3 "$DB" "SELECT COUNT(*) FROM memory_tags")
+assert "memory_tags INSERT funciona" "[ \"$count\" = '1' ]"
+
+bash "$SKALLING_ROOT/scripts/teamdb-export.sh" "$TEST_ML" >/dev/null 2>&1
+assert "export crea data_memory_links.sql" "[ -f '$TEST_ML/.opencode/context/teamdb/data_memory_links.sql' ]"
+assert "export crea data_memory_tags.sql" "[ -f '$TEST_ML/.opencode/context/teamdb/data_memory_tags.sql' ]"
+rm -rf "$TEST_ML"
+
+# ────────────────────────────────────────────────────────────────────────────
+# FIX M8 — doctor chequea teamdb
+# ────────────────────────────────────────────────────────────────────────────
+
+assert "doctor contiene check_teamdb" "grep -q 'check_teamdb' '$SKALLING_ROOT/setup-team-doctor.sh'"
+assert "doctor referencia VERSION" "grep -q 'VERSION' '$SKALLING_ROOT/setup-team-doctor.sh'"
+
+# ────────────────────────────────────────────────────────────────────────────
+# FIX H6 — install-global.sh VERSION dinámico
+# ────────────────────────────────────────────────────────────────────────────
+
+assert "install-global.sh lee VERSION" "grep -q \"grep '__version__'\" '$SKALLING_ROOT/install-global.sh'"
+assert "install-global.sh sin version hardcoded" "! grep -q 'SKALLING_VERSION=\"0.6.2\"' '$SKALLING_ROOT/install-global.sh'"
+
+# ────────────────────────────────────────────────────────────────────────────
+# FIX M9 — .gitattributes para .sql merge
+# ────────────────────────────────────────────────────────────────────────────
+
+assert ".gitattributes tiene data_*.sql" "grep -q 'data_\\*.sql' '$SKALLING_ROOT/templates/gitattributes.template'"
+assert ".gitattributes usa merge=union para sql" "grep -q 'data_\\*.sql merge=union' '$SKALLING_ROOT/templates/gitattributes.template'"
+
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

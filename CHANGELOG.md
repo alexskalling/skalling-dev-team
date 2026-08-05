@@ -21,18 +21,34 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 - **teamdb-export.sh**: DB → `.sql` para git
 - **teamdb-import.sh**: `.sql` → DB
 - **wip-tree.sh**: visualizador recursivo plan/feature/task con estados derivados
-- **27 tests** en `tests/teamdb.test.sh` (8 schemas + 7 scripts + 5 E2E + 7 FTS5/jerarquía)
+- **30 tests** en `tests/teamdb.test.sh` (8 schemas + 7 scripts + 5 E2E + 7 FTS5/jerarquía + 3 fixes audit/migrate/import)
 
 ### Changed
 - `install-global.sh`: instala teamdb global (DB + scripts)
 - `bootstrap-context.sh`: inicializa teamdb proyecto
 - `Pau.md`: documenta uso real de teamdb con queries
 
+### Fixed
+- **SQL injection en `teamdb-migrate.sh`**: helper `sql_escape` con `sed "s/'/''/g"` aplicado a todos los campos JSON antes de interpolación SQL. Migración segura de `.jsonl` legacy.
+- **Audit log triggers implementados**: 12 triggers (4 tablas × INSERT/UPDATE/DELETE) registran cada cambio en `audit_log` con timestamp, agent, action, table, row_id y details en JSON.
+- **flock wrappea escrituras (`teamdb_write_project`)**: nueva función en `lib-teamdb.sh` que toma lock de flock con timeout 5s antes de ejecutar INSERT/UPDATE/DELETE. Previene race conditions en escrituras concurrentes. Usada en `teamdb-migrate.sh`.
+- **Import en DB existente**: `teamdb-import.sh` ahora extrae solo líneas `INSERT INTO` del dump SQL (con `grep -E "^INSERT INTO "`), evitando conflicto con `CREATE TABLE` que ya existe. Importa idempotentemente con warnings por tabla que falle.
+- **`install-global.sh` lee VERSION dinámico**: ya no tiene `SKALLING_VERSION="0.6.2"` hardcodeado; lee de `VERSION` file via `grep '__version__' | sed`. Mismo fix en `setup-team-doctor.sh`.
+- **Doctor chequea teamdb**: nueva sección `check_teamdb()` valida `team.db` global y per-project contra VERSION, y verifica que los 12 audit triggers estén activos. Advierte si hay mismatch.
+- **`.gitattributes` para `.sql` merge**: `data_*.sql` usa `merge=union` (cada INSERT es idempotente, conservar ambas líneas es seguro).
+- **Hooks se activan automáticamente**: `bootstrap-context.sh` llama nueva función `activate_teamdb_hooks()` que copia `pre-commit` y `post-merge` a `.git/hooks/` y los hace ejecutables.
+- **`wip-tree.sh` SQL escape**: helper `sql_escape` aplicado a `parent_slug` antes de la query. Previene crash cuando un slug contiene comillas.
+- **`post-merge` no suprime errores**: removido `2>/dev/null || true`. Errores de import ahora son visibles en consola (la salud de teamdb es importante).
+
+### Removed
+- `sql/migrations/001_add_wip_hierarchy.sql`: dead code. La jerarquía `type`/`parent_id` ya está en `sql/project-schema.sql` desde v0.7.0 inicial. Directorio `sql/migrations/` vacío eliminado.
+
 ### Migration Guide v0.6.x → v0.7.0
 1. `git pull origin teamdb`
 2. `bash install-global.sh` (instala teamdb global automáticamente)
-3. Por cada proyecto: `bash bootstrap-context.sh` (crea team.db proyecto)
+3. Por cada proyecto: `bash bootstrap-context.sh` (crea team.db proyecto + activa hooks)
 4. Los archivos `.jsonl` legacy se migran automáticamente a la DB
+5. Verificar instalación: `bash setup-team-doctor.sh`
 
 ## [0.6.2] — 2026-08-04
 

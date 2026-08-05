@@ -290,6 +290,29 @@ init_teamdb() {
     fi
 }
 
+activate_teamdb_hooks() {
+    local project="$1"
+    if [[ ! -d "$project/.git" ]]; then
+        return 0
+    fi
+    local hooks_src="$SCRIPT_DIR/scripts/hooks"
+    local hooks_dst="$project/.git/hooks"
+    if [[ ! -d "$hooks_src" ]]; then
+        return 0
+    fi
+    local installed=0
+    for hook in pre-commit post-merge; do
+        if [[ -f "$hooks_src/$hook" ]]; then
+            run cp "$hooks_src/$hook" "$hooks_dst/$hook"
+            run chmod +x "$hooks_dst/$hook"
+            installed=$((installed + 1))
+        fi
+    done
+    if [[ "$installed" -gt 0 ]]; then
+        ok "teamdb hooks activados ($installed)"
+    fi
+}
+
 # ──────────────────────────────────────────────────────────────────────────────
 # MAIN
 # ──────────────────────────────────────────────────────────────────────────────
@@ -312,6 +335,7 @@ main() {
     generate_bundle
     generate_project_yaml
     init_teamdb "$PROJECT_DIR"
+    activate_teamdb_hooks "$PROJECT_DIR"
     check_design_md
 
     echo ""
