@@ -27,9 +27,9 @@ elif "$ROOT/.venv/bin/python" -c "import jsonschema" 2>/dev/null; then
 fi
 
 if [ -z "$PY" ]; then
-  echo "SKIP: jsonschema no instalado (pip install jsonschema o .venv)"
-  echo "PASS=0 FAIL=0 SKIP=1"
-  exit 0
+  echo "FAIL: jsonschema no instalado (pip install jsonschema o crear .venv)" >&2
+  echo "PASS=0 FAIL=1"
+  exit 1
 fi
 echo "usando $PY"
 
