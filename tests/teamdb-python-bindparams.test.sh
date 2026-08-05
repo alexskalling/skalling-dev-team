@@ -131,6 +131,14 @@ else
   assert_fail "raw mode acepta DDL benigno (CREATE TEMP)" "out=$RAW_DDL"
 fi
 
+# 12b. M5 (Luz): raw rechaza CTE-DML (WITH ... DELETE) aunque empiece con prefijo benigno
+RAW_CTE="$(python3 "$ROOT/scripts/teamdb_exec.py" --db "$DB" --mode raw --sql "WITH c AS (SELECT 1) DELETE FROM audit_log" 2>&1)"
+if echo "$RAW_CTE" | grep -qE "DML/DDL|destructivo|peligroso"; then
+  assert_pass "raw mode rechaza CTE-DML (WITH ... DELETE)"
+else
+  assert_fail "raw mode rechaza CTE-DML (WITH ... DELETE)" "out=$RAW_CTE"
+fi
+
 # 13. transaction: BEGIN IMMEDIATE + commit atómico
 teamdb_exec_transaction "$DB" \
   "INSERT INTO audit_log(ts,agent,action,table_name) VALUES(datetime('now'),?,'via_test','concepts')" \

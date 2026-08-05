@@ -141,7 +141,7 @@ try:
             UPDATE tasks SET status = 'pending', updated_at = ?
             WHERE id = ?
         """, (now, c['task_id']))
-    conn.execute("INSERT INTO audit_log(ts, agent, action, table_name) VALUES(datetime('now'), ?, 'release', 'task_claims')",
+    conn.execute("INSERT INTO audit_log(ts, agent, action, table_name, actor_source) VALUES(datetime('now'), ?, 'release', 'task_claims', 'helper')",
                  (release_by,))
     conn.commit()
     print('released: claim-id=%d status=%s' % (claim_id, new_status))
@@ -209,7 +209,7 @@ try:
         json.dump({'error': 'resolved requiere status=approved (actual=%s)' % t['status']}, sys.stdout)
         conn.rollback(); sys.exit(1)
     conn.execute("UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?", (target, now, t['id']))
-    conn.execute("INSERT INTO audit_log(ts, agent, action, table_name) VALUES(datetime('now'), ?, 'advance', 'tasks')", (actor,))
+    conn.execute("INSERT INTO audit_log(ts, agent, action, table_name, actor_source) VALUES(datetime('now'), ?, 'advance', 'tasks', 'helper')", (actor,))
     conn.commit()
     print('advanced: task=%s status=%s by=%s' % (task_slug, target, actor))
 except Exception as e:
@@ -347,7 +347,7 @@ try:
 
     conn.execute("UPDATE tasks SET status = 'in_progress', owner = ?, started_at = ?, updated_at = ? WHERE id = ?",
                  (actor, now, now, task['id']))
-    conn.execute("INSERT INTO audit_log(ts, agent, action, table_name) VALUES(datetime('now'), ?, 'claim', 'task_claims')",
+    conn.execute("INSERT INTO audit_log(ts, agent, action, table_name, actor_source) VALUES(datetime('now'), ?, 'claim', 'task_claims', 'helper')",
                  (actor,))
     conn.commit()
     json.dump({'claim_id': claim_id, 'lease_until': lease_end, 'attempt': new_attempt}, sys.stdout)

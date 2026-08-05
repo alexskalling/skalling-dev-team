@@ -206,6 +206,14 @@ else
   assert_fail "teamdb-claim.sh shellcheck 0 errores" "rc=$SHELLCHECK_RC"
 fi
 
+# 14. M1 (Luz): audit de claim/release/advance lleva actor_source='helper'
+BAD_AUDIT="$(sqlite3 "$DB" "SELECT COUNT(*) FROM audit_log WHERE action IN ('claim','release','advance') AND COALESCE(actor_source,'') != 'helper'" 2>/dev/null || echo 'ERR')"
+if [ "$BAD_AUDIT" = "0" ]; then
+  assert_pass "audit claim/release/advance con actor_source='helper'"
+else
+  assert_fail "audit claim/release/advance con actor_source='helper'" "rows sin actor_source helper: $BAD_AUDIT"
+fi
+
 rm -rf "$TEST_DIR"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

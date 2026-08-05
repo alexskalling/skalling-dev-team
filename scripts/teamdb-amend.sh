@@ -119,7 +119,7 @@ case "$OP" in
     fi
     NEXT_ORDER="$(teamdb_exec_value "$DB" "SELECT COALESCE(MAX(order_index)+1, 1) FROM tasks WHERE plan_id = ?" "$PLAN_ID")"
     TASK_SQL="INSERT INTO tasks(plan_id,slug,title,status,priority,order_index,owner,created_at,updated_at) VALUES(?,?,?,'pending',2,?,?,?,?)"
-    TASK_PARAMS="$PLAN_ID|$NEW_TASK_SLUG|$TITLE|$NEXT_ORDER|teo|$NOW|$NOW"
+    TASK_PARAMS_JSON="$(python3 -c "import json,sys; print(json.dumps(list(sys.argv[1:])))" "$PLAN_ID" "$NEW_TASK_SLUG" "$TITLE" "$NEXT_ORDER" "$ACTOR" "$NOW" "$NOW")"
     TARGET_TASK="$NEW_TASK_SLUG"
     HIST_OP="amended"
     DIFF="add task: $NEW_TASK_SLUG"
@@ -136,7 +136,7 @@ case "$OP" in
         ;;
     esac
     TASK_SQL="UPDATE tasks SET title = ?, updated_at = ? WHERE plan_id = ? AND slug = ?"
-    TASK_PARAMS="$NEW_TITLE|$NOW|$PLAN_ID|$TARGET_TASK"
+    TASK_PARAMS_JSON="$(python3 -c "import json,sys; print(json.dumps(list(sys.argv[1:])))" "$NEW_TITLE" "$NOW" "$PLAN_ID" "$TARGET_TASK")"
     HIST_OP="amended"
     DIFF="modify $TARGET_TASK: title -> $NEW_TITLE"
     ;;
@@ -151,7 +151,7 @@ case "$OP" in
         ;;
     esac
     TASK_SQL="UPDATE tasks SET resolution_md = ?, status = 'rejected', updated_at = ? WHERE plan_id = ? AND slug = ?"
-    TASK_PARAMS="deprecated via amend by $ACTOR at $NOW|$NOW|$PLAN_ID|$TARGET_TASK"
+    TASK_PARAMS_JSON="$(python3 -c "import json,sys; print(json.dumps(list(sys.argv[1:])))" "deprecated via amend by $ACTOR at $NOW" "$NOW" "$PLAN_ID" "$TARGET_TASK")"
     HIST_OP="deprecated"
     DIFF="deprecate $TARGET_TASK"
     ;;
@@ -162,29 +162,17 @@ esac
 
 # Atomicidad (Issue 7): task + plan_history + plans.updated_at en una sola transaccion.
 HIST_SQL="INSERT INTO plan_history(plan_id,version,changed_by,changed_at,operation,diff_md,snapshot_before) VALUES(?,?,?,?,?,?,?)"
-HIST_PARAMS="$PLAN_ID|$NEW_VERSION|$ACTOR|$NOW|$HIST_OP|$DIFF|$SNAPSHOT"
+HIST_PARAMS_JSON="$(python3 -c "import json,sys; print(json.dumps(list(sys.argv[1:])))" "$PLAN_ID" "$NEW_VERSION" "$ACTOR" "$NOW" "$HIST_OP" "$DIFF" "$SNAPSHOT")"
 PLANS_SQL="UPDATE plans SET updated_at = ? WHERE id = ?"
-PLANS_PARAMS="$NOW|$PLAN_ID"
+PLANS_PARAMS_JSON="$(python3 -c "import json,sys; print(json.dumps(list(sys.argv[1:])))" "$NOW" "$PLAN_ID")"
 
-IFS='|' read -ra TASK_ARR <<< "$TASK_PARAMS"
-IFS='|' read -ra HIST_ARR <<< "$HIST_PARAMS"
-IFS='|' read -ra PLANS_ARR <<< "$PLANS_PARAMS"
-
-python3 - "$DB" "$TASK_SQL" "${TASK_ARR[@]}" "$HIST_SQL" "${HIST_ARR[@]}" "$PLANS_SQL" "${PLANS_ARR[@]}" <<'PYEOF'
-import sqlite3, sys
+python3 - "$DB" "$TASK_SQL" "$TASK_PARAMS_JSON" "$HIST_SQL" "$HIST_PARAMS_JSON" "$PLANS_SQL" "$PLANS_PARAMS_JSON" "$ACTOR" <<'PYEOF'
+import sqlite3, sys, json
 db = sys.argv[1]
-task_sql = sys.argv[2]
-task_params = sys.argv[3:3+task_sql.count('?')]
-idx = 3 + len(task_params)
-hist_sql = sys.argv[idx]
-idx += 1
-hist_params_count = hist_sql.count('?')
-hist_params = sys.argv[idx:idx+hist_params_count]
-idx += hist_params_count
-plans_sql = sys.argv[idx]
-idx += 1
-plans_params_count = plans_sql.count('?')
-plans_params = sys.argv[idx:idx+plans_params_count]
+task_sql, task_params = sys.argv[2], json.loads(sys.argv[3])
+hist_sql, hist_params = sys.argv[4], json.loads(sys.argv[5])
+plans_sql, plans_params = sys.argv[6], json.loads(sys.argv[7])
+actor = sys.argv[8]
 conn = sqlite3.connect(db, timeout=5)
 conn.execute("PRAGMA foreign_keys=ON")
 try:
@@ -192,8 +180,8 @@ try:
     conn.execute(task_sql, task_params)
     conn.execute(hist_sql, hist_params)
     conn.execute(plans_sql, plans_params)
-    conn.execute("INSERT INTO audit_log(ts, agent, action, table_name) VALUES(datetime('now'), ?, 'amend', ?)",
-                 (task_params[-1] if task_params else 'unknown', 'tasks'))
+    conn.execute("INSERT INTO audit_log(ts, agent, action, table_name, actor_source) VALUES(datetime('now'), ?, 'amend', ?, 'helper')",
+                 (actor, 'tasks'))
     conn.commit()
     print("ok")
 except Exception as e:

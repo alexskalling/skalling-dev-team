@@ -20,20 +20,30 @@ import sqlite3
 import sys
 import json
 import argparse
+import re
 
+# Modo raw: solo lectura / DDL benigno. "with" se bloquea porque permite CTE-DML
+# (WITH ... DELETE/UPDATE) que empieza con prefijo "benigno".
 DML_DANGEROUS = ("drop", "delete", "update", "insert", "replace",
                  "alter", "truncate", "attach", "detach")
-DDL_BENIGN_PREFIXES = ("create", "select", "with", "pragma", "explain",
-                        "vacuum", "reindex", "analyze")
+DDL_BENIGN_PREFIXES = ("create", "select", "pragma", "explain",
+                       "vacuum", "reindex", "analyze")
+_BLOCKED_KEYWORDS = DML_DANGEROUS + ("with",)
+
+
+def _first_keyword(sql):
+    # Quita espacios, comentarios de bloque y de línea, y toma la primer palabra.
+    m = re.match(
+        r'\s*(?:(?:/\*.*?\*/\s*)|(?:--[^\n]*\n\s*))*([a-zA-Z]+)',
+        sql, re.S)
+    return m.group(1).lower() if m else ""
 
 
 def _raw_is_safe(sql):
-    s = sql.strip().lower()
-    if any(s.startswith(d) for d in DML_DANGEROUS):
+    kw = _first_keyword(sql)
+    if not kw or kw in _BLOCKED_KEYWORDS:
         return False
-    if not any(s.startswith(d) for d in DDL_BENIGN_PREFIXES):
-        return False
-    return True
+    return kw in DDL_BENIGN_PREFIXES
 
 
 def main():

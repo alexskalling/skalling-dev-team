@@ -200,6 +200,26 @@ else
   assert_fail "teamdb-amend.sh shellcheck 0 errores" "rc=$SHELLCHECK_RC"
 fi
 
+# 16. M1+M2 (Luz): audit amend con actor_source='helper' y agent = actor real
+BAD_AMEND=$(teamdb_exec_query "$DB" "SELECT COUNT(*) AS n FROM audit_log WHERE action='amend' AND (COALESCE(actor_source,'') != 'helper' OR agent NOT IN ('sol','teo'))" 2>/dev/null)
+AMEND_N=$(echo "$BAD_AMEND" | python3 -c "import json,sys; print(json.loads(sys.stdin.read())[0]['n'])" 2>/dev/null || echo 'ERR')
+if [ "$AMEND_N" = "0" ]; then
+  assert_pass "audit amend con actor_source='helper' y agent=actor real"
+else
+  assert_fail "audit amend con actor_source='helper' y agent=actor real" "rows malas: $AMEND_N"
+fi
+
+# 17. M3 (Luz): título con pipe no debe romper el parseo de params
+run_capture "bash '$ROOT/scripts/teamdb-amend.sh' 'auth-jwt' --add-task='fix|bug|urgente' --by sol '$TEST_DIR'"
+PIPE_SLUG="fix-bug-urgente"
+FOUND_PIPE=$(teamdb_exec_query "$DB" "SELECT COUNT(*) AS n FROM tasks WHERE plan_id=? AND slug=?" "$PLAN_ID" "$PIPE_SLUG" 2>/dev/null)
+PIPE_N=$(echo "$FOUND_PIPE" | python3 -c "import json,sys; print(json.loads(sys.stdin.read())[0]['n'])" 2>/dev/null || echo 0)
+if [ "$PIPE_N" -ge 1 ]; then
+  assert_pass "add-task con pipe en título funciona (M3)"
+else
+  assert_fail "add-task con pipe en título funciona (M3)" "out=$CAPTURE_OUT"
+fi
+
 rm -rf "$TEST_DIR" /tmp/amend-tasks.md
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

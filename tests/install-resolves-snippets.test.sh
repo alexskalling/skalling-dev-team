@@ -64,5 +64,45 @@ for agent in "$AGENTS_DIR"/*.md; do
   fi
 done
 
+# ─────────────────────────────────────────────────────────────────────────────
+# H1 (Luz): resolve_snippets no debe colgarse con marker faltante ni ciclos.
+# Se extrae la función real de install-global.sh y se prueba en aislamiento.
+# ─────────────────────────────────────────────────────────────────────────────
+UNIT="$(mktemp -d)"
+mkdir -p "$UNIT/templates/agents/snippets"
+echo "body ok" > "$UNIT/templates/agents/snippets/ci.md"
+echo "<!-- @include-snippet self -->" > "$UNIT/templates/agents/snippets/self.md"
+
+cat > "$UNIT/agent.md" <<'MDEOF'
+<!-- @include-snippet ci -->
+<!-- @include-snippet no-existe -->
+MDEOF
+
+cat > "$UNIT/agent-self.md" <<'MDEOF'
+<!-- @include-snippet self -->
+MDEOF
+
+cat > "$UNIT/t.sh" <<EOF
+SCRIPT_DIR="$UNIT"
+log() { return 0; }
+$(awk '/^resolve_snippets\(\) \{/{p=1} p{print} p&&/^\}$/{exit}' "$ROOT/install-global.sh")
+
+# Caso 1: marker faltante se elimina y no cuelga
+out="\$(resolve_snippets "$UNIT/agent.md")" || { echo "resolve no-terminó"; exit 1; }
+grep -q "body ok" <<< "\$out" || { echo "snippet no resuelto"; exit 1; }
+grep -q "@include-snippet" <<< "\$out" && { echo "marker no eliminado"; exit 1; } || true
+
+# Caso 2: auto-inclusión aborta con error (no infinito)
+resolve_snippets "$UNIT/agent-self.md" >/dev/null 2>&1
+[ "\$?" -ne 0 ] || { echo "ciclo no abortó"; exit 1; }
+EOF
+
+if bash "$UNIT/t.sh"; then
+  assert_pass "resolve_snippets: marker faltante se elimina y no cuelga"
+  assert_pass "resolve_snippets: ciclo aborta con error"
+else
+  assert_fail "resolve_snippets: no-terminación controlada" "unit test falló"
+fi
+
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ] || exit 1

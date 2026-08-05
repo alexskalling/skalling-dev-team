@@ -186,10 +186,13 @@ prune_old_backups() {
 
 # Resuelve markers <!-- @include-snippet <nombre> --> con el cuerpo del snippet
 # canónico en templates/agents/snippets/<nombre>.md (DC-2, build-time).
+# Blindado contra no-terminación: markers faltantes se eliminan, y un límite de
+# iteraciones aborta si un snippet se incluye a sí mismo o hay ciclos.
 resolve_snippets() {
     local agent_file="$1"
     local resolved_content
     resolved_content="$(cat "$agent_file")"
+    local depth=0
     while [[ "$resolved_content" =~ @include-snippet[[:space:]]+([a-z-]+) ]]; do
         local snippet_name="${BASH_REMATCH[1]}"
         local snippet_path="$SCRIPT_DIR/templates/agents/snippets/${snippet_name}.md"
@@ -197,7 +200,13 @@ resolve_snippets() {
             local snippet_body; snippet_body="$(cat "$snippet_path")"
             resolved_content="${resolved_content//<!-- @include-snippet $snippet_name -->/$snippet_body}"
         else
-            log WARN "Snippet no encontrado: $snippet_name (en $(basename "$agent_file"))"
+            log WARN "Snippet no encontrado: $snippet_name (en $(basename "$agent_file")); marker eliminado"
+            resolved_content="${resolved_content//<!-- @include-snippet $snippet_name -->/}"
+        fi
+        depth=$((depth + 1))
+        if [[ "$depth" -gt 64 ]]; then
+            log ERROR "resolve_snippets: límite de iteraciones alcanzado en $(basename "$agent_file") (posible ciclo de inclusión)"
+            return 1
         fi
     done
     printf '%s\n' "$resolved_content"
@@ -421,6 +430,12 @@ install_teamdb() {
             fi
         else
             log INFO "teamdb global ya existe"
+            # Upgrade aditivo: añadir actor_source a audit_log de DBs globales viejas
+            # (idempotente: en DBs nuevas la columna ya existe y el ALTER falla).
+            if sqlite3 "$HOME/.config/opencode/team.db" \
+                "ALTER TABLE audit_log ADD COLUMN actor_source TEXT DEFAULT 'trigger'" 2>/dev/null; then
+                log OK "teamdb global: audit_log.actor_source añadido"
+            fi
         fi
     else
         log WARN "sqlite3 no disponible, teamdb no se creó"

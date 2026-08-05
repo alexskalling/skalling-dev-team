@@ -30,4 +30,19 @@ if [ -d "$MIG_DIR" ]; then
   done
 fi
 
+# Verificar que las migrations dejaron el schema correcto; si no, fallar en vez
+# de seguir con una DB degradada (los errores de migración idempotentes, como el
+# "duplicate column" de 004 sobre DBs nuevas, se toleran arriba).
+EXPECTED_VERSION="0.7.2"
+VERSION="$(sqlite3 "$DB" "SELECT value FROM schema_meta WHERE key='version'" 2>/dev/null || true)"
+if [ "$VERSION" != "$EXPECTED_VERSION" ]; then
+  echo "ERROR: teamdb schema version=$VERSION, esperado $EXPECTED_VERSION (migrations incompletas)" >&2
+  exit 1
+fi
+HAS_ACTOR_SOURCE="$(sqlite3 "$DB" "SELECT count(*) FROM pragma_table_info('audit_log') WHERE name='actor_source'" 2>/dev/null || true)"
+if [ "${HAS_ACTOR_SOURCE:-0}" -lt 1 ]; then
+  echo "ERROR: audit_log.actor_source ausente tras migrations (correr git pull + teamdb-init)" >&2
+  exit 1
+fi
+
 echo "teamdb init: $PROJECT"
