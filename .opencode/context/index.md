@@ -8,6 +8,7 @@ Navegación principal del bundle.
 
 ## Follow-ups
 
+- [v0.7.2](./followups/v0.7.2.md) — pendientes menores del release v0.7.2 (teamdb-hardening)
 - [v0.6.0](./followups/v0.6.0.md) — pendientes menores del release v0.5.0 (drift detection)
 
 ## Trabajo en curso
