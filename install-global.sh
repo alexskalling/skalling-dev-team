@@ -337,6 +337,49 @@ install_gitattributes_template() {
     fi
 }
 
+install_teamdb() {
+    log INFO "Instalando teamdb (libSQL)"
+
+    # Copia scripts teamdb al bundle global
+    run mkdir -p "$OPENCODE_DIR/scripts"
+    for script in teamdb-init.sh teamdb-migrate.sh teamdb-export.sh teamdb-import.sh; do
+        if [[ -f "$SCRIPT_DIR/scripts/$script" ]]; then
+            run cp "$SCRIPT_DIR/scripts/$script" "$OPENCODE_DIR/scripts/$script"
+            run chmod +x "$OPENCODE_DIR/scripts/$script"
+        fi
+    done
+    if [[ -f "$SCRIPT_DIR/scripts/lib/lib-teamdb.sh" ]]; then
+        run cp "$SCRIPT_DIR/scripts/lib/lib-teamdb.sh" "$OPENCODE_DIR/scripts/lib-teamdb.sh"
+        run chmod +x "$OPENCODE_DIR/scripts/lib-teamdb.sh"
+    fi
+
+    # Copia schema global
+    if [[ -d "$SCRIPT_DIR/sql" ]]; then
+        run mkdir -p "$OPENCODE_DIR/skalling-data/teamdb-schema"
+        if [[ -f "$SCRIPT_DIR/sql/global-schema.sql" ]]; then
+            run cp "$SCRIPT_DIR/sql/global-schema.sql" "$OPENCODE_DIR/skalling-data/teamdb-schema/"
+        fi
+    fi
+
+    # Crea team.db global si no existe
+    if command -v sqlite3 >/dev/null 2>&1 && [[ -f "$OPENCODE_DIR/skalling-data/teamdb-schema/global-schema.sql" ]]; then
+        if [[ ! -f "$HOME/.config/opencode/team.db" ]]; then
+            run mkdir -p "$HOME/.config/opencode"
+            if sqlite3 "$HOME/.config/opencode/team.db" < "$OPENCODE_DIR/skalling-data/teamdb-schema/global-schema.sql"; then
+                log OK "team.db global creado"
+            else
+                log WARN "No se pudo crear team.db global"
+            fi
+        else
+            log INFO "team.db global ya existe"
+        fi
+    else
+        log WARN "sqlite3 no disponible, team.db no se creó"
+    fi
+
+    log OK "teamdb instalado"
+}
+
 print_summary() {
     cat <<EOF
 
@@ -381,6 +424,7 @@ do_install() {
     install_memory_helpers
     install_gitattributes_template
     install_data_files
+    install_teamdb
 
     if [[ "$DRY_RUN" == true ]]; then
         log INFO "Dry-run completo. Nada fue modificado."

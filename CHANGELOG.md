@@ -4,6 +4,36 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-08-05
+
+### Added
+- **libSQL como fuente de verdad**: 2 DBs (global + proyecto) con esquema formal
+- **Schema global** (`sql/global-schema.sql`): 8 tablas para agents_meta, skills_active, constitution_rules, user_preferences, stack_cache, projects_index
+- **Schema proyecto** (`sql/project-schema.sql`): 12 tablas + FTS5 + triggers para concepts, decisions, preferences, known_problems, work_in_progress, memory_tags, memory_links, audit_log
+- **Jerarquía plan/feature/task** en `work_in_progress` (columnas `type`, `parent_id`)
+- **Grafo de relaciones**: `memory_links` (extends/contradicts/uses/supersedes/related) + `memory_tags`
+- **FTS5**: búsqueda full-text en conceptos, decisiones y WIP
+- **Triggers automáticos**: mantienen FTS5 sincronizado con tablas base
+- **Audit log automático**: registra cada cambio
+- **lib-teamdb.sh**: wrapper bash con `flock` para multi-writer seguro
+- **teamdb-init.sh**: inicializa DB proyecto
+- **teamdb-migrate.sh**: migra `.jsonl` legacy a DB
+- **teamdb-export.sh**: DB → `.sql` para git
+- **teamdb-import.sh**: `.sql` → DB
+- **wip-tree.sh**: visualizador recursivo plan/feature/task con estados derivados
+- **27 tests** en `tests/teamdb.test.sh` (8 schemas + 7 scripts + 5 E2E + 7 FTS5/jerarquía)
+
+### Changed
+- `install-global.sh`: instala teamdb global (DB + scripts)
+- `bootstrap-context.sh`: inicializa teamdb proyecto
+- `Pau.md`: documenta uso real de teamdb con queries
+
+### Migration Guide v0.6.x → v0.7.0
+1. `git pull origin teamdb`
+2. `bash install-global.sh` (instala teamdb global automáticamente)
+3. Por cada proyecto: `bash bootstrap-context.sh` (crea team.db proyecto)
+4. Los archivos `.jsonl` legacy se migran automáticamente a la DB
+
 ## [0.6.2] — 2026-08-04
 
 ### Changed

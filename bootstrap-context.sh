@@ -270,6 +270,27 @@ check_design_md() {
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
+# R10 — TEAMDB (libSQL)
+# ──────────────────────────────────────────────────────────────────────────────
+
+init_teamdb() {
+    local project="$1"
+    if command -v sqlite3 >/dev/null 2>&1; then
+        if [[ -f "$SCRIPT_DIR/scripts/teamdb-init.sh" ]]; then
+            if bash "$SCRIPT_DIR/scripts/teamdb-init.sh" "$project" 2>/dev/null; then
+                ok "teamdb inicializado"
+            else
+                warn "teamdb no se pudo inicializar"
+            fi
+        else
+            warn "scripts/teamdb-init.sh no encontrado, skip teamdb"
+        fi
+    else
+        warn "sqlite3 no disponible, teamdb no se inicializó"
+    fi
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
 # MAIN
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -290,6 +311,7 @@ main() {
 
     generate_bundle
     generate_project_yaml
+    init_teamdb "$PROJECT_DIR"
     check_design_md
 
     echo ""

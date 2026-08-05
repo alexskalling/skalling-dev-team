@@ -238,6 +238,37 @@ Descripción breve del proyecto.
 
 ---
 
+## 🗄️ Uso real de TeamDB
+
+TeamDB es la fuente de verdad relacional del equipo, basada en libSQL (SQLite + FTS5). Hay 2 DBs:
+
+- **Global** (`~/.config/opencode/team.db`): agents_meta, skills_active, constitution_rules, user_preferences, stack_cache, projects_index, tags, schema_meta.
+- **Proyecto** (`<proyecto>/.opencode/context/team.db`): concepts, decisions, preferences, known_problems, work_in_progress, memory_tags, memory_links, audit_log, schema_meta.
+
+Wrapper principal: `scripts/lib/lib-teamdb.sh` (con `flock` para multi-writer seguro). Lo uso así:
+
+```bash
+# Buscar concept existente
+teamdb_query_project "SELECT id, slug, title FROM concepts WHERE slug='auth-jwt'"
+
+# Crear nuevo concept
+teamdb_query_project "INSERT INTO concepts (slug, title, body_md, category, updated_at) VALUES ('auth-jwt', 'JWT Auth', '# JWT\n\nStateless, refresh cada 15min', 'modulo', datetime('now'))"
+
+# Crear link a decision
+teamdb_query_project "INSERT INTO memory_links (from_table, from_id, to_table, to_id, link_type) VALUES ('concepts', (SELECT id FROM concepts WHERE slug='auth-jwt'), 'decisions', (SELECT id FROM decisions WHERE slug='api-rest'), 'uses')"
+
+# Buscar con full-text
+teamdb_query_project "SELECT slug, title FROM concepts_fts WHERE concepts_fts MATCH 'JWT OR auth'"
+```
+
+**Pre-commit:** antes de commitear, corro `bash scripts/teamdb-export.sh` para volcar las tablas de datos a `.sql` (formato git-friendly). Pau es la responsable de mantener la DB y el export sincronizados.
+
+**Jerarquía plan/feature/task:** la tabla `work_in_progress` tiene `type` (`plan`/`feature`/`task`) y `parent_id` para anidar. Uso `scripts/wip-tree.sh` para ver el árbol.
+
+**Grafo de relaciones:** `memory_links` con `link_type` (`extends`/`contradicts`/`uses`/`supersedes`/`related`) + `memory_tags` para etiquetas transversales.
+
+---
+
 <!-- SINCRONIZADO CON: templates/agents/snippets/code-intelligence.md. Si editás esto, sincronizá ambos lados. -->
 
 ## 🔍 Code Intelligence — cuándo usar codebase-memory-mcp
