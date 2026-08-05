@@ -4,6 +4,33 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.7.2] — 2026-08-05
+
+### Added
+- **Ciclo de planificación en DB**: `scripts/teamdb-plan.sh` (crea filas en `proposals`, `plans`, `tasks`), `teamdb-status.sh` (resume del plan activo), `teamdb-resume.sh`, `teamdb-execute-plan.sh` (descubre/orquesta la próxima task; NO ejecuta shell arbitrario desde la DB — DC-3), `teamdb-amend.sh` (amendment atómico in-place con version/historial en `plan_history` y preservación de tasks aprobadas como inmutables), `teamdb-deps.sh` (DAG con `task_dependencies`, detección de ciclos y query `runnable`), `teamdb-claim.sh` (claim atómico con lease/attempt/input_hash + resume), `teamdb-context.sh` (context capsules para handoff de Teo), `teamdb-export-md.sh` (markdown GENERADO desde DB, sin escritura bidireccional)
+- **Tablas nuevas** en `sql/project-schema.sql` (migration `003_add_dag_claims_history.sql`): `task_dependencies`, `task_claims`, `plan_history`, `task_context_capsules`
+- **SQL parametrizado real**: `scripts/teamdb_exec.py` (wrapper Python `sqlite3` con bound params) — `teamdb_safe_query` queda deprecated. Escrituras con transacciones `BEGIN IMMEDIATE` + WAL + `busy_timeout` en `teamdb_write_project`/`teamdb_write_global` (reemplaza flock)
+- **FTS5 para `known_problems`**: virtual table `problems_fts` + triggers sync (`teamdb-search.sh` la usa)
+- **Snippets single-source (DC-2)**: markers `@include-snippet` en los 8 agentes, resolución build-time en `install-global.sh::resolve_snippets`; canónicos en `templates/agents/snippets/`
+- **Handoff schema condicional**: `templates/handoff.schema.json` con `allOf` if/then — `project_context` required cuando `to` ∈ {TEO, LUZ}; `verification` required cuando `to` ∈ {JHON, LUZ} (o emisor de ingeniería)
+- **`audit_log.actor_source`**: columna nueva (`'helper'` vía `teamdb_write_*`, `'trigger'` en 12 triggers reescritos); plumbing de `TEAMDB_ACTOR`
+- **CI**: `.github/workflows/tests.yml` ampliado con 22 suites teamdb + 3 workflows nuevos (`teamdb-sqli.yml`, `handoffs.yml`, `teamdb-dag-claims.yml`) = 4 workflows en cada PR
+- **Suite agregadora** `tests/teamdb-hardening-suite.sh` (regresión completa 45/45)
+- **Tests nuevos**: version-coherence, portability-bash32, snippets-sync, install-resolves-snippets, handoff-schema-validation, agents-teamdb-integration, dag-tables, amend-full, deps-dag, claim-lease/strict/history, export-md, context-capsule/issue8, cycle-amended, execute-plan-no-shell, migration-003-unique, plan-atomic-idempotent, python-bindparams, write-wal, export-audit, migrate-md-preserve
+
+### Changed
+- `scripts/teamdb-search.sh` y `teamdb-related.sh` parametrizados (sin interpolación; whitelist de tipos en related)
+- `agents-base/Alex.md` y `agents-base/Jes.md`: TeamDB preferente para cargar contexto (fallback legacy)
+- `scripts/teamdb-migrate.sh`: SQL parametrizado + preserva `.md` (solo mueve `.jsonl` a `legacy/` — DC-1)
+- `scripts/teamdb-export.sh` exporta también `audit_log` y `schema_meta`
+- `scripts/build-schema.sh` (nuevo): estampa SOLO la fila `schema_meta.version` desde `VERSION` (AD-4 corregido)
+- Hooks `pre-commit`/`post-merge`: resuelven paths absolutos con `git rev-parse --show-toplevel` (sin `$SCRIPT_DIR/../`)
+- `install-global.sh`: instala todos los `teamdb-*.sh` dinámicamente + hooks ejecutables sin `|| true` silenciadores
+
+### Fixed
+- **SQL injection** en `teamdb-search.sh` y `teamdb-related.sh`: entradas del usuario pasan por bound params reales (Python `sqlite3`), no escape manual
+- Fixes del quality gate de Luz (H1/H2/M1-M5, commit `cfbf3f3`) y fix menor de handoff-schema (`6ad8944`): el test de schema deja de saltar silenciosamente si `jsonschema` falta
+
 ## [0.7.0] — 2026-08-05
 
 ### Added

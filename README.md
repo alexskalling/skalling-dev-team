@@ -174,7 +174,7 @@ skalling-dev-team/
 │       ├── lib-os.sh                 # Detecta SO
 │       └── lib-stack-detect.sh       # Detecta lenguajes y skills
 ├── .github/
-│   └── workflows/tests.yml           # CI (GitHub Actions)
+│   └── workflows/                    # CI (GitHub Actions): tests, teamdb-sqli, handoffs, teamdb-dag-claims
 ├── agents-base/                      # Los 8 agentes (archivos .md)
 ├── constitution/
 │   └── constitucion.md               # Las 16 reglas
@@ -259,7 +259,7 @@ Los receipts (`skalling-receipt`) formalizan cada verificación con evidence ant
 
 ## TeamDB (libSQL)
 
-Skalling v0.7.0 usa **libSQL** como fuente de verdad para memoria y tracking de trabajo.
+Skalling v0.7.2 usa **libSQL** como fuente de verdad para memoria y tracking de trabajo.
 
 ### Dos bases de datos
 
@@ -283,7 +283,17 @@ bash scripts/teamdb-export.sh /path/to/project
 # Import .sql → DB (post-merge)
 bash scripts/teamdb-import.sh /path/to/project
 
-# Visualizar jerarquía plan/feature/task
+# Ciclo de planificación en DB (proposals → plans → tasks)
+bash scripts/teamdb-plan.sh /path/to/project <plan-slug> <título> <tasks.md>
+bash scripts/teamdb-status.sh <plan-slug> /path/to/project
+bash scripts/teamdb-amend.sh <plan-slug> --add-task "..." --by <actor> /path/to/project
+bash scripts/teamdb-execute-plan.sh <plan-slug> /path/to/project
+
+# DAG de dependencias + claims atómicos
+bash scripts/teamdb-deps.sh runnable <plan-slug> /path/to/project
+bash scripts/teamdb-claim.sh claim <plan-slug> /path/to/project
+
+# Visualizar jerarquía plan/feature/task (legacy)
 bash scripts/wip-tree.sh /path/to/project
 ```
 
@@ -302,20 +312,31 @@ teamdb_query_project "SELECT slug, title FROM concepts_fts WHERE concepts_fts MA
 teamdb_query_project "SELECT c.title FROM concepts c JOIN memory_links ml ON ml.from_id=c.id WHERE ml.link_type='uses'"
 ```
 
-### Jerarquía plan / feature / task
+### Ciclo de planificación en DB
 
-Work in progress tiene una jerarquía: los planes contienen features, las features contienen tasks.
+El ciclo SDD vive en tablas `proposals`, `plans` y `tasks` (desde v0.7.2): los planes contienen tasks con dependencias (`task_dependencies`), historial de amendments (`plan_history`), claims atómicos (`task_claims`) y context capsules (`task_context_capsules`).
 
 ```bash
-# Crear plan
-teamdb_query_project "INSERT INTO work_in_progress (slug,type,title,body_md,status,owner,created_at,updated_at) VALUES ('plan-x','plan','Plan X','# objetivo','open','sol',datetime('now'),datetime('now'))"
+# Crear plan desde un tasks.md (genera filas en proposals/plans/tasks)
+bash scripts/teamdb-plan.sh /path/to/project "auth-jwt" "Auth JWT" /tmp/tasks.md
 
-# Crear feature bajo el plan
-teamdb_query_project "INSERT INTO work_in_progress (slug,type,parent_id,title,status,owner,created_at,updated_at) SELECT 'feat-y','feature',id,'Feature Y','open','teo',datetime('now'),datetime('now') FROM work_in_progress WHERE slug='plan-x'"
+# Ver estado del plan (próxima task, owner, blockers)
+bash scripts/teamdb-status.sh auth-jwt /path/to/project
 
-# Visualizar
-bash scripts/wip-tree.sh
+# Amendment atómico (versiona en plan_history; tasks aprobadas quedan inmutables)
+bash scripts/teamdb-amend.sh auth-jwt --add-task "refresh token" --by sol /path/to/project
+
+# DAG: qué tasks son ejecutables ahora
+bash scripts/teamdb-deps.sh runnable auth-jwt /path/to/project
+
+# Claim atómico de la próxima task (lease + attempt + input_hash)
+bash scripts/teamdb-claim.sh claim auth-jwt /path/to/project
+
+# Orquestar ejecución (solo descubre la próxima task; no ejecuta shell de la DB)
+bash scripts/teamdb-execute-plan.sh auth-jwt /path/to/project
 ```
+
+> **Legacy**: `work_in_progress` y `wip-tree.sh` siguen existiendo para visualización; los scripts nuevos del ciclo usan `proposals`/`plans`/`tasks`.
 
 ### Hooks git
 
@@ -325,10 +346,11 @@ bash scripts/wip-tree.sh
 ### Tests
 
 ```bash
-bash tests/teamdb.test.sh
+bash tests/teamdb.test.sh          # suite base teamdb
+bash tests/teamdb-hardening-suite.sh  # suite agregadora v0.7.2 (regresión completa)
 ```
 
-27 tests cubren: schemas, FTS5, jerarquía, init, export, import, migración.
+La suite agregadora `tests/teamdb-hardening-suite.sh` corre 41 suites de teamdb: schemas, FTS5, SQLi (search/related), ciclo completo en DB (plan/amend/deps/claim/execute-plan), escrituras WAL, export/import, migración, snippets, handoffs y versionado.
 
 ---
 
