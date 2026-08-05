@@ -263,6 +263,31 @@ teamdb_query_project "UPDATE work_in_progress SET status='in_progress', owner='t
 teamdb_query_project "INSERT INTO audit_log (ts, agent, action, table_name, row_id, details) VALUES (datetime('now'), 'teo', 'start', 'work_in_progress', (SELECT id FROM work_in_progress WHERE slug='task-endpoint'), '{\"status\":\"in_progress\"}')"
 ```
 
+## TeamDB: Verificar sync antes de commit
+
+Teo NO commitea sin antes verificar que el export incluye los cambios:
+
+```bash
+# 1. Modificar DB
+sqlite3 .opencode/context/team.db "INSERT INTO concepts ..."
+
+# 2. Export manual
+bash scripts/teamdb-export.sh .
+
+# 3. Verificar que el .sql tiene los cambios
+grep "mi-nuevo-concept" .opencode/context/teamdb/data_concepts.sql
+
+# 4. Commitear
+git add -A
+git commit -m "feat: agregar concept X"
+```
+
+**Cuándo regenerar la DB desde .sql:**
+```bash
+rm .opencode/context/team.db
+bash scripts/teamdb-init.sh .
+```
+
 ---
 
 <!-- SINCRONIZADO CON: templates/agents/snippets/code-intelligence.md. Si editás esto, sincronizá ambos lados. -->

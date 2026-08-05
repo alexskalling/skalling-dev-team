@@ -65,3 +65,23 @@ Si el doctor detecta errores o warnings, advertir al usuario y cerrar con estado
 - Nunca tocar `.opencode/changes/`, `docs/` ni `.opencode/state/`.
 - Nunca modificar un candidato sin confirmación individual.
 - Preferir archivar sobre borrar porque la historia es valiosa.
+
+## TeamDB
+
+Al olvidar conceptos viejos, también purgá la DB:
+
+```bash
+# Ver qué hay en la DB
+sqlite3 .opencode/context/team.db "SELECT slug, updated_at FROM concepts ORDER BY updated_at"
+
+# Borrar concepts viejos (no usados en el último año)
+sqlite3 .opencode/context/team.db "DELETE FROM concepts WHERE updated_at < datetime('now', '-1 year')"
+
+# Borrar decisions superseded
+sqlite3 .opencode/context/team.db "DELETE FROM decisions WHERE status='superseded'"
+```
+
+Luego exportá para que el git ignore no se queje:
+```bash
+bash scripts/teamdb-export.sh .
+```

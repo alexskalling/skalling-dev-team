@@ -54,3 +54,11 @@ Spec ↔ Memory link también es solo informativo y de ejecución manual: `bash 
 - Frontmatter inválido: corregir delimitadores YAML del agente.
 - REGLA #13 violada: crear `.opencode/context/proyecto/design-system.md`.
 - Instalación parcial: reinstalar agentes, skills, comandos o templates faltantes.
+
+## TeamDB
+
+El doctor chequea:
+
+- `~/.config/opencode/team.db` existe y schema v0.7.0
+- `scripts/teamdb-*.sh` ejecutables
+- Hooks git activos (si hay `.git`)

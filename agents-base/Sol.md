@@ -198,6 +198,24 @@ teamdb_query_project "INSERT INTO work_in_progress (slug, type, parent_id, title
 
 **Status flow:** `open` (Sol) → `in_progress` (Teo) → `in_review` (Jhon) → `approved` (Luz) → `resolved` (Pau).
 
+## TeamDB: Git Sync
+
+Sol sincroniza la DB con el repo:
+
+**Pre-commit (lo hace el hook):**
+- Export DB → `.sql`
+- Add `.sql` files
+
+**Post-merge (lo hace el hook):**
+- Import `.sql` → DB
+
+**Si Sol detecta drift:**
+```bash
+diff <(sqlite3 team.db "SELECT * FROM concepts") <(cat teamdb/data_concepts.sql)
+# Si difieren, regenerar
+bash scripts/teamdb-export.sh .
+```
+
 ---
 
 <!-- SINCRONIZADO CON: templates/agents/snippets/code-intelligence.md. Si editás esto, sincronizá ambos lados. -->

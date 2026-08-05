@@ -200,6 +200,16 @@ Correr mentalmente las validaciones:
 - Constitución accesible
 - Si frontend: design-system.md en bundle OKF
 
+## TeamDB (libSQL)
+
+A partir de v0.7.0, `/skalling-init` también inicializa la DB libSQL del proyecto:
+
+- Crea `.opencode/context/team.db` con schema proyecto
+- Activa hooks git (pre-commit export, post-merge import)
+- Si hay `.jsonl` legacy, los migra a la DB
+
+Para verificar: `ls .opencode/context/team.db`
+
 ### 4.7 — Code Intelligence (opt-in)
 
 Preguntá al usuario:

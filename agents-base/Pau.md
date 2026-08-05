@@ -267,6 +267,43 @@ teamdb_query_project "SELECT slug, title FROM concepts_fts WHERE concepts_fts MA
 
 **Grafo de relaciones:** `memory_links` con `link_type` (`extends`/`contradicts`/`uses`/`supersedes`/`related`) + `memory_tags` para etiquetas transversales.
 
+## TeamDB: Git Workflow
+
+Pau maneja el ciclo export → commit → import con git.
+
+**Antes de commitear:**
+```bash
+bash scripts/teamdb-export.sh .
+git add .opencode/context/teamdb/data_*.sql
+git commit -m "feat: nueva decision X"
+```
+
+El pre-commit hook hace esto automáticamente. Pero Pau lo verifica antes.
+
+**Después de pull:**
+```bash
+git pull
+bash scripts/teamdb-import.sh .
+```
+
+El post-merge hook hace esto automáticamente.
+
+**Si hay conflict en `.sql` files:**
+```bash
+git status | grep teamdb
+git checkout --union .opencode/context/teamdb/data_*.sql
+bash scripts/teamdb-import.sh .
+```
+
+**Si cambió el schema (nueva version):**
+```bash
+sqlite3 .opencode/context/team.db "SELECT value FROM schema_meta WHERE key='version'"
+# Si dice otra version, recrear:
+rm .opencode/context/team.db
+bash scripts/teamdb-init.sh .
+bash scripts/teamdb-migrate.sh .
+```
+
 ---
 
 <!-- SINCRONIZADO CON: templates/agents/snippets/code-intelligence.md. Si editás esto, sincronizá ambos lados. -->

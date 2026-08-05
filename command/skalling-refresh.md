@@ -64,3 +64,18 @@ bash skalling-dev-team/setup-team-doctor.sh
 - Si querés regenerar desde cero → usá `/skalling-init` con la opción de regenerar.
 - Si querés purgar memoria obsoleta → usá `/skalling-forget`.
 - Si querés ver el estado actual → usá `/skalling-status`.
+
+## TeamDB
+
+Refresh re-detecta stack. La DB permanece igual (no se borra), pero se actualiza `stack_cache` en la DB global:
+
+```bash
+sqlite3 ~/.config/opencode/team.db "INSERT OR REPLACE INTO stack_cache (project_path, detected_at, language, framework) VALUES ('$(pwd)', datetime('now'), 'LANG', 'FRAMEWORK')"
+```
+
+Si la DB proyecto cambió de schema, recreala:
+```bash
+rm .opencode/context/team.db
+bash scripts/teamdb-init.sh .
+bash scripts/teamdb-migrate.sh .
+```

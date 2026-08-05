@@ -95,3 +95,9 @@ Si `install-global.sh --force` falla, intentar sin `--force` y sugerir `--force`
 
 Corré /skalling-doctor para verificar que todo está saludable.
 ```
+
+## TeamDB
+
+El update también actualiza la DB global. Si hay migrations nuevas, se aplican automáticamente.
+
+Para proyectos: `bash scripts/teamdb-init.sh .` recrea la DB proyecto si hace falta.

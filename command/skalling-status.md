@@ -112,3 +112,11 @@ Si detectás errores o warnings:
 1. Sugerí correr `/skalling-doctor` para detalle completo.
 2. Si el bundle OKF está vacío, sugerí `/skalling-init` o `/skalling-refresh`.
 3. Si design-system.md falta en frontend, sugerí crearlo con `/impeccable document`
+
+## TeamDB
+
+El estado del proyecto incluye la DB libSQL:
+
+- `team.db` presente en `.opencode/context/`
+- Conteos: `sqlite3 .opencode/context/team.db "SELECT COUNT(*) FROM concepts"`
+- Jerarquía WIP: `bash scripts/wip-tree.sh .`

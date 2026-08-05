@@ -136,3 +136,20 @@ Cada worktree tiene su propio filesystem. Los conflictos se resuelven al mergear
 - Si el conflicto NO está en `.opencode/` (es código regular, no me meto).
 - Si el usuario sabe resolverlo y solo necesita confirmación (doy OK y me retiro).
 - Si es un merge trivial sin solapamiento (lo señalo y termino).
+
+## TeamDB
+
+Si hay conflictos en `.sql` files de teamdb:
+
+```bash
+# Ver archivos en conflicto
+git status | grep teamdb
+
+# Aplicar estrategia union (mantiene ambos lados)
+git checkout --union .opencode/context/teamdb/data_*.sql
+
+# Reimportar
+bash scripts/teamdb-import.sh .
+```
+
+Si el union no resuelve, editá el `.sql` manualmente y reimportá.
