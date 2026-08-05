@@ -59,6 +59,6 @@ Spec ↔ Memory link también es solo informativo y de ejecución manual: `bash 
 
 El doctor chequea:
 
-- `~/.config/opencode/team.db` existe y schema v0.7.0
+- `~/.config/opencode/team.db` existe y schema v0.7.2
 - `scripts/teamdb-*.sh` ejecutables
 - Hooks git activos (si hay `.git`)

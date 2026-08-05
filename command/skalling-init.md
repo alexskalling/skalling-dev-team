@@ -247,17 +247,9 @@ if [ ! -f ".opencode/context/team.db" ]; then
   fi
 fi
 
-# Verificar schema version
-VER=$(sqlite3 .opencode/context/team.db "SELECT value FROM schema_meta WHERE key='version'" 2>/dev/null)
-
-if [ "$VER" != "0.7.0" ]; then
-  echo "teamdb schema es $VER, regenerando a 0.7.0..."
-  rm .opencode/context/team.db
-  bash "$(dirname "$SKALLING_ROOT")/scripts/teamdb-init.sh" .
-  if [ -f ".opencode/context/DECISIONS.jsonl" ] || [ -d ".opencode/context/concept" ]; then
-    bash "$(dirname "$SKALLING_ROOT")/scripts/teamdb-migrate.sh" .
-  fi
-fi
+# Migrar y verificar schema (idempotente y NO destructivo: teamdb-init.sh aplica
+# las migrations 002/003/004 y valida version 0.7.2. NUNCA borrar la DB.)
+bash "$(dirname "$SKALLING_ROOT")/scripts/teamdb-init.sh" .
 
 # Activar hooks git
 if [ -d ".git" ]; then
@@ -366,7 +358,7 @@ Bootstrap completo:
 
 Estado del teamdb:
 - DB: .opencode/context/team.db
-- Schema: v0.7.0
+- Schema: v0.7.2
 - Conceptos: [N]
 - Decisiones: [N]
 - Hooks git: [activos | no aplica]
