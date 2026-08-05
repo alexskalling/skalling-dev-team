@@ -294,6 +294,80 @@ echo "  - Hooks: $([ -f .git/hooks/pre-commit ] && echo 'pre-commit OK' || echo 
 
 **Si team.db no se puede crear** (no hay sqlite3 o falla), avisar al usuario pero no abortar el init.
 
+### 4.9 — Poblar teamdb con estado inicial
+
+Después de crear la DB, poblar con los datos detectados del proyecto:
+
+```bash
+DB=".opencode/context/team.db"
+TS=$(date +%Y-%m-%dT%H:%M:%SZ)
+
+# 1. Stack como concept (si no existe)
+sqlite3 "$DB" "INSERT OR IGNORE INTO concepts (slug, title, body_md, category, updated_at) VALUES (
+  '$(cat project.yaml | yq -r '.language' 2>/dev/null | tr ' ' '-' || echo "stack")',
+  'Stack detectado',
+  '# Stack\n\n' || char(10) || 'Lenguaje: ' || char(10) || 'Framework: ...',
+  'stack',
+  '$TS'
+)" 2>/dev/null || true
+
+# 2. Módulos como concepts (uno por carpeta top-level)
+for module in app componentes lib tipos tests public docs; do
+  [ -d "$module" ] || continue
+  sqlite3 "$DB" "INSERT OR IGNORE INTO concepts (slug, title, body_md, category, updated_at) VALUES (
+    'modulo-$module',
+    'Módulo $module',
+    'Directorio del módulo $module del proyecto',
+    'modulo',
+    '$TS'
+  )" 2>/dev/null
+done
+
+# 3. Reglas del proyecto como preferences
+sqlite3 "$DB" "INSERT OR IGNORE INTO preferences (slug, scope, body_md, source, confidence) VALUES (
+  'tdd-obligatorio',
+  'workflow',
+  'TDD: escribir test antes que código (RED → GREEN → REFACTOR)',
+  'project.yaml',
+  1.0
+)"
+
+sqlite3 "$DB" "INSERT OR IGNORE INTO preferences (slug, scope, body_md, source, confidence) VALUES (
+  'nombres-espanol',
+  'code-style',
+  'Variables, funciones, archivos en español (excepto APIs públicas)',
+  'project.yaml',
+  1.0
+)"
+
+sqlite3 "$DB" "INSERT OR IGNORE INTO preferences (slug, scope, body_md, source, confidence) VALUES (
+  'test-coversor',
+  'tooling',
+  'Hay un typo conocido: el script se llama test:coversor (debería ser test:coverage). Workaround: usar directamente vitest run --coverage',
+  'consolidado',
+  0.8
+)"
+
+# 4. ADR base si no existe (memory_links no requiere esto, solo lo dejo de ejemplo)
+sqlite3 "$DB" "INSERT OR IGNORE INTO decisions (slug, title, body_md, status, decided_at, decided_by) VALUES (
+  'adr-001',
+  'Spec-Driven Development',
+  'Toda feature sigue: Pol → Sol → Teo ↔ Jhon → Luz → Pau',
+  'accepted',
+  '$TS',
+  'pau'
+)"
+
+# 5. Reportar cuántos concepts/decisions se insertaron
+echo ""
+echo "Datos insertados en teamdb:"
+echo "  Concepts: $(sqlite3 $DB 'SELECT COUNT(*) FROM concepts')"
+echo "  Decisiones: $(sqlite3 $DB 'SELECT COUNT(*) FROM decisions')"
+echo "  Preferencias: $(sqlite3 $DB 'SELECT COUNT(*) FROM preferences')"
+```
+
+**NO abortar si falla** — la DB debe seguir funcionando aunque yq no exista.
+
 ## Paso 5 — Resumen final
 
 ```
