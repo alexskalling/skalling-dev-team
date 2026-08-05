@@ -8,7 +8,8 @@ CREATE TABLE audit_log (
   action TEXT,
   table_name TEXT,
   row_id INTEGER,
-  details TEXT
+  details TEXT,
+  actor_source TEXT DEFAULT 'trigger'
 );
 CREATE INDEX idx_audit_ts ON audit_log(ts DESC);
 

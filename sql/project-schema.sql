@@ -104,7 +104,8 @@ CREATE TABLE audit_log (
   action TEXT,
   table_name TEXT,
   row_id INTEGER,
-  details TEXT
+  details TEXT,
+  actor_source TEXT DEFAULT 'trigger'
 );
 CREATE INDEX idx_audit_ts ON audit_log(ts DESC);
 
@@ -169,58 +170,59 @@ END;
 
 -- ────────────────────────────────────────────────────────────────────────────
 -- AUDIT LOG TRIGGERS — registran INSERT/UPDATE/DELETE de las tablas críticas
+-- auditado-v0.7.2: actor_source='trigger' distingue triggers de helper/manual
 -- ────────────────────────────────────────────────────────────────────────────
 
 CREATE TRIGGER concepts_audit_ai AFTER INSERT ON concepts BEGIN
-  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details)
-  VALUES (datetime('now'), 'system', 'insert', 'concepts', new.id, json_object('slug', new.slug));
+  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details, actor_source)
+  VALUES (datetime('now'), 'system', 'insert', 'concepts', new.id, json_object('slug', new.slug), 'trigger');
 END;
 CREATE TRIGGER concepts_audit_au AFTER UPDATE ON concepts BEGIN
-  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details)
-  VALUES (datetime('now'), 'system', 'update', 'concepts', new.id, json_object('slug', new.slug));
+  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details, actor_source)
+  VALUES (datetime('now'), 'system', 'update', 'concepts', new.id, json_object('slug', new.slug), 'trigger');
 END;
 CREATE TRIGGER concepts_audit_ad AFTER DELETE ON concepts BEGIN
-  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details)
-  VALUES (datetime('now'), 'system', 'delete', 'concepts', old.id, json_object('slug', old.slug));
+  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details, actor_source)
+  VALUES (datetime('now'), 'system', 'delete', 'concepts', old.id, json_object('slug', old.slug), 'trigger');
 END;
 
 CREATE TRIGGER decisions_audit_ai AFTER INSERT ON decisions BEGIN
-  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details)
-  VALUES (datetime('now'), 'system', 'insert', 'decisions', new.id, json_object('slug', new.slug));
+  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details, actor_source)
+  VALUES (datetime('now'), 'system', 'insert', 'decisions', new.id, json_object('slug', new.slug), 'trigger');
 END;
 CREATE TRIGGER decisions_audit_au AFTER UPDATE ON decisions BEGIN
-  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details)
-  VALUES (datetime('now'), 'system', 'update', 'decisions', new.id, json_object('slug', new.slug));
+  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details, actor_source)
+  VALUES (datetime('now'), 'system', 'update', 'decisions', new.id, json_object('slug', new.slug), 'trigger');
 END;
 CREATE TRIGGER decisions_audit_ad AFTER DELETE ON decisions BEGIN
-  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details)
-  VALUES (datetime('now'), 'system', 'delete', 'decisions', old.id, json_object('slug', old.slug));
+  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details, actor_source)
+  VALUES (datetime('now'), 'system', 'delete', 'decisions', old.id, json_object('slug', old.slug), 'trigger');
 END;
 
 CREATE TRIGGER wip_audit_ai AFTER INSERT ON work_in_progress BEGIN
-  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details)
-  VALUES (datetime('now'), 'system', 'insert', 'work_in_progress', new.id, json_object('slug', new.slug, 'type', new.type));
+  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details, actor_source)
+  VALUES (datetime('now'), 'system', 'insert', 'work_in_progress', new.id, json_object('slug', new.slug, 'type', new.type), 'trigger');
 END;
 CREATE TRIGGER wip_audit_au AFTER UPDATE ON work_in_progress BEGIN
-  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details)
-  VALUES (datetime('now'), 'system', 'update', 'work_in_progress', new.id, json_object('slug', new.slug, 'status', new.status));
+  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details, actor_source)
+  VALUES (datetime('now'), 'system', 'update', 'work_in_progress', new.id, json_object('slug', new.slug, 'status', new.status), 'trigger');
 END;
 CREATE TRIGGER wip_audit_ad AFTER DELETE ON work_in_progress BEGIN
-  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details)
-  VALUES (datetime('now'), 'system', 'delete', 'work_in_progress', old.id, json_object('slug', old.slug));
+  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details, actor_source)
+  VALUES (datetime('now'), 'system', 'delete', 'work_in_progress', old.id, json_object('slug', old.slug), 'trigger');
 END;
 
 CREATE TRIGGER problems_audit_ai AFTER INSERT ON known_problems BEGIN
-  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details)
-  VALUES (datetime('now'), 'system', 'insert', 'known_problems', new.id, json_object('slug', new.slug));
+  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details, actor_source)
+  VALUES (datetime('now'), 'system', 'insert', 'known_problems', new.id, json_object('slug', new.slug), 'trigger');
 END;
 CREATE TRIGGER problems_audit_au AFTER UPDATE ON known_problems BEGIN
-  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details)
-  VALUES (datetime('now'), 'system', 'update', 'known_problems', new.id, json_object('slug', new.slug));
+  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details, actor_source)
+  VALUES (datetime('now'), 'system', 'update', 'known_problems', new.id, json_object('slug', new.slug), 'trigger');
 END;
 CREATE TRIGGER problems_audit_ad AFTER DELETE ON known_problems BEGIN
-  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details)
-  VALUES (datetime('now'), 'system', 'delete', 'known_problems', old.id, json_object('slug', old.slug));
+  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details, actor_source)
+  VALUES (datetime('now'), 'system', 'delete', 'known_problems', old.id, json_object('slug', old.slug), 'trigger');
 END;
 
 -- ════════════════════════════════════════

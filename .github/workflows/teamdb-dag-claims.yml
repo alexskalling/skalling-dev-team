@@ -1,0 +1,27 @@
+name: teamdb-dag-claims
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  dag-claims:
+    name: DAG, claims, amend, export-md, context capsule
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install sqlite3 + python3
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sqlite3
+      - name: Run round-2 tests
+        run: |
+          bash tests/teamdb-dag-tables-exist.test.sh
+          bash tests/teamdb-amend-full.test.sh
+          bash tests/teamdb-deps-dag.test.sh
+          bash tests/teamdb-claim-lease.test.sh
+          bash tests/teamdb-export-md.test.sh
+          bash tests/teamdb-context-capsule.test.sh
+          bash tests/teamdb-cycle-amended.test.sh

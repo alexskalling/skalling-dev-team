@@ -184,6 +184,25 @@ prune_old_backups() {
     fi
 }
 
+# Resuelve markers <!-- @include-snippet <nombre> --> con el cuerpo del snippet
+# canónico en templates/agents/snippets/<nombre>.md (DC-2, build-time).
+resolve_snippets() {
+    local agent_file="$1"
+    local resolved_content
+    resolved_content="$(cat "$agent_file")"
+    while [[ "$resolved_content" =~ @include-snippet[[:space:]]+([a-z-]+) ]]; do
+        local snippet_name="${BASH_REMATCH[1]}"
+        local snippet_path="$SCRIPT_DIR/templates/agents/snippets/${snippet_name}.md"
+        if [[ -f "$snippet_path" ]]; then
+            local snippet_body; snippet_body="$(cat "$snippet_path")"
+            resolved_content="${resolved_content//<!-- @include-snippet $snippet_name -->/$snippet_body}"
+        else
+            log WARN "Snippet no encontrado: $snippet_name (en $(basename "$agent_file"))"
+        fi
+    done
+    printf '%s\n' "$resolved_content"
+}
+
 install_agents() {
     log INFO "Instalando 8 agentes en $AGENTS_DIR"
 
@@ -194,10 +213,15 @@ install_agents() {
     for agent_file in "$SCRIPT_DIR"/agents-base/*.md; do
         [[ -e "$agent_file" ]] || continue
         local name; name="$(basename "$agent_file")"
-        run cp "$agent_file" "$AGENTS_DIR/$name"
+        local resolved_content; resolved_content="$(resolve_snippets "$agent_file")"
+        if [[ "$DRY_RUN" == true ]]; then
+            echo "    [dry-run] $name (con snippets resueltos) → $AGENTS_DIR/$name"
+        else
+            printf '%s\n' "$resolved_content" > "$AGENTS_DIR/$name"
+        fi
         agent_count=$((agent_count + 1))
     done
-    log OK "$agent_count agentes instalados"
+    log OK "$agent_count agentes instalados (con snippets resueltos)"
 }
 
 install_skills_core() {

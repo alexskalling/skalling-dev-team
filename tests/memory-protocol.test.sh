@@ -5,7 +5,8 @@
 #   1. templates/agents/snippets/memory-protocol.md existe y tiene las 4 secciones
 #      obligatorias + la nota de sincronización (single source of truth).
 #   2. Cada uno de los 8 agentes (Alex, Pol, Jes, Sol, Teo, Jhon, Luz, Pau) tiene
-#      la sección `## 🧠 Memory Protocol` con el comment block SINCRONIZADO CON.
+#      el marker `<!-- @include-snippet memory-protocol -->` (DC-2: el cuerpo vive
+#      en templates/agents/snippets/memory-protocol.md y se expande en install).
 #   3. Pau tiene el bloque "consolidación" extendido (rol específico de memoria).
 #   4. El snippet canónico contiene los puntos clave (cuándo guardar, dónde,
 #      cómo marcar contradicciones) — sanity check de que no quedó vacío.
@@ -103,15 +104,15 @@ test_snippet_sections() {
 
 test_agents_have_section() {
     echo ""
-    echo "── Test 3: 8 agentes con sección ## 🧠 Memory Protocol ──"
+    echo "── Test 3: 8 agentes con marker Memory Protocol ──"
 
     local agents=(Alex Pol Jes Sol Teo Jhon Luz Pau)
     for agent in "${agents[@]}"; do
         local file="$AGENTS_DIR/${agent}.md"
-        if [[ -f "$file" ]] && grep -qE "^## 🧠 Memory Protocol" "$file"; then
-            pass "${agent}.md tiene sección '## 🧠 Memory Protocol'"
+        if [[ -f "$file" ]] && grep -qE "<!-- @include-snippet memory-protocol -->" "$file"; then
+            pass "${agent}.md tiene marker '## @include-snippet memory-protocol'"
         else
-            fail "${agent}.md NO tiene '## 🧠 Memory Protocol'"
+            fail "${agent}.md NO tiene marker 'memory-protocol'"
         fi
     done
 }
@@ -122,15 +123,15 @@ test_agents_have_section() {
 
 test_agents_have_sync_comment() {
     echo ""
-    echo "── Test 4: 8 agentes con comment block SINCRONIZADO CON ──"
+    echo "── Test 4: 8 agentes con marker sincronizado (DC-2) ──"
 
     local agents=(Alex Pol Jes Sol Teo Jhon Luz Pau)
     for agent in "${agents[@]}"; do
         local file="$AGENTS_DIR/${agent}.md"
-        if [[ -f "$file" ]] && grep -q "SINCRONIZADO CON:.*memory-protocol" "$file"; then
-            pass "${agent}.md tiene comment block SINCRONIZADO CON"
+        if [[ -f "$file" ]] && grep -q "@include-snippet" "$file"; then
+            pass "${agent}.md tiene markers de snippets (DC-2)"
         else
-            fail "${agent}.md NO tiene comment block SINCRONIZADO CON"
+            fail "${agent}.md NO tiene markers de snippets"
         fi
     done
 }

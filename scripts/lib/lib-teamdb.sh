@@ -42,7 +42,7 @@ teamdb_write_project() {
   local batches_json
   batches_json="$(python3 -c "import json,sys
 print(json.dumps([
-  {'sql':'INSERT INTO audit_log(ts,agent,action,table_name) VALUES(datetime(\"now\"),?,\"mutate\",?)', 'params':[sys.argv[1], sys.argv[2]]},
+  {'sql':'INSERT INTO audit_log(ts,agent,action,table_name,actor_source) VALUES(datetime(\"now\"),?,\"mutate\",?,?)', 'params':[sys.argv[1], sys.argv[2], 'helper']},
   {'sql':sys.argv[3], 'params':json.loads(sys.argv[4])}
 ]))" "$actor" "<via_helper>" "$sql" "$user_params_json")"
   teamdb_exec_multi "$db" "$batches_json"
@@ -59,7 +59,7 @@ teamdb_write_global() {
   local batches_json
   batches_json="$(python3 -c "import json,sys
 print(json.dumps([
-  {'sql':'INSERT INTO audit_log(ts,agent,action,table_name) VALUES(datetime(\"now\"),?,\"mutate-global\",?)', 'params':[sys.argv[1], sys.argv[2]]},
+  {'sql':'INSERT INTO audit_log(ts,agent,action,table_name,actor_source) VALUES(datetime(\"now\"),?,\"mutate-global\",?,?)', 'params':[sys.argv[1], sys.argv[2], 'helper']},
   {'sql':sys.argv[3], 'params':json.loads(sys.argv[4])}
 ]))" "$actor" "<via_helper-global>" "$sql" "$user_params_json")"
   teamdb_exec_multi "$db" "$batches_json"

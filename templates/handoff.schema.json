@@ -125,9 +125,31 @@
         "tests_passed": { "type": "integer" },
         "tests_failed": { "type": "integer" }
       }
+    },
+    "contradicciones_detectadas": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Contradicciones con concept docs detectadas al trabajar (INC-3)"
     }
   },
   "additionalProperties": false,
+  "allOf": [
+    {
+      "description": "Si destino es Teo o Luz → requiere project_context",
+      "if": { "properties": { "to": { "enum": ["TEO", "LUZ"] } } },
+      "then": { "required": ["project_context"] }
+    },
+    {
+      "description": "Si destino es Jhon o Luz → requiere verification (recibir evidencia)",
+      "if": { "properties": { "to": { "enum": ["JHON", "LUZ"] } } },
+      "then": { "required": ["verification"] }
+    },
+    {
+      "description": "Si emisor es ingeniería (TEO/JHON/LUZ) → debe llevar verification como evidencia",
+      "if": { "properties": { "from": { "enum": ["TEO", "JHON", "LUZ"] } } },
+      "then": { "required": ["verification"] }
+    }
+  ],
   "examples": [
     {
       "from": "TEO",

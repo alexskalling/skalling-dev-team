@@ -66,20 +66,20 @@ afirmar_comment_frontmatter_fragmento() {
 afirmar_seccion_agente() {
     local agente="$1"
     local archivo="$DIRECTORIO_AGENTES/${agente}.md"
-    if [[ -f "$archivo" ]] && grep -qE "^## 🔍 Code Intelligence — cuándo usar codebase-memory-mcp$" "$archivo"; then
-        aprobar "${agente}.md tiene sección Code Intelligence"
+    if [[ -f "$archivo" ]] && grep -qE "<!-- @include-snippet code-intelligence -->" "$archivo"; then
+        aprobar "${agente}.md tiene marker Code Intelligence"
     else
-        rechazar "${agente}.md no tiene la sección Code Intelligence exacta"
+        rechazar "${agente}.md no tiene el marker Code Intelligence"
     fi
 }
 
 afirmar_comment_sincronizacion_agente() {
     local agente="$1"
     local archivo="$DIRECTORIO_AGENTES/${agente}.md"
-    if [[ -f "$archivo" ]] && grep -qE "SINCRONIZADO CON:.*code-intelligence" "$archivo"; then
-        aprobar "${agente}.md tiene comment block de sincronización"
+    if [[ -f "$archivo" ]] && grep -qE "<!-- @include-snippet code-intelligence -->" "$archivo"; then
+        aprobar "${agente}.md tiene marker de snippet Code Intelligence (DC-2)"
     else
-        rechazar "${agente}.md no tiene comment block de sincronización"
+        rechazar "${agente}.md no tiene marker de snippet Code Intelligence"
     fi
 }
 
@@ -90,8 +90,8 @@ afirmar_orden_agente() {
     local linea_mp=""
 
     if [[ -f "$archivo" ]]; then
-        linea_ci="$(awk '/^## 🔍 Code Intelligence/{print NR; exit}' "$archivo")"
-        linea_mp="$(awk '/^## 🧠 Memory Protocol/{print NR; exit}' "$archivo")"
+        linea_ci="$(awk '/@include-snippet code-intelligence/{print NR; exit}' "$archivo")"
+        linea_mp="$(awk '/@include-snippet memory-protocol/{print NR; exit}' "$archivo")"
     fi
 
     if [[ "$linea_ci" =~ ^[0-9]+$ ]] && [[ "$linea_mp" =~ ^[0-9]+$ ]] && (( linea_ci < linea_mp )); then

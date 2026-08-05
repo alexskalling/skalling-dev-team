@@ -19,7 +19,35 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run tests (bash ${{ matrix.bash-version }})
-        run: bash tests/setup.test.sh
+        run: |
+          bash tests/setup.test.sh
+          for t in \
+            tests/teamdb.test.sh \
+            tests/teamdb-safe-query.test.sh \
+            tests/teamdb-search-sqli.test.sh \
+            tests/teamdb-related-sqli.test.sh \
+            tests/teamdb-problems-fts.test.sh \
+            tests/teamdb-python-bindparams.test.sh \
+            tests/teamdb-write-wal.test.sh \
+            tests/teamdb-amend-full.test.sh \
+            tests/teamdb-dag-tables-exist.test.sh \
+            tests/teamdb-deps-dag.test.sh \
+            tests/teamdb-claim-lease.test.sh \
+            tests/teamdb-claim-strict.test.sh \
+            tests/teamdb-claim-history.test.sh \
+            tests/teamdb-export-md.test.sh \
+            tests/teamdb-context-capsule.test.sh \
+            tests/teamdb-context-issue8.test.sh \
+            tests/teamdb-cycle-amended.test.sh \
+            tests/teamdb-migrate-md-preserve.test.sh \
+            tests/teamdb-migration-003-unique.test.sh \
+            tests/teamdb-plan-atomic-idempotent.test.sh \
+            tests/teamdb-execute-plan-no-shell.test.sh \
+            tests/teamdb-export-audit.test.sh; do
+            [ -f "$t" ] || { echo "FAIL: $t no existe"; exit 1; }
+            echo "Running $t"
+            bash "$t" || { echo "FAIL: $t"; exit 1; }
+          done
 
       - name: Run doctor (global check)
         run: bash setup-team-doctor.sh || true

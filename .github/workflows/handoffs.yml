@@ -1,0 +1,25 @@
+name: handoffs
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  handoff-validation:
+    name: Handoff schema + agents TeamDB integration + snippets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install jsonschema
+      - name: Run handoff tests
+        run: |
+          bash tests/handoff-schema-validation.test.sh
+          bash tests/agents-teamdb-integration.test.sh
+          bash tests/snippets-sync.test.sh
+          bash tests/install-resolves-snippets.test.sh

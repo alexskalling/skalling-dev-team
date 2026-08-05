@@ -1,0 +1,24 @@
+name: teamdb-sqli
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  sqli:
+    name: "SQL injection tests (round 2: incluye Python bindparams)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install sqlite3 + python3
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sqlite3
+      - name: Run SQLi tests
+        run: |
+          bash tests/teamdb-search-sqli.test.sh
+          bash tests/teamdb-related-sqli.test.sh
+          bash tests/teamdb-safe-query.test.sh
+          bash tests/teamdb-python-bindparams.test.sh
