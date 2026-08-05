@@ -247,6 +247,53 @@ grep -q "codebase-memory-mcp" ~/.config/opencode/opencode.jsonc
 
 **Si ya está instalado** (`command -v codebase-memory-mcp` retorna 0): saltar pregunta, reportar "Ya instalado en este sistema, paso saltado".
 
+### 4.8 — TeamDB (libSQL)
+
+**SIEMPRE** verificar que la DB del proyecto existe, sin importar el estado (A/B/C):
+
+```bash
+# Verificar si team.db existe
+if [ ! -f ".opencode/context/team.db" ]; then
+  echo "team.db no existe. Creando..."
+  bash "$(dirname "$SKALLING_ROOT")/scripts/teamdb-init.sh" .
+  
+  # Si hay .jsonl legacy, migrar
+  if [ -f ".opencode/context/DECISIONS.jsonl" ] || [ -d ".opencode/context/concept" ]; then
+    bash "$(dirname "$SKALLING_ROOT")/scripts/teamdb-migrate.sh" .
+  fi
+fi
+
+# Verificar schema version
+VER=$(sqlite3 .opencode/context/team.db "SELECT value FROM schema_meta WHERE key='version'" 2>/dev/null)
+
+if [ "$VER" != "0.7.0" ]; then
+  echo "teamdb schema es $VER, regenerando a 0.7.0..."
+  rm .opencode/context/team.db
+  bash "$(dirname "$SKALLING_ROOT")/scripts/teamdb-init.sh" .
+  if [ -f ".opencode/context/DECISIONS.jsonl" ] || [ -d ".opencode/context/concept" ]; then
+    bash "$(dirname "$SKALLING_ROOT")/scripts/teamdb-migrate.sh" .
+  fi
+fi
+
+# Activar hooks git
+if [ -d ".git" ]; then
+  HOOKS_SRC="$(dirname "$SKALLING_ROOT")/scripts/hooks"
+  cp "$HOOKS_SRC/pre-commit" .git/hooks/pre-commit 2>/dev/null
+  cp "$HOOKS_SRC/post-merge" .git/hooks/post-merge 2>/dev/null
+  chmod +x .git/hooks/pre-commit .git/hooks/post-merge 2>/dev/null
+fi
+
+# Reportar
+echo "TeamDB:"
+echo "  - DB: .opencode/context/team.db"
+echo "  - Schema: $(sqlite3 .opencode/context/team.db 'SELECT value FROM schema_meta WHERE key="version"')"
+echo "  - Conceptos: $(sqlite3 .opencode/context/team.db 'SELECT COUNT(*) FROM concepts')"
+echo "  - Decisiones: $(sqlite3 .opencode/context/team.db 'SELECT COUNT(*) FROM decisions')"
+echo "  - Hooks: $([ -f .git/hooks/pre-commit ] && echo 'pre-commit OK' || echo 'pre-commit NO')"
+```
+
+**Si team.db no se puede crear** (no hay sqlite3 o falla), avisar al usuario pero no abortar el init.
+
 ## Paso 5 — Resumen final
 
 ```
@@ -257,6 +304,14 @@ Bootstrap completo:
 ✓ Skills comunitarias revisadas: [encontradas | no encontradas]
 ✓ [Si frontend] design-system.md: [creado | pendiente manual]
 ✓ Doctor: [OK | warnings: ...]
+✓ TeamDB: [inicializado | regenerado | ya existe]
+
+Estado del teamdb:
+- DB: .opencode/context/team.db
+- Schema: v0.7.0
+- Conceptos: [N]
+- Decisiones: [N]
+- Hooks git: [activos | no aplica]
 
 Skalling está listo. ¿Qué necesitás?
 ```
