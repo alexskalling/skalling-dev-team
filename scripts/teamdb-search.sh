@@ -13,8 +13,21 @@ else
 fi
 
 QUERY="${1:-}"
-TYPE="${2:-all}"
-PROJECT="${3:-$(pwd)}"
+ARG2="${2:-}"
+ARG3="${3:-}"
+
+VALID_TYPES="all concepts decisions preferences problems wip"
+
+if [ -z "$ARG2" ]; then
+  TYPE="all"
+  PROJECT="$(pwd)"
+elif echo " $VALID_TYPES " | grep -q " $ARG2 "; then
+  TYPE="$ARG2"
+  PROJECT="${ARG3:-$(pwd)}"
+else
+  TYPE="all"
+  PROJECT="$ARG2"
+fi
 
 if [ -z "$QUERY" ]; then
   echo "Uso: bash teamdb-search.sh <query> [type] [project]"
@@ -24,7 +37,7 @@ if [ -z "$QUERY" ]; then
   echo "Ejemplos:"
   echo "  bash teamdb-search.sh 'JWT'"
   echo "  bash teamdb-search.sh 'auth' concepts"
-  echo "  bash teamdb-search.sh 'refresh' decisions"
+  echo "  bash teamdb-search.sh 'refresh' decisions /ruta/al/proyecto"
   exit 1
 fi
 
