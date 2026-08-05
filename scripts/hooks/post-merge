@@ -1,10 +1,29 @@
 #!/usr/bin/env bash
 # post-merge hook: import .sql files to teamdb
-# Errors son visibles (no suprimidos) — la salud de teamdb es importante.
-PROJECT="$(git rev-parse --show-toplevel)"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Errores son visibles (no se suprimen) — la salud de teamdb es importante.
+set -euo pipefail
 
-if [ -d "$PROJECT/.opencode/context/teamdb" ]; then
-  bash "$SCRIPT_DIR/../teamdb-import.sh" "$PROJECT"
-  echo "teamdb: imported .sql from git"
+PROJECT="$(git rev-parse --show-toplevel)"
+
+# Salir silenciosamente si no hay directorio teamdb
+[ -d "$PROJECT/.opencode/context/teamdb" ] || exit 0
+
+GLOBAL_SCRIPT="${SKALLING_ROOT:-$HOME/.config/opencode}/scripts/teamdb-import.sh"
+REPO_SCRIPT="$PROJECT/scripts/teamdb-import.sh"
+
+if [ -x "$GLOBAL_SCRIPT" ]; then
+  bash "$GLOBAL_SCRIPT" "$PROJECT" || {
+    echo "[ERROR] teamdb-import.sh falló. El merge continúa, pero teamdb puede estar desincronizado." >&2
+    exit 1
+  }
+elif [ -x "$REPO_SCRIPT" ]; then
+  bash "$REPO_SCRIPT" "$PROJECT" || {
+    echo "[ERROR] teamdb-import.sh falló." >&2
+    exit 1
+  }
+else
+  echo "[WARN] teamdb-import.sh no encontrado" >&2
+  exit 0
 fi
+
+echo "teamdb: imported .sql from git"

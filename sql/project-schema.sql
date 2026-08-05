@@ -1,4 +1,4 @@
--- Skalling Project DB Schema v0.7.0
+-- Skalling Project DB Schema (version row stamped at build time by scripts/build-schema.sh)
 -- Path: <proyecto>/.opencode/context/team.db
 
 CREATE TABLE concepts (
@@ -113,12 +113,13 @@ CREATE TABLE schema_meta (
   value TEXT NOT NULL
 );
 
-INSERT INTO schema_meta VALUES ('version', '0.7.0');
+INSERT INTO schema_meta VALUES ('version', '0.7.2');
 INSERT INTO schema_meta VALUES ('type', 'project');
 
 CREATE VIRTUAL TABLE concepts_fts USING fts5(title, body_md, content='concepts', content_rowid='id');
 CREATE VIRTUAL TABLE decisions_fts USING fts5(title, body_md, content='decisions', content_rowid='id');
 CREATE VIRTUAL TABLE wip_fts USING fts5(title, body_md, content='work_in_progress', content_rowid='id');
+CREATE VIRTUAL TABLE problems_fts USING fts5(title, symptom_md, workaround_md, content='known_problems', content_rowid='id');
 
 CREATE TRIGGER concepts_ai AFTER INSERT ON concepts BEGIN
   INSERT INTO concepts_fts(rowid, title, body_md) VALUES (new.id, new.title, new.body_md);
@@ -151,6 +152,19 @@ END;
 CREATE TRIGGER wip_au AFTER UPDATE ON work_in_progress BEGIN
   INSERT INTO wip_fts(wip_fts, rowid, title, body_md) VALUES('delete', old.id, old.title, old.body_md);
   INSERT INTO wip_fts(rowid, title, body_md) VALUES (new.id, new.title, new.body_md);
+END;
+
+CREATE TRIGGER problems_ai AFTER INSERT ON known_problems BEGIN
+  INSERT INTO problems_fts(rowid, title, symptom_md, workaround_md) VALUES (new.id, new.title, new.symptom_md, new.workaround_md);
+END;
+CREATE TRIGGER problems_ad AFTER DELETE ON known_problems BEGIN
+  INSERT INTO problems_fts(problems_fts, rowid, title, symptom_md, workaround_md)
+    VALUES('delete', old.id, old.title, old.symptom_md, old.workaround_md);
+END;
+CREATE TRIGGER problems_au AFTER UPDATE ON known_problems BEGIN
+  INSERT INTO problems_fts(problems_fts, rowid, title, symptom_md, workaround_md)
+    VALUES('delete', old.id, old.title, old.symptom_md, old.workaround_md);
+  INSERT INTO problems_fts(rowid, title, symptom_md, workaround_md) VALUES (new.id, new.title, new.symptom_md, new.workaround_md);
 END;
 
 -- ────────────────────────────────────────────────────────────────────────────
@@ -304,5 +318,60 @@ CREATE INDEX idx_tasks_plan ON tasks(plan_id);
 CREATE INDEX idx_tasks_status ON tasks(status);
 CREATE INDEX idx_tasks_owner ON tasks(owner);
 
--- Update schema version
-UPDATE schema_meta SET value = '0.7.1' WHERE key = 'version';
+-- ════════════════════════════════════════
+-- DAG + CLAIMS + HISTORY + CAPSULES v0.7.2 (T-2.9)
+-- ════════════════════════════════════════
+
+CREATE TABLE task_dependencies (
+  id INTEGER PRIMARY KEY,
+  task_id INTEGER NOT NULL,
+  depends_on_task_id INTEGER NOT NULL,
+  type TEXT DEFAULT 'blocks' CHECK (type IN ('blocks','relates_to','supersedes')),
+  created_at TEXT,
+  FOREIGN KEY (task_id) REFERENCES tasks(id),
+  FOREIGN KEY (depends_on_task_id) REFERENCES tasks(id),
+  UNIQUE(task_id, depends_on_task_id)
+);
+CREATE INDEX idx_task_deps_task ON task_dependencies(task_id);
+CREATE INDEX idx_task_deps_depends ON task_dependencies(depends_on_task_id);
+
+CREATE TABLE task_claims (
+  id INTEGER PRIMARY KEY,
+  task_id INTEGER NOT NULL,
+  actor TEXT NOT NULL,
+  attempt INTEGER NOT NULL DEFAULT 1,
+  input_hash TEXT NOT NULL,
+  lease_until INTEGER NOT NULL,
+  status TEXT DEFAULT 'active' CHECK (status IN ('active','done','failed','expired')),
+  claimed_at TEXT NOT NULL,
+  released_at TEXT,
+  FOREIGN KEY (task_id) REFERENCES tasks(id)
+);
+CREATE INDEX idx_task_claims_actor ON task_claims(actor, status);
+CREATE INDEX idx_task_claims_lease ON task_claims(lease_until);
+CREATE UNIQUE INDEX idx_task_claims_active ON task_claims(task_id) WHERE status = 'active';
+
+CREATE TABLE plan_history (
+  id INTEGER PRIMARY KEY,
+  plan_id INTEGER NOT NULL,
+  version INTEGER NOT NULL,
+  changed_by TEXT NOT NULL,
+  changed_at TEXT NOT NULL,
+  diff_md TEXT,
+  snapshot_before TEXT,
+  operation TEXT NOT NULL CHECK (operation IN ('created','amended','approved','deprecated','superseded')),
+  FOREIGN KEY (plan_id) REFERENCES plans(id)
+);
+CREATE INDEX idx_plan_history_plan ON plan_history(plan_id, version DESC);
+
+CREATE TABLE task_context_capsules (
+  id INTEGER PRIMARY KEY,
+  task_id INTEGER NOT NULL,
+  memory_table TEXT NOT NULL CHECK (memory_table IN ('concepts','decisions','preferences','known_problems')),
+  memory_id INTEGER NOT NULL,
+  relevance INTEGER DEFAULT 1,
+  provenance TEXT DEFAULT 'linked',
+  FOREIGN KEY (task_id) REFERENCES tasks(id),
+  UNIQUE(task_id, memory_table, memory_id)
+);
+CREATE INDEX idx_task_ctx_capsule ON task_context_capsules(task_id);

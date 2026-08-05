@@ -340,48 +340,66 @@ install_gitattributes_template() {
 install_teamdb_hooks() {
   if [ -d "$SCRIPT_DIR/scripts/hooks" ]; then
     run mkdir -p "$OPENCODE_DIR/hooks"
-    run cp "$SCRIPT_DIR/scripts/hooks/"* "$OPENCODE_DIR/hooks/" 2>/dev/null || true
+    # FIX INV-WRITE-2: NO usar `2>/dev/null || true`. Si cp falla, falla el install.
+    # shellcheck disable=SC2086
+    run cp "$SCRIPT_DIR/scripts/hooks/"* "$OPENCODE_DIR/hooks/"
+    local hook
+    for hook in "$OPENCODE_DIR/hooks/"*; do
+      [ -f "$hook" ] || continue
+      run chmod +x "$hook"
+    done
+  else
+    log WARN "Directorio scripts/hooks/ no existe, skip"
   fi
 }
 
 install_teamdb() {
     log INFO "Instalando teamdb (libSQL)"
 
-    # Copia scripts teamdb al bundle global
     run mkdir -p "$OPENCODE_DIR/scripts"
-    for script in teamdb-init.sh teamdb-migrate.sh teamdb-export.sh teamdb-import.sh wip-tree.sh; do
-        if [[ -f "$SCRIPT_DIR/scripts/$script" ]]; then
+    # Descubrir todos los teamdb-*.sh via glob (captura nuevos sin tocar install).
+    local script
+    for script in "$SCRIPT_DIR"/scripts/teamdb-*.sh; do
+        [ -f "$script" ] || continue
+        run cp "$script" "$OPENCODE_DIR/scripts/$(basename "$script")"
+        run chmod +x "$OPENCODE_DIR/scripts/$(basename "$script")"
+    done
+    for script in wip-tree.sh build-schema.sh; do
+        if [ -f "$SCRIPT_DIR/scripts/$script" ]; then
             run cp "$SCRIPT_DIR/scripts/$script" "$OPENCODE_DIR/scripts/$script"
             run chmod +x "$OPENCODE_DIR/scripts/$script"
         fi
     done
-    if [[ -f "$SCRIPT_DIR/scripts/lib/lib-teamdb.sh" ]]; then
+
+    # lib-teamdb.sh va como par plana (no en lib/) para que scripts lo busquen igual.
+    if [ -f "$SCRIPT_DIR/scripts/lib/lib-teamdb.sh" ]; then
         run cp "$SCRIPT_DIR/scripts/lib/lib-teamdb.sh" "$OPENCODE_DIR/scripts/lib-teamdb.sh"
         run chmod +x "$OPENCODE_DIR/scripts/lib-teamdb.sh"
     fi
 
-    # Copia schema global
-    if [[ -d "$SCRIPT_DIR/sql" ]]; then
+    # Schema
+    if [ -d "$SCRIPT_DIR/sql" ]; then
         run mkdir -p "$OPENCODE_DIR/skalling-data/teamdb-schema"
-        if [[ -f "$SCRIPT_DIR/sql/global-schema.sql" ]]; then
+        [ -f "$SCRIPT_DIR/sql/global-schema.sql" ] && \
             run cp "$SCRIPT_DIR/sql/global-schema.sql" "$OPENCODE_DIR/skalling-data/teamdb-schema/"
-        fi
+        [ -f "$SCRIPT_DIR/sql/project-schema.sql" ] && \
+            run cp "$SCRIPT_DIR/sql/project-schema.sql" "$OPENCODE_DIR/skalling-data/teamdb-schema/"
     fi
 
-    # Crea team.db global si no existe
-    if command -v sqlite3 >/dev/null 2>&1 && [[ -f "$OPENCODE_DIR/skalling-data/teamdb-schema/global-schema.sql" ]]; then
-        if [[ ! -f "$HOME/.config/opencode/team.db" ]]; then
+    # Inicializa teamdb global si no existe
+    if command -v sqlite3 >/dev/null 2>&1 && [ -f "$OPENCODE_DIR/skalling-data/teamdb-schema/global-schema.sql" ]; then
+        if [ ! -f "$HOME/.config/opencode/team.db" ]; then
             run mkdir -p "$HOME/.config/opencode"
             if sqlite3 "$HOME/.config/opencode/team.db" < "$OPENCODE_DIR/skalling-data/teamdb-schema/global-schema.sql"; then
-                log OK "team.db global creado"
+                log OK "teamdb global creado"
             else
-                log WARN "No se pudo crear team.db global"
+                log WARN "No se pudo crear teamdb global"
             fi
         else
-            log INFO "team.db global ya existe"
+            log INFO "teamdb global ya existe"
         fi
     else
-        log WARN "sqlite3 no disponible, team.db no se creó"
+        log WARN "sqlite3 no disponible, teamdb no se creó"
     fi
 
     log OK "teamdb instalado"

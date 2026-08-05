@@ -1,5 +1,16 @@
--- Skalling Global DB Schema v0.7.0
+-- Skalling Global DB Schema (version row stamped at build time by scripts/build-schema.sh)
 -- Path: ~/.config/opencode/team.db
+
+CREATE TABLE audit_log (
+  id INTEGER PRIMARY KEY,
+  ts TEXT NOT NULL,
+  agent TEXT,
+  action TEXT,
+  table_name TEXT,
+  row_id INTEGER,
+  details TEXT
+);
+CREATE INDEX idx_audit_ts ON audit_log(ts DESC);
 
 CREATE TABLE agents_meta (
   id INTEGER PRIMARY KEY,
@@ -68,7 +79,7 @@ CREATE TABLE schema_meta (
   value TEXT NOT NULL
 );
 
-INSERT INTO schema_meta VALUES ('version', '0.7.0');
+INSERT INTO schema_meta VALUES ('version', '0.7.2');
 INSERT INTO schema_meta VALUES ('type', 'global');
 
 CREATE INDEX idx_user_prefs_scope ON user_preferences(scope, scope_value);

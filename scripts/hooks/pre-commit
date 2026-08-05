@@ -1,9 +1,27 @@
 #!/usr/bin/env bash
 # pre-commit hook: export teamdb data to .sql
-PROJECT="$(git rev-parse --show-toplevel)"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+set -euo pipefail
 
-if [ -f "$PROJECT/.opencode/context/team.db" ]; then
-  bash "$SCRIPT_DIR/../teamdb-export.sh" "$PROJECT"
-  git add "$PROJECT/.opencode/context/teamdb"/data_*.sql 2>/dev/null || true
+PROJECT="$(git rev-parse --show-toplevel)"
+
+# Salir silenciosamente si no hay teamdb proyecto
+[ -f "$PROJECT/.opencode/context/team.db" ] || exit 0
+
+# Preferir install global; fallback al repo
+GLOBAL_SCRIPT="${SKALLING_ROOT:-$HOME/.config/opencode}/scripts/teamdb-export.sh"
+REPO_SCRIPT="$PROJECT/scripts/teamdb-export.sh"
+
+if [ -x "$GLOBAL_SCRIPT" ]; then
+  bash "$GLOBAL_SCRIPT" "$PROJECT"
+elif [ -x "$REPO_SCRIPT" ]; then
+  bash "$REPO_SCRIPT" "$PROJECT"
+else
+  echo "[WARN] teamdb-export.sh no encontrado (global: $GLOBAL_SCRIPT, repo: $REPO_SCRIPT)" >&2
+  exit 0
+fi
+
+SQL_FILES=$(ls "$PROJECT/.opencode/context/teamdb"/data_*.sql 2>/dev/null) || true
+if [ -n "$SQL_FILES" ]; then
+  # shellcheck disable=SC2086
+  git add $SQL_FILES
 fi

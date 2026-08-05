@@ -1,0 +1,190 @@
+{
+  "from": "TEO",
+  "to": "JHON",
+  "task": "Verificar implementacion Fase 2 v2 de teamdb-hardening (T-2.9 a T-2.17v2, T-2.7, T-2.8)",
+  "summary": "Fase 2 v2 completada: schema DAG/claims/history/capsules + Python teamdb_exec.py con bind params reales + WAL+BEGIN IMMEDIATE multi-statement + amend con version/historial + DAG con cycle detection + claim atómico con lease/attempt + resume/release + export Markdown unidireccional GENERATED + context capsule + teamdb-plan unificado + export audit_log + migrate preserva .md. 13 tests nuevos, 311 asserts PASS totales, 0 shellcheck, 0 bash -n errores.",
+  "artifacts": [
+    "sql/project-schema.sql (4 tablas nuevas: task_dependencies, task_claims, plan_history, task_context_capsules)",
+    "sql/global-schema.sql (tabla audit_log agregada)",
+    "sql/migrations/003_add_dag_claims_history.sql (nuevo, idempotente)",
+    "scripts/teamdb_exec.py (nuevo, CLI Python con sqlite3 real + bind params)",
+    "scripts/teamdb-plan.sh (sustituye stub, unificado proposal+plan+tasks+DAG+history)",
+    "scripts/teamdb-amend.sh (sustituye stub, version+history+preserva aprobadas)",
+    "scripts/teamdb-status.sh (aun stub — ver riesgos)",
+    "scripts/teamdb-resume.sh (aun stub — T-3.5 lo implementa)",
+    "scripts/teamdb-execute-plan.sh (wrapper compatible DC-3, no shell desde DB)",
+    "scripts/teamdb-deps.sh (nuevo, DAG + cycle detection + runnable)",
+    "scripts/teamdb-claim.sh (nuevo, atomic claim + lease + resume/release)",
+    "scripts/teamdb-context.sh (nuevo, context capsule)",
+    "scripts/teamdb-export-md.sh (nuevo, Markdown GENERATED unidireccional)",
+    "scripts/teamdb-export.sh (modificado, incluye audit_log + cycle + DAG + claims)",
+    "scripts/teamdb-migrate.sh (modificado, preserva .md, mueve solo .jsonl a legacy)",
+    "scripts/teamdb-search.sh (migrado a teamdb_exec_query bound-param)",
+    "scripts/teamdb-related.sh (migrado a teamdb_exec_query bound-param)",
+    "scripts/lib/lib-teamdb.sh (teamdb_safe_query, _has_control_char, _sql_quote, _actor_or_unknown, teamdb_has_table, teamdb_exec_query, teamdb_exec_write, teamdb_exec_value, teamdb_exec_transaction, teamdb_exec_multi, teamdb_write_project multi-statement, teamdb_write_global, init con WAL)",
+    "scripts/teamdb-init.sh (fix shellcheck + aplica migrations/003)",
+    "tests/teamdb-dag-tables-exist.test.sh (nuevo)",
+    "tests/teamdb-python-bindparams.test.sh (nuevo)",
+    "tests/teamdb-write-wal.test.sh (nuevo)",
+    "tests/teamdb-amend-full.test.sh (nuevo)",
+    "tests/teamdb-deps-dag.test.sh (nuevo)",
+    "tests/teamdb-claim-lease.test.sh (nuevo)",
+    "tests/teamdb-export-md.test.sh (nuevo)",
+    "tests/teamdb-context-capsule.test.sh (nuevo)",
+    "tests/teamdb-cycle-amended.test.sh (nuevo)",
+    "tests/teamdb-export-audit.test.sh (nuevo)",
+    "tests/teamdb-migrate-md-preserve.test.sh (nuevo)",
+    "tests/portability-bash32.test.sh (nuevo)",
+    "tests/teamdb-execute-plan-no-shell.test.sh (nuevo, valida DC-3)"
+  ],
+  "tests_passed": true,
+  "tests_summary": {
+    "teamdb-dag-tables-exist": {"total": 15, "passed": 15, "failed": 0},
+    "teamdb-python-bindparams": {"total": 17, "passed": 17, "failed": 0},
+    "teamdb-write-wal": {"total": 11, "passed": 11, "failed": 0},
+    "teamdb-amend-full": {"total": 15, "passed": 15, "failed": 0},
+    "teamdb-deps-dag": {"total": 14, "passed": 14, "failed": 0},
+    "teamdb-claim-lease": {"total": 14, "passed": 14, "failed": 0},
+    "teamdb-export-md": {"total": 19, "passed": 19, "failed": 0},
+    "teamdb-context-capsule": {"total": 10, "passed": 10, "failed": 0},
+    "teamdb-cycle-amended": {"total": 17, "passed": 17, "failed": 0},
+    "teamdb-export-audit": {"total": 14, "passed": 14, "failed": 0},
+    "teamdb-migrate-md-preserve": {"total": 9, "passed": 9, "failed": 0},
+    "portability-bash32": {"total": 10, "passed": 10, "failed": 0},
+    "teamdb-execute-plan-no-shell": {"total": 7, "passed": 7, "failed": 0},
+    "fase-1-regresion (9 tests)": {"total": 139, "passed": 139, "failed": 0}
+  },
+  "verification": {
+    "type": "test_suite",
+    "command": "bash tests/teamdb-dag-tables-exist.test.sh && bash tests/teamdb-python-bindparams.test.sh && bash tests/teamdb-write-wal.test.sh && bash tests/teamdb-amend-full.test.sh && bash tests/teamdb-deps-dag.test.sh && bash tests/teamdb-claim-lease.test.sh && bash tests/teamdb-export-md.test.sh && bash tests/teamdb-context-capsule.test.sh && bash tests/teamdb-cycle-amended.test.sh && bash tests/teamdb-export-audit.test.sh && bash tests/teamdb-migrate-md-preserve.test.sh && bash tests/portability-bash32.test.sh && bash tests/teamdb-execute-plan-no-shell.test.sh && bash tests/teamdb.test.sh && bash tests/teamdb-safe-query.test.sh && bash tests/teamdb-search-sqli.test.sh && bash tests/teamdb-related-sqli.test.sh && bash tests/teamdb-problems-fts.test.sh && bash tests/install-script-copies.test.sh && bash tests/install-hooks-paths.test.sh && bash tests/audit-log-actor.test.sh && bash tests/version-coherence.test.sh",
+    "output_summary": "22 test suites = 311 asserts PASS, 0 FAIL. Shellcheck 0 errores en 22 scripts (lib-teamdb.sh + 17 teamdb-*.sh + 2 hooks + build-schema.sh). bash -n 0 errores. teamdb_exec.py parsea como AST.",
+    "exit_code": 0,
+    "shellcheck_files": [
+      "scripts/lib/lib-teamdb.sh",
+      "scripts/build-schema.sh",
+      "scripts/teamdb-init.sh",
+      "scripts/teamdb-search.sh",
+      "scripts/teamdb-related.sh",
+      "scripts/teamdb-plan.sh",
+      "scripts/teamdb-amend.sh",
+      "scripts/teamdb-status.sh",
+      "scripts/teamdb-resume.sh",
+      "scripts/teamdb-execute-plan.sh",
+      "scripts/teamdb-deps.sh",
+      "scripts/teamdb-claim.sh",
+      "scripts/teamdb-context.sh",
+      "scripts/teamdb-export-md.sh",
+      "scripts/teamdb-export.sh",
+      "scripts/teamdb-import.sh",
+      "scripts/teamdb-migrate.sh",
+      "scripts/teamdb-graph.sh",
+      "scripts/hooks/pre-commit",
+      "scripts/hooks/post-merge"
+    ],
+    "shellcheck_exit_code": 0,
+    "python_ast": "teamdb_exec.py OK"
+  },
+  "desviaciones_del_plan": [
+    {
+      "id": "DESV-F2-1",
+      "tarea": "T-2.10 (Python teamdb_exec.py)",
+      "plan_propuso": "Modo 'transaction' con un solo statement + bind",
+      "realidad": "SQLite3 Python no soporta multi-statement con bind. Implementé mode=multi que acepta JSON de [{sql, params}, ...] y los ejecuta en una sola transacción BEGIN IMMEDIATE.",
+      "implementacion": "teamdb_exec_multi recibe batches JSON (array de {sql, params}). teamdb_write_project lo usa para escribir audit_log + user SQL atómicamente."
+    },
+    {
+      "id": "DESV-F2-2",
+      "tarea": "T-2.10",
+      "plan_propuso": "teamdb_safe_query como path activo",
+      "realidad": "El plan en amendment round 2 dice migrar a teamdb_exec_query como camino activo",
+      "implementacion": "Migré teamdb-search.sh y teamdb-related.sh a teamdb_exec_query (JSON via Python con bind). teamdb_safe_query queda exportada como DEPRECATED (header comment) para backward-compat de Fase 1."
+    },
+    {
+      "id": "DESV-F2-3",
+      "tarea": "T-2.11 (WAL + BEGIN IMMEDIATE)",
+      "plan_propuso": "Reemplazar flock con BEGIN IMMEDIATE via teamdb_exec.py",
+      "realidad": "Flock no funciona con zsh y es inherentemente portable problemático",
+      "implementacion": "teamdb_init_project setea PRAGMA journal_mode=WAL + busy_timeout + foreign_keys al crear la DB. teamdb_write_project usa mode=multi (BEGIN IMMEDIATE + 2 statements atómicos)."
+    },
+    {
+      "id": "DESV-F2-4",
+      "tarea": "T-2.12 (amend version+history)",
+      "plan_propuso": "operation enum: add, modify, deprecate",
+      "realidad": "CHECK constraint de plan_history.operation solo acepta: created, amended, approved, deprecated, superseded",
+      "implementacion": "Mapeo interno: add/modify → amended, deprecate → deprecated. diff_md lleva el tipo original (add/modify/deprecate)."
+    },
+    {
+      "id": "DESV-F2-5",
+      "tarea": "T-2.13 (DAG cycle detection)",
+      "plan_propuso": "python3 con <<EOF heredoc con interpolación bash",
+      "realidad": "Heredoc interpolation es fuente de SQLi/error",
+      "implementacion": "python3 - \"$DB\" \"$TASK_ID\" \"$DEP_ID\" (argv) — los IDs vienen de teamdb_exec_value (validados). Detección DFS pura en Python, sin SQL embebido."
+    },
+    {
+      "id": "DESV-F2-6",
+      "tarea": "T-2.17v2 (teamdb-plan)",
+      "plan_propuso": "Slugs derivados del titulo sin prefijo",
+      "realidad": "Sin prefijo, los slugs colisionan con tablas (`decisions`, `preferences`) y con UNIQUE constraints entre plans distintos",
+      "implementacion": "Forzar prefijo `task-` siempre: task-endpoint-post-login, task-validar-jwt, etc. Para custom slug, el caller puede usar formato task-N en el titulo."
+    },
+    {
+      "id": "DESV-F2-7",
+      "tarea": "T-2.14 (claim shell args)",
+      "plan_propuesto": "python3 con env vars TEAMDB_ACTOR en argv",
+      "realidad": "Pattern fragil y feo",
+      "implementacion": "Python recibe actor como argv explícito. clean separation entre bash y python."
+    },
+    {
+      "id": "DESV-F2-8",
+      "tarea": "T-2.16 (context capsule filtro de status)",
+      "plan_propuso": "Solo filtrar decisions rejected",
+      "realidad": "Tambien preferences y known_problems benefit del filtrado",
+      "implementacion": "Filtrar: decisions (solo accepted), problems (excluir wontfix). preferences no se filtra (siempre relevante)."
+    }
+  ],
+  "riesgos_pendientes_para_fase_3": [
+    {
+      "id": "R-F2-1",
+      "tipo": "Schema",
+      "riesgo": "DBs preexistentes (sin 003 aplicado) pueden tener triggers `agent='system'`. El trigger sigue disparando, generando audit_log rows con literal 'system'. teamdb_write_project emite row con actor real (helper). Hay duplicacion temporal.",
+      "mitigacion_actual": "teamdb_write_project emite rows con actor_source='helper' (vía el formato del INSERT). El trigger emite con agent='system' literal.",
+      "accion_fase_3": "T-3.4 (audit-log-actor-source): agregar columna actor_source, refactorizar triggers para usar PRAGMA actor, eliminar duplicación."
+    },
+    {
+      "id": "R-F2-2",
+      "tipo": "Scripts legacy",
+      "riesgo": "teamdb-status.sh y teamdb-resume.sh siguen como stubs. No hay vista de status del plan todavía.",
+      "mitigacion_actual": "Stubs imprimen '[STUB]' y exit 0. El flujo claim+resume+release funciona via teamdb-claim.sh --resume.",
+      "accion_fase_3": "T-2.3 (status) o T-3.x: implementar teamdb-status.sh que muestre plan activo, tareas pendientes, blockers, runnable. T-3.5: teamdb-resume.sh que integre --resume con priorización."
+    },
+    {
+      "id": "R-F2-3",
+      "tipo": "zsh compat",
+      "riesgo": "El patrón `(... 200>file)` (heredoc FD) no es aceptado por zsh (parse error). bash 3.2 lo acepta. Tests corren con bash, OK.",
+      "mitigacion_actual": "Tests + scripts usan bash 3.2+. zsh solo es un shell interactivo en el sistema del desarrollador.",
+      "accion_fase_3": "Si se requiere zsh compat, refactorizar teamdb_with_lock para usar `exec 200>file` antes del subshell."
+    },
+    {
+      "id": "R-F2-4",
+      "tipo": "Trigger de audit",
+      "riesgo": "Triggers existentes de Fase 0 disparan `agent='system'` literalmente. teamdb_exec.py hace row con actor real, pero el trigger tambien dispara. Resultado: 2 rows por mutación (helper + trigger).",
+      "mitigacion_actual": "Helper rows tienen agent=actor real, trigger rows agent='system'. Lectores pueden filtrar por `agent != 'system'` o `actor_source='helper'` (cuando se implemente).",
+      "accion_fase_3": "T-3.4: agregar `actor_source` col, refactorizar triggers con PRAGMA actor, eliminar duplicación. FASE 3 ya tiene el plan."
+    },
+    {
+      "id": "R-F2-5",
+      "tipo": "FTS5 query sanitization",
+      "riesgo": "El search.sh sanitiza el query FTS5 con sed (quita \\ \" * () [] {} :). Inputs con `+ - " pueden pasar y dar resultados inesperados pero NO son SQLi (van por bind param).",
+      "mitigacion_actual": "Sanitización básica + bind param evita cualquier SQLi. FTS5 puede dar 0 resultados con sintaxis rara.",
+      "accion_fase_3": "Considerar tokenización FTS5 más robusta (unicode61 + tokenchars)."
+    },
+    {
+      "id": "R-F2-6",
+      "tipo": "spec-memory-link test",
+      "riesgo": "spec-memory-link.test.sh asume VERSION 0.6.2 (deuda preexistente). Ya fallaba antes del bump 0.7.0/0.7.2.",
+      "mitigacion_actual": "Documentado en handoff de Fase 1. No es regresion de Fase 2.",
+      "accion_fase_3": "Actualizar el test a la versión actual."
+    }
+  ],
+  "next_action": "Fase 3 — pendiente de orden de Sol/Jhon. Trabajo sugerido: (1) T-3.1 snippets + T-3.2 install con markers, (2) T-3.3 handoff schema condicional, (3) T-3.4 audit-log-actor-source (cierra R-F2-1 y R-F2-4), (4) T-3.5 resume con priorización, (5) T-3.6 execute-plan real, (6) T-3.7 audit cleanup, (7) T-3.8 CI workflows. Luz corre quality gate arquitectónico al final. Pau actualiza CHANGELOG [Unreleased] 0.7.2."
+}

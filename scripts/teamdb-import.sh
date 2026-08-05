@@ -2,11 +2,14 @@
 # teamdb-import.sh — .sql → DB (idempotente, no rompe DB existente)
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-export SKALLING_ROOT="$(dirname "$SCRIPT_DIR")"
+SKALLING_ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+export SKALLING_ROOT="$SKALLING_ROOT_DIR"
 # Fallback: funciona en repo (lib/lib-teamdb.sh) y en global (lib-teamdb.sh)
 if [ -f "$SCRIPT_DIR/lib-teamdb.sh" ]; then
+  # shellcheck disable=SC1091
   source "$SCRIPT_DIR/lib-teamdb.sh"
 elif [ -f "$SCRIPT_DIR/lib/lib-teamdb.sh" ]; then
+  # shellcheck disable=SC1091
   source "$SCRIPT_DIR/lib/lib-teamdb.sh"
 else
   echo "ERROR: lib-teamdb.sh no encontrado" >&2

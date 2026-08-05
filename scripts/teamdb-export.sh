@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# teamdb-export.sh — DB → .sql
+# teamdb-export.sh — DB → .sql (incluye audit_log, schema_meta, cycle + DAG + claims)
+# T-2.7 + T-2.9: exporta todas las tablas relevantes para que `git diff` refleje cambios.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Fallback: funciona en repo (lib/lib-teamdb.sh) y en global (lib-teamdb.sh)
 if [ -f "$SCRIPT_DIR/lib-teamdb.sh" ]; then
+  # shellcheck disable=SC1091
   source "$SCRIPT_DIR/lib-teamdb.sh"
 elif [ -f "$SCRIPT_DIR/lib/lib-teamdb.sh" ]; then
+  # shellcheck disable=SC1091
   source "$SCRIPT_DIR/lib/lib-teamdb.sh"
 else
   echo "ERROR: lib-teamdb.sh no encontrado" >&2
@@ -19,11 +21,14 @@ local_db="$(teamdb_project_path "$PROJECT")"
 OUT="$PROJECT/.opencode/context/teamdb"
 mkdir -p "$OUT"
 
-sqlite3 "$local_db" ".dump concepts" > "$OUT/data_concepts.sql" 2>/dev/null || true
-sqlite3 "$local_db" ".dump decisions" > "$OUT/data_decisions.sql" 2>/dev/null || true
-sqlite3 "$local_db" ".dump preferences" > "$OUT/data_preferences.sql" 2>/dev/null || true
-sqlite3 "$local_db" ".dump known_problems" > "$OUT/data_problems.sql" 2>/dev/null || true
-sqlite3 "$local_db" ".dump memory_links" > "$OUT/data_memory_links.sql" 2>/dev/null || true
-sqlite3 "$local_db" ".dump memory_tags" > "$OUT/data_memory_tags.sql" 2>/dev/null || true
+# Tablas de "datos de usuario" + cycle + DAG + claims + history + capsules
+USER_TABLES="concepts decisions preferences known_problems memory_links memory_tags work_in_progress proposals plans specs design_notes tasks task_dependencies task_claims plan_history task_context_capsules audit_log schema_meta"
+
+for table in $USER_TABLES; do
+  out="$OUT/data_${table}.sql"
+  if sqlite3 "$local_db" ".dump $table" > "$out" 2>/dev/null; then
+    :
+  fi
+done
 
 echo "exported: $OUT"

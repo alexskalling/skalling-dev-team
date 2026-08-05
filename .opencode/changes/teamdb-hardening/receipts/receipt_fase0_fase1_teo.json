@@ -1,0 +1,118 @@
+{
+  "from": "TEO",
+  "to": "JHON",
+  "task": "Verificar implementación Fase 0 + Fase 1 de teamdb-hardening (v0.7.2)",
+  "summary": "Bump v0.7.2 (schema row + README + build-schema.sh idempotente), parametrización de teamdb-search/related (cierre SQLi), FTS5 para known_problems, install-global reescrito (copia todos los teamdb-*.sh + hooks ejecutables), hooks con git rev-parse (sin SCRIPT_DIR/..), TEAMDB_ACTOR plumbing fundacional. 8 tests nuevos, todos verdes.",
+  "artifacts": [
+    "VERSION",
+    "README.md",
+    "sql/project-schema.sql",
+    "sql/global-schema.sql",
+    "scripts/build-schema.sh",
+    "scripts/lib/lib-teamdb.sh",
+    "scripts/teamdb-search.sh",
+    "scripts/teamdb-related.sh",
+    "scripts/teamdb-amend.sh",
+    "scripts/teamdb-plan.sh",
+    "scripts/teamdb-status.sh",
+    "scripts/teamdb-resume.sh",
+    "scripts/teamdb-execute-plan.sh",
+    "scripts/hooks/pre-commit",
+    "scripts/hooks/post-merge",
+    "install-global.sh",
+    "bootstrap-context.sh",
+    "tests/version-coherence.test.sh",
+    "tests/teamdb-safe-query.test.sh",
+    "tests/teamdb-search-sqli.test.sh",
+    "tests/teamdb-related-sqli.test.sh",
+    "tests/teamdb-problems-fts.test.sh",
+    "tests/install-script-copies.test.sh",
+    "tests/install-hooks-paths.test.sh",
+    "tests/audit-log-actor.test.sh"
+  ],
+  "tests_passed": true,
+  "tests_summary": {
+    "teamdb-safe-query": {"total": 10, "passed": 10, "failed": 0},
+    "teamdb-search-sqli": {"total": 14, "passed": 14, "failed": 0},
+    "teamdb-related-sqli": {"total": 11, "passed": 11, "failed": 0},
+    "teamdb-problems-fts": {"total": 8, "passed": 8, "failed": 0},
+    "install-script-copies": {"total": 18, "passed": 18, "failed": 0},
+    "install-hooks-paths": {"total": 9, "passed": 9, "failed": 0},
+    "audit-log-actor": {"total": 10, "passed": 10, "failed": 0},
+    "version-coherence": {"total": 6, "passed": 6, "failed": 0},
+    "teamdb (regresion)": {"total": 53, "passed": 53, "failed": 0}
+  },
+  "verification": {
+    "type": "test_suite",
+    "command": "bash tests/teamdb-safe-query.test.sh && bash tests/teamdb-search-sqli.test.sh && bash tests/teamdb-related-sqli.test.sh && bash tests/teamdb-problems-fts.test.sh && bash tests/install-script-copies.test.sh && bash tests/install-hooks-paths.test.sh && bash tests/audit-log-actor.test.sh && bash tests/version-coherence.test.sh && bash tests/teamdb.test.sh",
+    "output_summary": "All 8 new tests + teamdb regression = 139 asserts PASS, 0 FAIL. Shellcheck 0 errors en 11 archivos tocados. bash -n 0 errors. install --dry-run exit 0. AC-1.4 grep sin interpolacion: 0 matches.",
+    "exit_code": 0,
+    "shellcheck_files": [
+      "scripts/lib/lib-teamdb.sh",
+      "scripts/teamdb-search.sh",
+      "scripts/teamdb-related.sh",
+      "scripts/hooks/pre-commit",
+      "scripts/hooks/post-merge",
+      "scripts/build-schema.sh",
+      "scripts/teamdb-amend.sh",
+      "scripts/teamdb-plan.sh",
+      "scripts/teamdb-status.sh",
+      "scripts/teamdb-resume.sh",
+      "scripts/teamdb-execute-plan.sh"
+    ],
+    "shellcheck_exit_code": 0
+  },
+  "desviaciones_del_plan": [
+    {
+      "id": "DESV-1",
+      "tarea": "T-1.1 (teamdb_safe_query)",
+      "plan_propuso": "sqlite3 db \"SELECT ?\" \"param\" — bind posicional via CLI",
+      "realidad": "El CLI de sqlite3 (version 3.51.0) NO soporta bind posicional (?/??N/:name). Trata todos los args restantes como SQL concatenada.",
+      "implementacion": "teamdb_safe_query hace escape explicito ' -> '' (estandar SQL) y sustituye ? en el template. Sigue siendo seguro porque: (1) caller pasa templates con ? solo en valores, (2) nombres de tabla/column vienen del caller como literales en el template, (3) el caller debe validar inputs.",
+      "mitigacion": "Validacion previa: rechazo NUL/control chars, length cap 1024 chars, mode whitelist. Para callers que pasen templates con interpolacion de variables whitelisted (e.g., $TABLE), el caller es responsable. Esto es MAS seguro que `printf %q` (que escapa para bash, no para SQL).",
+      "ref_evidence": "Comando de prueba: `sqlite3 t.db \"SELECT ?\" \"42\"` retorna 'near \"42\": syntax error' en sqlite3 3.51.0. Verificado en macOS con la version del sistema."
+    },
+    {
+      "id": "DESV-2",
+      "tarea": "T-1.5 (install-teamdb)",
+      "plan_propuso": "find -maxdepth 1 -name 'teamdb-*.sh' -printf '%f\\n'",
+      "realidad": "find de macOS (BSD) no soporta -printf (es extension GNU).",
+      "implementacion": "Reemplazado por glob bash: `for script in \"$SCRIPT_DIR\"/scripts/teamdb-*.sh; do ... done`. 100% portable bash 3.2."
+    },
+    {
+      "id": "DESV-3",
+      "tarea": "T-1.4 (problems FTS5)",
+      "plan_propuso": "Agregar problems_fts5 y reemplazar search de problems para usarlo.",
+      "realidad": "T-1.2 fue escrito ANTES de T-1.4. Para que T-1.2 pueda pasar sin T-1.4, implemente fallback LIKE en teamdb-search.sh para problems. T-1.4 luego agrega problems_fts al schema y search.sh detecta la presencia de problems_fts via teamdb_has_table.",
+      "impacto": "Sin FTS5, search de problems usa triple LIKE. Con FTS5 (schema regenerado), usa FTS5. Ambos pasan el test."
+    },
+    {
+      "id": "DESV-4",
+      "tarea": "T-1.5 (stubs)",
+      "plan_propuso": "Los scripts teamdb-plan/status/amend/resume/execute-plan son FASE 2.",
+      "realidad": "Para que T-1.5 (install copia TODOS los teamdb-*.sh) los pueda mencionar, cree stubs minimos ejecutables. FASE 2 los implementa de verdad.",
+      "stubs": "5 scripts con shebang + set -euo pipefail + echo \"[STUB]\" + exit 0."
+    }
+  ],
+  "riesgos_pendientes": [
+    {
+      "id": "R-F1-1",
+      "riesgo": "audit_log.agent sigue siendo 'system' en triggers existentes del schema (T-2.2 + T-3.7 lo refactorizan para usar TEAMDB_ACTOR via _actor_or_unknown).",
+      "mitigacion_actual": "TEAMDB_ACTOR plumbing listo (T-1.7). Helper _actor_or_unknown exporta el actor para que T-2.2 lo use en INSERT INTO audit_log con actor real.",
+      "accion_fase_2": "T-2.2: teamdb_write_global escribe audit_log row con actor_source='helper' y agent=_actor_or_unknown."
+    },
+    {
+      "id": "R-F1-2",
+      "riesgo": "DBs team.db preexistentes (anteriores a este change) tienen schema 0.7.0. El doctor advierte.",
+      "mitigacion_actual": "Para correr install en maquinas con teamdb viejo, hacer: `rm ~/.config/opencode/team.db && bash install-global.sh`. El init recrea con schema 0.7.2.",
+      "accion_fase_2": "Considerar ALTER TABLE en build-schema para migrar in-place. O doc en CHANGELOG."
+    },
+    {
+      "id": "R-F1-3",
+      "riesgo": "spec-memory-link.test.sh falla porque asume VERSION 0.6.2 (deuda preexistente, ya fallaba antes del bump 0.7.2).",
+      "mitigacion_actual": "Documentado. No es regresion de este change.",
+      "accion_fase_2": "Actualizar el test a la nueva version (fuera de scope de Fase 1)."
+    }
+  ],
+  "next_action": "Fase 2: implementar teamdb_write_global (T-2.2), reemplazar stubs de teamdb-plan/status/amend/resume/execute-plan (T-2.3), tests de cycle (T-2.4), version coherence (T-2.5 ya cubierto en T-0.1), bash 3.2 portability (T-2.7), .jsonl migration (T-2.8). Luz corre quality gate al final de Fase 1 (R-1: clean code; seguridad). Pau actualiza CHANGELOG [Unreleased]."
+}

@@ -1623,16 +1623,16 @@ test_release_y_doctor() {
     echo ""
     echo "── Test 5: versión, documentación e integración doctor ──"
 
-    if grep -q '0.6.2' "$ROOT/VERSION"; then
-        pass "VERSION declara 0.6.2"
+    if grep -q '0.7.2' "$ROOT/VERSION"; then
+        pass "VERSION declara 0.7.2"
     else
-        fail "VERSION no declara 0.6.2"
+        fail "VERSION no declara 0.7.2"
     fi
 
-    if grep -q 'SKALLING_VERSION="0.6.2"' "$ROOT/setup-team-doctor.sh"; then
-        pass "doctor declara SKALLING_VERSION 0.6.2"
+    if grep -q 'SKALLING_VERSION="\$(grep' "$ROOT/setup-team-doctor.sh"; then
+        pass "doctor lee SKALLING_VERSION dinámico de VERSION"
     else
-        fail "doctor no declara SKALLING_VERSION 0.6.2"
+        fail "doctor SKALLING_VERSION no lee de VERSION dinámicamente"
     fi
 
     if grep -q 'info "Drift detection disponible:' "$ROOT/setup-team-doctor.sh"; then

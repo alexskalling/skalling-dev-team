@@ -277,7 +277,9 @@ init_teamdb() {
     local project="$1"
     if command -v sqlite3 >/dev/null 2>&1; then
         if [[ -f "$SCRIPT_DIR/scripts/teamdb-init.sh" ]]; then
-            if bash "$SCRIPT_DIR/scripts/teamdb-init.sh" "$project" 2>/dev/null; then
+            # bootstrap es ejecutado por Alex → seteamos TEAMDB_ACTOR=alex
+            # para que audit_log refleje el actor real (INV-AUDIT-1).
+            if TEAMDB_ACTOR=alex bash "$SCRIPT_DIR/scripts/teamdb-init.sh" "$project" 2>/dev/null; then
                 ok "teamdb inicializado"
             else
                 warn "teamdb no se pudo inicializar"
