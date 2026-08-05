@@ -25,3 +25,6 @@ __pycache__/
 # Test artifacts
 coverage/
 .nyc_output/
+
+# TeamDB: la DB cruda no se commitea; git guarda el export .sql (.opencode/context/teamdb/)
+.opencode/context/team.db
