@@ -349,7 +349,7 @@ install_teamdb() {
 
     # Copia scripts teamdb al bundle global
     run mkdir -p "$OPENCODE_DIR/scripts"
-    for script in teamdb-init.sh teamdb-migrate.sh teamdb-export.sh teamdb-import.sh; do
+    for script in teamdb-init.sh teamdb-migrate.sh teamdb-export.sh teamdb-import.sh wip-tree.sh; do
         if [[ -f "$SCRIPT_DIR/scripts/$script" ]]; then
             run cp "$SCRIPT_DIR/scripts/$script" "$OPENCODE_DIR/scripts/$script"
             run chmod +x "$OPENCODE_DIR/scripts/$script"

@@ -883,6 +883,28 @@ test_install_global_dryrun() {
     rm -rf "$fake_home"
 }
 
+test_install_global_teamdb_scripts() {
+    echo ""
+    echo "── Test 12: Scripts teamdb del bundle global ──"
+
+    local fake_home; fake_home="$(mktemp -d)"
+    local installed_wip_tree="$fake_home/.config/opencode/scripts/wip-tree.sh"
+
+    if HOME="$fake_home" bash "$REPO_ROOT/install-global.sh" --force >/dev/null 2>&1; then
+        pass "install-global.sh --force exit 0"
+    else
+        fail "install-global.sh --force falló"
+    fi
+
+    if [[ -x "$installed_wip_tree" ]]; then
+        pass "install-global.sh copia wip-tree.sh ejecutable"
+    else
+        fail "install-global.sh NO copia wip-tree.sh ejecutable"
+    fi
+
+    rm -rf "$fake_home"
+}
+
 # ──────────────────────────────────────────────────────────────────────────────
 # RUN
 # ──────────────────────────────────────────────────────────────────────────────
@@ -905,6 +927,7 @@ test_collaborative_memory
 test_scripts_syntax
 test_bootstrap_e2e
 test_install_global_dryrun
+test_install_global_teamdb_scripts
 test_merge_helper_e2e
 test_windows_support
 test_lib_os_detection
