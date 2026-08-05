@@ -86,44 +86,28 @@ C) Continuar trabajo (salir del init)
 
 ## Paso 4 — Bootstrap (si A o B eligió crear)
 
-### 4.1 — Crear bundle OKF
+### 4.5 — Generar bundle (legacy deshabilitado)
 
-```
-.opencode/context/
-├── README.md                       # descripción del bundle
-├── index.md                        # navegación root
-├── log.md                          # timestamp de este bootstrap
-├── stack/
-│   ├── index.md
-│   ├── backend.md                  # type: Concept, stack detectado
-│   ├── frontend.md                 # si aplica
-│   └── testing.md                  # type: Concept, test runner
-├── proyecto/
-│   ├── index.md
-│   └── que-es.md                   # type: Concept, extraído del README
-├── decisiones/                     # vacías con secciones
-│   └── index.md
-├── trabajo-en-curso/               # vacías
-│   └── index.md
-├── preferencias/                   # vacías
-│   └── index.md
-└── problemas-conocidos/            # vacías
-    └── index.md
+**A partir de v0.7.0, los archivos `.md` del bundle OKF ya NO se crean.** La DB libSQL es la fuente única de verdad.
+
+Si necesitás leer el bundle en formato markdown, exportá desde la DB:
+
+```bash
+# Exportar todos los concepts a markdown (one-liner)
+sqlite3 .opencode/context/team.db "SELECT body_md FROM concepts" > /tmp/concepts.md
+
+# O usar export estándar:
+bash ~/.config/opencode/scripts/teamdb-export.sh .
 ```
 
-Cada archivo con frontmatter OKF:
-```yaml
----
-type: Concept
-title: Backend del proyecto
-description: Stack de backend detectado automáticamente
-resource: package.json
-tags: [stack, backend, typescript]
-timestamp: 2026-07-28T15:30:00Z
-agent: alex
-confidence: 0.7
----
-```
+Los archivos legacy (si quedaron de una versión anterior) se preservan en `.opencode/context/legacy/` para referencia histórica.
+
+**Skipping:** NO crear:
+- PRODUCT.md
+- DESIGN.md
+- README.md, index.md, log.md
+- design.json, project.yaml
+- context/stack/, context/proyecto/, context/decisiones/, etc.
 
 ### 4.2 — Crear project.yaml
 
