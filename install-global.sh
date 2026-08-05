@@ -19,6 +19,9 @@ source "$(dirname "$0")/scripts/lib/lib-os.sh"
 # shellcheck source=scripts/lib/lib-stack-detect.sh
 source "$(dirname "$0")/scripts/lib/lib-stack-detect.sh"
 
+# shellcheck source=scripts/lib/lib-teamdb.sh
+source "$(dirname "$0")/scripts/lib/lib-teamdb.sh"
+
 skalling_log_os
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -403,6 +406,12 @@ install_teamdb() {
             run chmod +x "$OPENCODE_DIR/scripts/$script"
         fi
     done
+    # teamdb_exec.py: motor Python con bound params — los writes (teamdb_write_*)
+    # lo resuelven en $OPENCODE_DIR/scripts/. Sin él, el bundle instalado no escribe.
+    if [ -f "$SCRIPT_DIR/scripts/teamdb_exec.py" ]; then
+        run cp "$SCRIPT_DIR/scripts/teamdb_exec.py" "$OPENCODE_DIR/scripts/teamdb_exec.py"
+        run chmod +x "$OPENCODE_DIR/scripts/teamdb_exec.py"
+    fi
 
     # lib-teamdb.sh va como par plana (no en lib/) para que scripts lo busquen igual.
     if [ -f "$SCRIPT_DIR/scripts/lib/lib-teamdb.sh" ]; then
@@ -410,31 +419,37 @@ install_teamdb() {
         run chmod +x "$OPENCODE_DIR/scripts/lib-teamdb.sh"
     fi
 
-    # Schema
+    # Schema + migrations: ruta canónica que los scripts esperan ($SKALLING_ROOT/sql/).
+    # Sin esto, un proyecto inicializado desde el bundle instalado usa schemas viejos.
     if [ -d "$SCRIPT_DIR/sql" ]; then
-        run mkdir -p "$OPENCODE_DIR/skalling-data/teamdb-schema"
+        run mkdir -p "$OPENCODE_DIR/sql"
         [ -f "$SCRIPT_DIR/sql/global-schema.sql" ] && \
-            run cp "$SCRIPT_DIR/sql/global-schema.sql" "$OPENCODE_DIR/skalling-data/teamdb-schema/"
+            run cp "$SCRIPT_DIR/sql/global-schema.sql" "$OPENCODE_DIR/sql/"
         [ -f "$SCRIPT_DIR/sql/project-schema.sql" ] && \
-            run cp "$SCRIPT_DIR/sql/project-schema.sql" "$OPENCODE_DIR/skalling-data/teamdb-schema/"
+            run cp "$SCRIPT_DIR/sql/project-schema.sql" "$OPENCODE_DIR/sql/"
+        if [ -d "$SCRIPT_DIR/sql/migrations" ]; then
+            run mkdir -p "$OPENCODE_DIR/sql/migrations"
+            run cp "$SCRIPT_DIR/sql/migrations/"*.sql "$OPENCODE_DIR/sql/migrations/"
+        fi
     fi
 
     # Inicializa teamdb global si no existe
-    if command -v sqlite3 >/dev/null 2>&1 && [ -f "$OPENCODE_DIR/skalling-data/teamdb-schema/global-schema.sql" ]; then
+    if command -v sqlite3 >/dev/null 2>&1 && [ -f "$OPENCODE_DIR/sql/global-schema.sql" ]; then
         if [ ! -f "$HOME/.config/opencode/team.db" ]; then
             run mkdir -p "$HOME/.config/opencode"
-            if sqlite3 "$HOME/.config/opencode/team.db" < "$OPENCODE_DIR/skalling-data/teamdb-schema/global-schema.sql"; then
+            if sqlite3 "$HOME/.config/opencode/team.db" < "$OPENCODE_DIR/sql/global-schema.sql"; then
                 log OK "teamdb global creado"
             else
                 log WARN "No se pudo crear teamdb global"
             fi
         else
             log INFO "teamdb global ya existe"
-            # Upgrade aditivo: añadir actor_source a audit_log de DBs globales viejas
-            # (idempotente: en DBs nuevas la columna ya existe y el ALTER falla).
-            if sqlite3 "$HOME/.config/opencode/team.db" \
-                "ALTER TABLE audit_log ADD COLUMN actor_source TEXT DEFAULT 'trigger'" 2>/dev/null; then
-                log OK "teamdb global: audit_log.actor_source añadido"
+            # Upgrade aditivo idempotente (H2): crea audit_log si falta y
+            # añade actor_source si falta. No toca datos existentes.
+            if teamdb_heal_global; then
+                log OK "teamdb global: audit_log/actor_source asegurados"
+            else
+                log WARN "teamdb global: upgrade aditivo no aplicado"
             fi
         fi
     else

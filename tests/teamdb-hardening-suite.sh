@@ -24,6 +24,7 @@ for t in tests/teamdb-safe-query.test.sh \
          tests/handoff-schema-validation.test.sh \
          tests/agents-teamdb-integration.test.sh \
          tests/audit-log-actor-source.test.sh \
+         tests/teamdb-global-heal.test.sh \
          tests/teamdb-dag-tables-exist.test.sh \
          tests/teamdb-amend-full.test.sh \
          tests/teamdb-deps-dag.test.sh \

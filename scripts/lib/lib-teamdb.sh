@@ -95,13 +95,50 @@ teamdb_init_project() {
   echo "$db"
 }
 
+# teamdb_heal_global: upgrade aditivo idempotente del team.db global (DBs viejas).
+# 1) crea audit_log si la DB es pre-0.7.2; 2) añade actor_source si falta la
+# columna; 3) deja schema_meta.version al día (si existe la tabla).
+# En DBs nuevas (recién creadas del schema actual) es un no-op.
+# NOTA: al bumpear versión, actualizar el valor '0.7.2' de abajo.
+teamdb_heal_global() {
+  teamdb_check_sqlite3 || return 1
+  local db; db="$(teamdb_global_path)"
+  [ -f "$db" ] || { echo "[ERROR] DB global no existe: $db" >&2; return 1; }
+  sqlite3 "$db" <<'SQL' || { echo "[ERROR] Heal teamdb global falló: $db" >&2; return 1; }
+CREATE TABLE IF NOT EXISTS audit_log (
+  id INTEGER PRIMARY KEY,
+  ts TEXT NOT NULL,
+  agent TEXT,
+  action TEXT,
+  table_name TEXT,
+  row_id INTEGER,
+  details TEXT,
+  actor_source TEXT DEFAULT 'trigger'
+);
+CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(ts DESC);
+SQL
+  local has_col
+  has_col="$(sqlite3 "$db" "SELECT 1 FROM pragma_table_info('audit_log') WHERE name='actor_source'" 2>/dev/null)"
+  if [ "$has_col" != "1" ]; then
+    sqlite3 "$db" "ALTER TABLE audit_log ADD COLUMN actor_source TEXT DEFAULT 'trigger'" || {
+      echo "[ERROR] No se pudo añadir actor_source al team.db global" >&2
+      return 1
+    }
+  fi
+  sqlite3 "$db" "UPDATE schema_meta SET value='0.7.2' WHERE key='version'" 2>/dev/null || true
+  return 0
+}
+
 teamdb_init_global() {
   teamdb_check_sqlite3 || return 1
   local db; db="$(teamdb_global_path)"
   local schema="${SKALLING_ROOT:-$(dirname "$(dirname "${BASH_SOURCE[0]}")")}/sql/global-schema.sql"
   [ -f "$schema" ] || { echo "[ERROR] Schema: $schema" >&2; return 1; }
   mkdir -p "$(dirname "$db")"
-  [ -f "$db" ] || sqlite3 "$db" < "$schema"
+  if [ ! -f "$db" ]; then
+    sqlite3 "$db" < "$schema" || { echo "[ERROR] No se pudo crear DB global: $db" >&2; return 1; }
+  fi
+  teamdb_heal_global || return 1
   echo "$db"
 }
 

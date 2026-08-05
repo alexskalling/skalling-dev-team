@@ -52,6 +52,99 @@ else
   assert_fail "dry-run menciona lib-teamdb.sh" "no aparece"
 fi
 
+# Debe mencionar teamdb_exec.py (motor de writes con bound params)
+if echo "$OUT" | grep -q "teamdb_exec.py"; then
+  assert_pass "dry-run menciona teamdb_exec.py"
+else
+  assert_fail "dry-run menciona teamdb_exec.py" "no aparece"
+fi
+
+# El bundle instalado debe poder ESCRIBIR (teamdb_exec.py presente + heal global)
+mkdir -p "$FAKE_HOME/.config/opencode"
+sqlite3 "$FAKE_HOME/.config/opencode/team.db" <<'SQL'
+CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+INSERT INTO schema_meta VALUES ('version', '0.7.1');
+INSERT INTO schema_meta VALUES ('type', 'global');
+CREATE TABLE user_preferences (
+  id INTEGER PRIMARY KEY,
+  slug TEXT UNIQUE NOT NULL,
+  scope TEXT NOT NULL,
+  scope_value TEXT,
+  body_md TEXT,
+  confidence REAL DEFAULT 1.0,
+  source TEXT
+);
+SQL
+export HOME="$FAKE_HOME"
+bash "$ROOT/install-global.sh" >/dev/null 2>&1
+if [ -f "$FAKE_HOME/.config/opencode/scripts/teamdb_exec.py" ]; then
+  assert_pass "install copia teamdb_exec.py"
+else
+  assert_fail "install copia teamdb_exec.py"
+fi
+WRITE_RC=1
+TEAMDB_ACTOR=ci bash -c '
+  . "$1/scripts/lib-teamdb.sh"
+  teamdb_init_global >/dev/null
+  teamdb_write_global \
+    "INSERT INTO user_preferences(slug,scope,body_md) VALUES(?,?,?)" \
+    "installed-write" "test" "body" >/dev/null 2>&1
+' _ "$FAKE_HOME/.config/opencode"
+WRITE_RC=$?
+export HOME="$HOME_BAK"
+if [ "$WRITE_RC" = "0" ]; then
+  assert_pass "bundle instalado escribe via teamdb_write_global"
+else
+  assert_fail "bundle instalado escribe via teamdb_write_global" "rc=$WRITE_RC"
+fi
+
+# La ruta canónica sql/ debe estar instalada (schemas + migrations) — layout scripts.
+if [ -f "$FAKE_HOME/.config/opencode/sql/project-schema.sql" ] \
+   && grep -q "actor_source" "$FAKE_HOME/.config/opencode/sql/project-schema.sql"; then
+  assert_pass "sql/project-schema.sql instalado con actor_source"
+else
+  assert_fail "sql/project-schema.sql instalado con actor_source"
+fi
+if [ -f "$FAKE_HOME/.config/opencode/sql/global-schema.sql" ] \
+   && grep -q "actor_source" "$FAKE_HOME/.config/opencode/sql/global-schema.sql"; then
+  assert_pass "sql/global-schema.sql instalado con actor_source"
+else
+  assert_fail "sql/global-schema.sql instalado con actor_source"
+fi
+if [ -f "$FAKE_HOME/.config/opencode/sql/migrations/004_add_actor_source.sql" ]; then
+  assert_pass "sql/migrations/004_add_actor_source.sql instalado"
+else
+  assert_fail "sql/migrations/004_add_actor_source.sql instalado"
+fi
+
+# Un proyecto inicializado desde el bundle instalado funciona end-to-end
+export HOME="$FAKE_HOME"
+PROJ="$FAKE_HOME/proj"
+mkdir -p "$PROJ"
+bash "$FAKE_HOME/.config/opencode/scripts/teamdb-init.sh" "$PROJ" >/dev/null 2>&1
+RC_INIT=$?
+export HOME="$HOME_BAK"
+PROJ_DB="$PROJ/.opencode/context/team.db"
+if [ "$RC_INIT" = "0" ]; then
+  assert_pass "teamdb-init.sh instalado inicializa proyecto (exit 0)"
+else
+  assert_fail "teamdb-init.sh instalado inicializa proyecto (exit 0)" "rc=$RC_INIT"
+fi
+if [ -f "$PROJ_DB" ]; then
+  assert_pass "DB de proyecto creada por bundle instalado"
+else
+  assert_fail "DB de proyecto creada por bundle instalado"
+fi
+VER_PROJ=$(sqlite3 "$PROJ_DB" "SELECT value FROM schema_meta WHERE key='version'")
+HAS_ACTOR=$(sqlite3 "$PROJ_DB" "SELECT count(*) FROM pragma_table_info('audit_log') WHERE name='actor_source'")
+HAS_HISTORY=$(sqlite3 "$PROJ_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='plan_history'")
+if [ "$VER_PROJ" = "0.7.2" ] && [ "$HAS_ACTOR" = "1" ] && [ -n "$HAS_HISTORY" ]; then
+  assert_pass "proyecto instalado: version 0.7.2 + actor_source + migraciones 003"
+else
+  assert_fail "proyecto instalado: version 0.7.2 + actor_source + migraciones 003" \
+    "ver=$VER_PROJ actor=$HAS_ACTOR history=$HAS_HISTORY"
+fi
+
 # Hooks
 if echo "$OUT" | grep -qE "hooks/(pre-commit|post-merge)"; then
   assert_pass "dry-run menciona hooks/pre-commit o hooks/post-merge"
