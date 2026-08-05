@@ -37,7 +37,7 @@ fi
 for s in teamdb-init teamdb-migrate teamdb-export teamdb-import \
          teamdb-search teamdb-related teamdb-graph \
          teamdb-plan teamdb-status teamdb-amend teamdb-resume \
-         teamdb-execute-plan wip-tree; do
+         teamdb-execute-plan teamdb-skills-sync wip-tree; do
   if echo "$OUT" | grep -q "$s.sh"; then
     assert_pass "dry-run menciona $s.sh"
   else
@@ -138,10 +138,10 @@ fi
 VER_PROJ=$(sqlite3 "$PROJ_DB" "SELECT value FROM schema_meta WHERE key='version'")
 HAS_ACTOR=$(sqlite3 "$PROJ_DB" "SELECT count(*) FROM pragma_table_info('audit_log') WHERE name='actor_source'")
 HAS_HISTORY=$(sqlite3 "$PROJ_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='plan_history'")
-if [ "$VER_PROJ" = "0.7.2" ] && [ "$HAS_ACTOR" = "1" ] && [ -n "$HAS_HISTORY" ]; then
-  assert_pass "proyecto instalado: version 0.7.2 + actor_source + migraciones 003"
+if [ "$VER_PROJ" = "0.7.3" ] && [ "$HAS_ACTOR" = "1" ] && [ -n "$HAS_HISTORY" ]; then
+  assert_pass "proyecto instalado: version 0.7.3 + actor_source + migraciones 003"
 else
-  assert_fail "proyecto instalado: version 0.7.2 + actor_source + migraciones 003" \
+  assert_fail "proyecto instalado: version 0.7.3 + actor_source + migraciones 003" \
     "ver=$VER_PROJ actor=$HAS_ACTOR history=$HAS_HISTORY"
 fi
 
@@ -154,6 +154,15 @@ if [ -x "$INST_HOOKS/pre-commit" ] && [ -x "$INST_HOOKS/post-merge" ]; then
   assert_pass "hooks instalados en \$OPENCODE_DIR/hooks y ejecutables"
 else
   assert_fail "hooks instalados en \$OPENCODE_DIR/hooks y ejecutables" "ls: $(ls "$INST_HOOKS" 2>/dev/null)"
+fi
+
+# Skills registry: el installer corre teamdb-skills-sync.sh y puebla skills_active
+G_VER=$(sqlite3 "$FAKE_HOME/.config/opencode/team.db" "SELECT value FROM schema_meta WHERE key='version'")
+G_SKILLS=$(sqlite3 "$FAKE_HOME/.config/opencode/team.db" "SELECT COUNT(*) FROM skills_active")
+if [ "$G_VER" = "0.7.3" ] && [ "$G_SKILLS" -gt 0 ]; then
+  assert_pass "install: team.db global 0.7.3 + skills_active poblado ($G_SKILLS skills)"
+else
+  assert_fail "install: team.db global 0.7.3 + skills_active poblado" "ver=$G_VER skills=$G_SKILLS"
 fi
 
 # skalling-init.md debe resolver $SK_ROOT (no $(dirname "$SKALLING_ROOT")) y buscar hooks en $SK_ROOT/hooks

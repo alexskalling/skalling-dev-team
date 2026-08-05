@@ -27,7 +27,9 @@ CREATE TABLE skills_active (
   skill_name TEXT NOT NULL UNIQUE,
   source TEXT,
   installed_at TEXT,
-  version TEXT
+  version TEXT,
+  description TEXT,
+  load_path TEXT
 );
 
 CREATE TABLE constitution_rules (
@@ -80,7 +82,7 @@ CREATE TABLE schema_meta (
   value TEXT NOT NULL
 );
 
-INSERT INTO schema_meta VALUES ('version', '0.7.2');
+INSERT INTO schema_meta VALUES ('version', '0.7.3');
 INSERT INTO schema_meta VALUES ('type', 'global');
 
 CREATE INDEX idx_user_prefs_scope ON user_preferences(scope, scope_value);

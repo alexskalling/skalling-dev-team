@@ -97,9 +97,10 @@ teamdb_init_project() {
 
 # teamdb_heal_global: upgrade aditivo idempotente del team.db global (DBs viejas).
 # 1) crea audit_log si la DB es pre-0.7.2; 2) añade actor_source si falta la
-# columna; 3) deja schema_meta.version al día (si existe la tabla).
+# columna; 3) v0.7.3: skills_active como indice (description/load_path); 4) deja
+# schema_meta.version al día (si existe la tabla).
 # En DBs nuevas (recién creadas del schema actual) es un no-op.
-# NOTA: al bumpear versión, actualizar el valor '0.7.2' de abajo.
+# NOTA: al bumpear versión, actualizar el valor '0.7.3' de abajo.
 teamdb_heal_global() {
   teamdb_check_sqlite3 || return 1
   local db; db="$(teamdb_global_path)"
@@ -125,7 +126,26 @@ SQL
       return 1
     }
   fi
-  sqlite3 "$db" "UPDATE schema_meta SET value='0.7.2' WHERE key='version'" 2>/dev/null || true
+  # v0.7.3: skills_active como indice (description/load_path). Si la tabla no
+  # existe (DB pre-v0.7.2), crearla completa. Idempotente.
+  sqlite3 "$db" <<'SQL'
+CREATE TABLE IF NOT EXISTS skills_active (
+  id INTEGER PRIMARY KEY,
+  skill_name TEXT NOT NULL UNIQUE,
+  source TEXT,
+  installed_at TEXT,
+  version TEXT,
+  description TEXT,
+  load_path TEXT
+);
+SQL
+  for col in "description TEXT" "load_path TEXT"; do
+    local colname="${col%% *}"
+    if [ "$(sqlite3 "$db" "SELECT 1 FROM pragma_table_info('skills_active') WHERE name='$colname'" 2>/dev/null)" != "1" ]; then
+      sqlite3 "$db" "ALTER TABLE skills_active ADD COLUMN $col" 2>/dev/null || true
+    fi
+  done
+  sqlite3 "$db" "UPDATE schema_meta SET value='0.7.3' WHERE key='version'" 2>/dev/null || true
   return 0
 }
 

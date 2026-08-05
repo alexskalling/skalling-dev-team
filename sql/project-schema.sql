@@ -114,7 +114,7 @@ CREATE TABLE schema_meta (
   value TEXT NOT NULL
 );
 
-INSERT INTO schema_meta VALUES ('version', '0.7.2');
+INSERT INTO schema_meta VALUES ('version', '0.7.3');
 INSERT INTO schema_meta VALUES ('type', 'project');
 
 CREATE VIRTUAL TABLE concepts_fts USING fts5(title, body_md, content='concepts', content_rowid='id');
@@ -377,3 +377,18 @@ CREATE TABLE task_context_capsules (
   UNIQUE(task_id, memory_table, memory_id)
 );
 CREATE INDEX idx_task_ctx_capsule ON task_context_capsules(task_id);
+
+-- ════════════════════════════════════════
+-- SKILLS REGISTRY (v0.7.3)
+-- Indice/ficha de las skills del proyecto. El CONTENIDO NO se guarda aca:
+-- vive en .opencode/skills/<name>/SKILL.md (o ~/.agents/skills). Solo metadata
+-- para saber qué skills tiene el proyecto, para qué sirven y dónde cargarlas.
+-- ════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS skills_registry (
+  name TEXT PRIMARY KEY,
+  description TEXT,
+  version TEXT,
+  source TEXT,
+  load_path TEXT,
+  added_at TEXT DEFAULT (datetime('now'))
+);

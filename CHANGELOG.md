@@ -4,6 +4,19 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.7.3] — 2026-08-05
+
+### Added
+- **Skills registry (índice, no contenido)**: las skills siguen viviendo como archivos `SKILL.md`, pero ahora la DB guarda la ficha de cada una (`name`, `description`, `version`, `source`, `load_path`) en `skills_active` (global) y `skills_registry` (por proyecto). Preguntás "¿qué skills tiene este proyecto y para qué sirven?" → query a la DB, no adivinar.
+- **`scripts/teamdb-skills-sync.sh`**: indexa skills desde `skills-lock.json`, `.opencode/skills`, `~/.agents/skills` y `$OPENCODE_DIR/skills`, extrayendo metadata del frontmatter de `SKILL.md`. Idempotente (upsert por nombre).
+- **Migración `005_add_skills_registry.sql`** (`skills_registry` en schema de proyecto) + columnas `description`/`load_path` en `skills_active` (schema global, añadidas idempotentemente por `teamdb_heal_global`).
+- **Wiring**: `install-global.sh` corre el sync global al instalar; `/skalling-init` (paso 4.4) indexa las skills del proyecto.
+- **`skalling-init`**: resuelve la raíz de instalación (`$SK_ROOT`, repo o `~/.config/opencode`) y busca hooks en `$OPENCODE_DIR/hooks` — corrige el bootstrap cuando `SKALLING_ROOT` no está definido y no rompe el `team.db` existente (ver Fixes).
+
+### Fixed
+- `skalling-init` (v0.7.2) destruía `team.db` si el schema no era `0.7.0` exacto: ahora migra con `teamdb-init.sh` (idempotente, nunca borra).
+- `skalling-init` (v0.7.2) no encontraba `teamdb-*.sh` ni los hooks git por referencias a `$(dirname "$SKALLING_ROOT")` con la variable sin definir: ahora usa `$SK_ROOT` resuelto.
+
 ## [0.7.2] — 2026-08-05
 
 ### Added

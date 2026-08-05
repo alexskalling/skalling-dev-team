@@ -166,6 +166,14 @@ Para cada match:
 2. Si acepta → copiar de `~/.config/opencode/skills/<nombre>/` a `.opencode/skills/<nombre>/`
 3. Loggear en `.opencode/context/log.md`
 
+Después de decidir las skills, indexarlas en la DB (indice, no contenido):
+```bash
+bash "$SK_ROOT/scripts/teamdb-skills-sync.sh" "$(pwd)"
+```
+Esto puebla `skills_registry` (proyecto) y `skills_active` (global) con la ficha
+de cada skill (name/description/version/source/load_path) leída del frontmatter
+de `SKILL.md`. Idempotente, se puede re-correr en cualquier momento.
+
 ### 4.5 — Buscar skills adicionales con find-skills
 
 Después de instalar las skills stack-specific, ejecutá `/skalling-find-skills` para buscar skills de la comunidad que puedan servir para el stack detectado:
@@ -257,7 +265,7 @@ if [ ! -f ".opencode/context/team.db" ]; then
 fi
 
 # Migrar y verificar schema (idempotente y NO destructivo: teamdb-init.sh aplica
-# las migrations 002/003/004 y valida version 0.7.2. NUNCA borrar la DB.)
+# las migrations 002/003/004/005 y valida version 0.7.3. NUNCA borrar la DB.)
 bash "$SK_ROOT/scripts/teamdb-init.sh" .
 
 # Activar hooks git (el installer los deja en $SK_ROOT/hooks; en el repo viven en scripts/hooks)

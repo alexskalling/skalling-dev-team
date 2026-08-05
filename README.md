@@ -2,7 +2,7 @@
 
 Skalling es un equipo de **8 agentes de IA** que trabajan juntos adentro de [OpenCode](https://opencode.ai). Cada agente tiene un rol específico y siguen un ciclo ordenado para construir software bien hecho.
 
-**Versión actual: 0.7.2**
+**Versión actual: 0.7.3**
 
 ---
 
@@ -243,11 +243,18 @@ Skalling usa **skalling-memory** (estilo Engram) para reducir contexto:
 
 ```
 .opencode/context/
-├── DECISIONS.jsonl    # Decisiones arquitectónicas
-├── PATTERNS.jsonl     # Patrones reutilizables
-├── PREFERENCES.jsonl  # Preferencias del equipo
-├── REJECTIONS.jsonl   # Qué no funcionó y por qué
+├── team.db              # Memoria del proyecto (fuente de verdad desde v0.7.0)
+│   └── tablas:
+│       ├── concepts       # Concept docs (What/Why/Where/Learned)
+│       ├── decisions      # Decisiones arquitectónicas
+│       ├── preferences    # Preferencias del equipo
+│       └── known_problems # Qué no funcionó y por qué (búsqueda FTS)
+├── skills_registry       # Índice de skills del proyecto (name/description/source)
+└── proyecto/
+    └── design-system.md  # R13: tokens de diseño (documento de referencia, no memoria)
 ```
+
+**Los archivos de memoria `.jsonl`/`.md` ya NO se crean desde v0.7.0**: viven en `team.db` (se exportan a `.sql` en cada commit y se importan al pull). Los legacy se migran con `teamdb-migrate.sh`.
 
 **Ahorro: ~90% tokens** (de ~8000 a ~700 por tarea).
 
@@ -259,7 +266,7 @@ Los receipts (`skalling-receipt`) formalizan cada verificación con evidence ant
 
 ## TeamDB (libSQL)
 
-Skalling v0.7.2 usa **libSQL** como fuente de verdad para memoria y tracking de trabajo.
+Skalling v0.7.3 usa **libSQL** como fuente de verdad para memoria y tracking de trabajo.
 
 ### Dos bases de datos
 

@@ -26,7 +26,7 @@ DB="$TEST_DIR/.opencode/context/team.db"
 echo "==> Test 1: DB init"
 assert "DB existe" "[ -f '$DB' ]"
 ver=$(sqlite3 "$DB" "SELECT value FROM schema_meta WHERE key='version'")
-assert "schema 0.7.2" "[ \"$ver\" = '0.7.2' ]"
+assert "schema 0.7.3" "[ \"$ver\" = '0.7.3' ]"
 
 echo "==> Test 2: Hooks existen"
 assert "pre-commit" "[ -f '$SKALLING_ROOT/scripts/hooks/pre-commit' ]"

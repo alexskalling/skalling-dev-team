@@ -456,6 +456,15 @@ install_teamdb() {
         log WARN "sqlite3 no disponible, teamdb no se creó"
     fi
 
+    # Poblar skills_active (indice global de skills) si hay DB
+    if [ -f "$OPENCODE_DIR/scripts/teamdb-skills-sync.sh" ] && [ -f "$HOME/.config/opencode/team.db" ]; then
+        if bash "$OPENCODE_DIR/scripts/teamdb-skills-sync.sh" >/dev/null 2>&1; then
+            log OK "skills registry: global sincronizado"
+        else
+            log WARN "skills registry: sync global no aplicado"
+        fi
+    fi
+
     log OK "teamdb instalado"
 }
 
