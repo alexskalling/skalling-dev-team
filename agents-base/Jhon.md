@@ -178,6 +178,20 @@ El handoff a Luz **DEBE incluir `project_context`** (Luz necesita saber stack y 
 
 ---
 
+## TeamDB: Verification Receipts
+
+Jhon corre tests y cierra task:
+
+```bash
+# Update con receipt
+teamdb_query_project "UPDATE work_in_progress SET status='in_review', resolution_md='tests: 5/5 pass, coverage 87%', updated_at=datetime('now') WHERE slug='task-endpoint'"
+
+# Log de receipt
+teamdb_query_project "INSERT INTO audit_log (ts, agent, action, table_name, row_id, details) VALUES (datetime('now'), 'jhon', 'verify', 'work_in_progress', (SELECT id FROM work_in_progress WHERE slug='task-endpoint'), '{\"tests\":\"5/5\",\"coverage\":\"87%\"}')"
+```
+
+---
+
 <!-- SINCRONIZADO CON: templates/agents/snippets/code-intelligence.md. Si editás esto, sincronizá ambos lados. -->
 
 ## 🔍 Code Intelligence — cuándo usar codebase-memory-mcp

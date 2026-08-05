@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# pre-commit hook: export teamdb data to .sql
+PROJECT="$(git rev-parse --show-toplevel)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [ -f "$PROJECT/.opencode/context/team.db" ]; then
+  bash "$SCRIPT_DIR/../teamdb-export.sh" "$PROJECT"
+  git add "$PROJECT/.opencode/context/teamdb"/data_*.sql 2>/dev/null || true
+fi

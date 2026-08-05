@@ -337,6 +337,13 @@ install_gitattributes_template() {
     fi
 }
 
+install_teamdb_hooks() {
+  if [ -d "$SCRIPT_DIR/scripts/hooks" ]; then
+    run mkdir -p "$OPENCODE_DIR/hooks"
+    run cp "$SCRIPT_DIR/scripts/hooks/"* "$OPENCODE_DIR/hooks/" 2>/dev/null || true
+  fi
+}
+
 install_teamdb() {
     log INFO "Instalando teamdb (libSQL)"
 
@@ -425,6 +432,7 @@ do_install() {
     install_gitattributes_template
     install_data_files
     install_teamdb
+    install_teamdb_hooks
 
     if [[ "$DRY_RUN" == true ]]; then
         log INFO "Dry-run completo. Nada fue modificado."

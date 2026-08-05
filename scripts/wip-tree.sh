@@ -23,10 +23,10 @@ status_icon() {
 print_children() {
   local indent="$1"
   local parent_slug="$2"
-  
+
   local children
-  children=$(sqlite3 "$local_db" "SELECT slug, title, type, status, owner FROM work_in_progress WHERE parent_id = (SELECT id FROM work_in_progress WHERE slug='$parent_slug') ORDER BY priority, created_at")
-  
+  children=$(sqlite3 -separator $'\t' "$local_db" "SELECT slug, title, type, status, owner FROM work_in_progress WHERE parent_id = (SELECT id FROM work_in_progress WHERE slug='$parent_slug') ORDER BY priority, created_at")
+
   while IFS=$'\t' read -r cslug ctitle ctype cstatus cowner; do
     [ -z "$cslug" ] && continue
     local icon; icon=$(status_icon "$cstatus")
@@ -37,18 +37,24 @@ print_children() {
   done <<< "$children"
 }
 
-echo "📋 Work In Progress"
-roots=$(sqlite3 "$local_db" "SELECT slug, title, type, status FROM work_in_progress WHERE parent_id IS NULL ORDER BY type='plan' DESC, created_at DESC")
+render_tree() {
+  local roots
+  roots=$(sqlite3 -separator $'\t' "$local_db" "SELECT slug, title, type, status FROM work_in_progress WHERE parent_id IS NULL ORDER BY type='plan' DESC, created_at DESC")
 
-while IFS=$'\t' read -r rslug rtitle rtype rstatus; do
-  [ -z "$rslug" ] && continue
-  local icon; icon=$(status_icon "$rstatus")
-  if [ "$rtype" = "plan" ]; then
-    echo "${icon} 📋 PLAN: ${rtitle}"
-    print_children "│   " "$rslug"
-  else
-    echo "${icon} ⚠️  ${rtype}: ${rtitle}"
-    print_children "   " "$rslug"
-  fi
-  echo ""
-done <<< "$roots"
+  while IFS=$'\t' read -r rslug rtitle rtype rstatus; do
+    [ -z "$rslug" ] && continue
+    local icon
+    icon=$(status_icon "$rstatus")
+    if [ "$rtype" = "plan" ]; then
+      echo "${icon} 📋 PLAN: ${rtitle}"
+      print_children "│   " "$rslug"
+    else
+      echo "${icon} ⚠️  ${rtype}: ${rtitle}"
+      print_children "   " "$rslug"
+    fi
+    echo ""
+  done <<< "$roots"
+}
+
+echo "📋 Work In Progress"
+render_tree

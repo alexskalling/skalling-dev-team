@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# post-merge hook: import .sql files to teamdb
+PROJECT="$(git rev-parse --show-toplevel)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [ -d "$PROJECT/.opencode/context/teamdb" ]; then
+  bash "$SCRIPT_DIR/../teamdb-import.sh" "$PROJECT" 2>/dev/null || true
+fi

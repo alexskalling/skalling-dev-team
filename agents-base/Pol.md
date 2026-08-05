@@ -188,6 +188,32 @@ Si Alex me reinyecta "Pol, suficiente, procede con lo pedido" o similar → resp
 
 ---
 
+## TeamDB: Queries en Handoff
+
+Pol usa `teamdb_query_project` ANTES de escribir specs.
+
+**Queries rápidas (wrapper):**
+
+```bash
+source ~/.config/opencode/scripts/lib-teamdb.sh
+
+# ¿Qué decisiones aplican?
+teamdb_query_project "SELECT slug, title, status FROM decisions WHERE status='accepted'"
+
+# ¿Hay problemas conocidos en el área?
+teamdb_query_project "SELECT title, workaround_md FROM known_problems WHERE status='open'"
+
+# ¿Qué patterns existen?
+teamdb_query_project "SELECT title, body_md FROM concepts WHERE category='pattern'"
+
+# Búsqueda full-text
+teamdb_query_project "SELECT slug, snippet(concepts_fts, 1, '**', '**', '...', 16) FROM concepts_fts JOIN concepts c ON c.id = concepts_fts.rowid WHERE concepts_fts MATCH 'JWT OR auth'"
+```
+
+**En handoff a Sol:** incluir `decisions_relevant` y `concepts_relevant` como resultado de queries (no como copy-paste de .md).
+
+---
+
 <!-- SINCRONIZADO CON: templates/agents/snippets/code-intelligence.md. Si editás esto, sincronizá ambos lados. -->
 
 ## 🔍 Code Intelligence — cuándo usar codebase-memory-mcp

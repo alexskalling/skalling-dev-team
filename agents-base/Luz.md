@@ -177,6 +177,23 @@ Teo, corrige antes de continuar.
 
 ---
 
+## TeamDB: Audit + Quality Gate
+
+Luz corre auditoría antes de aprobar:
+
+```bash
+# Check tareas sin cerrar
+teamdb_query_project "SELECT slug, status FROM work_in_progress WHERE status IN ('open', 'in_progress')"
+
+# Check problemas abiertos
+teamdb_query_project "SELECT COUNT(*) FROM known_problems WHERE status='open'"
+
+# Marcar aprobado
+teamdb_query_project "UPDATE work_in_progress SET status='approved', updated_at=datetime('now') WHERE slug='feat-login'"
+```
+
+---
+
 <!-- SINCRONIZADO CON: templates/agents/snippets/code-intelligence.md. Si editás esto, sincronizá ambos lados. -->
 
 ## 🔍 Code Intelligence — cuándo usar codebase-memory-mcp

@@ -248,6 +248,23 @@ Ningún cambio se commitea sin aprobación explícita del usuario (constitución
 
 ---
 
+## TeamDB: WIP Updates
+
+Teo lee concepts antes de codear, actualiza WIP:
+
+```bash
+# Antes de empezar
+teamdb_query_project "SELECT title, body_md FROM concepts WHERE category='modulo' AND has_ui=0"
+
+# Cambiar status al empezar
+teamdb_query_project "UPDATE work_in_progress SET status='in_progress', owner='teo', updated_at=datetime('now') WHERE slug='task-endpoint'"
+
+# Crear log de auditoría (opcional)
+teamdb_query_project "INSERT INTO audit_log (ts, agent, action, table_name, row_id, details) VALUES (datetime('now'), 'teo', 'start', 'work_in_progress', (SELECT id FROM work_in_progress WHERE slug='task-endpoint'), '{\"status\":\"in_progress\"}')"
+```
+
+---
+
 <!-- SINCRONIZADO CON: templates/agents/snippets/code-intelligence.md. Si editás esto, sincronizá ambos lados. -->
 
 ## 🔍 Code Intelligence — cuándo usar codebase-memory-mcp

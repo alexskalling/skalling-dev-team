@@ -257,6 +257,81 @@ Los receipts (`skalling-receipt`) formalizan cada verificación con evidence ant
 
 ---
 
+## TeamDB (libSQL)
+
+Skalling v0.7.0 usa **libSQL** como fuente de verdad para memoria y tracking de trabajo.
+
+### Dos bases de datos
+
+| DB | Path | Contenido |
+|---|---|---|
+| Global | `~/.config/opencode/team.db` | Agentes, skills, constitución, preferencias cross-project |
+| Proyecto | `<proyecto>/.opencode/context/team.db` | Conceptos, decisiones, problemas, WIP |
+
+### Scripts principales
+
+```bash
+# Inicializar DB en un proyecto
+bash scripts/teamdb-init.sh /path/to/project
+
+# Migrar .jsonl legacy a DB
+bash scripts/teamdb-migrate.sh /path/to/project
+
+# Export DB → .sql (para git)
+bash scripts/teamdb-export.sh /path/to/project
+
+# Import .sql → DB (post-merge)
+bash scripts/teamdb-import.sh /path/to/project
+
+# Visualizar jerarquía plan/feature/task
+bash scripts/wip-tree.sh /path/to/project
+```
+
+### Queries útiles
+
+```bash
+source ~/.config/opencode/scripts/lib-teamdb.sh
+
+# ¿Qué decisiones hay?
+teamdb_query_project "SELECT slug, title FROM decisions WHERE status='accepted'"
+
+# Búsqueda full-text
+teamdb_query_project "SELECT slug, title FROM concepts_fts WHERE concepts_fts MATCH 'JWT OR auth'"
+
+# Grafo de relaciones
+teamdb_query_project "SELECT c.title FROM concepts c JOIN memory_links ml ON ml.from_id=c.id WHERE ml.link_type='uses'"
+```
+
+### Jerarquía plan / feature / task
+
+Work in progress tiene una jerarquía: los planes contienen features, las features contienen tasks.
+
+```bash
+# Crear plan
+teamdb_query_project "INSERT INTO work_in_progress (slug,type,title,body_md,status,owner,created_at,updated_at) VALUES ('plan-x','plan','Plan X','# objetivo','open','sol',datetime('now'),datetime('now'))"
+
+# Crear feature bajo el plan
+teamdb_query_project "INSERT INTO work_in_progress (slug,type,parent_id,title,status,owner,created_at,updated_at) SELECT 'feat-y','feature',id,'Feature Y','open','teo',datetime('now'),datetime('now') FROM work_in_progress WHERE slug='plan-x'"
+
+# Visualizar
+bash scripts/wip-tree.sh
+```
+
+### Hooks git
+
+- `pre-commit`: exporta DB → `.sql` antes de commitear
+- `post-merge`: importa `.sql` → DB después de hacer pull
+
+### Tests
+
+```bash
+bash tests/teamdb.test.sh
+```
+
+27 tests cubren: schemas, FTS5, jerarquía, init, export, import, migración.
+
+---
+
 ## Health check
 
 Si algo no funciona:

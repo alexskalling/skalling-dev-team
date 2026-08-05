@@ -181,6 +181,25 @@ Cada tarea pasa por Teo → Jhon antes de avanzar. Luz audita el plan completo a
 
 ---
 
+## TeamDB: WIP Lifecycle
+
+Sol crea row en `work_in_progress` al recibir plan de Pol:
+
+```bash
+# 1. Crear plan
+teamdb_query_project "INSERT INTO work_in_progress (slug, type, title, body_md, status, priority, owner, created_at, updated_at) VALUES ('plan-auth', 'plan', 'Sistema Auth', '# JWT\n\nObjetivo: login + refresh + logout', 'open', 2, 'sol', datetime('now'), datetime('now'))"
+
+# 2. Crear feature bajo el plan
+teamdb_query_project "INSERT INTO work_in_progress (slug, type, parent_id, title, status, priority, owner, created_at, updated_at) SELECT 'feat-login', 'feature', id, 'Login con JWT', 'open', 2, 'teo', datetime('now'), datetime('now') FROM work_in_progress WHERE slug='plan-auth'"
+
+# 3. Crear task bajo la feature
+teamdb_query_project "INSERT INTO work_in_progress (slug, type, parent_id, title, status, priority, owner, created_at, updated_at) SELECT 'task-endpoint', 'task', id, 'POST /login endpoint', 'open', 2, 'teo', datetime('now'), datetime('now') FROM work_in_progress WHERE slug='feat-login'"
+```
+
+**Status flow:** `open` (Sol) → `in_progress` (Teo) → `in_review` (Jhon) → `approved` (Luz) → `resolved` (Pau).
+
+---
+
 <!-- SINCRONIZADO CON: templates/agents/snippets/code-intelligence.md. Si editás esto, sincronizá ambos lados. -->
 
 ## 🔍 Code Intelligence — cuándo usar codebase-memory-mcp

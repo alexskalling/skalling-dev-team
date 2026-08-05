@@ -97,5 +97,23 @@ fts_title=$(sqlite3 "$TEST_E2E/.opencode/context/team.db" "SELECT title FROM con
 assert "FTS5 match en E2E" "[ \"$fts_title\" = 'JWT Config' ]"
 
 rm -rf "$TEST_DIR" "$TEST_DIR2" "$TEST_E2E"
+
+# Test: wip-tree con datos demo
+TEST_DEMO=$(mktemp -d)
+mkdir -p "$TEST_DEMO/.opencode/context"
+SKALLING_ROOT="$SKALLING_ROOT" bash "$SKALLING_ROOT/scripts/teamdb-init.sh" "$TEST_DEMO" >/dev/null
+DB="$TEST_DEMO/.opencode/context/team.db"
+
+# Crear plan + features + tasks
+sqlite3 "$DB" "INSERT INTO work_in_progress (slug,type,title,status,owner,created_at,updated_at) VALUES ('p','plan','Mi Plan','open','sol',datetime('now'),datetime('now'))"
+sqlite3 "$DB" "INSERT INTO work_in_progress (slug,type,parent_id,title,status,owner,created_at,updated_at) SELECT 'f','feature',id,'Mi Feature','open','teo',datetime('now'),datetime('now') FROM work_in_progress WHERE slug='p'"
+sqlite3 "$DB" "INSERT INTO work_in_progress (slug,type,parent_id,title,status,owner,created_at,updated_at) SELECT 't','task',id,'Mi Task','open','teo',datetime('now'),datetime('now') FROM work_in_progress WHERE slug='f'"
+
+out=$(bash "$SKALLING_ROOT/scripts/wip-tree.sh" "$TEST_DEMO")
+assert "wip-tree muestra plan" "echo \"$out\" | grep -q 'PLAN: Mi Plan'"
+assert "wip-tree muestra feature" "echo \"$out\" | grep -q 'feature: Mi Feature'"
+assert "wip-tree muestra task" "echo \"$out\" | grep -q 'task: Mi Task'"
+
+rm -rf "$TEST_DEMO"
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
