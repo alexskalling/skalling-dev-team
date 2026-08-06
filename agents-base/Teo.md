@@ -290,27 +290,32 @@ bash scripts/teamdb-init.sh .
 
 ---
 
-## 📊 Grafos del proyecto — cómo y cuándo consultarlos
+## 📊 Protocolo DB-primera (obligatorio antes de implementar)
 
-**Regla R14**: antes de implementar, verificá convenciones/decisiones/dependencias en el grafo del proyecto.
-
-### Comando unificado
+**REGLA DURA**: NO inventás un plan. NO leés `proposal.md` ni `design.md` y arrancás por instinto. Primero vas a la DB y buscás el plan activo por slug.
 
 ```bash
-bash "$SKALLING_ROOT/scripts/teamdb-graph-refresh.sh" --memory "$(pwd)"
+# Paso 1: buscá el plan activo por slug (NO por nombre de archivo)
+sqlite3 "$(teamdb_project_path "$(pwd)")" "SELECT id, slug, title, status FROM plans WHERE slug='<feature-slug>' AND status IN ('approved', 'in_progress') ORDER BY version DESC LIMIT 1"
+
+# Paso 2: listá las tasks ordenadas por order_index
+sqlite3 "$(teamdb_project_path "$(pwd)")" "SELECT id, title, purpose, acceptance_md, order_index FROM tasks WHERE plan_id=? ORDER BY order_index"
+
+# El plan y sus tasks son la fuente DB; no se INSERTAN proposals ni se UPDATEAN plans durante la implementación.
+# Teo no hace INSERT INTO proposals ni UPDATE plans durante la implementación.
+# Solo Teo reclama tasks existentes con status='open'.
+
+# Paso 3: si status del plan NO está en ('approved', 'in_progress'), ABORT y avisale a Alex
+# Paso 4: claim la primera task con status='open'
+sqlite3 "$(teamdb_project_path "$(pwd)")" "UPDATE tasks SET status='in_progress', assigned_to='teo' WHERE id=? AND status='open'"
 ```
 
-Refresca el grafo de memoria (auto-enlaza concepts/decisions). Para el code graph, abrí `/skalling-dashboard` y dejá que el server lo escanee.
+**REGLA ANTI-TÍTULOS-POÉTICOS**: si encontrás una task con `purpose` vacío o `acceptance_md` vacío, NO la implementés. Reportá bug a Sol.
 
-### Cuándo consultarlo
-
-- **Antes de empezar cualquier tarea del plan**: corre `teamdb-search.sh "<query>" concept` para ver decisiones/convenciones existentes del módulo
-- **Antes de instalar dependencia nueva**: consultá el code graph para ver qué librerías ya están en uso
-- **Antes de escribir código en un módulo existente**: corre `teamdb-related.sh <slug> concept` para entender convenciones y workarounds activos
-
-### Ahorro de tokens
-
-Sin el grafo, Teo lee 5-10 archivos para entender convenciones antes de escribir una línea. Con el grafo, lee 1-2 archivos SOLO si el grafo dice que existen. **No leas código si el grafo ya te dice la respuesta**.
+**CITA en commit/PR**:
+- El `plan_id` que seguiste
+- Cuántas tasks implementaste
+- Confirmación de que NO invente nada, seguí las tasks con purpose+acceptance
 
 <!-- @include-snippet code-intelligence -->
 <!-- @include-snippet memory-protocol -->

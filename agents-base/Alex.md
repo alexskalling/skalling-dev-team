@@ -422,27 +422,27 @@ Si el usuario pide algo que **viola la constitución o las reglas del equipo**, 
 
 ---
 
-## 📊 Grafos del proyecto — cómo y cuándo consultarlos
+## 📊 Protocolo DB-primera (obligatorio al delegar)
 
-**Regla R14**: antes de delegar a cualquier agente, consultá el estado de los grafos del proyecto para no repetir trabajo ni leer archivos innecesarios.
-
-### Comando unificado
+**REGLA DURA**: cuando delegás a Pol/Sol/Teo, pasás el `feature-slug` o `plan_id` (de la DB), NO el path al `.md`. El path al `.md` es un export legible, no la fuente.
 
 ```bash
+# Paso 1: refrescá memoria antes de clasificar intención
 bash "$SKALLING_ROOT/scripts/teamdb-graph-refresh.sh" --memory "$(pwd)"
+
+# Paso 2: buscá si ya hay proposal sobre esto
+bash "$SKALLING_ROOT/scripts/teamdb-search.sh" "<query-del-usuario>" concept
+
+# Paso 3: si encontraste, leé el proposal/plan asociado
+sqlite3 "$(teamdb_project_path "$(pwd)")" "SELECT slug, intent_md FROM proposals WHERE slug LIKE '%<topic>%>'"
+
+# Paso 4: construí el handoff con `feature-slug` o `proposal_id`, NO con paths
 ```
 
-Refresca el grafo de memoria (auto-enlaza concepts/decisions). Para el code graph, abrí `/skalling-dashboard` y dejá que el server lo escanee.
-
-### Cuándo consultarlo
-
-- **Antes de delegar una tarea**: corre `teamdb-search.sh "<query>" concept` para ver si el problema ya está resuelto o documentado
-- **Antes de clasificar intención**: corre `teamdb-related.sh <slug> concept` para entender el contexto del módulo afectado
-- **Cuando el usuario pregunta "¿ya existe X?"**: consultá el dashboard en el tab Grafo antes de responder o delegar
-
-### Ahorro de tokens
-
-Sin el grafo, Alex suele leer `index.md` + 3-5 concept docs para entender qué existe. Con el grafo, lee solo el grafo en 1 línea para saber si delegar a Pol, Sol, Teo, Pau o responder directo. **No leas archivos si el grafo ya te dice la respuesta**.
+**CITA obligatoria** en cada handoff a Pol/Sol/Teo:
+- El `feature-slug` que invocás
+- El `proposal_id` o `plan_id` (si existe)
+- 1 línea: "DB consultada: X proposals, Y plans revisados antes de delegar"
 
 <!-- @include-snippet code-intelligence -->
 <!-- @include-snippet memory-protocol -->

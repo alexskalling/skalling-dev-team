@@ -218,27 +218,34 @@ bash scripts/teamdb-export.sh .
 
 ---
 
-## 📊 Grafos del proyecto — cómo y cuándo consultarlos
+## 📊 Protocolo DB-primera (obligatorio antes de diseñar plan técnico)
 
-**Regla R14**: antes de diseñar plan técnico, verificá módulos ya existentes en el code graph y decisiones en el grafo de memoria.
-
-### Comando unificado
+**REGLA DURA**: Sol NO crea un plan nuevo. Sol hace UPDATE del proposal existente en la DB. Si hay planes duplicados sobre el mismo feature-slug, eso es un BUG de Pol, no motivo para crear otro.
 
 ```bash
-bash "$SKALLING_ROOT/scripts/teamdb-graph-refresh.sh" --memory "$(pwd)"
+# Paso 1: refrescá el code graph (módulos existentes)
+curl -s http://localhost:3741/api/codegraph 2>/dev/null | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+print('Code graph:', len(d.get('nodes', [])), 'archivos')
+"
+
+# Paso 2: buscá el proposal que Pol dejó aprobado
+sqlite3 "$(teamdb_project_path "$(pwd)")" "SELECT id, slug, status FROM proposals WHERE slug='<feature-slug>' ORDER BY created_at DESC LIMIT 1"
+
+# Paso 3: si el proposal existe, hacé UPDATE del plan asociado (NO INSERT)
+sqlite3 "$(teamdb_project_path "$(pwd)")" <<SQL
+UPDATE plans SET design_md='<tu diseño técnico>', version=version+1, updated_at=datetime('now'), updated_by='sol' WHERE proposal_id=?;
+SQL
+
+# Paso 4: insertá las tasks con purpose + acceptance (NO títulos poéticos)
+# Cada task DEBE tener: title descriptivo, purpose (1-2 frases), acceptance_md (criterios verificables), order_index
 ```
 
-Refresca el grafo de memoria. Para el code graph (estructura de archivos e imports), abrí `/skalling-dashboard` y dejá que el server lo escanee, o corré `curl -X POST http://localhost:3741/api/codegraph/refresh`.
-
-### Cuándo consultarlo
-
-- **Antes de escribir `design.md`**: corre `teamdb-search.sh "<query>" concept` para ver módulos ya existentes y evitar duplicar
-- **Antes de proponer archivos nuevos**: consultá el code graph (dashboard o `curl http://localhost:3741/api/codegraph`) para entender la estructura actual
-- **Antes de elegir stack/librería**: corre `teamdb-related.sh <slug> concept` para ver qué `uses` ya está decidido
-
-### Ahorro de tokens
-
-Sin el grafo, Sol lee `project.yaml` + código + memoria dispersa. Con el grafo, lee solo el code graph + memoria enlazada. **No propongas archivos nuevos si el code graph muestra que ya existen**.
+**CITA obligatoria** en tu handoff a Teo:
+- Cuál es el `plan_id` que actualizaste (NO el slug del .md, el ID de la DB)
+- Cuántas tasks agregaste
+- Lista de tasks con `purpose`, NO títulos tipo "Gimme Shelter"
 
 <!-- @include-snippet code-intelligence -->
 <!-- @include-snippet memory-protocol -->

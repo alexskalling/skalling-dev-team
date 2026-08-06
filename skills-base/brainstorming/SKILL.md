@@ -1,6 +1,10 @@
 ---
 name: brainstorming
 description: "You MUST use this before any creative work - creating features, building components, adding functionality, or modifying behavior. Explores user intent, requirements and design before implementation."
+license: MIT
+metadata:
+  author: skalling-team
+  version: "1.0"
 ---
 
 # Brainstorming Ideas Into Designs
@@ -34,15 +38,14 @@ Start by understanding the current project context, then ask questions one at a 
 
 ## After the Design
 
-**Documentation:**
-- Write the validated design to `docs/plans/YYYY-MM-DD-<topic>-design.md`
-- Use elements-of-style:writing-clearly-and-concisely skill if available
-- Commit the design document to git
+**Documentation (Skalling protocol — DB como source of truth):**
+- Pol NO escribe el design validado como archivo. Devuelve el texto del proposal a Alex vía relay.
+- Alex invoca a Sol, quien INSERT en la tabla `proposals` de team.db (vía `teamdb-plan.sh`) y SOLO si el usuario lo pide, exporta un `.md` derivado vía `teamdb-export-md.sh`.
+- El header del `.md` debe decir `GENERATED from teamdb`. El export es derivado, no fuente.
 
 **Implementation (if continuing):**
 - Ask: "Ready to set up for implementation?"
-- Use superpowers:using-git-worktrees to create isolated workspace
-- Use superpowers:writing-plans to create detailed implementation plan
+- Alex invoca a Sol (skill `writing-plans`) si todavía no hay un plan estructurado.
 
 ## Key Principles
 
