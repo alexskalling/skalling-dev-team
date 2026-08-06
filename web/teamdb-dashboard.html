@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TeamDB</title>
+<style>
+  :root {
+    --bg: #111218;
+    --surface: #18181f;
+    --surface2: #22222e;
+    --border: #2e2e3e;
+    --text: #d4d4dc;
+    --muted: #6b6b80;
+    --accent: #7c6af7;
+    --green: #4ade80;
+    --yellow: #fbbf24;
+    --red: #f87171;
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .sidebar {
+    width: 180px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 20px 0;
+  }
+  .sidebar-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    text-transform: uppercase;
+    padding: 0 16px 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 12px;
+  }
+  .nav-item {
+    padding: 8px 16px;
+    font-size: 13px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: color 0.1s, background 0.1s;
+    border-left: 2px solid transparent;
+    user-select: none;
+  }
+  .nav-item:hover { color: var(--text); background: var(--surface2); }
+  .nav-item.active { color: var(--text); border-left-color: var(--accent); background: var(--surface2); }
+  .sidebar-footer {
+    margin-top: auto;
+    padding: 16px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .topbar h2 { font-size: 15px; font-weight: 600; }
+  .topbar-right { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--muted); }
+  .content { flex: 1; overflow-y: auto; padding: 24px; }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+  }
+  .stat-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .stat-value { font-size: 28px; font-weight: 700; line-height: 1; }
+  .stat-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  .progress { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .progress-track { flex: 1; height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 2px; background: var(--accent); transition: width 0.4s; }
+  .progress-fill.ok { background: var(--green); }
+  .progress-fill.warn { background: var(--yellow); }
+  .progress-fill.bad { background: var(--red); }
+  .progress-pct { font-size: 12px; font-weight: 600; min-width: 36px; text-align: right; }
+
+  .plan-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin-bottom: 10px;
+  }
+  .plan-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
+  .plan-title { font-size: 14px; font-weight: 600; }
+  .plan-status {
+    font-size: 11px; font-weight: 600; padding: 2px 8px;
+    border-radius: 20px; background: var(--surface2); color: var(--muted);
+  }
+  .plan-status.accepted { background: #0f2d1a; color: var(--green); }
+  .plan-status.proposed { background: #1a1b3d; color: #a5b4fc; }
+  .plan-meta { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; }
+  th {
+    text-align: left; padding: 9px 14px; font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted);
+    background: var(--surface2); border-bottom: 1px solid var(--border); white-space: nowrap;
+  }
+  td { padding: 9px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface2); }
+  .mono { font-family: 'SF Mono', Monaco, monospace; font-size: 12px; color: var(--accent); }
+
+  .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+
+  .empty { text-align: center; padding: 48px 24px; color: var(--muted); font-size: 13px; }
+  .tab { display: none; }
+  .tab.active { display: block; }
+
+  #loading { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px; z-index: 100; }
+  #loading.hidden { display: none; }
+  #loading p { color: var(--muted); font-size: 14px; }
+  .spinner { width: 28px; height: 28px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .tag { display: inline-block; padding: 1px 7px; border-radius: 20px; font-size: 10px; font-weight: 600; background: #1e1b3d; color: #a5b4fc; }
+
+  .autorow { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer; }
+  .expand-btn { background: none; border: none; color: var(--muted); cursor: pointer; padding: 2px 6px; font-size: 14px; border-radius: 4px; }
+  .expand-btn:hover { color: var(--accent); background: var(--surface2); }
+  tr.detail-row { display: none; }
+  tr.detail-row td { padding: 12px 16px; background: var(--surface2); border-top: 1px dashed var(--border); color: var(--text); font-size: 13px; line-height: 1.5; }
+  tr.detail-row td .detail-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 6px; }
+  tr.detail-row td .detail-content { white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow-y: auto; }
+  tr.detail-row td .detail-content code { background: var(--bg); padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+  tr.detail-row.open { display: table-row; }
+  tr:hover .expand-btn { color: var(--text); }
+  .plan-hier { display: flex; flex-direction: column; gap: 12px; }
+  .plan-block { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .plan-hdr { padding: 14px 16px; border-bottom: 1px solid var(--border); cursor: pointer; }
+  .plan-hdr:hover { background: var(--surface2); }
+  .plan-hdr-title { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .plan-hdr-title .expand-ico { font-size: 10px; color: var(--muted); transition: transform 0.15s; }
+  .plan-hdr-title .expand-ico.open { transform: rotate(90deg); }
+  .plan-hdr-meta { display: flex; gap: 16px; margin-top: 6px; font-size: 12px; color: var(--muted); }
+  .plan-hdr-meta span { display: flex; align-items: center; gap: 4px; }
+  .plan-body { padding: 12px 16px; border-top: 1px dashed var(--border); }
+  .plan-body.collapsed { display: none; }
+  .feat-block { margin-bottom: 10px; }
+  .feat-hdr { display: flex; align-items: center; gap: 8px; padding: 6px 0; cursor: pointer; }
+  .feat-hdr:hover .feat-title { color: var(--accent); }
+  .feat-title { font-size: 13px; font-weight: 600; flex: 1; }
+  .feat-body { padding: 6px 0 6px 24px; }
+  .feat-body.collapsed { display: none; }
+  .task-row { display: flex; align-items: center; gap: 10px; padding: 4px 0; font-size: 13px; }
+  .task-row:hover { color: var(--accent); }
+  .task-status { font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 20px; text-transform: uppercase; }
+  .task-status.open { background: #1e1b3d; color: #a5b4fc; }
+  .task-status.in_progress { background: #2d2a1a; color: #fbbf24; }
+  .task-status.resolved { background: #0f2d1a; color: #4ade80; }
+  .task-status.rejected, .task-status.abandoned { background: #2d1a1a; color: #f87171; }
+  .task-owner { margin-left: auto; font-size: 11px; color: var(--muted); }
+  .plan-desc { font-size: 12px; color: var(--muted); margin-bottom: 12px; line-height: 1.5; white-space: pre-wrap; }
+  .feat-desc { font-size: 12px; color: var(--muted); margin: 4px 0 8px 24px; line-height: 1.4; }
+  .plan-empty { padding: 16px; color: var(--muted); font-size: 13px; text-align: center; }
+  .flat-task-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; font-size: 13px; border-top: 1px dashed var(--border); }
+  .flat-task-row:hover { color: var(--accent); }
+  .task-cols { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-top: 10px; }
+  .task-col { background: var(--bg); border-radius: 6px; padding: 8px 10px; }
+  .task-col-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+  .task-col .task-row { padding: 3px 0; font-size: 12px; border: none; }
+  .task-col .task-row:hover { color: var(--accent); }
+  #refresh-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--muted); padding: 4px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; }
+  #refresh-btn:hover { color: var(--text); }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <p>Cargando...</p>
+</div>
+
+<div class="sidebar">
+  <div class="sidebar-title">TeamDB</div>
+  <div class="nav-item" data-tab="plans">Planes</div>
+  <div class="nav-item active" data-tab="graph">Grafo</div>
+  <div class="nav-item" data-tab="concepts">Concepts</div>
+  <div class="nav-item" data-tab="decisions">Decisiones</div>
+  <div class="nav-item" data-tab="problems">Problemas</div>
+  <div class="nav-item" data-tab="preferences">Preferences</div>
+  <div class="sidebar-footer" id="sidebar-db"></div>
+</div>
+
+<div class="main">
+  <div class="topbar">
+    <h2 id="tab-title">Dashboard</h2>
+    <div class="topbar-right">
+      <span id="project-name" style="color: var(--text)"></span>
+      <button id="refresh-btn" onclick="render()">Refresh</button>
+      <label class="autorow">
+        <input type="checkbox" id="auto-check"> 30s
+      </label>
+    </div>
+  </div>
+
+  <div class="content">
+    <div class="tab" id="tab-plans"></div>
+    <div class="tab active" id="tab-graph"></div>
+    <div class="tab" id="tab-concepts"></div>
+    <div class="tab" id="tab-decisions"></div>
+    <div class="tab" id="tab-problems"></div>
+    <div class="tab" id="tab-preferences"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });
+
+let current = 'graph';
+let autoTimer = null;
+let apiData = {};
+
+const TABS = ['plans','graph','concepts','decisions','problems','preferences'];
+const TITLES = { plans:'Planes', graph:'Grafo', concepts:'Concepts', decisions:'Decisiones', problems:'Problemas', preferences:'Preferences' };
+
+document.querySelectorAll('.nav-item').forEach(el => {
+  el.onclick = () => showTab(el.dataset.tab);
+});
+
+function showTab(id) {
+  current = id;
+  TABS.forEach(t => document.getElementById('tab-' + t).classList.toggle('active', t === id));
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.tab === id));
+  document.getElementById('tab-title').textContent = TITLES[id];
+  render();
+}
+
+document.getElementById('auto-check').onchange = e => {
+  if (e.target.checked) autoTimer = setInterval(render, 30000);
+  else { clearInterval(autoTimer); autoTimer = null; }
+};
+
+async function api(path) {
+  if (apiData[path]) return apiData[path];
+  try {
+    const res = await fetch(path);
+    if (!res.ok) return null;
+    const data = await res.json();
+    apiData[path] = data;
+    return data;
+  } catch { return null; }
+}
+
+// Heartbeat para mantener el server vivo mientras el browser está abierto
+setInterval(() => { fetch('/api/heartbeat').catch(() => {}); }, 60000);
+
+async function render() {
+  apiData = {};
+  window['render_' + current]();
+}
+
+// ── Dashboard ───────────────────────────────────────────────
+async function render_dashboard() {
+  const s = await api('/api/stats');
+  if (!s) return render_error();
+  const pct = s.tasks_pct || 0;
+  const pctClass = pct >= 70 ? 'ok' : pct >= 40 ? 'warn' : 'bad';
+  const pctColor = pct >= 70 ? 'var(--green)' : pct >= 40 ? 'var(--yellow)' : 'var(--red)';
+
+  document.getElementById('tab-dashboard').innerHTML = `
+    <div class="stats">
+      <div class="stat"><div class="stat-label">Concepts</div><div class="stat-value" style="color:var(--accent)">${s.concepts||0}</div></div>
+      <div class="stat"><div class="stat-label">Decisiones</div><div class="stat-value" style="color:var(--accent)">${s.decisions||0}</div></div>
+      <div class="stat"><div class="stat-label">Planes</div><div class="stat-value" style="color:var(--accent)">${s.plans||0}</div></div>
+      <div class="stat">
+        <div class="stat-label">Tareas</div>
+        <div class="stat-value" style="color:${pctColor}">${s.tasks_done||0}/${s.tasks_total||0}</div>
+        <div class="progress"><div class="progress-track"><div class="progress-fill ${pctClass}" style="width:${pct}%"></div></div></div>
+        <div class="stat-sub">${pct}% completadas</div>
+      </div>
+      <div class="stat"><div class="stat-label">Problemas</div><div class="stat-value" style="color:var(--red)">${s.problems||0}</div></div>
+      <div class="stat"><div class="stat-label">Links</div><div class="stat-value" style="color:var(--green)">${s.links||0}</div></div>
+      <div class="stat"><div class="stat-label">Schema</div><div class="stat-value" style="font-size:18px;color:var(--muted)">v${s.version||'?'}</div></div>
+    </div>
+    ${await renderPlansHtml('/api/plans')}
+  `;
+}
+
+// ── Graph ──────────────────────────────────────────────────
+let graphMode = 'memoria';
+
+async function render_graph() {
+  document.getElementById('tab-graph').innerHTML = `
+    <div class="section-head">
+      <div class="section-title">${graphMode === 'memoria' ? 'Memoria (links de TeamDB)' : 'Codigo (imports del proyecto)'}</div>
+      <div style="display:flex;gap:6px">
+        <button onclick="graphMode='memoria';render()" style="background:${graphMode==='memoria'?'var(--accent)':'var(--surface2)'};border:1px solid ${graphMode==='memoria'?'var(--accent)':'var(--border)'};color:${graphMode==='memoria'?'#fff':'var(--muted)'};padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer">Memoria</button>
+        <button onclick="graphMode='codigo';render()" style="background:${graphMode==='codigo'?'var(--accent)':'var(--surface2)'};border:1px solid ${graphMode==='codigo'?'var(--accent)':'var(--border)'};color:${graphMode==='codigo'?'#fff':'var(--muted)'};padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer">Codigo</button>
+      </div>
+    </div>
+    <div id="graph-content" style="min-height:300px"></div>
+  `;
+
+  if (graphMode === 'memoria') {
+    await render_graph_memoria();
+  } else {
+    await render_graph_codigo();
+  }
+}
+
+async function render_graph_memoria() {
+  const g = await api('/api/graph');
+  if (!g) return;
+  const nodes = g.nodes || {};
+  const links = g.links || [];
+  const ns = new Set([...links.map(l => l.fs), ...links.map(l => l.ts)]);
+
+  const mmN = [...ns].map(s => {
+    const n = Object.values(nodes).find(n => n.slug === s);
+    const shape = (n && n.type === 'decision') ? `(${s})` : `[${s}]`;
+    return `    ${s}${shape}`;
+  }).join('\n');
+  const mmE = links.map(l => `    ${l.fs} -->|${l.link_type}| ${l.ts}`).join('\n');
+  const mm = mmN ? `graph TD\n${mmN}\n${mmE}` : '';
+
+  document.getElementById('graph-content').innerHTML = `
+    <div class="stats" style="margin-bottom:16px">
+      <div class="stat"><div class="stat-label">Nodos</div><div class="stat-value">${ns.size}</div></div>
+      <div class="stat"><div class="stat-label">Enlaces</div><div class="stat-value">${links.length}</div></div>
+    </div>
+    ${mm ? `<div class="mermaid">${mm}</div>` : '<div class="empty">Sin enlaces. Corr&eacute; <code>teamdb-link.sh</code> para crear enlaces.</div>'}
+  `;
+  if (mm) mermaid.run({ nodes: document.querySelectorAll('.mermaid') });
+}
+
+async function render_graph_codigo() {
+  const cg = await api('/api/codegraph');
+  if (!cg) return;
+
+  const nodes = cg.nodes || [];
+  const edges = cg.edges || [];
+  const pages = nodes.filter(n => n.type === 'page');
+  const libs = nodes.filter(n => n.type === 'lib');
+
+  const mmN = nodes.map(n => {
+    const id = n.path.replace(/[^a-zA-Z0-9_]/g, '_');
+    const label = n.path.split('/').pop().replace(/\.[^.]+$/, '');
+    const shape = n.type === 'page' ? `(${label})` : `["${n.path}"]`;
+    return `    ${id}${shape}`;
+  }).join('\n');
+
+  const edgeList = edges.map(e => {
+    const ef = e.from.replace(/[^a-zA-Z0-9_]/g, '_');
+    const et = e.to.replace(/[^a-zA-Z0-9_]/g, '_');
+    return `    ${ef} --> ${et}`;
+  }).join('\n');
+
+  const mm = (mmN + '\n' + edgeList) ? `graph TD\n${mmN}\n${edgeList}` : '';
+
+  document.getElementById('graph-content').innerHTML = `
+    <div class="stats" style="margin-bottom:16px">
+      <div class="stat"><div class="stat-label">Archivos</div><div class="stat-value">${nodes.length}</div></div>
+      <div class="stat"><div class="stat-label">Paginas</div><div class="stat-value" style="color:var(--accent)">${pages.length}</div></div>
+      <div class="stat"><div class="stat-label">Lib/Data</div><div class="stat-value" style="color:var(--green)">${libs.length}</div></div>
+      <div class="stat"><div class="stat-label">Imports</div><div class="stat-value">${edges.length}</div></div>
+    </div>
+    ${mm ? `<div class="mermaid">${mm}</div>` : '<div class="empty">Sin archivos encontrados.</div>'}
+  `;
+  if (mm) mermaid.run({ nodes: document.querySelectorAll('.mermaid') });
+}
+
+// ── Plans ─────────────────────────────────────────────────
+ async function render_plans() {
+  const hier = await api('/api/plans-hierarchy');
+  if (hier && hier.length) {
+    const allFeatures = hier.flatMap(p => p._features || []);
+    const allTasks = hier.flatMap(p => (p._features || []).flatMap(f => f._children || []));
+    const openTasks = allTasks.filter(t => ['open'].includes(t.status));
+    const progTasks = allTasks.filter(t => ['in_progress', 'in_review'].includes(t.status));
+    const doneTasks = allTasks.filter(t => ['resolved', 'approved'].includes(t.status));
+    const statsHtml = `
+      <div class="stats" style="margin-bottom:20px">
+        <div class="stat"><div class="stat-label">Planes</div><div class="stat-value" style="color:var(--accent)">${hier.length}</div></div>
+        <div class="stat"><div class="stat-label">Funcionalidades</div><div class="stat-value" style="color:var(--accent)">${allFeatures.length}</div></div>
+        <div class="stat"><div class="stat-label">Tareas</div><div class="stat-value" style="color:var(--accent)">${allTasks.length}</div></div>
+        <div class="stat"><div class="stat-label">Abiertas</div><div class="stat-value" style="color:#a5b4fc">${openTasks.length}</div></div>
+        <div class="stat"><div class="stat-label">En Progreso</div><div class="stat-value" style="color:#fbbf24">${progTasks.length}</div></div>
+        <div class="stat"><div class="stat-label">Terminadas</div><div class="stat-value" style="color:var(--green)">${doneTasks.length}</div></div>
+      </div>`;
+    document.getElementById('tab-plans').innerHTML = statsHtml + '<div class="plan-hier">' + hier.map(renderPlanBlock).join('') + '</div>';
+    return;
+  }
+  const plans = await api('/api/plans');
+  document.getElementById('tab-plans').innerHTML = (plans && plans.length)
+    ? '<div class="plan-hier">' + (await Promise.all(plans.map(renderPlanCardFlat))) + '</div>'
+    : '<div class="empty">Sin planes</div>';
+}
+
+function renderPlanBlock(p) {
+  const featCount = p._features ? p._features.length : 0;
+  const taskCount = p._flat_tasks ? p._flat_tasks.length : 0;
+  const totalTasks = (p._features || []).reduce((s, f) => s + (f._children ? f._children.length : 0), 0) + taskCount;
+  const doneTasks = (p._features || []).reduce((s, f) => s + (f._children ? f._children.filter(t => t.status === 'resolved').length : 0), 0);
+  const pct = totalTasks ? Math.round(doneTasks / totalTasks * 100) : 0;
+  const cls = pct >= 70 ? 'ok' : pct >= 40 ? 'warn' : 'bad';
+
+  return `
+    <div class="plan-block">
+      <div class="plan-hdr" onclick="togglePlan('${p.slug}')">
+        <div class="plan-hdr-title">
+          <span class="expand-ico" id="ico_${esc(p.slug)}">&#9658;</span>
+          ${esc(p.title || p.slug)}
+          <span class="plan-status ${p.status||'draft'}">${p.status||'draft'}</span>
+        </div>
+        <div class="plan-hdr-meta">
+          ${featCount ? `<span>${featCount} funcionalidades</span>` : ''}
+          ${totalTasks ? `<span>${totalTasks} tareas</span>` : ''}
+          ${totalTasks ? `<span>${pct}%</span>` : ''}
+        </div>
+      </div>
+      <div class="plan-body" id="body_${esc(p.slug)}">
+        ${(p.body_md || p.description || p.design_md) ? `<div class="plan-desc">${esc(p.body_md || p.description || p.design_md)}</div>` : ''}
+        ${(p._features || []).map(f => renderFeatureBlock(f)).join('')}
+        ${(p._flat_tasks || []).map(t => renderFlatTaskRow(t)).join('')}
+        ${!(p.body_md || p.description || p.design_md) && !(p._features || []).length && !(p._flat_tasks || []).length ? '<div class="plan-empty">Sin funcionalidades ni tareas</div>' : ''}
+      </div>
+    </div>`;
+}
+
+function renderFeatureBlock(f) {
+  const tasks = f._children || [];
+  const openTasks = tasks.filter(t => ['open'].includes(t.status));
+  const progTasks = tasks.filter(t => ['in_progress', 'in_review'].includes(t.status));
+  const doneTasks = tasks.filter(t => ['resolved', 'approved'].includes(t.status));
+  const deadTasks = tasks.filter(t => ['rejected', 'abandoned'].includes(t.status));
+
+  return `
+    <div class="feat-block">
+      <div class="feat-hdr" onclick="toggleFeat('${f.id}')">
+        <span class="expand-ico" id="fico_${f.id}">&#9658;</span>
+        <span class="feat-title">${esc(f.title || f.slug)}</span>
+        <span class="task-status ${f.status||'open'}">${f.status||'open'}</span>
+        ${tasks.length ? `<span style="font-size:11px;color:var(--muted)">${doneTasks.length}/${tasks.length}</span>` : ''}
+      </div>
+      <div class="feat-body" id="fbody_${f.id}">
+        ${f.description ? `<div class="feat-desc">${esc(f.description)}</div>` : ''}
+        ${f.body_md ? `<div class="feat-desc" style="margin-left:0;background:var(--bg);padding:8px;border-radius:6px;white-space:pre-wrap">${esc(f.body_md)}</div>` : ''}
+        ${tasks.length ? `
+        <div class="task-cols">
+          ${openTasks.length ? `<div class="task-col"><div class="task-col-label">Abiertas (${openTasks.length})</div>${openTasks.map(t => renderWipTaskRow(t)).join('')}</div>` : ''}
+          ${progTasks.length ? `<div class="task-col"><div class="task-col-label">En Progreso (${progTasks.length})</div>${progTasks.map(t => renderWipTaskRow(t)).join('')}</div>` : ''}
+          ${doneTasks.length ? `<div class="task-col"><div class="task-col-label">Terminadas (${doneTasks.length})</div>${doneTasks.map(t => renderWipTaskRow(t)).join('')}</div>` : ''}
+          ${deadTasks.length ? `<div class="task-col"><div class="task-col-label">Descartadas (${deadTasks.length})</div>${deadTasks.map(t => renderWipTaskRow(t)).join('')}</div>` : ''}
+        </div>` : `<div style="font-size:12px;color:var(--muted);padding:4px 0">Sin tareas</div>`}
+      </div>
+    </div>`;
+}
+
+function renderWipTaskRow(t) {
+  return `
+    <div class="task-row">
+      <span style="flex:1">${esc(t.title||t.slug)}</span>
+      ${t.owner ? `<span class="task-owner">${esc(t.owner)}</span>` : ''}
+    </div>`;
+}
+
+function renderFlatTaskRow(t) {
+  return `
+    <div class="flat-task-row">
+      <span class="task-status ${t.status||'pending'}">${t.status||'pending'}</span>
+      <span style="flex:1">${esc(t.title||t.slug)}</span>
+      ${t.owner ? `<span class="task-owner">${esc(t.owner)}</span>` : ''}
+    </div>`;
+}
+
+function renderPlanCardFlat(p) {
+  const pct = p.tt ? Math.round(p.td / p.tt * 100) : 0;
+  const cls = pct >= 70 ? 'ok' : pct >= 40 ? 'warn' : 'bad';
+  return `
+    <div class="plan-block">
+      <div class="plan-hdr" onclick="togglePlan('${p.slug}')">
+        <div class="plan-hdr-title">
+          <span class="expand-ico" id="ico_${esc(p.slug)}">&#9658;</span>
+          ${esc(p.title||p.slug)}
+          <span class="plan-status ${p.status||'draft'}">${p.status||'draft'}</span>
+        </div>
+        <div class="plan-hdr-meta">
+          ${p.tt ? `<span>${p.tt} tareas</span>` : ''}
+          ${p.tt ? `<span>${pct}%</span>` : ''}
+        </div>
+      </div>
+      <div class="plan-body" id="body_${esc(p.slug)}">
+        ${p.design_md ? `<div class="plan-desc">${esc(p.design_md)}</div>` : ''}
+        <div style="margin-top:8px">${p.tt || 0} tareas &middot; ${pct}%</div>
+        <div class="progress" style="margin-top:8px">
+          <div class="progress-track"><div class="progress-fill ${cls}" style="width:${pct}%"></div></div>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function renderPlansHtml(url) {
+  const plans = await api(url);
+  if (!plans || !plans.length) return '<div class="empty">Sin planes</div>';
+  return '<div class="plan-hier">' + (await Promise.all(plans.map(renderPlanCardFlat))) + '</div>';
+}
+
+// ── Concepts ────────────────────────────────────────────────
+async function render_concepts() {
+  const data = await api('/api/concepts');
+  if (!data) return;
+  document.getElementById('tab-concepts').innerHTML = (data && data.length)
+    ? `<div class="table-wrap"><table>
+      <thead><tr><th style="width:30px"></th><th>Slug</th><th>Titulo</th><th>Categoria</th><th>Actualizado</th></tr></thead>
+      <tbody>${data.map((c, i) => `
+        <tr>
+          <td><button class="expand-btn" onclick="toggleDetail('c${i}')">&#9658;</button></td>
+          <td class="mono">${esc(c.slug)}</td>
+          <td>${esc(c.title||'—')}</td>
+          <td>${c.category ? `<span class="tag">${esc(c.category)}</span>` : '—'}</td>
+          <td style="color:var(--muted);font-size:12px">${fmt(c.updated_at)}</td>
+        </tr>
+        <tr class="detail-row" id="c${i}">
+          <td colspan="5">
+            ${c.body_md ? `<div class="detail-label">Body</div><div class="detail-content">${esc(c.body_md)}</div>` : ''}
+            ${c.description_md ? `<div class="detail-label" style="margin-top:8px">Description</div><div class="detail-content">${esc(c.description_md)}</div>` : ''}
+            ${!c.body_md && !c.description_md ? '<span style="color:var(--muted);font-size:12px">Sin contenido adicional</span>' : ''}
+          </td>
+        </tr>`).join('')}</tbody>
+    </table></div>` : '<div class="empty">Sin concepts</div>';
+}
+
+// ── Decisions ──────────────────────────────────────────────
+async function render_decisions() {
+  const data = await api('/api/decisions');
+  if (!data) return;
+  document.getElementById('tab-decisions').innerHTML = (data && data.length)
+    ? `<div class="table-wrap"><table>
+      <thead><tr><th style="width:30px"></th><th>Slug</th><th>Titulo</th><th>Estado</th><th>Fecha</th><th>Por</th></tr></thead>
+      <tbody>${data.map((d, i) => `
+        <tr>
+          <td><button class="expand-btn" onclick="toggleDetail('d${i}')">&#9658;</button></td>
+          <td class="mono">${esc(d.slug)}</td>
+          <td>${esc(d.title||'—')}</td>
+          <td><span class="plan-status ${d.status}">${d.status||'—'}</span></td>
+          <td style="color:var(--muted);font-size:12px">${fmt(d.decided_at)}</td>
+          <td style="color:var(--muted)">${esc(d.decided_by||'—')}</td>
+        </tr>
+        <tr class="detail-row" id="d${i}">
+          <td colspan="6">
+            ${d.body_md ? `<div class="detail-label">Body</div><div class="detail-content">${esc(d.body_md)}</div>` : ''}
+            ${d.description_md ? `<div class="detail-label" style="margin-top:8px">Description</div><div class="detail-content">${esc(d.description_md)}</div>` : ''}
+            ${!d.body_md && !d.description_md ? '<span style="color:var(--muted);font-size:12px">Sin contenido adicional</span>' : ''}
+          </td>
+        </tr>`).join('')}</tbody>
+    </table></div>` : '<div class="empty">Sin decisiones</div>';
+}
+
+// ── Problems ──────────────────────────────────────────────
+async function render_problems() {
+  const data = await api('/api/problems');
+  if (!data) return;
+  document.getElementById('tab-problems').innerHTML = (data && data.length)
+    ? `<div class="table-wrap"><table>
+      <thead><tr><th style="width:30px"></th><th>Slug</th><th>Descripcion</th><th>Workaround</th><th>Descubierto</th></tr></thead>
+      <tbody>${data.map((p, i) => `
+        <tr>
+          <td><button class="expand-btn" onclick="toggleDetail('p${i}')">&#9658;</button></td>
+          <td class="mono">${esc(p.slug)}</td>
+          <td>${esc(p.title||'—')}</td>
+          <td style="color:var(--green);font-size:12px">${esc(p.workaround_md||'').substring(0,80)}</td>
+          <td style="color:var(--muted);font-size:12px">${fmt(p.discovered_at)}</td>
+        </tr>
+        <tr class="detail-row" id="p${i}">
+          <td colspan="5">
+            ${p.description_md ? `<div class="detail-label">Description</div><div class="detail-content">${esc(p.description_md)}</div>` : ''}
+            ${p.workaround_md ? `<div class="detail-label" style="margin-top:8px">Workaround</div><div class="detail-content">${esc(p.workaround_md)}</div>` : ''}
+            ${p.body_md ? `<div class="detail-label" style="margin-top:8px">Body</div><div class="detail-content">${esc(p.body_md)}</div>` : ''}
+            ${!p.description_md && !p.workaround_md && !p.body_md ? '<span style="color:var(--muted);font-size:12px">Sin contenido adicional</span>' : ''}
+          </td>
+        </tr>`).join('')}</tbody>
+    </table></div>` : '<div class="empty">Sin problemas conocidos</div>';
+}
+
+// ── Preferences ───────────────────────────────────────────
+async function render_preferences() {
+  const data = await api('/api/preferences');
+  if (!data) return;
+  document.getElementById('tab-preferences').innerHTML = (data && data.length)
+    ? `<div class="table-wrap"><table>
+      <thead><tr><th style="width:30px"></th><th>Slug</th><th>Scope</th><th>Valor</th></tr></thead>
+      <tbody>${data.map((p, i) => `
+        <tr>
+          <td><button class="expand-btn" onclick="toggleDetail('pr${i}')">&#9658;</button></td>
+          <td class="mono">${esc(p.slug)}</td>
+          <td><span class="tag">${esc(p.scope)}</span></td>
+          <td style="color:var(--muted)">${esc(p.scope_value||'—')}</td>
+        </tr>
+        <tr class="detail-row" id="pr${i}">
+          <td colspan="4">
+            ${p.body_md ? `<div class="detail-label">Body</div><div class="detail-content">${esc(p.body_md)}</div>` : ''}
+            ${p.description_md ? `<div class="detail-label" style="margin-top:8px">Description</div><div class="detail-content">${esc(p.description_md)}</div>` : ''}
+            ${!p.body_md && !p.description_md ? '<span style="color:var(--muted);font-size:12px">Sin contenido adicional</span>' : ''}
+          </td>
+        </tr>`).join('')}</tbody>
+    </table></div>` : '<div class="empty">Sin preferences</div>';
+}
+
+// ── Toggle ─────────────────────────────────────────────────
+function togglePlan(slug) {
+  const body = document.getElementById('body_' + slug);
+  const ico = document.getElementById('ico_' + slug);
+  if (!body) return;
+  const open = body.classList.toggle('collapsed');
+  ico.classList.toggle('open', !open);
+}
+
+function toggleFeat(id) {
+  const body = document.getElementById('fbody_' + id);
+  const ico = document.getElementById('fico_' + id);
+  if (!body) return;
+  const open = body.classList.toggle('collapsed');
+  ico.classList.toggle('open', !open);
+}
+
+function toggleDetail(id) {
+  const row = document.getElementById(id);
+  if (!row) return;
+  const open = row.classList.toggle('open');
+  row.previousElementSibling.querySelector('.expand-btn').textContent = open ? '▼' : '▶';
+}
+
+// ── Error ─────────────────────────────────────────────────
+function render_error() {
+  document.getElementById('loading').innerHTML = `
+    <p style="color:var(--red)">No se pudo cargar datos.</p>
+    <p style="color:var(--muted);font-size:12px">Verific&aacute; que el servidor est&eacute; corriendo.</p>
+  `;
+}
+
+// ── Utils ─────────────────────────────────────────────────
+function esc(v) { return v == null ? '' : String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function fmt(v) { if (!v) return '—'; try { return new Date(v).toLocaleDateString('es-AR'); } catch { return v; } }
+
+// ── Boot ──────────────────────────────────────────────────
+async function boot() {
+  try {
+    const info = await api('/api/info');
+    if (!info) throw new Error('no info');
+    document.getElementById('sidebar-db').textContent = info.project || 'team.db';
+    document.getElementById('project-name').textContent = info.project || '';
+    document.getElementById('loading').classList.add('hidden');
+    render();
+  } catch(e) {
+    render_error();
+  }
+}
+
+boot();
+</script>
+</body>
+</html>

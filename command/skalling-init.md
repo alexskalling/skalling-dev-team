@@ -202,44 +202,7 @@ A partir de v0.7.0, `/skalling-init` también inicializa la DB libSQL del proyec
 
 Para verificar: `ls .opencode/context/team.db`
 
-### 4.7 — Code Intelligence (opt-in)
-
-Preguntá al usuario:
-
-> "¿Querés instalar codebase-memory-mcp para indexar este proyecto en un grafo de conocimiento estructural? (Sí/No, default No)"
-
-**Si dice No** → saltar este paso y seguir normal.
-
-**Si dice Sí** → instalar con verificación de integridad:
-```bash
-VERSION="v0.1.0"  # TODO: actualizar cuando sepas la última estable
-INSTALLER="/tmp/codebase-memory-mcp-install.sh"
-CHECKSUMS_URL="https://github.com/DeusData/codebase-memory-mcp/releases/download/${VERSION}/checksums.txt"
-
-curl -fsSL "https://raw.githubusercontent.com/DeusData/codebase-memory-mcp/${VERSION}/install.sh" -o "$INSTALLER"
-curl -fsSL "$CHECKSUMS_URL" -o /tmp/codebase-memory-mcp-checksums.txt
-
-EXPECTED_SHA="$(grep "$(basename $INSTALLER)" /tmp/codebase-memory-mcp-checksums.txt | awk '{print $1}')"
-ACTUAL_SHA="$(shasum -a 256 "$INSTALLER" | awk '{print $1}')"
-if [[ "$EXPECTED_SHA" != "$ACTUAL_SHA" ]]; then
-    echo "ERROR: checksum no coincide, abortando" >&2
-    exit 1
-fi
-
-bash "$INSTALLER"
-```
-
-Después de instalar, verificar que el MCP server quedó configurado:
-```bash
-grep -q "codebase-memory-mcp" ~/.config/opencode/opencode.jsonc
-```
-
-- Si la verificación pasa → informar al usuario: "codebase-memory-mcp instalado. El snippet en los agentes ya está activo. Indexá este proyecto con `codebase-memory-mcp index` cuando quieras."
-- Si la verificación de checksum falla → **error** (no warning). Es superficie de seguridad: no instalamos binarios no verificados.
-
-**Si ya está instalado** (`command -v codebase-memory-mcp` retorna 0): saltar pregunta, reportar "Ya instalado en este sistema, paso saltado".
-
-### 4.8 — TeamDB (libSQL)
+### 4.7 — TeamDB (libSQL)
 
 **SIEMPRE** verificar que la DB del proyecto existe, sin importar el estado (A/B/C):
 
@@ -265,8 +228,12 @@ if [ ! -f ".opencode/context/team.db" ]; then
 fi
 
 # Migrar y verificar schema (idempotente y NO destructivo: teamdb-init.sh aplica
-# las migrations 002/003/004/005 y valida version 0.7.3. NUNCA borrar la DB.)
+# las migrations 002/003/004/005/006 y valida version 0.7.4. NUNCA borrar la DB.)
 bash "$SK_ROOT/scripts/teamdb-init.sh" .
+
+# Auto-enlazar el grafo de memoria (related por categoría/tag, uses módulo->stack).
+# Idempotente: si ya hay links, no duplica. Se puede re-correr con /skalling-graph.
+bash "$SK_ROOT/scripts/teamdb-link.sh" . 2>/dev/null || true
 
 # Activar hooks git (el installer los deja en $SK_ROOT/hooks; en el repo viven en scripts/hooks)
 if [ -d ".git" ]; then
@@ -288,7 +255,7 @@ echo "  - Hooks: $([ -f .git/hooks/pre-commit ] && echo 'pre-commit OK' || echo 
 
 **Si team.db no se puede crear** (no hay sqlite3 o falla), avisar al usuario pero no abortar el init.
 
-### 4.9 — Poblar teamdb con estado inicial
+### 4.8 — Poblar teamdb con estado inicial
 
 Después de crear la DB, poblar con los datos detectados del proyecto:
 

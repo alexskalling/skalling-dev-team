@@ -378,10 +378,10 @@ check_inteligencia_codigo() {
         if grep -q "codebase-memory-mcp" ~/.config/opencode/opencode.jsonc 2>/dev/null; then
             info "MCP server configurado en opencode.jsonc"
         else
-            info "MCP server NO configurado — corré /skalling-init paso 4.7 o instalá manualmente"
+            info "MCP server NO configurado — instalá y configurá manualmente"
         fi
     else
-        info "codebase-memory-mcp NO instalado (opt-in — instalá con /skalling-init paso 4.7 si querés)"
+        info "codebase-memory-mcp NO instalado (opt-in — instalá manualmente si querés)"
     fi
 }
 

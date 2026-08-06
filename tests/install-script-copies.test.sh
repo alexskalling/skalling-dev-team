@@ -37,7 +37,7 @@ fi
 for s in teamdb-init teamdb-migrate teamdb-export teamdb-import \
          teamdb-search teamdb-related teamdb-graph \
          teamdb-plan teamdb-status teamdb-amend teamdb-resume \
-         teamdb-execute-plan teamdb-skills-sync wip-tree; do
+         teamdb-execute-plan teamdb-skills-sync teamdb-link wip-tree; do
   if echo "$OUT" | grep -q "$s.sh"; then
     assert_pass "dry-run menciona $s.sh"
   else
@@ -138,10 +138,10 @@ fi
 VER_PROJ=$(sqlite3 "$PROJ_DB" "SELECT value FROM schema_meta WHERE key='version'")
 HAS_ACTOR=$(sqlite3 "$PROJ_DB" "SELECT count(*) FROM pragma_table_info('audit_log') WHERE name='actor_source'")
 HAS_HISTORY=$(sqlite3 "$PROJ_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='plan_history'")
-if [ "$VER_PROJ" = "0.7.3" ] && [ "$HAS_ACTOR" = "1" ] && [ -n "$HAS_HISTORY" ]; then
-  assert_pass "proyecto instalado: version 0.7.3 + actor_source + migraciones 003"
+if [ "$VER_PROJ" = "0.7.4" ] && [ "$HAS_ACTOR" = "1" ] && [ -n "$HAS_HISTORY" ]; then
+  assert_pass "proyecto instalado: version 0.7.4 + actor_source + migraciones 003"
 else
-  assert_fail "proyecto instalado: version 0.7.3 + actor_source + migraciones 003" \
+  assert_fail "proyecto instalado: version 0.7.4 + actor_source + migraciones 003" \
     "ver=$VER_PROJ actor=$HAS_ACTOR history=$HAS_HISTORY"
 fi
 
@@ -156,13 +156,33 @@ else
   assert_fail "hooks instalados en \$OPENCODE_DIR/hooks y ejecutables" "ls: $(ls "$INST_HOOKS" 2>/dev/null)"
 fi
 
+# teamdb-link.sh instalado enlaza un proyecto end-to-end (grafo usable)
+export HOME="$FAKE_HOME"
+sqlite3 "$PROJ_DB" "INSERT INTO concepts(slug,title,category,body_md,updated_at) VALUES('mod-a','A','mod','x',datetime('now')),('mod-b','B','mod','x',datetime('now')),('stk','Stack','stack','x',datetime('now'))"
+bash "$FAKE_HOME/.config/opencode/scripts/teamdb-link.sh" "$PROJ" >/dev/null 2>&1
+RC_LINK=$?
+export HOME="$HOME_BAK"
+LINKS=$(sqlite3 "$PROJ_DB" "SELECT COUNT(*) FROM memory_links")
+if [ "$RC_LINK" = "0" ] && [ "$LINKS" -gt 0 ]; then
+  assert_pass "teamdb-link.sh instalado enlaza proyecto (links=$LINKS)"
+else
+  assert_fail "teamdb-link.sh instalado enlaza proyecto" "rc=$RC_LINK links=$LINKS"
+fi
+
+# Comando /skalling-graph instalado
+if [ -f "$FAKE_HOME/.config/opencode/command/skalling-graph.md" ]; then
+  assert_pass "comando /skalling-graph instalado"
+else
+  assert_fail "comando /skalling-graph instalado"
+fi
+
 # Skills registry: el installer corre teamdb-skills-sync.sh y puebla skills_active
 G_VER=$(sqlite3 "$FAKE_HOME/.config/opencode/team.db" "SELECT value FROM schema_meta WHERE key='version'")
 G_SKILLS=$(sqlite3 "$FAKE_HOME/.config/opencode/team.db" "SELECT COUNT(*) FROM skills_active")
-if [ "$G_VER" = "0.7.3" ] && [ "$G_SKILLS" -gt 0 ]; then
-  assert_pass "install: team.db global 0.7.3 + skills_active poblado ($G_SKILLS skills)"
+if [ "$G_VER" = "0.7.4" ] && [ "$G_SKILLS" -gt 0 ]; then
+  assert_pass "install: team.db global 0.7.4 + skills_active poblado ($G_SKILLS skills)"
 else
-  assert_fail "install: team.db global 0.7.3 + skills_active poblado" "ver=$G_VER skills=$G_SKILLS"
+  assert_fail "install: team.db global 0.7.4 + skills_active poblado" "ver=$G_VER skills=$G_SKILLS"
 fi
 
 # skalling-init.md debe resolver $SK_ROOT (no $(dirname "$SKALLING_ROOT")) y buscar hooks en $SK_ROOT/hooks
@@ -182,6 +202,19 @@ else
   assert_fail "skalling-init.md usa \$SK_ROOT/scripts/teamdb-init.sh"
 fi
 
+# Code Intelligence (codebase-memory-mcp) ya no se pregunta en el init: el grafo
+# de memoria (teamdb-link) cubre la red del proyecto. El MCP sigue opt-in manual.
+if grep -q "¿Querés instalar codebase-memory-mcp\|Code Intelligence (opt-in)" "$ROOT/command/skalling-init.md"; then
+  assert_fail "skalling-init.md sin pregunta de codebase-memory-mcp"
+else
+  assert_pass "skalling-init.md sin pregunta de codebase-memory-mcp"
+fi
+if grep -q 'teamdb-link.sh' "$ROOT/command/skalling-init.md"; then
+  assert_pass "skalling-init.md enlaza el grafo (teamdb-link.sh)"
+else
+  assert_fail "skalling-init.md enlaza el grafo (teamdb-link.sh)"
+fi
+
 # Verificar que NO hay `|| true` silenciador cerca de hooks
 if grep -nE "hooks/.*2>/dev/null \|\| true" "$ROOT/install-global.sh" >/dev/null 2>&1; then
   assert_fail "NO hay || true silenciador en sección hooks"
@@ -199,6 +232,23 @@ fi
 
 # Verificar que los hooks actuales NO usan SCRIPT_DIR/.. (paths fragiles) — T-1.6 lo arregla.
 # Skipped: este assert es de T-1.6, no T-1.5.
+
+# Dashboard web: HTML instalado y comando skalling-dashboard presente
+if [ -f "$FAKE_HOME/.config/opencode/web/teamdb-dashboard.html" ]; then
+  assert_pass "web/teamdb-dashboard.html instalado"
+else
+  assert_fail "web/teamdb-dashboard.html instalado"
+fi
+if [ -f "$FAKE_HOME/.config/opencode/command/skalling-dashboard.md" ]; then
+  assert_pass "comando /skalling-dashboard instalado"
+else
+  assert_fail "comando /skalling-dashboard instalado"
+fi
+if [ -f "$FAKE_HOME/.config/opencode/scripts/teamdb-dashboard.sh" ]; then
+  assert_pass "scripts/teamdb-dashboard.sh instalado"
+else
+  assert_fail "scripts/teamdb-dashboard.sh instalado"
+fi
 
 rm -rf "$FAKE_HOME"
 

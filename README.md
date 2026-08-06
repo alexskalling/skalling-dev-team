@@ -2,7 +2,7 @@
 
 Skalling es un equipo de **8 agentes de IA** que trabajan juntos adentro de [OpenCode](https://opencode.ai). Cada agente tiene un rol específico y siguen un ciclo ordenado para construir software bien hecho.
 
-**Versión actual: 0.7.3**
+**Versión actual: 0.7.4**
 
 ---
 
@@ -58,7 +58,7 @@ Requiere Windows 10+ y Git Bash o WSL2.
 
 ### Code Intelligence (opt-in, v0.4.0+)
 
-**Code Intelligence (opt-in, v0.4.0+)**: Skalling ofrece integración opcional con [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp), un servidor MCP que indexa el código del proyecto en un grafo estructural. Esto permite a los agentes hacer queries como "¿quién llama a X?" o "¿qué afecta Y?" en lugar de leer archivos uno por uno. NO es dependencia dura — durante `/skalling-init` se pregunta si querés instalarlo (paso 4.7). Si está instalado, los 8 agentes saben cuándo usar las 5 tools mediante el snippet de Code Intelligence.
+**Code Intelligence (opt-in, v0.4.0+)**: Skalling ofrece integración opcional con [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp), un servidor MCP que indexa el código del proyecto en un grafo estructural. Esto permite a los agentes hacer queries como "¿quién llama a X?" o "¿qué afecta Y?" en lugar de leer archivos uno por uno. NO es dependencia dura — no se instala desde `/skalling-init`; si querés usarlo instalalo manualmente. Si está instalado, los 8 agentes saben cuándo usar las 5 tools mediante el snippet de Code Intelligence.
 
 ### Drift detection
 
@@ -178,7 +178,7 @@ skalling-dev-team/
 ├── agents-base/                      # Los 8 agentes (archivos .md)
 ├── constitution/
 │   └── constitucion.md               # Las 16 reglas
-├── command/                          # Los 7 comandos /skalling-*
+├── command/                          # Los 8 comandos /skalling-*
 ├── skills-base/                      # Habilidades de los agentes (7 skalling-* core)
 ├── templates/                        # Plantillas
 ├── data/                             # Detectores de lenguajes
@@ -266,7 +266,7 @@ Los receipts (`skalling-receipt`) formalizan cada verificación con evidence ant
 
 ## TeamDB (libSQL)
 
-Skalling v0.7.3 usa **libSQL** como fuente de verdad para memoria y tracking de trabajo.
+Skalling v0.7.4 usa **libSQL** como fuente de verdad para memoria y tracking de trabajo.
 
 ### Dos bases de datos
 

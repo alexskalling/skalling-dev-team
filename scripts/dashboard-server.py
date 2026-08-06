@@ -1,0 +1,273 @@
+#!/usr/bin/env python3
+"""HTTP server for TeamDB dashboard — queries SQLite directly, returns JSON."""
+import http.server
+import socketserver
+import os
+import json
+import urllib.parse
+import sqlite3
+import time
+import re
+
+PORT = int(os.environ.get("TDB_PORT", "3741"))
+DB_PATH = os.environ.get("TDB_DB", "")
+HTML_PATH = os.environ.get("TDB_HTML", "")
+PROJECT_NAME = os.environ.get("TDB_PROJECT", "proyecto")
+TIMEOUT_FILE = os.environ.get("TDB_TIMEOUT_FILE", "")
+
+
+def query_db(sql, params=()):
+    if not os.path.exists(DB_PATH):
+        return []
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        return [{"_error": str(e)}]
+
+
+def val(sql):
+    rows = query_db(sql)
+    return rows[0][list(rows[0].keys())[0]] if rows else None
+
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def send_json(self, data):
+        body = json.dumps(data, default=str).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", len(body))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def touch_timeout(self):
+        if TIMEOUT_FILE:
+            with open(TIMEOUT_FILE, "w") as f:
+                f.write(str(int(time.time())))
+
+    def do_GET(self):
+        self.touch_timeout()
+
+        if self.path == "/api/heartbeat":
+            self.send_json({"ok": True})
+            return
+
+        if self.path == "/api/info":
+            self.send_json({
+                "project": PROJECT_NAME,
+                "db": DB_PATH,
+                "exists": os.path.exists(DB_PATH),
+                "size": os.path.getsize(DB_PATH) if os.path.exists(DB_PATH) else 0,
+            })
+            return
+
+        if self.path == "/api/stats":
+            c = val("SELECT COUNT(*) FROM concepts") or 0
+            d = val("SELECT COUNT(*) FROM decisions") or 0
+            p = val("SELECT COUNT(*) FROM plans") or 0
+            tasks = query_db("SELECT status FROM tasks")
+            done = sum(1 for t in tasks if t.get("status") == "done")
+            total = len(tasks)
+            pct = round(done / total * 100) if total else 0
+            pb = val("SELECT COUNT(*) FROM known_problems") or 0
+            lnk = val("SELECT COUNT(*) FROM memory_links") or 0
+            ver = val("SELECT value FROM schema_meta WHERE key='version'") or "?"
+            self.send_json({
+                "concepts": c, "decisions": d, "plans": p,
+                "tasks_done": done, "tasks_total": total, "tasks_pct": pct,
+                "problems": pb, "links": lnk, "version": ver,
+            })
+            return
+
+        if self.path == "/api/plans":
+            plans = query_db("""
+                SELECT p.*, COUNT(t.id) as tt,
+                       SUM(CASE WHEN t.status='done' THEN 1 ELSE 0 END) as td
+                FROM plans p LEFT JOIN tasks t ON t.plan_id=p.id GROUP BY p.id ORDER BY p.created_at DESC
+            """)
+            self.send_json(plans)
+            return
+
+        if self.path == "/api/plans-hierarchy":
+            wip = query_db("SELECT * FROM work_in_progress ORDER BY type, slug")
+            plans_wip = [w for w in wip if w.get("type") == "plan"]
+            features_wip = [w for w in wip if w.get("type") == "feature"]
+            tasks_wip = [w for w in wip if w.get("type") == "task"]
+
+            by_parent = {}
+            for f in features_wip:
+                pid = f.get("parent_id")
+                if pid not in by_parent:
+                    by_parent[pid] = []
+                by_parent[pid].append({**f, "_children": []})
+
+            for t in tasks_wip:
+                pid = t.get("parent_id")
+                if pid not in by_parent:
+                    by_parent[pid] = []
+                by_parent[pid].append({**t, "_children": []})
+
+            for f in features_wip:
+                f["_children"] = by_parent.get(f["id"], [])
+
+            by_plan = {}
+            for f in features_wip:
+                pid = f.get("parent_id")
+                if pid not in by_plan:
+                    by_plan[pid] = []
+                by_plan[pid].append(f)
+
+            result = []
+            for p in plans_wip:
+                pid = p["id"]
+                result.append({
+                    **p,
+                    "_type": "wip",
+                    "_features": by_plan.get(pid, []),
+                    "_flat_tasks": [],
+                })
+
+            self.send_json(result)
+            return
+
+        if self.path == "/api/tasks":
+            tasks = query_db("""
+                SELECT t.*, p.slug as ps, p.title as pt
+                FROM tasks t LEFT JOIN plans p ON p.id=t.plan_id ORDER BY t.order_index ASC
+            """)
+            self.send_json(tasks)
+            return
+
+        if self.path == "/api/concepts":
+            self.send_json(query_db("SELECT * FROM concepts ORDER BY category, slug"))
+            return
+
+        if self.path == "/api/decisions":
+            self.send_json(query_db("SELECT * FROM decisions ORDER BY decided_at DESC"))
+            return
+
+        if self.path == "/api/problems":
+            self.send_json(query_db("SELECT * FROM known_problems ORDER BY discovered_at DESC"))
+            return
+
+        if self.path == "/api/preferences":
+            self.send_json(query_db("SELECT * FROM preferences ORDER BY scope, slug"))
+            return
+
+        if self.path == "/api/graph":
+            nodes = {}
+            for c in query_db("SELECT id, slug, category FROM concepts"):
+                nodes["c" + str(c["id"])] = {"slug": c["slug"], "type": "concept", "category": c.get("category", "")}
+            for d in query_db("SELECT id, slug, status FROM decisions"):
+                nodes["d" + str(d["id"])] = {"slug": d["slug"], "type": "decision", "status": d.get("status", "")}
+
+            links = query_db("""
+                SELECT ml.*,
+                       COALESCE(c1.slug,d1.slug) as fs, COALESCE(c2.slug,d2.slug) as ts
+                FROM memory_links ml
+                LEFT JOIN concepts c1 ON ml.from_table='concepts' AND c1.id=ml.from_id
+                LEFT JOIN decisions d1 ON ml.from_table='decisions' AND d1.id=ml.from_id
+                LEFT JOIN concepts c2 ON ml.to_table='concepts' AND c2.id=ml.to_id
+                LEFT JOIN decisions d2 ON ml.to_table='decisions' AND d2.id=ml.to_id
+            """)
+            links = [l for l in links if l.get("fs") and l.get("ts")]
+            self.send_json({"nodes": nodes, "links": links})
+            return
+
+        if self.path == "/api/codegraph":
+            PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(DB_PATH)))
+            nodes = {}
+            edges = []
+            exts = {".ts", ".tsx", ".js", ".jsx", ".cts", ".mts"}
+
+            for base in ["app", "lib", "components", "services", "scripts"]:
+                dir_path = os.path.join(PROJECT_ROOT, base)
+                if not os.path.isdir(dir_path):
+                    continue
+                for root, _, files in os.walk(dir_path):
+                    for f in files:
+                        if not any(f.endswith(e) for e in exts):
+                            continue
+                        full = os.path.join(root, f)
+                        rel = os.path.relpath(full, PROJECT_ROOT).replace("\\", "/")
+                        nodes[rel] = {
+                            "path": rel,
+                            "type": "page" if "/app/" in rel else "lib",
+                        }
+
+            for base in ["app", "lib", "components", "services", "scripts"]:
+                dir_path = os.path.join(PROJECT_ROOT, base)
+                if not os.path.isdir(dir_path):
+                    continue
+                for root, _, files in os.walk(dir_path):
+                    for f in files:
+                        if not any(f.endswith(e) for e in exts):
+                            continue
+                        full = os.path.join(root, f)
+                        rel = os.path.relpath(full, PROJECT_ROOT).replace("\\", "/")
+                        try:
+                            with open(full, "r", encoding="utf-8", errors="ignore") as fh:
+                                txt = fh.read()
+                            for m in re.finditer(r'''from\s+['"]([^'"]+)['"]''', txt):
+                                imp = m.group(1)
+                                if imp.startswith("."):
+                                    resolved = os.path.normpath(os.path.join(os.path.dirname(rel), imp))
+                                    resolved = resolved.replace("\\", "/")
+                                    if not any(resolved.endswith(e) for e in exts):
+                                        for ext in [".ts", ".tsx", ".js", ".jsx"]:
+                                            if resolved + ext in nodes:
+                                                resolved += ext
+                                                break
+                                        else:
+                                            resolved += ".ts"
+                                    if resolved in nodes and resolved != rel:
+                                        edges.append({"from": rel, "to": resolved})
+                                elif imp.startswith("@/"):
+                                    resolved = imp[2:]
+                                    if not any(resolved.endswith(e) for e in exts):
+                                        for ext in [".ts", ".tsx", ".js", ".jsx"]:
+                                            if resolved + ext in nodes:
+                                                resolved += ext
+                                                break
+                                        else:
+                                            resolved += ".ts"
+                                    if resolved in nodes:
+                                        edges.append({"from": rel, "to": resolved})
+                        except Exception:
+                            pass
+
+            self.send_json({"nodes": list(nodes.values()), "edges": edges})
+            return
+
+        if self.path in ("/", "/index.html"):
+            serve_path = HTML_PATH
+        else:
+            serve_path = urllib.parse.unquote(self.path[1:])
+
+        if serve_path and os.path.exists(serve_path):
+            ct = "text/html" if serve_path.endswith(".html") else "application/octet-stream"
+            with open(serve_path, "rb") as f:
+                data = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", ct)
+            self.send_header("Content-Length", len(data))
+            self.end_headers()
+            self.wfile.write(data)
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def log_message(self, *args):
+        pass
+
+
+if __name__ == "__main__":
+    print(f"PORT={PORT}", flush=True)
+    socketserver.TCPServer.allow_reuse_address = True
+    with socketserver.TCPServer(("127.0.0.1", PORT), Handler) as httpd:
+        httpd.serve_forever()

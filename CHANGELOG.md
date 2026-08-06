@@ -4,6 +4,17 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.7.4] — 2026-08-05
+
+### Added
+- **Grafo de memoria auto-enlazado**: `scripts/teamdb-link.sh` crea los links de `memory_links` que el grafo ya sabía dibujar pero nadie poblaba. Reglas: `related` entre conceptos de la misma categoría, `related` entre conceptos/decisiones que comparten tag, y `uses` de conceptos no-stack → conceptos de categoría `stack`. Idempotente (no duplica), escribe con audit (`teamdb_write_project`), soporta `--dry-run`.
+- **Comando `/skalling-graph`**: protocolo para visualizar la memoria como grafo (link + graph en text/mermaid/dot + related + search), con el mismo estilo de `/skalling-init`.
+- **Migración `006_link_graph.sql`** (marca schema v0.7.4; el schema no cambia).
+- **`/skalling-init` ahora enlaza el grafo** tras crear la DB, y deja de preguntar por codebase-memory-mcp (paso 4.7 eliminado): con el grafo de teamdb la red del proyecto se arma sola. El MCP sigue disponible como opt-in manual.
+
+### Changed
+- `teamdb-link.sh` usa los writes audited del helper (`audit_log` con `actor_source='helper'`).
+
 ## [0.7.3] — 2026-08-05
 
 ### Added

@@ -400,6 +400,11 @@ install_teamdb() {
         run cp "$script" "$OPENCODE_DIR/scripts/$(basename "$script")"
         run chmod +x "$OPENCODE_DIR/scripts/$(basename "$script")"
     done
+    # dashboard-server.py: servidor HTTP para el dashboard HTML
+    if [ -f "$SCRIPT_DIR/scripts/dashboard-server.py" ]; then
+        run cp "$SCRIPT_DIR/scripts/dashboard-server.py" "$OPENCODE_DIR/scripts/dashboard-server.py"
+        run chmod +x "$OPENCODE_DIR/scripts/dashboard-server.py"
+    fi
     for script in wip-tree.sh build-schema.sh; do
         if [ -f "$SCRIPT_DIR/scripts/$script" ]; then
             run cp "$SCRIPT_DIR/scripts/$script" "$OPENCODE_DIR/scripts/$script"
@@ -468,6 +473,14 @@ install_teamdb() {
     log OK "teamdb instalado"
 }
 
+install_web_dashboard() {
+    if [ -d "$SCRIPT_DIR/web" ]; then
+        run mkdir -p "$OPENCODE_DIR/web"
+        run cp "$SCRIPT_DIR/web/"*.html "$OPENCODE_DIR/web/" 2>/dev/null || true
+        log OK "dashboard web instalado"
+    fi
+}
+
 print_summary() {
     cat <<EOF
 
@@ -481,6 +494,7 @@ print_summary() {
      ├── command/         (comandos /skalling-*)
      ├── templates/       (templates OKF y SDD)
      ├── constitucion.md  (reglas universales)
+     ├── web/            (dashboard HTML — abre con /skalling-dashboard)
      └── skalling-data/   (stack-detectors, skills-by-stack)
 
   🚀 Próximos pasos:
@@ -490,6 +504,7 @@ print_summary() {
   3. Para inicializar manualmente:    /skalling-init
   4. Para ver el estado del bundle:  /skalling-status
   5. Para validar la instalación:     /skalling-doctor
+  6. Para abrir el dashboard:         /skalling-dashboard
 
   📦 Backups automáticos: $BACKUP_DIR
   📋 Log de instalación:  $INSTALL_LOG
@@ -514,6 +529,7 @@ do_install() {
     install_data_files
     install_teamdb
     install_teamdb_hooks
+    install_web_dashboard
 
     if [[ "$DRY_RUN" == true ]]; then
         log INFO "Dry-run completo. Nada fue modificado."

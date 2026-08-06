@@ -60,7 +60,7 @@ assert "export" "bash $SKALLING_ROOT/scripts/teamdb-export.sh '$TEST_DIR'"
 assert "data_concepts.sql" "[ -f '$TEST_DIR/.opencode/context/teamdb/data_concepts.sql' ]"
 
 # Test 8: versión
-assert "version 0.7.3" "sqlite3 '$TEST_DIR/.opencode/context/team.db' \"SELECT value FROM schema_meta WHERE key='version'\" | grep -q '0.7.3'"
+assert "version 0.7.4" "sqlite3 '$TEST_DIR/.opencode/context/team.db' \"SELECT value FROM schema_meta WHERE key='version'\" | grep -q '0.7.4'"
 
 # Test 9-15: scripts bash
 assert "teamdb-init.sh existe" "[ -x '$SKALLING_ROOT/scripts/teamdb-init.sh' ]"

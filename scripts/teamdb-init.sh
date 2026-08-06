@@ -33,7 +33,7 @@ fi
 # Verificar que las migrations dejaron el schema correcto; si no, fallar en vez
 # de seguir con una DB degradada (los errores de migración idempotentes, como el
 # "duplicate column" de 004 sobre DBs nuevas, se toleran arriba).
-EXPECTED_VERSION="0.7.3"
+EXPECTED_VERSION="0.7.4"
 VERSION="$(sqlite3 "$DB" "SELECT value FROM schema_meta WHERE key='version'" 2>/dev/null || true)"
 if [ "$VERSION" != "$EXPECTED_VERSION" ]; then
   echo "ERROR: teamdb schema version=$VERSION, esperado $EXPECTED_VERSION (migrations incompletas)" >&2
