@@ -145,7 +145,21 @@ SQL
       sqlite3 "$db" "ALTER TABLE skills_active ADD COLUMN $col" 2>/dev/null || true
     fi
   done
-  sqlite3 "$db" "UPDATE schema_meta SET value='0.7.8' WHERE key='version'" 2>/dev/null || true
+  # Validar que las correcciones aditivas quedaron aplicadas antes de bumpear
+  # la versión. Sin esto, una DB con schema incompleto reportaba 0.7.8 mintiendo.
+  local has_audit has_actor has_skills has_schema_meta
+  has_audit="$(sqlite3 "$db" "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='audit_log'" 2>/dev/null || true)"
+  has_actor="$(sqlite3 "$db" "SELECT count(*) FROM pragma_table_info('audit_log') WHERE name='actor_source'" 2>/dev/null || true)"
+  has_skills="$(sqlite3 "$db" "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='skills_active'" 2>/dev/null || true)"
+  has_schema_meta="$(sqlite3 "$db" "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='schema_meta'" 2>/dev/null || true)"
+  if [ "${has_audit:-0}" = "0" ] || [ "${has_actor:-0}" = "0" ] || [ "${has_skills:-0}" = "0" ] || [ "${has_schema_meta:-0}" = "0" ]; then
+    echo "[ERROR] teamdb heal: schema incompleto (audit_log=$has_audit actor_source=$has_actor skills_active=$has_skills schema_meta=$has_schema_meta); no se bumpeó versión" >&2
+    return 1
+  fi
+  if ! sqlite3 "$db" "UPDATE schema_meta SET value='0.7.8' WHERE key='version'" 2>/dev/null; then
+    echo "[ERROR] No se pudo actualizar schema_meta.version en $db" >&2
+    return 1
+  fi
   return 0
 }
 
