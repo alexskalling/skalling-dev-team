@@ -139,14 +139,14 @@ test_agent_frontmatter() {
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
-# TEST 4: Constitución tiene reglas R1-R14
+# TEST 4: Constitución tiene reglas R1-R17
 # ──────────────────────────────────────────────────────────────────────────────
 
 test_constitution() {
     echo ""
     echo "── Test 4: Constitución completa ──"
 
-    local rules=(R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 R16)
+    local rules=(R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 R16 R17)
     for r in "${rules[@]}"; do
         # Match "### R<n>" or "## R<n>" or "## [emoji] R<n>" formats
         if grep -qE "^(##|###) .*${r} " "$REPO_ROOT/constitution/constitucion.md"; then
@@ -160,8 +160,8 @@ test_constitution() {
     assert_file_contains "$REPO_ROOT/constitution/constitucion.md" "REGLA #13" "REGLA #13 mencionada"
     assert_file_contains "$REPO_ROOT/constitution/constitucion.md" "design-system.md" "design-system.md mencionada en R13"
 
-    # REGLA #14 (Ponytail) específica
-    assert_file_contains "$REPO_ROOT/constitution/constitucion.md" "Ponytail" "R14 Ponytail mencionada"
+    # REGLA #15 (Ponytail) específica
+    assert_file_contains "$REPO_ROOT/constitution/constitucion.md" "Ponytail" "R15 Ponytail mencionada"
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -245,12 +245,12 @@ test_data_files() {
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
-# TEST 8b: R15 Collaborative memory + merge helpers
+# TEST 8b: R16 Collaborative memory + merge helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
 test_collaborative_memory() {
     echo ""
-    echo "── Test 8b: R15 Collaborative memory ──"
+    echo "── Test 8b: R16 Collaborative memory ──"
 
     # .gitattributes template existe
     assert_file_exists "$REPO_ROOT/templates/gitattributes.template" "gitattributes.template existe"
@@ -264,15 +264,15 @@ test_collaborative_memory() {
     assert_file_contains "$REPO_ROOT/templates/gitattributes.template" "log.md" "log.md protegido"
     assert_file_contains "$REPO_ROOT/templates/gitattributes.template" "constitucion.md" "constitucion.md protegido"
 
-    # Constitución tiene R15
-    if grep -qE "^(##|###) .*R15 " "$REPO_ROOT/constitution/constitucion.md"; then
-        pass "R15 presente en constitución"
+    # Constitución tiene R16
+    if grep -qE "^(##|###) .*R16 " "$REPO_ROOT/constitution/constitucion.md"; then
+        pass "R16 presente en constitución"
     else
-        fail "R15 NO encontrada en constitución"
+        fail "R16 NO encontrada en constitución"
     fi
 
     # Pau prompt menciona conflictos colaborativos
-    assert_file_contains "$REPO_ROOT/agents-base/Pau.md" "R15\|conflicto\|merge" "Pau referencia R15/merge"
+    assert_file_contains "$REPO_ROOT/agents-base/Pau.md" "R16\|conflicto\|merge" "Pau referencia R16/merge"
 
     # Merge helper script existe y es ejecutable
     if [[ -x "$REPO_ROOT/scripts/merge-helper.sh" ]]; then

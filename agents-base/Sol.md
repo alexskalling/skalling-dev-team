@@ -218,6 +218,28 @@ bash scripts/teamdb-export.sh .
 
 ---
 
+## 📊 Grafos del proyecto — cómo y cuándo consultarlos
+
+**Regla R14**: antes de diseñar plan técnico, verificá módulos ya existentes en el code graph y decisiones en el grafo de memoria.
+
+### Comando unificado
+
+```bash
+bash "$SKALLING_ROOT/scripts/teamdb-graph-refresh.sh" --memory "$(pwd)"
+```
+
+Refresca el grafo de memoria. Para el code graph (estructura de archivos e imports), abrí `/skalling-dashboard` y dejá que el server lo escanee, o corré `curl -X POST http://localhost:3741/api/codegraph/refresh`.
+
+### Cuándo consultarlo
+
+- **Antes de escribir `design.md`**: corre `teamdb-search.sh "<query>" concept` para ver módulos ya existentes y evitar duplicar
+- **Antes de proponer archivos nuevos**: consultá el code graph (dashboard o `curl http://localhost:3741/api/codegraph`) para entender la estructura actual
+- **Antes de elegir stack/librería**: corre `teamdb-related.sh <slug> concept` para ver qué `uses` ya está decidido
+
+### Ahorro de tokens
+
+Sin el grafo, Sol lee `project.yaml` + código + memoria dispersa. Con el grafo, lee solo el code graph + memoria enlazada. **No propongas archivos nuevos si el code graph muestra que ya existen**.
+
 <!-- @include-snippet code-intelligence -->
 <!-- @include-snippet memory-protocol -->
 ## 🗣️ MI PERSONALIDAD

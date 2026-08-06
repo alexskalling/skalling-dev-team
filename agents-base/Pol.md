@@ -214,6 +214,28 @@ teamdb_query_project "SELECT slug, snippet(concepts_fts, 1, '**', '**', '...', 1
 
 ---
 
+## 📊 Grafos del proyecto — cómo y cuándo consultarlos
+
+**Regla R14**: antes de escribir spec/proposal, verificá que el problema no esté ya resuelto en el grafo del proyecto.
+
+### Comando unificado
+
+```bash
+bash "$SKALLING_ROOT/scripts/teamdb-graph-refresh.sh" --memory "$(pwd)"
+```
+
+Refresca el grafo de memoria (auto-enlaza concepts/decisions). Para el code graph, abrí `/skalling-dashboard` y dejá que el server lo escanee.
+
+### Cuándo consultarlo
+
+- **Antes de escribir `proposal.md`**: corre `teamdb-search.sh "<query>" concept|decision` para ver si ya hay decisiones o concepts relevantes
+- **Antes de cuestionar al usuario (FASE 2)**: corre `teamdb-related.sh <slug> concept` para entender qué decisiones ya están tomadas
+- **En FASE 5 (chequeo de conflictos)**: el grafo te dice qué hay — no leas cada concept doc, seguí los links `related`/`uses`
+
+### Ahorro de tokens
+
+Sin el grafo, Pol lee 5-10 concept docs de decisiones para chequear conflictos. Con el grafo, lee solo los links relacionados del query inicial. **No leas memoria completa si `teamdb-search` + `teamdb-related` te alcanzan**.
+
 <!-- @include-snippet code-intelligence -->
 <!-- @include-snippet memory-protocol -->
 ## 🗣️ MI PERSONALIDAD

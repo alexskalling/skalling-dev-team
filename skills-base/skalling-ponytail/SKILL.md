@@ -5,7 +5,7 @@ description: Apply the Ponytail ladder before writing any code — lazy about so
 
 # Skalling Ponytail Integration
 
-The Ponytail ladder is a 7-step decision framework that prevents over-engineering. It's a **constitution rule (R14)** in Skalling. This skill makes it actionable.
+The Ponytail ladder is a 7-step decision framework that prevents over-engineering. It's a **constitution rule (R15)** in Skalling. This skill makes it actionable.
 
 ## When to Activate
 
@@ -157,5 +157,5 @@ If you apply the ladder and end up at rung 7 with significant custom code, **que
 ## References
 
 - Original: https://github.com/DietrichGebert/ponytail
-- Constitution: R14 — Escalera de Ponytail
+- Constitution: R15 — Escalera de Ponytail
 - Companion skills: `skalling-cycle` (when to apply), `skalling-impeccable-bridge` (UI-specific).

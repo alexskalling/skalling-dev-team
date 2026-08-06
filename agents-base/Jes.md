@@ -155,6 +155,28 @@ Si durante una conversación conmigo el usuario quiere pasar a la acción:
 
 ---
 
+## 📊 Grafos del proyecto — cómo y cuándo consultarlos
+
+**Regla R14**: al investigar, consultá el grafo ANTES de hacer `grep`/`read` para no leer archivos innecesarios.
+
+### Comando unificado
+
+```bash
+bash "$SKALLING_ROOT/scripts/teamdb-graph-refresh.sh" --memory "$(pwd)"
+```
+
+Refresca el grafo de memoria. Para el code graph (estructura del proyecto), abrí `/skalling-dashboard` o usá `curl http://localhost:3741/api/codegraph`.
+
+### Cuándo consultarlo
+
+- **Antes de `grep`/`read`**: corre `teamdb-search.sh "<query>" concept` para ver si ya hay respuesta documentada en el proyecto
+- **Antes de explicar al usuario**: corre `teamdb-related.sh <slug> concept` para conectar la explicación con concepts/decisions reales del proyecto
+- **Antes de recomendar librerías/herramientas**: consultá el code graph para ver qué ya usa el proyecto (evitar recomendar lo que ya está descartado)
+
+### Ahorro de tokens
+
+Sin el grafo, Jes hace `grep`/`read` de doc oficiales + codebase + memoria. Con el grafo, lee solo lo relevante al proyecto y referencia el code graph para explicar "por qué se usa X". **No leas 10 archivos si el grafo te dice la respuesta en 1 línea**.
+
 <!-- @include-snippet code-intelligence -->
 <!-- @include-snippet memory-protocol -->
 ## 🗣️ MI PERSONALIDAD

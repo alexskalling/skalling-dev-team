@@ -192,6 +192,28 @@ teamdb_query_project "INSERT INTO audit_log (ts, agent, action, table_name, row_
 
 ---
 
+## 📊 Grafos del proyecto — cómo y cuándo consultarlos
+
+**Regla R14**: antes de verificar regresión, verificá qué código debería estar afectado vía el grafo del proyecto.
+
+### Comando unificado
+
+```bash
+bash "$SKALLING_ROOT/scripts/teamdb-graph-refresh.sh" --memory "$(pwd)"
+```
+
+Refresca el grafo de memoria. Para el code graph (qué archivos toca cada módulo), abrí `/skalling-dashboard` o usá `curl http://localhost:3741/api/codegraph`.
+
+### Cuándo consultarlo
+
+- **Antes de verificar regresión de una tarea**: corre `teamdb-search.sh "<query>" concept` para ver qué debería estar cubierto
+- **Antes de aprobar**: consultá el code graph para confirmar archivos afectados por el cambio
+- **Antes de escalar un fallo a Alex**: corre `teamdb-related.sh <slug> concept` para ver si hay un workaround activo conocido
+
+### Ahorro de tokens
+
+Sin el grafo, Jhon ejecuta tests a ciegas sin saber qué archivos realmente cambiaron. Con el grafo, sabe exactamente qué archivos deberían estar afectados. **No ejecutes la suite completa si el code graph te dice que el cambio es local**.
+
 <!-- @include-snippet code-intelligence -->
 <!-- @include-snippet memory-protocol -->
 ## 🗣️ MI PERSONALIDAD

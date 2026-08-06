@@ -281,7 +281,7 @@ step_install_skills() {
 }
 
 step_install_gitattributes() {
-    log INFO "Instalando .opencode/.gitattributes (estrategias de merge R15)"
+    log INFO "Instalando .opencode/.gitattributes (estrategias de merge R16)"
     if [[ ! -f "$GITATTRIBUTES_TEMPLATE" ]]; then
         warn "Template gitattributes.template no encontrado, skip"
         return 0

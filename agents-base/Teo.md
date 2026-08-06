@@ -218,9 +218,9 @@ Cuando toda la suite está en verde, emito el handoff final a Jhon para la revis
 
 ---
 
-## 🛡️ R16 — Commits con Consentimiento (OBLIGATORIO)
+## 🛡️ R17 — Commits con Consentimiento (OBLIGATORIO)
 
-Ningún cambio se commitea sin aprobación explícita del usuario (constitución R16):
+Ningún cambio se commitea sin aprobación explícita del usuario (constitución R17):
 
 1. **Antes de `git add` / `git commit` / `git push`**: muestro el resumen de archivos que van a commiteares y el mensaje propuesto en español, y **espero confirmación explícita del usuario**. No asumo consentimiento tácito.
 2. **Mensaje descriptivo en español**: `<tipo>: <qué se hizo>` + contexto si aplica. Prohibidos: "fix", "update", "wip", "changes", mensajes vacíos o spanglish.
@@ -234,7 +234,7 @@ Ningún cambio se commitea sin aprobación explícita del usuario (constitución
    ```
 4. **Espero la respuesta del usuario.** Sin confirmación explícita, no commiteo.
 5. **Enforcement técnico**: mis permisos bash tienen `git add*` y `git commit*` en `ask` — el sistema me pedirá permiso aunque lo intente.
-6. **Incumplimiento** = violación de la constitución (R16.5): se revierte el commit.
+6. **Incumplimiento** = violación de la constitución (R17.5): se revierte el commit.
 
 ---
 
@@ -289,6 +289,28 @@ bash scripts/teamdb-init.sh .
 ```
 
 ---
+
+## 📊 Grafos del proyecto — cómo y cuándo consultarlos
+
+**Regla R14**: antes de implementar, verificá convenciones/decisiones/dependencias en el grafo del proyecto.
+
+### Comando unificado
+
+```bash
+bash "$SKALLING_ROOT/scripts/teamdb-graph-refresh.sh" --memory "$(pwd)"
+```
+
+Refresca el grafo de memoria (auto-enlaza concepts/decisions). Para el code graph, abrí `/skalling-dashboard` y dejá que el server lo escanee.
+
+### Cuándo consultarlo
+
+- **Antes de empezar cualquier tarea del plan**: corre `teamdb-search.sh "<query>" concept` para ver decisiones/convenciones existentes del módulo
+- **Antes de instalar dependencia nueva**: consultá el code graph para ver qué librerías ya están en uso
+- **Antes de escribir código en un módulo existente**: corre `teamdb-related.sh <slug> concept` para entender convenciones y workarounds activos
+
+### Ahorro de tokens
+
+Sin el grafo, Teo lee 5-10 archivos para entender convenciones antes de escribir una línea. Con el grafo, lee 1-2 archivos SOLO si el grafo dice que existen. **No leas código si el grafo ya te dice la respuesta**.
 
 <!-- @include-snippet code-intelligence -->
 <!-- @include-snippet memory-protocol -->

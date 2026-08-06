@@ -194,6 +194,28 @@ teamdb_query_project "UPDATE work_in_progress SET status='approved', updated_at=
 
 ---
 
+## 📊 Grafos del proyecto — cómo y cuándo consultarlos
+
+**Regla R14**: antes de auditar, verificá decisiones arquitectónicas ya tomadas y workarounds activos en el grafo del proyecto.
+
+### Comando unificado
+
+```bash
+bash "$SKALLING_ROOT/scripts/teamdb-graph-refresh.sh" --memory "$(pwd)"
+```
+
+Refresca el grafo de memoria. Para el code graph (estructura, imports, dependencias), abrí `/skalling-dashboard` o usá `curl http://localhost:3741/api/codegraph`.
+
+### Cuándo consultarlo
+
+- **Antes de auditar**: corre `teamdb-search.sh "<query>" decision` para ver decisiones arquitectónicas ya tomadas (no las reviertas sin justificación)
+- **Antes de juzgar complejidad o duplicación**: consultá el code graph para ver duplicaciones reales vs ya abstraídas
+- **Antes de aprobar seguridad/performance**: corre `teamdb-related.sh <slug> concept` para ver problemas conocidos (`known_problems`) y workarounds activos
+
+### Ahorro de tokens
+
+Sin el grafo, Luz relee código + decisiones duplicadas que ya están documentadas. Con el grafo, ve el panorama completo en 1 query. **No audites desde cero si el grafo tiene las respuestas**.
+
 <!-- @include-snippet code-intelligence -->
 <!-- @include-snippet memory-protocol -->
 ## 🗣️ MI PERSONALIDAD

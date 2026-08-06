@@ -194,11 +194,11 @@ generate_bundle() {
         skalling_sed_inplace "$CONTEXT_DIR/proyecto/que-es.md" "s|\[Una línea del README\]|${desc}|g"
     fi
 
-    # .gitattributes para estrategias de merge (R15)
+    # .gitattributes para estrategias de merge (R16)
     if [[ -f "$TEMPLATES_DIR/gitattributes.template" ]]; then
         run cp "$TEMPLATES_DIR/gitattributes.template" "$OPENCODE_DIR/.gitattributes"
         if [[ "$DRY_RUN" == false ]]; then
-            log "  ✓ .gitattributes instalado (estrategias de merge R15)"
+            log "  ✓ .gitattributes instalado (estrategias de merge R16)"
         fi
     fi
 

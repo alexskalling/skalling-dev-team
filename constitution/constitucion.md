@@ -135,6 +135,57 @@ confidence: 1.0
 
 ---
 
+## R14 — Ahorro de tokens vía grafos del proyecto
+
+**Motivación**: el grafo de memoria y el code graph existen para que los agentes NO lean archivos innecesarios. Un agente que `grep` + `read` 10 archivos cuando el grafo le dice la respuesta en 1 línea, está quemando tokens del usuario.
+
+**Regla universal**: los 8 agentes (Alex, Pol, Jes, Sol, Teo, Jhon, Luz, Pau) deben consultar el estado de los grafos del proyecto ANTES de:
+
+- **Alex**: delegar a cualquier agente o responder "¿ya existe X?"
+- **Pol**: validar intent del usuario y escribir `proposal.md`
+- **Jes**: investigar (consultar grafo antes de `grep`/`read`)
+- **Sol**: diseñar un plan técnico
+- **Teo**: implementar cambios
+- **Jhon**: verificar regresión
+- **Luz**: auditar calidad/seguridad
+- **Pau**: consolidar memoria definitiva
+
+### Comando unificado
+
+```bash
+bash "$SKALLING_ROOT/scripts/teamdb-graph-refresh.sh" "$(pwd)"
+```
+
+Refresca AMBOS grafos (memoria + código). Ver `command/skalling-graph-refresh.md`.
+
+### Por qué
+
+Sin el grafo actualizado, los agentes proponen cambios basándose en memoria vieja y cometen errores que ya fueron resueltos.
+
+### Pau al cerrar feature
+
+Pau corre el refresh automáticamente después de consolidar memoria (ver `agents-base/Pau.md`). Esto garantiza que el siguiente ciclo arranca con grafos frescos.
+
+### Ejemplo: ticket pelotudo prevenido
+
+**Sin grafo**: Teo recibe "agregá un botón de logout en el navbar". Teo abre 8 archivos buscando dónde está el navbar, dónde están los componentes auth, dónde está el session provider. Lee 800 líneas. Tarda 5 min y consume 12k tokens.
+
+**Con grafo**: Teo corre `teamdb-search.sh "navbar" concept` → encuentra `concept: ui-navbar`. Corre `teamdb-related.sh ui-navbar concept` → ve que está linkeado a `concept: ui-button` y `concept: auth-session`. Lee solo esos 3 archivos. Tarda 1 min y consume 3k tokens.
+
+**Ahorro**: ~75% de tokens, ~80% de tiempo.
+
+### Regla nemotécnica
+
+> "Si vas a leer más de 2 archivos para entender qué existe, primero consultá el grafo."
+
+### Cuándo NO consultar el grafo
+
+- Cambios triviales (typo, una línea)
+- Cuando el usuario explícitamente te da toda la info necesaria
+- Cuando el grafo está vacío y recién estás arrancando el proyecto
+
+---
+
 ## 🧠 Reglas de Memoria OKF
 
 ### Catálogo de tipos de concept docs
@@ -337,7 +388,7 @@ D) Lo explico yo con mis palabras
 
 ---
 
-## 🪜 R14 — Escalera de Ponytail (Lazy Senior Dev)
+## 🪜 R15 — Escalera de Ponytail (Lazy Senior Dev)
 
 > Inspirado en [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail).
 > Filosofía: "lazy about the solution, never about reading".
@@ -372,7 +423,7 @@ D) Lo explico yo con mis palabras
 
 ---
 
-## 🤝 R15 — Resolución de Conflictos Colaborativos (Memoria Compartida)
+## 🤝 R16 — Resolución de Conflictos Colaborativos (Memoria Compartida)
 
 > Cuando dos o más devs trabajan en paralelo y commitean cambios en `.opencode/`,
 > git no puede auto-mergear todo. Esta regla define cómo Skalling maneja esos conflictos.
@@ -433,7 +484,7 @@ D) Lo explico yo con mis palabras
 
 ---
 
-## 🛡️ R16 — Consentimiento del Usuario y Commits Claros
+## 🛡️ R17 — Consentimiento del Usuario y Commits Claros
 
 > **Ningún cambio se commitea al repositorio sin aprobación explícita del usuario.**
 > Los mensajes de commit deben ser claros, descriptivos y en español.
@@ -487,10 +538,11 @@ Los comandos se adaptan al stack detectado en `project.yaml`.
 - Constitución de proyecto: `~/.config/opencode/constitucion.md` (este archivo).
 - Constitution de Skalling: `skalling-dev-team/constitucion/constitucion.md` (source).
 - Bundle de memoria del proyecto: `.opencode/context/`.
+- **Grafo de código**: `code_graph_cache` + `code_imports` en la DB del proyecto. Consultar con `/api/codegraph` del dashboard. Refrescar con `POST /api/codegraph/refresh`. Los agentes DEBEN usarlo para entender la estructura del proyecto antes de proponer cambios.
 - Cambios SDD: `.opencode/changes/`.
 - Skills disponibles: `~/.config/opencode/skills/`.
-- Comandos: `/skalling-init`, `/skalling-status`, `/skalling-refresh`, `/skalling-doctor`, `/skalling-forget`, `/skalling-update`.
-- R16: commits requieren permiso del usuario y mensajes descriptivos en español.
+- Comandos: `/skalling-init`, `/skalling-status`, `/skalling-refresh`, `/skalling-doctor`, `/skalling-forget`, `/skalling-update`, `/skalling-codegraph`.
+- R17: commits requieren permiso del usuario y mensajes descriptivos en español.
 
 ---
 
