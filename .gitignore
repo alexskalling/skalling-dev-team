@@ -28,3 +28,15 @@ coverage/
 
 # TeamDB: la DB cruda no se commitea; git guarda el export .sql (.opencode/context/teamdb/)
 .opencode/context/team.db
+.opencode/context/team.db-shm
+.opencode/context/team.db-wal
+.opencode/context/team.db.pre-migration-*
+.opencode/context/.pre-migration-*
+.opencode/context/.backup-*
+.opencode/context/.backups/
+.opencode/context/.legacy-backup-*
+
+# Cambios efímeros (no son código, son output de ejecución)
+.opencode/changes/**/insert-proposal.sql
+.opencode/changes/**/receipts/
+.opencode/changes/**/logs/

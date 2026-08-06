@@ -63,6 +63,43 @@ assert_dir_exists() {
     fi
 }
 
+assert_no_path() {
+    # assert_no_path "desc" "file" "string" → fail si `string` está en `file`
+    if [[ -f "$2" ]] && grep -q -- "$3" "$2"; then
+        fail "$1 — '$3' todavía aparece en $2"
+    else
+        pass "$1"
+    fi
+}
+
+assert_no_superpowers() {
+    # assert_no_superpowers "desc" "file" → fail si `superpowers:` está en `file`
+    if [[ -f "$2" ]] && grep -q "superpowers:" "$2"; then
+        fail "$1 — referencia 'superpowers:' todavía en $2"
+    else
+        pass "$1"
+    fi
+}
+
+assert_uses_db() {
+    # assert_uses_db "desc" "file" "marker" → fail si `marker` NO está en `file`
+    if [[ -f "$2" ]] && grep -q -- "$3" "$2"; then
+        pass "$1"
+    else
+        fail "$1 — '$3' no encontrado en $2"
+    fi
+}
+
+assert_grep() {
+    # assert_grep "desc" "file" "regex" → fail si el regex NO matchea en `file`
+    # Acepta regex BRE: `\|` para alternación, `\.` para literal dot.
+    if [[ -f "$2" ]] && grep -q -- "$3" "$2"; then
+        pass "$1"
+    else
+        fail "$1 — regex '$3' no matchea en $2"
+    fi
+}
+
 # ──────────────────────────────────────────────────────────────────────────────
 # TEST 1: Estructura del installer existe
 # ──────────────────────────────────────────────────────────────────────────────
@@ -504,6 +541,35 @@ test_tier1_fixes() {
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
+# TEST TIER 1 FIX 1.2: Skills NO escriben a docs/plans/ ni usan superpowers
+# ──────────────────────────────────────────────────────────────────────────────
+
+test_tier1_skills_fixes() {
+    echo ""
+    echo "── Test Tier 1 FIX 1.2: Skills no usan paths legacy ni superpowers ──"
+
+    # brainstorming: NO docs/plans, NO superpowers, SI team.db
+    assert_no_path 'brainstorming no escribe a docs/plans' \
+        "$REPO_ROOT/skills-base/brainstorming/SKILL.md" 'docs/plans'
+
+    assert_no_superpowers 'brainstorming no usa superpowers' \
+        "$REPO_ROOT/skills-base/brainstorming/SKILL.md"
+
+    assert_uses_db 'brainstorming referencia la DB' \
+        "$REPO_ROOT/skills-base/brainstorming/SKILL.md" 'team.db'
+
+    # writing-plans: NO docs/plans, NO superpowers, SI team.db
+    assert_no_path 'writing-plans no escribe a docs/plans' \
+        "$REPO_ROOT/skills-base/writing-plans/SKILL.md" 'docs/plans'
+
+    assert_no_superpowers 'writing-plans no usa superpowers' \
+        "$REPO_ROOT/skills-base/writing-plans/SKILL.md"
+
+    assert_uses_db 'writing-plans referencia la DB' \
+        "$REPO_ROOT/skills-base/writing-plans/SKILL.md" 'team.db'
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
 # TEST TIER 2: Regresión de los fixes de auditoría completos
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -695,6 +761,204 @@ test_tier4_memory_improvements() {
         fi
     fi
 }
+
+# ──────────────────────────────────────────────────────────────────────────────
+# TEST FIX 1.3 (nuevo): agentes DEBEN tener protocolo DB-primera numerado
+# ──────────────────────────────────────────────────────────────────────────────
+
+test_db_first_protocol() {
+    echo ""
+    echo "── Test FIX 1.3: Protocolo DB-primera en agentes ──"
+
+    for agent in Alex Pol Sol Teo; do
+        assert_grep \
+            "${agent} tiene protocolo DB-primera" \
+            "$REPO_ROOT/agents-base/${agent}.md" \
+            "DB-primera\|teamdb-search\.sh\|teamdb-related\.sh"
+    done
+
+    # Sanity: el protocolo debe ser pasos numerados (Paso 1, Paso 2...)
+    for agent in Alex Pol Sol Teo; do
+        assert_grep \
+            "${agent} tiene pasos numerados (Paso 1...)" \
+            "$REPO_ROOT/agents-base/${agent}.md" \
+            "Paso 1:"
+    done
+
+    # Sanity: el protocolo debe instruir CITAR el resultado
+    for agent in Alex Pol Sol Teo; do
+        assert_grep \
+            "${agent} pide CITAR el resultado de la consulta DB" \
+            "$REPO_ROOT/agents-base/${agent}.md" \
+            "CIT"
+    done
+}
+
+test_plan_protocol_no_parallel_files() {
+  # Pol/Sol/Teo NO deben decir "leer .md para implementar"
+  for agent in Pol Sol Teo; do
+    if ! grep -q "INSERT INTO proposals\|UPDATE plans" "agents-base/${agent}.md"; then
+      echo "FAIL: ${agent} no referencia INSERT/UPDATE de proposals o plans"
+      return 1
+    fi
+  done
+
+  # Todos los agentes del ciclo SDD deben mencionar slug o plan_id
+  for agent in Alex Pol Sol Teo; do
+    if ! grep -qE "feature-slug|proposal_id|plan_id" "agents-base/${agent}.md"; then
+      echo "FAIL: ${agent} no referencia slug o ID en handoff"
+      return 1
+    fi
+  done
+
+  # Teo NO debe decir "leer design.md" o "leer proposal.md para implementar"
+  if grep -qE "leer.*\.md.*para implementar|read design\.md|read proposal\.md" "agents-base/Teo.md"; then
+    echo "FAIL: Teo.md sugiere leer .md para implementar (debería ir a la DB)"
+    return 1
+  fi
+
+  # Pol NO debe decir "crear proposal.md"
+  if grep -qE "crear proposal\.md|escribir proposal\.md.*a filesystem|escribir.*\.md.*filesystem" "agents-base/Pol.md"; then
+    echo "FAIL: Pol.md sugiere escribir proposal.md a filesystem"
+    return 1
+  fi
+
+  echo "OK: FIX 1.4 — protocolos anti-duplicación de planes"
+}
+
+test_plan_protocol_no_parallel_files
+
+# ──────────────────────────────────────────────────────────────────────────────
+# BLOQUE 2 — FIX 1.5: Migration 009 plan_contract (v0.7.7)
+# Enforces: plans tiene intent_md/version/created_by/updated_by,
+# tasks tiene purpose, audit triggers sobre plans existen.
+# ──────────────────────────────────────────────────────────────────────────────
+
+test_migration_009_plan_contract() {
+  echo ""
+  echo "── Test FIX 1.5: migration 009 plan_contract (v0.7.7) ──"
+
+  local DB="$REPO_ROOT/.opencode/context/team.db"
+  [ -f "$DB" ] || { echo "FAIL: DB no existe: $DB"; return 1; }
+
+  # 1. Version bumped a 0.7.7
+  local version
+  version=$(sqlite3 "$DB" "SELECT value FROM schema_meta WHERE key='version'" 2>/dev/null)
+  if [ "$version" != "0.7.7" ]; then
+    echo "FAIL: version esperada 0.7.7, obtenida: $version"
+    return 1
+  fi
+  echo "  ✓ version = 0.7.7"
+
+  # 2. plans tiene columnas nuevas: intent_md, version, created_by, updated_by
+  local cols
+  cols=$(sqlite3 "$DB" "PRAGMA table_info(plans)" 2>/dev/null)
+  for col in intent_md version created_by updated_by; do
+    if ! echo "$cols" | grep -qE "^[0-9]+\|${col}\|"; then
+      echo "FAIL: plans no tiene columna $col"
+      return 1
+    fi
+  done
+  echo "  ✓ plans tiene intent_md, version, created_by, updated_by"
+
+  # 3. plans.status CHECK constraint incluye 'in_progress' (NO 'active')
+  local plans_sql
+  plans_sql=$(sqlite3 "$DB" "SELECT sql FROM sqlite_master WHERE type='table' AND name='plans'" 2>/dev/null)
+  if ! echo "$plans_sql" | grep -q "in_progress"; then
+    echo "FAIL: plans.status CHECK no incluye 'in_progress'"
+    return 1
+  fi
+  if echo "$plans_sql" | grep -qE "'active'"; then
+    echo "FAIL: plans.status CHECK todavía incluye 'active' (debe ser 'in_progress')"
+    return 1
+  fi
+  echo "  ✓ plans.status CHECK: in_progress (no active)"
+
+  # 4. tasks tiene columna purpose
+  local tasks_cols
+  tasks_cols=$(sqlite3 "$DB" "PRAGMA table_info(tasks)" 2>/dev/null)
+  if ! echo "$tasks_cols" | grep -qE "^[0-9]+\|purpose\|"; then
+    echo "FAIL: tasks no tiene columna purpose"
+    return 1
+  fi
+  echo "  ✓ tasks tiene columna purpose"
+
+  # 5. audit triggers sobre plans existen (al menos 2)
+  local trigger_count
+  trigger_count=$(sqlite3 "$DB" "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name LIKE 'plans_audit%'" 2>/dev/null)
+  if [ "$trigger_count" -lt 2 ]; then
+    echo "FAIL: triggers plans_audit* instalados: $trigger_count (esperados >=2)"
+    return 1
+  fi
+  echo "  ✓ triggers plans_audit_* instalados: $trigger_count"
+
+  # 6. CHECK constraint rechaza explícitamente 'active' (no debe haberse colado)
+  local bad_insert
+  bad_insert=$(sqlite3 "$DB" "INSERT INTO plans (slug, title, status, design_md, created_at, updated_at) VALUES ('setup-test-active-banned', 'X', 'active', '', datetime('now'), datetime('now'));" 2>&1 || true)
+  if ! echo "$bad_insert" | grep -qiE "CHECK constraint failed"; then
+    echo "FAIL: CHECK constraint aceptó 'active' (debería rechazar): $bad_insert"
+    return 1
+  fi
+  echo "  ✓ CHECK constraint rechaza 'active'"
+
+  # 7. Trigger de INSERT genera audit_log entry
+  local before_audit
+  before_audit=$(sqlite3 "$DB" "SELECT COUNT(*) FROM audit_log WHERE table_name='plans' AND action='insert'" 2>/dev/null)
+  sqlite3 "$DB" "INSERT INTO plans (slug, title, status, design_md, created_by, created_at, updated_at) VALUES ('setup-test-trigger-1', 'X', 'draft', '', 'setup-test', datetime('now'), datetime('now'));" 2>/dev/null
+  local after_audit
+  after_audit=$(sqlite3 "$DB" "SELECT COUNT(*) FROM audit_log WHERE table_name='plans' AND action='insert'" 2>/dev/null)
+  if [ "$after_audit" -le "$before_audit" ]; then
+    echo "FAIL: plans_audit_ai no generó audit_log (before=$before_audit after=$after_audit)"
+    sqlite3 "$DB" "DELETE FROM audit_log WHERE table_name='plans' AND row_id IN (SELECT id FROM plans WHERE slug='setup-test-trigger-1');" 2>/dev/null
+    sqlite3 "$DB" "DELETE FROM plans WHERE slug='setup-test-trigger-1';" 2>/dev/null
+    return 1
+  fi
+  echo "  ✓ plans_audit_ai genera audit_log (insert: $before_audit -> $after_audit)"
+
+  # 8. Trigger de UPDATE genera audit_log entry
+  local before_update
+  before_update=$(sqlite3 "$DB" "SELECT COUNT(*) FROM audit_log WHERE table_name='plans' AND action='update'" 2>/dev/null)
+  sqlite3 "$DB" "UPDATE plans SET status='in_progress', version=2, updated_by='setup-test' WHERE slug='setup-test-trigger-1';" 2>/dev/null
+  local after_update
+  after_update=$(sqlite3 "$DB" "SELECT COUNT(*) FROM audit_log WHERE table_name='plans' AND action='update'" 2>/dev/null)
+  if [ "$after_update" -le "$before_update" ]; then
+    echo "FAIL: plans_audit_au no generó audit_log (before=$before_update after=$after_update)"
+    sqlite3 "$DB" "DELETE FROM audit_log WHERE table_name='plans' AND row_id IN (SELECT id FROM plans WHERE slug='setup-test-trigger-1');" 2>/dev/null
+    sqlite3 "$DB" "DELETE FROM plans WHERE slug='setup-test-trigger-1';" 2>/dev/null
+    return 1
+  fi
+  echo "  ✓ plans_audit_au genera audit_log (update: $before_update -> $after_update)"
+
+  # 9. Cleanup
+  sqlite3 "$DB" "DELETE FROM audit_log WHERE table_name='plans' AND row_id IN (SELECT id FROM plans WHERE slug='setup-test-trigger-1');" 2>/dev/null
+  sqlite3 "$DB" "DELETE FROM plans WHERE slug='setup-test-trigger-1';" 2>/dev/null
+
+  # 10. Archivo de migration existe
+  local mig_file="$REPO_ROOT/sql/migrations/009_plan_contract.sql"
+  if [ ! -f "$mig_file" ]; then
+    echo "FAIL: migration file no existe: $mig_file"
+    return 1
+  fi
+  echo "  ✓ migration file existe: sql/migrations/009_plan_contract.sql"
+
+  # 11. teamdb-amend.sh validate purpose
+  if ! grep -qE "purpose.*obligatorio|requiere.*purpose|--purpose" "$REPO_ROOT/scripts/teamdb-amend.sh"; then
+    echo "FAIL: teamdb-amend.sh no valida purpose"
+    return 1
+  fi
+  echo "  ✓ teamdb-amend.sh valida purpose"
+
+  # 12. teamdb-plan.sh tiene strict-contract option
+  if ! grep -qE "strict-contract|--purpose" "$REPO_ROOT/scripts/teamdb-plan.sh"; then
+    echo "FAIL: teamdb-plan.sh no tiene --strict-contract/--purpose"
+    return 1
+  fi
+  echo "  ✓ teamdb-plan.sh tiene --strict-contract/--purpose"
+
+  echo "OK: FIX 1.5 — migration 009 plan_contract aplicada con contract enforcement"
+}
+
+test_migration_009_plan_contract
 
 # ──────────────────────────────────────────────────────────────────────────────
 # TEST FUNCIONAL: Validar JSON schema real con un handoff
@@ -906,6 +1170,88 @@ test_install_global_teamdb_scripts() {
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
+# BLOQUE 4 — FIX 1.6: Script de migración de planes .md a la DB
+# Verifica que existe el script, es ejecutable, tiene --dry-run funcional,
+# y referencia el source-of-truth DB (no genera planes fantasma).
+# ──────────────────────────────────────────────────────────────────────────────
+
+test_migration_script_exists() {
+    echo ""
+    echo "── Test FIX 1.6: migrate-plans-md-to-db.sh ──"
+
+    local script="$REPO_ROOT/scripts/migrate-plans-md-to-db.sh"
+    if [[ ! -f "$script" ]]; then
+        fail "FIX 1.6: migrate-plans-md-to-db.sh no existe"
+        return
+    fi
+    pass "FIX 1.6: script existe"
+
+    if [[ ! -x "$script" ]]; then
+        fail "FIX 1.6: migrate-plans-md-to-db.sh no es ejecutable"
+    else
+        pass "FIX 1.6: script es ejecutable"
+    fi
+
+    # bash -n syntax check
+    if bash -n "$script" 2>/dev/null; then
+        pass "FIX 1.6: bash -n syntax OK"
+    else
+        fail "FIX 1.6: bash -n syntax error"
+    fi
+
+    # Sincronizado a ~/.config/opencode/scripts/
+    if [[ -x "$HOME/.config/opencode/scripts/migrate-plans-md-to-db.sh" ]]; then
+        pass "FIX 1.6: sincronizado a ~/.config/opencode/scripts/"
+    else
+        log "FIX 1.6: no sincronizado a home (ok si $HOME es CI)"
+    fi
+
+    # Dry-run funciona (no debe fallar ni escribir en DB)
+    local before_count
+    before_count=$(sqlite3 "$REPO_ROOT/.opencode/context/team.db" \
+        "SELECT COUNT(*) FROM proposals WHERE decided_by='legacy-import'" 2>/dev/null || echo "0")
+    if bash "$script" --dry-run "$REPO_ROOT" >/dev/null 2>&1; then
+        local after_count
+        after_count=$(sqlite3 "$REPO_ROOT/.opencode/context/team.db" \
+            "SELECT COUNT(*) FROM proposals WHERE decided_by='legacy-import'" 2>/dev/null || echo "0")
+        if [[ "$after_count" == "$before_count" ]]; then
+            pass "FIX 1.6: --dry-run no muta la DB (count $before_count == $after_count)"
+        else
+            fail "FIX 1.6: --dry-run MUTÓ la DB ($before_count -> $after_count)"
+        fi
+    else
+        log "FIX 1.6: --dry-run no disponible o falló (puede ser esperado si no hay .md)"
+    fi
+
+    # No debe usar superpowers ni paths legacy
+    if grep -q "superpowers:" "$script" 2>/dev/null; then
+        fail "FIX 1.6: script referencia superpowers"
+    fi
+    if grep -q "opencode/plans/" "$script" 2>/dev/null; then
+        fail "FIX 1.6: script usa path legacy opencode/plans/"
+    fi
+    if grep -q "teamdb_project_path" "$script" 2>/dev/null; then
+        pass "FIX 1.6: script usa teamdb_project_path (DB-first)"
+    else
+        fail "FIX 1.6: script NO usa teamdb_project_path"
+    fi
+
+    # Idempotencia: segunda corrida debe skip-ear
+    local before_idem
+    before_idem=$(sqlite3 "$REPO_ROOT/.opencode/context/team.db" \
+        "SELECT COUNT(*) FROM proposals WHERE decided_by='legacy-import'" 2>/dev/null || echo "0")
+    bash "$script" "$REPO_ROOT" >/dev/null 2>&1 || true
+    local after_idem
+    after_idem=$(sqlite3 "$REPO_ROOT/.opencode/context/team.db" \
+        "SELECT COUNT(*) FROM proposals WHERE decided_by='legacy-import'" 2>/dev/null || echo "0")
+    if [[ "$before_idem" == "$after_idem" ]]; then
+        pass "FIX 1.6: idempotente (count estable en re-run: $before_idem)"
+    else
+        fail "FIX 1.6: NO idempotente (count $before_idem -> $after_idem)"
+    fi
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
 # RUN
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -932,10 +1278,13 @@ test_merge_helper_e2e
 test_windows_support
 test_lib_os_detection
 test_tier1_fixes
+test_tier1_skills_fixes
 test_tier2_fixes
 test_tier3_fixes
 test_tier4_memory_improvements
+test_db_first_protocol
 test_handoff_schema_validation
+test_migration_script_exists
 
 echo ""
 echo "═══════════════════════════════════════════════════"
