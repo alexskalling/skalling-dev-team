@@ -118,14 +118,14 @@ conn.row_factory = sqlite3.Row
 
 plan = conn.execute("SELECT id, slug, title FROM plans WHERE slug = ?", (plan_slug,)).fetchone()
 if not plan:
-    print("{}")
+    print(json.dumps({'concepts': [], 'decisions': [], 'preferences': [], 'known_problems': [], 'task': None, 'plan': None}, ensure_ascii=False))
     sys.exit(0)
 task = conn.execute("""
     SELECT id, slug, title, description_md, acceptance_md, status
     FROM tasks WHERE plan_id = ? AND slug = ?
 """, (plan['id'], task_slug)).fetchone()
 if not task:
-    print("{}")
+    print(json.dumps({'concepts': [], 'decisions': [], 'preferences': [], 'known_problems': [], 'task': None, 'plan': {'slug': plan['slug'], 'title': plan['title']}}, ensure_ascii=False))
     sys.exit(0)
 
 # Per-tabla: columnas de texto a buscar, filtro de status, campo body.
