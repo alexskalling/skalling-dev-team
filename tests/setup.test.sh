@@ -794,6 +794,56 @@ test_db_first_protocol() {
     done
 }
 
+# ──────────────────────────────────────────────────────────────────────────────
+# BLOQUE 1 — FIX 1.7: Jes tiene protocolo DB-primera numerado
+# Enforces: Jes.md referencia teamdb-search/teamdb-related explícitamente,
+# tiene REGLA DURA explícita, y al menos un paso numerado (Paso 1:).
+# ──────────────────────────────────────────────────────────────────────────────
+
+test_jes_db_first_protocol() {
+  echo ""
+  echo "── Test FIX 1.7: Jes protocolo DB-primera ──"
+
+  local file="$REPO_ROOT/agents-base/Jes.md"
+
+  if [ ! -f "$file" ]; then
+    echo "FAIL: Jes.md no existe"
+    return 1
+  fi
+
+  # 1. Jes referencia teamdb-search.sh o teamdb-related.sh
+  if ! grep -qE "teamdb-search\.sh|teamdb-related\.sh" "$file"; then
+    echo "FAIL: Jes.md no referencia teamdb-search.sh ni teamdb-related.sh"
+    return 1
+  fi
+  echo "  ✓ Jes referencia teamdb-search.sh / teamdb-related.sh"
+
+  # 2. Jes tiene REGLA DURA explícita
+  if ! grep -q "REGLA DURA" "$file"; then
+    echo "FAIL: Jes.md no tiene REGLA DURA explícita"
+    return 1
+  fi
+  echo "  ✓ Jes tiene REGLA DURA explícita"
+
+  # 3. Jes tiene pasos numerados (Paso 1:)
+  if ! grep -qE "Paso 1:|Paso 2:|Paso 3:" "$file"; then
+    echo "FAIL: Jes.md no tiene pasos numerados"
+    return 1
+  fi
+  echo "  ✓ Jes tiene pasos numerados (Paso 1:, Paso 2:, ...)"
+
+  # 4. Jes menciona CITAR (consistente con otros 4 agentes)
+  if ! grep -qE "CIT" "$file"; then
+    echo "FAIL: Jes.md no instruye CITAR el resultado"
+    return 1
+  fi
+  echo "  ✓ Jes instruye CITAR el resultado de la DB"
+
+  echo "OK: FIX 1.7 — Jes tiene protocolo DB-primera explícito"
+}
+
+test_jes_db_first_protocol
+
 test_plan_protocol_no_parallel_files() {
   # Pol/Sol/Teo NO deben decir "leer .md para implementar"
   for agent in Pol Sol Teo; do
@@ -844,11 +894,11 @@ test_migration_009_plan_contract() {
   # 1. Version bumped a 0.7.7
   local version
   version=$(sqlite3 "$DB" "SELECT value FROM schema_meta WHERE key='version'" 2>/dev/null)
-  if [ "$version" != "0.7.7" ]; then
-    echo "FAIL: version esperada 0.7.7, obtenida: $version"
+  if [ "$version" != "0.7.8" ]; then
+    echo "FAIL: version esperada 0.7.8, obtenida: $version"
     return 1
   fi
-  echo "  ✓ version = 0.7.7"
+  echo "  ✓ version = 0.7.8"
 
   # 2. plans tiene columnas nuevas: intent_md, version, created_by, updated_by
   local cols

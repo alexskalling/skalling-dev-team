@@ -70,17 +70,17 @@ else
   assert_fail "migración 005 idempotente (segunda pasada sin error)"
 fi
 
-# ── C) teamdb-init de proyecto llega a 0.7.6 con skills_registry ──
+# ── C) teamdb-init de proyecto llega a 0.7.8 con skills_registry ──
 PROJ="$TMP/proj"
 mkdir -p "$PROJ"
 bash "$ROOT/scripts/teamdb-init.sh" "$PROJ" >/dev/null 2>&1
 P_DB="$PROJ/.opencode/context/team.db"
 P_VER=$(sqlite3 "$P_DB" "SELECT value FROM schema_meta WHERE key='version'" 2>/dev/null)
 P_SKILLS=$(sqlite3 "$P_DB" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='skills_registry'" 2>/dev/null)
-if [ "$P_VER" = "0.7.6" ] && [ "$P_SKILLS" = "1" ]; then
-  assert_pass "teamdb-init proyecto: 0.7.6 + skills_registry"
+if [ "$P_VER" = "0.7.8" ] && [ "$P_SKILLS" = "1" ]; then
+  assert_pass "teamdb-init proyecto: 0.7.8 + skills_registry"
 else
-  assert_fail "teamdb-init proyecto: 0.7.6 + skills_registry" "ver=$P_VER skills=$P_SKILLS"
+  assert_fail "teamdb-init proyecto: 0.7.8 + skills_registry" "ver=$P_VER skills=$P_SKILLS"
 fi
 
 # ── D) Sync puebla global + proyecto (idempotente) ────────────

@@ -47,9 +47,11 @@ if [ -f "$DB" ]; then
   if cp "$DB" "$BACKUP_FILE" 2>/dev/null; then
     echo "teamdb backup: $BACKUP_FILE"
     # Rotación: mantener últimos 5
-    BACKUP_COUNT=$(ls -1 "$BACKUP_DIR"/team.db.backup-* 2>/dev/null | wc -l | tr -d ' ')
+    BACKUP_COUNT=$(find "$BACKUP_DIR" -maxdepth 1 -name 'team.db.backup-*' -type f 2>/dev/null | wc -l | tr -d ' ')
     if [ "$BACKUP_COUNT" -gt 5 ]; then
-      ls -1t "$BACKUP_DIR"/team.db.backup-* | tail -n +6 | xargs -r rm -f
+      find "$BACKUP_DIR" -maxdepth 1 -name 'team.db.backup-*' -type f -printf '%T@ %p\n' 2>/dev/null \
+        | sort -n | head -n -5 | cut -d' ' -f2- \
+        | while IFS= read -r f; do rm -f -- "$f"; done
     fi
   else
     echo "WARN: backup de team.db falló (¿permisos?)" >&2
@@ -67,7 +69,7 @@ fi
 # Verificar que las migrations dejaron el schema correcto; si no, fallar en vez
 # de seguir con una DB degradada (los errores de migración idempotentes, como el
 # "duplicate column" de 004 sobre DBs nuevas, se toleran arriba).
-EXPECTED_VERSION="0.7.6"
+EXPECTED_VERSION="0.7.8"
 VERSION="$(sqlite3 "$DB" "SELECT value FROM schema_meta WHERE key='version'" 2>/dev/null || true)"
 if [ "$VERSION" != "$EXPECTED_VERSION" ]; then
   echo "ERROR: teamdb schema version=$VERSION, esperado $EXPECTED_VERSION (migrations incompletas)" >&2
