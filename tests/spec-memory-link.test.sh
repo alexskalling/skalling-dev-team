@@ -1094,14 +1094,14 @@ test_identificadores_en_espanol() {
 
 test_version_bump_y_changelog() {
     echo ""
-    echo "── Test 4.4 / 4.5: bump 0.7.4 y entrada CHANGELOG ──"
+    echo "── Test 4.4 / 4.5: bump 0.7.6 y entrada CHANGELOG ──"
 
     local version_actual
     version_actual="$(grep -E '^__version__' "$VERSION_FILE" | sed -E 's/.*"([^"]+)".*/\1/')"
-    if [[ "$version_actual" == "0.7.4" ]]; then
-        pass "VERSION = 0.7.4"
+    if [[ "$version_actual" == "0.7.6" ]]; then
+        pass "VERSION = 0.7.6"
     else
-        fail "VERSION != 0.7.4 (obtenido: $version_actual)"
+        fail "VERSION != 0.7.6 (obtenido: $version_actual)"
     fi
 
     if grep -q 'SKALLING_VERSION="\$(grep' "$DOCTOR"; then

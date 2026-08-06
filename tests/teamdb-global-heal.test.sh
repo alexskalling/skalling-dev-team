@@ -77,10 +77,10 @@ else
 fi
 
 VER=$(sqlite3 "$FAKE_HOME/.config/opencode/team.db" "SELECT value FROM schema_meta WHERE key='version'")
-if [ "$VER" = "0.7.4" ]; then
-  assert_pass "install heals: schema_meta.version al día (0.7.4)"
+if [ "$VER" = "0.7.6" ]; then
+  assert_pass "install heals: schema_meta.version al día (0.7.6)"
 else
-  assert_fail "install heals: schema_meta.version al día (0.7.4)" "ver=$VER"
+  assert_fail "install heals: schema_meta.version al día (0.7.6)" "ver=$VER"
 fi
 
 PREFS=$(sqlite3 "$FAKE_HOME/.config/opencode/team.db" "SELECT COUNT(*) FROM user_preferences WHERE slug='viejas-pref'")
@@ -131,7 +131,7 @@ RC_HEAL2=$?
 VER2=$(sqlite3 "$DB_GLOBAL" "SELECT value FROM schema_meta WHERE key='version'")
 PREFS2=$(sqlite3 "$DB_GLOBAL" "SELECT COUNT(*) FROM user_preferences")
 export HOME="$HOME_BAK"
-if [ "$RC_HEAL2" = "0" ] && [ "$VER2" = "0.7.4" ] && [ "$PREFS2" = "2" ]; then
+if [ "$RC_HEAL2" = "0" ] && [ "$VER2" = "0.7.6" ] && [ "$PREFS2" = "2" ]; then
   assert_pass "heal idempotente (2ª pasada sin cambios)"
 else
   assert_fail "heal idempotente (2ª pasada sin cambios)" "rc=$RC_HEAL2 ver=$VER2 prefs=$PREFS2"
@@ -148,8 +148,8 @@ export HOME="$HOME_BAK"
 HAS_TABLE=$(sqlite3 "$DB_FRESH" "SELECT name FROM sqlite_master WHERE type='table' AND name='audit_log'")
 HAS_COL2=$(sqlite3 "$DB_FRESH" "SELECT 1 FROM pragma_table_info('audit_log') WHERE name='actor_source'")
 VER3=$(sqlite3 "$DB_FRESH" "SELECT value FROM schema_meta WHERE key='version'")
-if [ -n "$HAS_TABLE" ] && [ "$HAS_COL2" = "1" ] && [ "$VER3" = "0.7.4" ]; then
-  assert_pass "DB global nueva usa schema actual (audit_log + actor_source + 0.7.4)"
+if [ -n "$HAS_TABLE" ] && [ "$HAS_COL2" = "1" ] && [ "$VER3" = "0.7.6" ]; then
+  assert_pass "DB global nueva usa schema actual (audit_log + actor_source + 0.7.6)"
 else
   assert_fail "DB global nueva usa schema actual" "table=$HAS_TABLE col=$HAS_COL2 ver=$VER3"
 fi

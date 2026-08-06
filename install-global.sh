@@ -304,6 +304,16 @@ install_templates() {
     fi
 }
 
+install_version_file() {
+    log INFO "Instalando VERSION en $OPENCODE_DIR/VERSION"
+    if [[ -f "$SCRIPT_DIR/VERSION" ]]; then
+        run cp "$SCRIPT_DIR/VERSION" "$OPENCODE_DIR/VERSION"
+        log OK "VERSION instalado"
+    else
+        log WARN "VERSION file no encontrado, skip"
+    fi
+}
+
 install_merge_helper() {
     log INFO "Instalando merge-helper script en $OPENCODE_DIR"
     if [[ -f "$SCRIPT_DIR/scripts/merge-helper.sh" ]]; then
@@ -494,7 +504,9 @@ print_summary() {
      ├── command/         (comandos /skalling-*)
      ├── templates/       (templates OKF y SDD)
      ├── constitucion.md  (reglas universales)
+     ├── VERSION          (versión del bundle)
      ├── web/            (dashboard HTML — abre con /skalling-dashboard)
+     ├── scripts/        (teamdb-*.sh + dashboard-server.py)
      └── skalling-data/   (stack-detectors, skills-by-stack)
 
   🚀 Próximos pasos:
@@ -523,6 +535,7 @@ do_install() {
     install_commands
     install_constitution
     install_templates
+    install_version_file
     install_merge_helper
     install_memory_helpers
     install_gitattributes_template

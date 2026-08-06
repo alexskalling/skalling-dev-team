@@ -148,7 +148,7 @@ echo "================================="
 echo "RESULTADO: $PASS pass, $FAIL fail"
 echo "================================="
 if [ "$FAIL" -eq 0 ]; then
-  echo "✅ TODO OK. Teamdb v0.7.4 funciona end-to-end."
+  echo "✅ TODO OK. Teamdb v0.7.6 funciona end-to-end."
   exit 0
 else
   echo "❌ Hay $FAIL fallos. Revisá."

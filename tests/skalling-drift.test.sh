@@ -1623,10 +1623,10 @@ test_release_y_doctor() {
     echo ""
     echo "── Test 5: versión, documentación e integración doctor ──"
 
-    if grep -q '0.7.4' "$ROOT/VERSION"; then
-        pass "VERSION declara 0.7.4"
+    if grep -q '0.7.6' "$ROOT/VERSION"; then
+        pass "VERSION declara 0.7.6"
     else
-        fail "VERSION no declara 0.7.4"
+        fail "VERSION no declara 0.7.6"
     fi
 
     if grep -q 'SKALLING_VERSION="\$(grep' "$ROOT/setup-team-doctor.sh"; then

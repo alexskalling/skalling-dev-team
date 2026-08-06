@@ -228,7 +228,7 @@ if [ ! -f ".opencode/context/team.db" ]; then
 fi
 
 # Migrar y verificar schema (idempotente y NO destructivo: teamdb-init.sh aplica
-# las migrations 002/003/004/005/006 y valida version 0.7.4. NUNCA borrar la DB.)
+# las migrations 002/003/004/005/006 y valida version 0.7.6. NUNCA borrar la DB.)
 bash "$SK_ROOT/scripts/teamdb-init.sh" .
 
 # Auto-enlazar el grafo de memoria (related por categoría/tag, uses módulo->stack).

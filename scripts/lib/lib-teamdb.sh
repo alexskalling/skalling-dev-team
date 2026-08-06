@@ -100,7 +100,7 @@ teamdb_init_project() {
 # columna; 3) v0.7.3: skills_active como indice (description/load_path); 4) deja
 # schema_meta.version al día (si existe la tabla).
 # En DBs nuevas (recién creadas del schema actual) es un no-op.
-# NOTA: al bumpear versión, actualizar el valor '0.7.4' de abajo.
+# NOTA: al bumpear versión, actualizar el valor '0.7.6' de abajo.
 teamdb_heal_global() {
   teamdb_check_sqlite3 || return 1
   local db; db="$(teamdb_global_path)"
@@ -145,7 +145,7 @@ SQL
       sqlite3 "$db" "ALTER TABLE skills_active ADD COLUMN $col" 2>/dev/null || true
     fi
   done
-  sqlite3 "$db" "UPDATE schema_meta SET value='0.7.4' WHERE key='version'" 2>/dev/null || true
+  sqlite3 "$db" "UPDATE schema_meta SET value='0.7.6' WHERE key='version'" 2>/dev/null || true
   return 0
 }
 
