@@ -45,7 +45,7 @@ fi
 NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 teamdb_exec_write "$DB" "INSERT INTO proposals(slug,title,intent_md,status,agent,created_at,updated_at) VALUES(?,?,?,?,'pol',?,?)" "hist-test" "H" "# I" "approved" "$NOW" "$NOW" >/dev/null
 PID=$(teamdb_exec_value "$DB" "SELECT id FROM proposals WHERE slug=?" "hist-test")
-teamdb_exec_write "$DB" "INSERT INTO plans(slug,title,proposal_id,design_md,status,agent,created_at,updated_at) VALUES(?,?,?,?,'active','sol',?,?)" "hist-test" "H" "$PID" "# D" "$NOW" "$NOW" >/dev/null
+teamdb_exec_write "$DB" "INSERT INTO plans(slug,title,proposal_id,design_md,status,agent,created_at,updated_at) VALUES(?,?,?,?,'in_progress','sol',?,?)" "hist-test" "H" "$PID" "# D" "$NOW" "$NOW" >/dev/null
 PLAN_ID=$(teamdb_exec_value "$DB" "SELECT id FROM plans WHERE slug=?" "hist-test")
 teamdb_exec_write "$DB" "INSERT INTO tasks(plan_id,slug,title,status,priority,order_index,owner,created_at,updated_at) VALUES(?,?,?,'pending',2,1,?,?,?)" "$PLAN_ID" "task-1" "T1" "teo" "$NOW" "$NOW" >/dev/null
 TASK_ID=$(teamdb_exec_value "$DB" "SELECT id FROM tasks WHERE plan_id=? AND slug='task-1'" "$PLAN_ID")

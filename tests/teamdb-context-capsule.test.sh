@@ -30,7 +30,7 @@ NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 teamdb_exec_write "$DB" "INSERT INTO proposals(slug,title,intent_md,status,agent,created_at,updated_at) VALUES(?,?,?,?,'pol',?,?)" \
   "ctx-test" "Ctx" "# I" "approved" "$NOW" "$NOW" >/dev/null
 PID=$(teamdb_exec_value "$DB" "SELECT id FROM proposals WHERE slug=?" "ctx-test")
-teamdb_exec_write "$DB" "INSERT INTO plans(slug,title,proposal_id,design_md,status,agent,created_at,updated_at) VALUES(?,?,?,?,'active','sol',?,?)" \
+teamdb_exec_write "$DB" "INSERT INTO plans(slug,title,proposal_id,design_md,status,agent,created_at,updated_at) VALUES(?,?,?,?,'in_progress','sol',?,?)" \
   "ctx-test" "Ctx" "$PID" "# D" "$NOW" "$NOW" >/dev/null
 PLAN_ID=$(teamdb_exec_value "$DB" "SELECT id FROM plans WHERE slug=?" "ctx-test")
 teamdb_exec_write "$DB" "INSERT INTO tasks(plan_id,slug,title,status,priority,order_index,owner,created_at,updated_at) VALUES(?,?,?,'pending',2,1,?,?,?)" \
@@ -117,20 +117,20 @@ else
   assert_fail "cápsula es JSON válido"
 fi
 
-# 6. task inexistente → capsule vacia (no falla)
+# 6. task inexistente → capsule shape completo con task=null (no falla)
 CAPSULE=$(bash "$ROOT/scripts/teamdb-context.sh" for-task "ctx-test" "no-task" "$TEST_DIR" 2>&1)
-if [ "$CAPSULE" = "{}" ]; then
-  assert_pass "task inexistente → cápsula vacía"
+if echo "$CAPSULE" | python3 -c 'import sys,json; d=json.load(sys.stdin); assert d["task"] is None and d["plan"] is not None and d["concepts"]==[] and d["decisions"]==[]' 2>/dev/null; then
+  assert_pass "task inexistente → capsule shape completo con task=null"
 else
-  assert_fail "task inexistente → cápsula vacía" "capsule=$CAPSULE"
+  assert_fail "task inexistente → capsule shape completo con task=null" "capsule=$CAPSULE"
 fi
 
-# 7. plan inexistente → capsule vacia
+# 7. plan inexistente → capsule shape completo con plan=null
 CAPSULE=$(bash "$ROOT/scripts/teamdb-context.sh" for-task "no-plan" "task-1" "$TEST_DIR" 2>&1)
-if [ "$CAPSULE" = "{}" ]; then
-  assert_pass "plan inexistente → cápsula vacía"
+if echo "$CAPSULE" | python3 -c 'import sys,json; d=json.load(sys.stdin); assert d["plan"] is None and d["task"] is None and d["concepts"]==[] and d["decisions"]==[]' 2>/dev/null; then
+  assert_pass "plan inexistente → capsule shape completo con plan=null"
 else
-  assert_fail "plan inexistente → cápsula vacía" "capsule=$CAPSULE"
+  assert_fail "plan inexistente → capsule shape completo con plan=null" "capsule=$CAPSULE"
 fi
 
 # 8. link con memoria inexistente (no falla, solo warning)

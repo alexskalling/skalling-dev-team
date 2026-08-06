@@ -30,7 +30,7 @@ NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 teamdb_exec_write "$DB" "INSERT INTO proposals(slug,title,intent_md,status,agent,created_at,updated_at) VALUES(?,?,?,?,'pol',?,?)" \
   "exec-test" "Exec test" "# I" "approved" "$NOW" "$NOW" >/dev/null
 PID=$(teamdb_exec_value "$DB" "SELECT id FROM proposals WHERE slug=?" "exec-test")
-teamdb_exec_write "$DB" "INSERT INTO plans(slug,title,proposal_id,design_md,status,agent,created_at,updated_at) VALUES(?,?,?,?,'active','sol',?,?)" \
+teamdb_exec_write "$DB" "INSERT INTO plans(slug,title,proposal_id,design_md,status,agent,created_at,updated_at) VALUES(?,?,?,?,'in_progress','sol',?,?)" \
   "exec-test" "Exec test" "$PID" "# D" "$NOW" "$NOW" >/dev/null
 PLAN_ID=$(teamdb_exec_value "$DB" "SELECT id FROM plans WHERE slug=?" "exec-test")
 teamdb_exec_write "$DB" "INSERT INTO tasks(plan_id,slug,title,status,priority,order_index,owner,created_at,updated_at) VALUES(?,?,?,'pending',2,1,?,?,?)" \

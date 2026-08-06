@@ -28,7 +28,7 @@ setup_plan() {
     "$plan_slug" "Plan" "# I" "approved" "$now" "$now" >/dev/null
   local pid
   pid=$(teamdb_exec_value "$db" "SELECT id FROM proposals WHERE slug=?" "$plan_slug")
-  teamdb_exec_write "$db" "INSERT INTO plans(slug,title,proposal_id,design_md,status,agent,created_at,updated_at) VALUES(?,?,?,?,'active','sol',?,?)" \
+  teamdb_exec_write "$db" "INSERT INTO plans(slug,title,proposal_id,design_md,status,agent,created_at,updated_at) VALUES(?,?,?,?,'in_progress','sol',?,?)" \
     "$plan_slug" "Plan" "$pid" "# D" "$now" "$now" >/dev/null
   local plan_id
   plan_id=$(teamdb_exec_value "$db" "SELECT id FROM plans WHERE slug=?" "$plan_slug")
