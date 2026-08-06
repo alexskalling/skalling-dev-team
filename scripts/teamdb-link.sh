@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 # teamdb-link.sh — Auto-enlazar memoria en grafo de teamdb
 # Reglas:
-#   R1 related  — conceptos que comparten categoría
-#   R2 related  — conceptos/decisiones que comparten tag
-#   R3 uses     — concepto no-stack -> concepto de categoría 'stack'
+#   R1 related      — conceptos que comparten categoría
+#   R2 related      — conceptos/decisiones que comparten tag (same_table: related, cross_table: same_tag)
+#   R3 uses         — concepto no-stack -> concepto de categoría 'stack'
+#   R4 part_of      — WIP hijo (feature/task) -> WIP padre (plan/feature)
+#   R5 references   — decisión -> concept cuando body_md menciona el slug del concept
 # Idempotente (no duplica links). Usa teamdb_write_project (audit + parámetros).
+# Flags:
+#   --dry-run   solo muestra conteos, no escribe nada
+#   --quiet     suprime output decorativo (errores se siguen mostrando)
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -21,9 +26,11 @@ fi
 
 PROJECT="$(pwd)"
 DRY_RUN=0
+QUIET=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY_RUN=1; shift ;;
+    --quiet) QUIET=1; shift ;;
     *) PROJECT="$1"; shift ;;
   esac
 done
@@ -37,6 +44,9 @@ count_type() {
 
 related_before="$(count_type related)"
 uses_before="$(count_type uses)"
+part_of_before="$(count_type part_of)"
+references_before="$(count_type references)"
+same_tag_before="$(count_type same_tag)"
 
 SQL_R1=$(cat <<'SQL'
 INSERT INTO memory_links(from_table, from_id, to_table, to_id, link_type, confidence)
@@ -81,20 +91,55 @@ AND NOT EXISTS (
 SQL
 )
 
+SQL_R4=$(cat <<'SQL'
+INSERT INTO memory_links(from_table, from_id, to_table, to_id, link_type, confidence)
+SELECT 'work_in_progress', child.id, 'work_in_progress', parent.id, 'part_of', 1.0
+FROM work_in_progress child
+JOIN work_in_progress parent ON child.parent_id = parent.id
+WHERE child.type IN ('feature', 'task')
+  AND child.parent_id IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM memory_links ml
+    WHERE ml.from_table='work_in_progress' AND ml.from_id=child.id
+      AND ml.to_table='work_in_progress' AND ml.to_id=parent.id
+      AND ml.link_type='part_of'
+  )
+SQL
+)
+
+SQL_R5=$(cat <<'SQL'
+INSERT INTO memory_links(from_table, from_id, to_table, to_id, link_type, confidence)
+SELECT 'decisions', d.id, 'concepts', c.id, 'references', 0.9
+FROM decisions d, concepts c
+WHERE d.body_md IS NOT NULL
+  AND d.body_md LIKE '%' || c.slug || '%'
+  AND NOT EXISTS (
+    SELECT 1 FROM memory_links ml
+    WHERE ml.from_table='decisions' AND ml.from_id=d.id
+      AND ml.to_table='concepts' AND ml.to_id=c.id
+      AND ml.link_type='references'
+  )
+SQL
+)
+
+out() {
+  [ "$QUIET" = "1" ] || echo "$@"
+}
+
 report() {
   local rule="$1" before="$2" after="$3"
   if [ "$after" -gt "$before" ]; then
-    echo "  $rule: +$((after - before)) links ($before -> $after)"
+    out "  $rule: +$((after - before)) links ($before -> $after)"
   else
-    echo "  $rule: sin cambios ($after)"
+    out "  $rule: sin cambios ($after)"
   fi
 }
 
-echo "🔗 Enlazando memoria en $DB"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+out "🔗 Enlazando memoria en $DB"
+out "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 if [ "$DRY_RUN" = "1" ]; then
-  echo "  (dry-run: no se escribe nada)"
+  out "  (dry-run: no se escribe nada)"
 fi
 
 if [ "$DRY_RUN" = "0" ]; then
@@ -106,11 +151,19 @@ if [ "$DRY_RUN" = "0" ]; then
   uses_before="$(count_type uses)"
   TEAMDB_ACTOR="skalling-link" teamdb_write_project "$DB" "$SQL_R3"
   report "uses (-> stack)" "$uses_before" "$(count_type uses)"
+  part_of_before="$(count_type part_of)"
+  TEAMDB_ACTOR="skalling-link" teamdb_write_project "$DB" "$SQL_R4"
+  report "part_of (WIP -> parent)" "$part_of_before" "$(count_type part_of)"
+  references_before="$(count_type references)"
+  TEAMDB_ACTOR="skalling-link" teamdb_write_project "$DB" "$SQL_R5"
+  report "references (decision -> concept)" "$references_before" "$(count_type references)"
 else
-  echo "  related (categoría): $related_before existentes"
-  echo "  related (tags): $(count_type related) existentes"
-  echo "  uses (-> stack): $uses_before existentes"
+  out "  related (categoría): $related_before existentes"
+  out "  related (tags): $(count_type related) existentes"
+  out "  uses (-> stack): $uses_before existentes"
+  out "  part_of (WIP -> parent): $part_of_before existentes"
+  out "  references (decision -> concept): $references_before existentes"
 fi
 
-echo ""
-echo "Grafo: bash $(dirname "$0")/teamdb-graph.sh \"$PROJECT\" text"
+out ""
+out "Grafo: bash $(dirname "$0")/teamdb-graph.sh \"$PROJECT\" text"

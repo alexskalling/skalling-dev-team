@@ -165,83 +165,31 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 nodes["c" + str(c["id"])] = {"slug": c["slug"], "type": "concept", "category": c.get("category", "")}
             for d in query_db("SELECT id, slug, status FROM decisions"):
                 nodes["d" + str(d["id"])] = {"slug": d["slug"], "type": "decision", "status": d.get("status", "")}
+            for w in query_db("SELECT id, slug, type, status FROM work_in_progress WHERE type IN ('feature','task')"):
+                nodes["w" + w["slug"]] = {"slug": w["slug"], "type": w["type"], "category": "wip", "status": w.get("status", "")}
 
             links = query_db("""
                 SELECT ml.*,
-                       COALESCE(c1.slug,d1.slug) as fs, COALESCE(c2.slug,d2.slug) as ts
+                       COALESCE(c1.slug,d1.slug,w1.slug) as fs, COALESCE(c2.slug,d2.slug,w2.slug) as ts
                 FROM memory_links ml
                 LEFT JOIN concepts c1 ON ml.from_table='concepts' AND c1.id=ml.from_id
                 LEFT JOIN decisions d1 ON ml.from_table='decisions' AND d1.id=ml.from_id
+                LEFT JOIN work_in_progress w1 ON ml.from_table='work_in_progress' AND w1.id=ml.from_id
                 LEFT JOIN concepts c2 ON ml.to_table='concepts' AND c2.id=ml.to_id
                 LEFT JOIN decisions d2 ON ml.to_table='decisions' AND d2.id=ml.to_id
+                LEFT JOIN work_in_progress w2 ON ml.to_table='work_in_progress' AND w2.id=ml.to_id
             """)
             links = [l for l in links if l.get("fs") and l.get("ts")]
             self.send_json({"nodes": nodes, "links": links})
             return
 
         if self.path == "/api/codegraph":
-            PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(DB_PATH)))
-            nodes = {}
-            edges = []
-            exts = {".ts", ".tsx", ".js", ".jsx", ".cts", ".mts"}
-
-            for base in ["app", "lib", "components", "services", "scripts"]:
-                dir_path = os.path.join(PROJECT_ROOT, base)
-                if not os.path.isdir(dir_path):
-                    continue
-                for root, _, files in os.walk(dir_path):
-                    for f in files:
-                        if not any(f.endswith(e) for e in exts):
-                            continue
-                        full = os.path.join(root, f)
-                        rel = os.path.relpath(full, PROJECT_ROOT).replace("\\", "/")
-                        nodes[rel] = {
-                            "path": rel,
-                            "type": "page" if "/app/" in rel else "lib",
-                        }
-
-            for base in ["app", "lib", "components", "services", "scripts"]:
-                dir_path = os.path.join(PROJECT_ROOT, base)
-                if not os.path.isdir(dir_path):
-                    continue
-                for root, _, files in os.walk(dir_path):
-                    for f in files:
-                        if not any(f.endswith(e) for e in exts):
-                            continue
-                        full = os.path.join(root, f)
-                        rel = os.path.relpath(full, PROJECT_ROOT).replace("\\", "/")
-                        try:
-                            with open(full, "r", encoding="utf-8", errors="ignore") as fh:
-                                txt = fh.read()
-                            for m in re.finditer(r'''from\s+['"]([^'"]+)['"]''', txt):
-                                imp = m.group(1)
-                                if imp.startswith("."):
-                                    resolved = os.path.normpath(os.path.join(os.path.dirname(rel), imp))
-                                    resolved = resolved.replace("\\", "/")
-                                    if not any(resolved.endswith(e) for e in exts):
-                                        for ext in [".ts", ".tsx", ".js", ".jsx"]:
-                                            if resolved + ext in nodes:
-                                                resolved += ext
-                                                break
-                                        else:
-                                            resolved += ".ts"
-                                    if resolved in nodes and resolved != rel:
-                                        edges.append({"from": rel, "to": resolved})
-                                elif imp.startswith("@/"):
-                                    resolved = imp[2:]
-                                    if not any(resolved.endswith(e) for e in exts):
-                                        for ext in [".ts", ".tsx", ".js", ".jsx"]:
-                                            if resolved + ext in nodes:
-                                                resolved += ext
-                                                break
-                                        else:
-                                            resolved += ".ts"
-                                    if resolved in nodes:
-                                        edges.append({"from": rel, "to": resolved})
-                        except Exception:
-                            pass
-
-            self.send_json({"nodes": list(nodes.values()), "edges": edges})
+            cached_nodes = query_db("SELECT node_path as path, node_lang as lang, node_type as type FROM code_graph_cache")
+            cached_edges = query_db("SELECT from_path as 'from', to_path as 'to' FROM code_imports")
+            if not cached_nodes:
+                self.send_json({"nodes": [], "edges": [], "cached": False})
+            else:
+                self.send_json({"nodes": cached_nodes, "edges": cached_edges, "cached": True})
             return
 
         if self.path in ("/", "/index.html"):
@@ -261,6 +209,108 @@ class Handler(http.server.BaseHTTPRequestHandler):
         else:
             self.send_response(404)
             self.end_headers()
+
+    def _refresh_codegraph(self):
+        """Refresca el code graph: escanea archivos del proyecto, parsea imports."""
+        import time
+        PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(DB_PATH)))
+
+        EXCLUDE_DIRS = {
+            "node_modules", ".git", ".next", ".nuxt", ".svelte-kit",
+            "dist", "build", "target", "out", "__pycache__", ".pytest_cache",
+            ".venv", "venv", ".env", ".tox", "vendor", "bin", "obj",
+        }
+        LANG_EXTS = {
+            ".ts": "typescript", ".tsx": "typescript", ".js": "javascript", ".jsx": "javascript",
+            ".py": "python", ".rs": "rust", ".go": "go", ".java": "java",
+        }
+        IMPORT_PATTERNS = {
+            "typescript": [r'''from\s+['"]([^'"]+)['"]''', r'''import\s+.*?\s+from\s+['"]([^'"]+)['"]'''],
+            "javascript": [r'''from\s+['"]([^'"]+)['"]''', r'''import\s+.*?\s+from\s+['"]([^'"]+)['"]'''],
+            "python": [r'''^import\s+(\S+)''', r'''^from\s+(\S+)\s+import'''],
+        }
+
+        exts = set(LANG_EXTS.keys())
+        nodes = {}
+        edges = []
+        now = time.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        for root, dirs, files in os.walk(PROJECT_ROOT):
+            dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS and not d.startswith(".")]
+            for f in files:
+                if not any(f.endswith(e) for e in exts):
+                    continue
+                full = os.path.join(root, f)
+                rel = os.path.relpath(full, PROJECT_ROOT).replace("\\", "/")
+                lang = LANG_EXTS.get(os.path.splitext(f)[1], "unknown")
+                nodes[rel] = {"path": rel, "type": "source", "lang": lang}
+
+        for rel in nodes:
+            full = os.path.join(PROJECT_ROOT, rel)
+            lang = nodes[rel].get("lang", "unknown")
+            if lang not in IMPORT_PATTERNS:
+                continue
+            try:
+                txt = open(full, "r", encoding="utf-8", errors="ignore").read()
+                for pattern in IMPORT_PATTERNS[lang]:
+                    for m in re.finditer(pattern, txt, re.MULTILINE):
+                        imp = m.group(1)
+                        if lang in ("typescript", "javascript"):
+                            if imp.startswith("."):
+                                resolved = os.path.normpath(os.path.join(os.path.dirname(rel), imp)).replace("\\", "/")
+                                if not any(resolved.endswith(e) for e in exts):
+                                    for ext in [".ts", ".tsx", ".js", ".jsx"]:
+                                        if resolved + ext in nodes:
+                                            resolved += ext
+                                            break
+                                    else:
+                                        resolved += ".ts"
+                                if resolved in nodes and resolved != rel:
+                                    edges.append((rel, resolved))
+                            elif imp.startswith("@/"):
+                                resolved = imp[2:]
+                                if not any(resolved.endswith(e) for e in exts):
+                                    for ext in [".ts", ".tsx", ".js", ".jsx"]:
+                                        if resolved + ext in nodes:
+                                            resolved += ext
+                                            break
+                                        else:
+                                            resolved += ".ts"
+                                if resolved in nodes:
+                                    edges.append((rel, resolved))
+                        elif lang == "python" and "." in imp:
+                            imp_path = imp.replace(".", "/")
+                            if imp_path + ".py" in nodes:
+                                edges.append((rel, imp_path + ".py"))
+            except Exception:
+                pass
+
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute("DELETE FROM code_imports")
+        conn.execute("DELETE FROM code_graph_cache")
+        for path, n in nodes.items():
+            conn.execute(
+                "INSERT OR REPLACE INTO code_graph_cache (node_path, node_lang, node_type, updated_at) VALUES (?, ?, ?, ?)",
+                (path, n["lang"], n["type"], now)
+            )
+        for frm, to in edges:
+            conn.execute(
+                "INSERT OR IGNORE INTO code_imports (from_path, to_path, updated_at) VALUES (?, ?, ?)",
+                (frm, to, now)
+            )
+        conn.commit()
+        conn.close()
+
+        self.send_json({"nodes": len(nodes), "edges": len(edges), "updated_at": now})
+
+    def do_POST(self):
+        self.touch_timeout()
+        if self.path == "/api/codegraph/refresh":
+            self._refresh_codegraph()
+            return
+
+        self.send_response(404)
+        self.end_headers()
 
     def log_message(self, *args):
         pass

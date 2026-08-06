@@ -39,13 +39,15 @@ link_exists() {
 TEST_DIR="$(mktemp -d)"
 mkdir -p "$TEST_DIR/.opencode/context"
 DB="$TEST_DIR/.opencode/context/team.db"
-# ─── C0: fixture con schema v0.7.4 (migración 006 aplicada por init)
+# ─── C0: fixture con schema actual (última migración aplicada por init)
 SKALLING_ROOT="$ROOT" bash "$ROOT/scripts/teamdb-init.sh" "$TEST_DIR" >/dev/null 2>&1
 FIX_VER=$(sqlite3 "$DB" "SELECT value FROM schema_meta WHERE key='version'")
-if [ -f "$ROOT/sql/migrations/006_link_graph.sql" ] && [ "$FIX_VER" = "0.7.4" ]; then
-  assert_pass "migración 006 presente y fixture en v0.7.4"
+LAST_MIG=$(ls "$ROOT/sql/migrations/"*.sql 2>/dev/null | sort | tail -1 | xargs -I{} basename {} .sql)
+EXPECTED_VER=$(grep -oE "0\.[0-9]+\.[0-9]+" "$ROOT/sql/migrations/$LAST_MIG.sql" | tail -1)
+if [ -f "$ROOT/sql/migrations/006_link_graph.sql" ] && [ "$FIX_VER" = "$EXPECTED_VER" ] && [ "$FIX_VER" != "0.7.6" -o "$FIX_VER" = "0.7.6" ]; then
+  assert_pass "última migración aplicada: $FIX_VER ($LAST_MIG)"
 else
-  assert_fail "migración 006 presente y fixture en v0.7.4" "ver=$FIX_VER"
+  assert_fail "última migración aplicada" "ver=$FIX_VER expected=$EXPECTED_VER last_mig=$LAST_MIG"
 fi
 
 seed() {
@@ -157,7 +159,23 @@ else
   assert_fail "--dry-run no escribe" "rc=$_CAP_RC links=$DRY_LINKS"
 fi
 
-rm -rf "$TEST_DIR" "$EMPTY_DIR" "$DRY_DIR"
+# ─── C10: no-regresión — R4 nunca crea link_type='part_of' entre concepts
+PART_OF_DIR="$(mktemp -d)"
+mkdir -p "$PART_OF_DIR/.opencode/context"
+PART_OF_DB="$PART_OF_DIR/.opencode/context/team.db"
+SKALLING_ROOT="$ROOT" bash "$ROOT/scripts/teamdb-init.sh" "$PART_OF_DIR" >/dev/null 2>&1
+sqlite3 "$PART_OF_DB" "INSERT INTO concepts(slug,title,category,body_md,updated_at) VALUES('test-parent','Test Parent','mod','x',datetime('now')),('test-child','Test Child','mod','y',datetime('now'))"
+bash "$ROOT/scripts/teamdb-link.sh" "$PART_OF_DIR" >/dev/null 2>&1
+TOTAL_PART_OF=$(sqlite3 "$PART_OF_DB" "SELECT COUNT(*) FROM memory_links WHERE link_type='part_of'")
+FWD_LINK=$(sqlite3 "$PART_OF_DB" "SELECT COUNT(*) FROM memory_links ml JOIN concepts a ON ml.from_table='concepts' AND a.id=ml.from_id JOIN concepts b ON ml.to_table='concepts' AND b.id=ml.to_id WHERE a.slug='test-parent' AND b.slug='test-child' AND ml.link_type='part_of'")
+BWD_LINK=$(sqlite3 "$PART_OF_DB" "SELECT COUNT(*) FROM memory_links ml JOIN concepts a ON ml.from_table='concepts' AND a.id=ml.from_id JOIN concepts b ON ml.to_table='concepts' AND b.id=ml.to_id WHERE a.slug='test-child' AND b.slug='test-parent' AND ml.link_type='part_of'")
+if [ "$TOTAL_PART_OF" = "0" ] && [ "$FWD_LINK" = "0" ] && [ "$BWD_LINK" = "0" ]; then
+  assert_pass "R4 no crea part_of entre concepts (test-parent<->test-child, total_part_of=$TOTAL_PART_OF)"
+else
+  assert_fail "R4 no crea part_of entre concepts" "total_part_of=$TOTAL_PART_OF fwd=$FWD_LINK bwd=$BWD_LINK"
+fi
+
+rm -rf "$TEST_DIR" "$EMPTY_DIR" "$DRY_DIR" "$PART_OF_DIR"
 
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
