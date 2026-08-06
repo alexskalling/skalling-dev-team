@@ -16,9 +16,24 @@ else
   exit 1
 fi
 
-PROJECT="${1:-$(pwd)}"
+DRY_RUN=false
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run) DRY_RUN=true; shift ;;
+    *) PROJECT="$1"; shift ;;
+  esac
+done
+PROJECT="${PROJECT:-$(pwd)}"
 teamdb_init_project "$PROJECT"
 local_db="$(teamdb_project_path "$PROJECT")"
+
+_run_sql() {
+  if [ "$DRY_RUN" = true ]; then
+    echo "    [dry-run] sqlite3 $local_db < $1"
+  else
+    sqlite3 "$local_db" < "$1" 2>/dev/null || true
+  fi
+}
 CTX_DIR="$PROJECT/.opencode/context"
 
 sql_escape() {
