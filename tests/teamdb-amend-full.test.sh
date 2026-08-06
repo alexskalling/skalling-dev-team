@@ -42,7 +42,7 @@ teamdb_exec_write "$DB" \
   "auth-jwt" "Auth feature" "# Intent" "approved" "$NOW" "$NOW" >/dev/null
 PID=$(teamdb_exec_query "$DB" "SELECT id AS i FROM proposals WHERE slug = ?" "auth-jwt" | python3 -c "import json,sys; print(json.loads(sys.stdin.read())[0]['i'])")
 teamdb_exec_write "$DB" \
-  "INSERT INTO plans(slug,title,proposal_id,design_md,status,agent,created_at,updated_at) VALUES(?,?,?,?,'active','sol',?,?)" \
+  "INSERT INTO plans(slug,title,proposal_id,design_md,status,agent,created_at,updated_at) VALUES(?,?,?,?,'in_progress','sol',?,?)" \
   "auth-jwt" "Auth feature" "$PID" "# Design" "$NOW" "$NOW" >/dev/null
 PLAN_ID=$(teamdb_exec_query "$DB" "SELECT id AS i FROM plans WHERE slug = ?" "auth-jwt" | python3 -c "import json,sys; print(json.loads(sys.stdin.read())[0]['i'])")
 for i in 1 2 3; do
@@ -63,8 +63,8 @@ else
   assert_fail "setup: task 1 marcada approved" "$BEFORE_OK"
 fi
 
-# 2. --add-task crea nueva task
-run_capture "bash '$ROOT/scripts/teamdb-amend.sh' 'auth-jwt' --add-task='New task added' --by sol '$TEST_DIR'"
+# 2. --add-task crea nueva task (Bloque 2 v0.7.7: requiere --purpose)
+run_capture "bash '$ROOT/scripts/teamdb-amend.sh' 'auth-jwt' --add-task='New task added' --purpose='Coverage for new feature' --by sol '$TEST_DIR'"
 if [ "$CAPTURE_RC" = "0" ]; then
   COUNT_NEW=$(teamdb_exec_query "$DB" "SELECT COUNT(*) AS n FROM tasks WHERE plan_id=(SELECT id FROM plans WHERE slug='auth-jwt') AND title='New task added'")
   if echo "$COUNT_NEW" | grep -q '"n": 1'; then
@@ -209,8 +209,8 @@ else
   assert_fail "audit amend con actor_source='helper' y agent=actor real" "rows malas: $AMEND_N"
 fi
 
-# 17. M3 (Luz): título con pipe no debe romper el parseo de params
-run_capture "bash '$ROOT/scripts/teamdb-amend.sh' 'auth-jwt' --add-task='fix|bug|urgente' --by sol '$TEST_DIR'"
+# 17. M3 (Luz): título con pipe no debe romper el parseo de params (con --purpose por v0.7.7)
+run_capture "bash '$ROOT/scripts/teamdb-amend.sh' 'auth-jwt' --add-task='fix|bug|urgente' --purpose='Fix the urgent pipe bug' --by sol '$TEST_DIR'"
 PIPE_SLUG="fix-bug-urgente"
 FOUND_PIPE=$(teamdb_exec_query "$DB" "SELECT COUNT(*) AS n FROM tasks WHERE plan_id=? AND slug=?" "$PLAN_ID" "$PIPE_SLUG" 2>/dev/null)
 PIPE_N=$(echo "$FOUND_PIPE" | python3 -c "import json,sys; print(json.loads(sys.stdin.read())[0]['n'])" 2>/dev/null || echo 0)
@@ -218,6 +218,23 @@ if [ "$PIPE_N" -ge 1 ]; then
   assert_pass "add-task con pipe en título funciona (M3)"
 else
   assert_fail "add-task con pipe en título funciona (M3)" "out=$CAPTURE_OUT"
+fi
+
+# 18. Bloque 2 v0.7.7: --add-task sin --purpose debe FALLAR
+run_capture "bash '$ROOT/scripts/teamdb-amend.sh' 'auth-jwt' --add-task='No purpose' --by sol '$TEST_DIR'"
+if [ "$CAPTURE_RC" != "0" ] && echo "$CAPTURE_OUT" | grep -qiE "purpose|requiere"; then
+  assert_pass "add-task sin --purpose rechazado (contract v0.7.7)"
+else
+  assert_fail "add-task sin --purpose rechazado" "rc=$CAPTURE_RC out=$CAPTURE_OUT"
+fi
+
+# 19. Bloque 2 v0.7.7: purpose del nuevo task queda persistido
+PURPOSE_CHECK=$(teamdb_exec_query "$DB" "SELECT purpose AS p FROM tasks WHERE plan_id=? AND slug='new-task-added'" "$PLAN_ID" 2>/dev/null)
+PURPOSE_VAL=$(echo "$PURPOSE_CHECK" | python3 -c "import json,sys; print(json.loads(sys.stdin.read())[0].get('p',''))" 2>/dev/null || echo "")
+if [ "$PURPOSE_VAL" = "Coverage for new feature" ]; then
+  assert_pass "purpose se persiste correctamente en tasks"
+else
+  assert_fail "purpose se persiste correctamente en tasks" "got=$PURPOSE_VAL"
 fi
 
 rm -rf "$TEST_DIR" /tmp/amend-tasks.md

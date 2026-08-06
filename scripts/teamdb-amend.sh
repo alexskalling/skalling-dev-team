@@ -18,13 +18,15 @@ usage() {
 Uso: teamdb-amend.sh <plan-slug> [opciones] [project]
 
 Operaciones (excluyentes):
-  --add-task "<title>"           crea una nueva task
+  --add-task "<title>"                       crea una nueva task
   --modify-task=<slug> --new-title="<title>"  modifica título de task
-  --deprecate-task=<slug>        marca task como superseded (soft-delete)
-  --show                         muestra el historial de amendments
+  --deprecate-task=<slug>                    marca task como superseded (soft-delete)
+  --show                                     muestra el historial de amendments
 
 Otros:
-  --by <actor>                   actor (default: TEAMDB_ACTOR o 'sol')
+  --by <actor>                               actor (default: TEAMDB_ACTOR o 'sol')
+  --purpose <text>                           purpose obligatorio al --add-task (v0.7.7 Bloque 2)
+  --acceptance <text>                        acceptance_md opcional al --add-task
 
 El plan no debe tener status 'completed' o 'abandoned' para ser amendable.
 Las tasks en status 'approved', 'resolved', 'in_progress' o 'in_review' son
@@ -45,6 +47,8 @@ TARGET_TASK=""
 ACTOR=""
 PROJECT=""
 SHOW="0"
+PURPOSE=""
+ACCEPTANCE=""
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -55,6 +59,10 @@ while [ "$#" -gt 0 ]; do
     --deprecate-task=*) OP="deprecate"; TARGET_TASK="${1#--deprecate-task=}" ;;
     --by=*) ACTOR="${1#--by=}" ;;
     --by) shift; ACTOR="${1:-}" ;;
+    --purpose=*) PURPOSE="${1#--purpose=}" ;;
+    --purpose) shift; PURPOSE="${1:-}" ;;
+    --acceptance=*) ACCEPTANCE="${1#--acceptance=}" ;;
+    --acceptance) shift; ACCEPTANCE="${1:-}" ;;
     --show) SHOW="1" ;;
     -*) echo "[ERROR] opción desconocida: $1" >&2; exit 2 ;;
     *) PROJECT="$1" ;;
@@ -111,6 +119,11 @@ case "$OP" in
   add)
     TITLE="$NEW_TITLE"
     [ -n "$TITLE" ] || { echo "[ERROR] --add-task requiere título" >&2; exit 2; }
+    # Bloque 2 v0.7.7: contract enforcement — purpose obligatorio al --add-task
+    if [ -z "$PURPOSE" ]; then
+      echo "[ERROR] --add-task requiere --purpose (1-2 frases: por qué existe la task). v0.7.7 Bloque 2." >&2
+      exit 2
+    fi
     NEW_TASK_SLUG="$(printf '%s' "$TITLE" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-//;s/-$//;s/--*/-/g')"
     [ -z "$NEW_TASK_SLUG" ] && NEW_TASK_SLUG="task-$NEW_VERSION"
     EXISTING="$(teamdb_exec_value "$DB" "SELECT id FROM tasks WHERE plan_id = ? AND slug = ?" "$PLAN_ID" "$NEW_TASK_SLUG")"
@@ -118,11 +131,11 @@ case "$OP" in
       NEW_TASK_SLUG="${NEW_TASK_SLUG}-${NEW_VERSION}"
     fi
     NEXT_ORDER="$(teamdb_exec_value "$DB" "SELECT COALESCE(MAX(order_index)+1, 1) FROM tasks WHERE plan_id = ?" "$PLAN_ID")"
-    TASK_SQL="INSERT INTO tasks(plan_id,slug,title,status,priority,order_index,owner,created_at,updated_at) VALUES(?,?,?,'pending',2,?,?,?,?)"
-    TASK_PARAMS_JSON="$(python3 -c "import json,sys; print(json.dumps(list(sys.argv[1:])))" "$PLAN_ID" "$NEW_TASK_SLUG" "$TITLE" "$NEXT_ORDER" "$ACTOR" "$NOW" "$NOW")"
+    TASK_SQL="INSERT INTO tasks(plan_id,slug,title,purpose,acceptance_md,status,priority,order_index,owner,created_at,updated_at) VALUES(?,?,?,?,?,'pending',2,?,?,?,?)"
+    TASK_PARAMS_JSON="$(python3 -c "import json,sys; print(json.dumps(list(sys.argv[1:])))" "$PLAN_ID" "$NEW_TASK_SLUG" "$TITLE" "$PURPOSE" "$ACCEPTANCE" "$NEXT_ORDER" "$ACTOR" "$NOW" "$NOW")"
     TARGET_TASK="$NEW_TASK_SLUG"
     HIST_OP="amended"
-    DIFF="add task: $NEW_TASK_SLUG"
+    DIFF="add task: $NEW_TASK_SLUG (purpose: ${PURPOSE:0:60})"
     ;;
   modify)
     [ -n "$TARGET_TASK" ] || { echo "[ERROR] --modify-task requiere slug" >&2; exit 2; }
@@ -163,8 +176,9 @@ esac
 # Atomicidad (Issue 7): task + plan_history + plans.updated_at en una sola transaccion.
 HIST_SQL="INSERT INTO plan_history(plan_id,version,changed_by,changed_at,operation,diff_md,snapshot_before) VALUES(?,?,?,?,?,?,?)"
 HIST_PARAMS_JSON="$(python3 -c "import json,sys; print(json.dumps(list(sys.argv[1:])))" "$PLAN_ID" "$NEW_VERSION" "$ACTOR" "$NOW" "$HIST_OP" "$DIFF" "$SNAPSHOT")"
-PLANS_SQL="UPDATE plans SET updated_at = ? WHERE id = ?"
-PLANS_PARAMS_JSON="$(python3 -c "import json,sys; print(json.dumps(list(sys.argv[1:])))" "$NOW" "$PLAN_ID")"
+# Bloque 2 v0.7.7: bump version y updated_by en plans (version se mantiene sincronizado con plan_history)
+PLANS_SQL="UPDATE plans SET updated_at = ?, updated_by = ?, version = ? WHERE id = ?"
+PLANS_PARAMS_JSON="$(python3 -c "import json,sys; print(json.dumps(list(sys.argv[1:])))" "$NOW" "$ACTOR" "$NEW_VERSION" "$PLAN_ID")"
 
 python3 - "$DB" "$TASK_SQL" "$TASK_PARAMS_JSON" "$HIST_SQL" "$HIST_PARAMS_JSON" "$PLANS_SQL" "$PLANS_PARAMS_JSON" "$ACTOR" <<'PYEOF'
 import sqlite3, sys, json
