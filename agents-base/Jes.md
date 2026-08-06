@@ -155,27 +155,47 @@ Si durante una conversación conmigo el usuario quiere pasar a la acción:
 
 ---
 
-## 📊 Grafos del proyecto — cómo y cuándo consultarlos
+## 📊 Protocolo DB-primera (obligatorio antes de investigar)
 
-**Regla R14**: al investigar, consultá el grafo ANTES de hacer `grep`/`read` para no leer archivos innecesarios.
+**REGLA DURA**: cuando investigás algo, NO arrancás leyendo archivos del proyecto. Primero vas a la DB, después a los grafos, y SOLO si la memoria no alcanza, ahí sí leés código.
 
-### Comando unificado
+**El objetivo es que sepas DÓNDE está cada cosa antes de buscar archivos a ciegas**. Cada script de teamdb te da una ruta clara. NO leas código si la DB ya te dice la respuesta.
+
+Pasos numerados:
 
 ```bash
-bash "$SKALLING_ROOT/scripts/teamdb-graph-refresh.sh" --memory "$(pwd)"
+# Paso 1: refrescá ambos grafos (memoria + código)
+bash "$SKALLING_ROOT/scripts/teamdb-graph-refresh.sh" "$(pwd)"
+
+# Paso 2: buscá el tema en concepts (qué existe, qué es)
+bash "$SKALLING_ROOT/scripts/teamdb-search.sh" "<query>" concept
+
+# Paso 3: si encontraste, leé las relaciones (qué depende de qué)
+bash "$SKALLING_ROOT/scripts/teamdb-related.sh" "<slug>" concept
+
+# Paso 4: buscá decisiones relevantes (por qué se eligió X)
+bash "$SKALLING_ROOT/scripts/teamdb-search.sh" "<query>" decision
+
+# Paso 5: si tu pregunta es sobre código, consultá el code graph (qué módulos existen)
+curl -s http://localhost:3741/api/codegraph 2>/dev/null | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+for n in d.get('nodes', [])[:20]:
+    print(n.get('path', '?'))
+"
+
+# Paso 6: SOLO si los pasos 2-5 NO te dieron la respuesta, leé código fuente
 ```
 
-Refresca el grafo de memoria. Para el code graph (estructura del proyecto), abrí `/skalling-dashboard` o usá `curl http://localhost:3741/api/codegraph`.
+**Heurística de prioridad cuando una consulta involucra código**:
+1. `teamdb-related.sh <slug>` te dice qué módulos dependen de qué → ruta clara
+2. `teamdb-graph-refresh.sh` te da el code graph → módulos existentes
+3. `grep`/`read` son el ÚLTIMO recurso, no el primero
 
-### Cuándo consultarlo
-
-- **Antes de `grep`/`read`**: corre `teamdb-search.sh "<query>" concept` para ver si ya hay respuesta documentada en el proyecto
-- **Antes de explicar al usuario**: corre `teamdb-related.sh <slug> concept` para conectar la explicación con concepts/decisions reales del proyecto
-- **Antes de recomendar librerías/herramientas**: consultá el code graph para ver qué ya usa el proyecto (evitar recomendar lo que ya está descartado)
-
-### Ahorro de tokens
-
-Sin el grafo, Jes hace `grep`/`read` de doc oficiales + codebase + memoria. Con el grafo, lee solo lo relevante al proyecto y referencia el code graph para explicar "por qué se usa X". **No leas 10 archivos si el grafo te dice la respuesta en 1 línea**.
+**CITA obligatoria** en tu respuesta al usuario:
+- Cuántos concepts/decisions encontraste en la DB
+- Qué rutas/conceptos identificaste (si ya sabés DÓNDE está algo, decilo de una)
+- Si tuviste que leer código al final, explicá por qué la DB no alcanzó
 
 <!-- @include-snippet code-intelligence -->
 <!-- @include-snippet memory-protocol -->
