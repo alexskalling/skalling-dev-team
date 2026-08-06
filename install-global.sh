@@ -462,9 +462,18 @@ install_teamdb() {
             # Upgrade aditivo idempotente (H2): crea audit_log si falta y
             # añade actor_source si falta. No toca datos existentes.
             if teamdb_heal_global; then
-                log OK "teamdb global: audit_log/actor_source asegurados"
+                # Validar post-heal: que la DB realmente quedó al día (rechaza
+                # DBs donde heal pasó pero schema sigue roto).
+                DB_GLOBAL_POST="$HOME/.config/opencode/team.db"
+                VER_GLOBAL="$(sqlite3 "$DB_GLOBAL_POST" "SELECT value FROM schema_meta WHERE key='version'" 2>/dev/null || echo "")"
+                HAS_AUDIT_GLOBAL="$(sqlite3 "$DB_GLOBAL_POST" "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='audit_log'" 2>/dev/null || echo 0)"
+                if [ "$VER_GLOBAL" = "0.7.8" ] && [ "${HAS_AUDIT_GLOBAL:-0}" -gt 0 ]; then
+                    log OK "teamdb global: $VER_GLOBAL con audit_log/actor_source"
+                else
+                    log WARN "teamdb global: heal reportó éxito pero schema inconsistente (version=$VER_GLOBAL audit_log=$HAS_AUDIT_GLOBAL); requiere intervención manual"
+                fi
             else
-                log WARN "teamdb global: upgrade aditivo no aplicado"
+                log WARN "teamdb global: upgrade aditivo no aplicado; schema posiblemente desactualizado"
             fi
         fi
     else
