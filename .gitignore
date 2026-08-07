@@ -40,3 +40,5 @@ coverage/
 .opencode/changes/**/insert-proposal.sql
 .opencode/changes/**/receipts/
 .opencode/changes/**/logs/
+.atl/
+.opencode/context/.pre-preference-edit-*.db
