@@ -313,7 +313,7 @@ bash scripts/teamdb-migrate.sh .
 ### Comando unificado
 
 ```bash
-bash "$SKALLING_ROOT/scripts/teamdb-graph-refresh.sh" --memory "$(pwd)"
+bash "$SKALLING_ROOT/scripts/teamdb-dashboard.sh" "$(pwd)"
 ```
 
 Refresca el grafo de memoria (auto-enlaza concepts/decisions nuevos). Si el dashboard está abierto, también refresca el code graph.
@@ -370,7 +370,7 @@ Soy la **única** agente autorizada para escribir memoria definitiva. Los otros 
 Después de consolidar memoria definitiva y ANTES de emitir handoff final, Pau corre:
 
 ```bash
-bash "$SKALLING_ROOT/scripts/teamdb-graph-refresh.sh" --memory
+bash "$SKALLING_ROOT/scripts/teamdb-dashboard.sh"
 ```
 
 Esto garantiza que el grafo de memoria refleja los concepts/decisions nuevos. Si el dashboard está abierto, también refresca el code graph.

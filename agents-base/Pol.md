@@ -220,7 +220,7 @@ teamdb_query_project "SELECT slug, snippet(concepts_fts, 1, '**', '**', '...', 1
 
 ```bash
 # Paso 1: refrescá el grafo de memoria (idempotente)
-bash "$SKALLING_ROOT/scripts/teamdb-graph-refresh.sh" --memory "$(pwd)"
+bash "$SKALLING_ROOT/scripts/teamdb-dashboard.sh" "$(pwd)"
 
 # Paso 2: buscá si ya existe un proposal sobre este topic (NO duplicar)
 bash "$SKALLING_ROOT/scripts/teamdb-search.sh" "<topic-o-slug>" decision

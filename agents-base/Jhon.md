@@ -199,7 +199,7 @@ teamdb_query_project "INSERT INTO audit_log (ts, agent, action, table_name, row_
 ### Comando unificado
 
 ```bash
-bash "$SKALLING_ROOT/scripts/teamdb-graph-refresh.sh" --memory "$(pwd)"
+bash "$SKALLING_ROOT/scripts/teamdb-dashboard.sh" "$(pwd)"
 ```
 
 Refresca el grafo de memoria. Para el code graph (qué archivos toca cada módulo), abrí `/skalling-dashboard` o usá `curl http://localhost:3741/api/codegraph`.

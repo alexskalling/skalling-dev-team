@@ -448,7 +448,7 @@ Si el usuario pide algo que **viola la constitución o las reglas del equipo**, 
 
 ```bash
 # Paso 1: refrescá memoria antes de clasificar intención
-bash "$SKALLING_ROOT/scripts/teamdb-graph-refresh.sh" --memory "$(pwd)"
+bash "$SKALLING_ROOT/scripts/teamdb-dashboard.sh" "$(pwd)"
 
 # Paso 2: buscá si ya hay proposal sobre esto
 bash "$SKALLING_ROOT/scripts/teamdb-search.sh" "<query-del-usuario>" concept
