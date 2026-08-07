@@ -28,7 +28,7 @@ VERSION="$(extract_version "$ROOT/VERSION")"
 [ -n "$VERSION" ] || { echo "VERSION no extraíble"; exit 1; }
 echo "VERSION declarada: $VERSION"
 
-assert "VERSION formato semver" "[ \"$VERSION\" = '0.7.6' ]"
+assert "VERSION formato semver" "grep -qE '^[0-9]+\\.[0-9]+\\.[0-9]+$' <<< '$VERSION'"
 
 PROJ_SCHEMA="$ROOT/sql/project-schema.sql"
 GLOB_SCHEMA="$ROOT/sql/global-schema.sql"

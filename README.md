@@ -347,8 +347,35 @@ bash scripts/teamdb-execute-plan.sh auth-jwt /path/to/project
 
 ### Hooks git
 
-- `pre-commit`: exporta DB → `.sql` antes de commitear
+- `pre-commit`: exporta DB → `.sql` antes de commitear y valida que el árbol staged coincida con el último receipt sellado (tree_hash, v0.8.3+)
 - `post-merge`: importa `.sql` → DB después de hacer pull
+
+### Review con lenses (v0.8.3+)
+
+`scripts/skalling-review.sh` reemplaza la revisión visual ("Luz mira a ojo") por un análisis estructurado sobre el diff, con 4 lentes adaptados al stack bash/sqlite:
+
+| Lens | Qué busca |
+|---|---|
+| `risk` | `eval` sin comillas, `rm -rf` sin guarda de ruta, `curl/wget -k`, `http://`, secretos hardcodeados, `chmod 777`, SQL injection en queries `sqlite3` |
+| `resilience` | scripts sin `set -euo pipefail`, `mktemp -d` sin trap de cleanup, locks sin timeout |
+| `readability` | funciones > 50 líneas, variables genéricas, TODO/FIXME/HACK, líneas > 120 chars, archivos > 400 líneas |
+| `reliability` | scripts sin test que los cubra, tests sin `assert_`/PASS counter |
+
+```bash
+# Review completa
+bash scripts/skalling-review.sh
+
+# Un solo lente
+bash scripts/skalling-review.sh --lens risk
+
+# Otro directorio / rango de diff
+bash scripts/skalling-review.sh --cwd /path/to/project --diff HEAD~1
+
+# Kill switch (default: ON)
+SKALLING_REVIEW_MODE=off bash scripts/skalling-review.sh
+```
+
+Cada finding se emite con severidad `BLOCKER` (falla el review), `WARNING` o `INFO`. Al final se sella un **receipt inmutable** (`scripts/teamdb-seal-receipt.sh`) con `tree_hash`: el hash SHA-256 (16 chars) de `git diff HEAD`. El `pre-commit` compara ese hash con el árbol staged: si alguien tocó una línea después de la revisión, el commit se bloquea hasta re-sellar o revertir.
 
 ### Tests
 

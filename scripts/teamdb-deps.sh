@@ -7,15 +7,6 @@ set -euo pipefail
 PROJECT="${PROJECT:-$(pwd)}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Lock file para evitar race conditions entre agentes
-LOCK_DIR="$PROJECT/.opencode/context"
-LOCK_FILE="$LOCK_DIR/team.lock"
-mkdir -p "$LOCK_DIR" 2>/dev/null || true
-if command -v flock >/dev/null 2>&1; then
-  exec 9>"$LOCK_FILE" 2>/dev/null || true
-  flock -w 10 9 || { echo "ERROR: no se pudo obtener lock en $LOCK_FILE" >&2; exit 1; }
-fi
-trap 'exec 9>&- 2>/dev/null' EXIT
-
 # shellcheck disable=SC1091
 if [ -f "$SCRIPT_DIR/lib-teamdb.sh" ]; then
   . "$SCRIPT_DIR/lib-teamdb.sh"
@@ -33,6 +24,13 @@ case "$OP" in
   add)
     PLAN_SLUG="$1"; TASK_SLUG="$2"; DEPENDS_ON="$3"; PROJECT="${4:-$(pwd)}"
     [ -d "$PROJECT" ] || PROJECT="$(pwd)"
+    # Lock cross-platform (mkdir-based, sin flock). v0.8.3
+    LOCK_DIR="$PROJECT/.opencode/context/.locks/team"
+    mkdir -p "$(dirname "$LOCK_DIR")" 2>/dev/null || true
+    if ! teamdb_lock "$LOCK_DIR" 10; then
+      exit 1
+    fi
+    trap 'teamdb_unlock "$LOCK_DIR"' EXIT
     DB="$(teamdb_project_path "$PROJECT")"
     [ -f "$DB" ] || { echo "[ERROR] DB no existe" >&2; exit 1; }
 
@@ -91,6 +89,13 @@ PYEOF
   remove)
     PLAN_SLUG="$1"; TASK_SLUG="$2"; DEPENDS_ON="$3"; PROJECT="${4:-$(pwd)}"
     [ -d "$PROJECT" ] || PROJECT="$(pwd)"
+    # Lock cross-platform (mkdir-based, sin flock). v0.8.3
+    LOCK_DIR="$PROJECT/.opencode/context/.locks/team"
+    mkdir -p "$(dirname "$LOCK_DIR")" 2>/dev/null || true
+    if ! teamdb_lock "$LOCK_DIR" 10; then
+      exit 1
+    fi
+    trap 'teamdb_unlock "$LOCK_DIR"' EXIT
     DB="$(teamdb_project_path "$PROJECT")"
     [ -f "$DB" ] || { echo "[ERROR] DB no existe" >&2; exit 1; }
     PLAN_ID="$(teamdb_exec_value "$DB" "SELECT id FROM plans WHERE slug = ?" "$PLAN_SLUG")"
@@ -105,6 +110,13 @@ PYEOF
   runnable)
     PLAN_SLUG="$1"; PROJECT="${2:-$(pwd)}"
     [ -d "$PROJECT" ] || PROJECT="$(pwd)"
+    # Lock cross-platform (mkdir-based, sin flock). v0.8.3
+    LOCK_DIR="$PROJECT/.opencode/context/.locks/team"
+    mkdir -p "$(dirname "$LOCK_DIR")" 2>/dev/null || true
+    if ! teamdb_lock "$LOCK_DIR" 10; then
+      exit 1
+    fi
+    trap 'teamdb_unlock "$LOCK_DIR"' EXIT
     DB="$(teamdb_project_path "$PROJECT")"
     [ -f "$DB" ] || { echo "[ERROR] DB no existe" >&2; exit 1; }
     PLAN_ID="$(teamdb_exec_value "$DB" "SELECT id FROM plans WHERE slug = ?" "$PLAN_SLUG")"
@@ -125,6 +137,13 @@ PYEOF
   show)
     PLAN_SLUG="$1"; PROJECT="${2:-$(pwd)}"
     [ -d "$PROJECT" ] || PROJECT="$(pwd)"
+    # Lock cross-platform (mkdir-based, sin flock). v0.8.3
+    LOCK_DIR="$PROJECT/.opencode/context/.locks/team"
+    mkdir -p "$(dirname "$LOCK_DIR")" 2>/dev/null || true
+    if ! teamdb_lock "$LOCK_DIR" 10; then
+      exit 1
+    fi
+    trap 'teamdb_unlock "$LOCK_DIR"' EXIT
     DB="$(teamdb_project_path "$PROJECT")"
     [ -f "$DB" ] || { echo "[ERROR] DB no existe" >&2; exit 1; }
     PLAN_ID="$(teamdb_exec_value "$DB" "SELECT id FROM plans WHERE slug = ?" "$PLAN_SLUG")"
@@ -142,6 +161,13 @@ PYEOF
   list)
     PLAN_SLUG="$1"; PROJECT="${2:-$(pwd)}"
     [ -d "$PROJECT" ] || PROJECT="$(pwd)"
+    # Lock cross-platform (mkdir-based, sin flock). v0.8.3
+    LOCK_DIR="$PROJECT/.opencode/context/.locks/team"
+    mkdir -p "$(dirname "$LOCK_DIR")" 2>/dev/null || true
+    if ! teamdb_lock "$LOCK_DIR" 10; then
+      exit 1
+    fi
+    trap 'teamdb_unlock "$LOCK_DIR"' EXIT
     DB="$(teamdb_project_path "$PROJECT")"
     [ -f "$DB" ] || { echo "[ERROR] DB no existe" >&2; exit 1; }
     PLAN_ID="$(teamdb_exec_value "$DB" "SELECT id FROM plans WHERE slug = ?" "$PLAN_SLUG")"

@@ -100,7 +100,7 @@ teamdb_init_project() {
 # columna; 3) v0.7.3: skills_active como indice (description/load_path); 4) deja
 # schema_meta.version al día (si existe la tabla).
 # En DBs nuevas (recién creadas del schema actual) es un no-op.
-# NOTA: al bumpear versión, actualizar el valor '0.7.8' de abajo.
+# NOTA: al bumpear versión, actualizar el valor '0.8.3' de abajo.
 teamdb_heal_global() {
   teamdb_check_sqlite3 || return 1
   local db; db="$(teamdb_global_path)"
@@ -146,17 +146,17 @@ SQL
     fi
   done
   # Validar que las correcciones aditivas quedaron aplicadas antes de bumpear
-  # la versión. Sin esto, una DB con schema incompleto reportaba 0.7.8 mintiendo.
+  # la versión. Sin esto, una DB con schema incompleto reportaba 0.8.3 mintiendo.
   local has_audit has_actor has_skills has_schema_meta
   has_audit="$(sqlite3 "$db" "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='audit_log'" 2>/dev/null || true)"
   has_actor="$(sqlite3 "$db" "SELECT count(*) FROM pragma_table_info('audit_log') WHERE name='actor_source'" 2>/dev/null || true)"
   has_skills="$(sqlite3 "$db" "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='skills_active'" 2>/dev/null || true)"
   has_schema_meta="$(sqlite3 "$db" "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='schema_meta'" 2>/dev/null || true)"
   if [ "${has_audit:-0}" = "0" ] || [ "${has_actor:-0}" = "0" ] || [ "${has_skills:-0}" = "0" ] || [ "${has_schema_meta:-0}" = "0" ]; then
-    echo "[ERROR] teamdb heal: schema incompleto (audit_log=$has_audit actor_source=$has_actor skills_active=$has_skills schema_meta=$has_schema_meta); no se bumpeó versión" >&2
+    echo "[ERROR] teamdb heal: schema incompleto (audit_log=$has_audit actor_source=$has_actor skills_active=$has_skills schema_meta=$has_schema_meta); no se bumpeó version" >&2
     return 1
   fi
-  if ! sqlite3 "$db" "UPDATE schema_meta SET value='0.7.8' WHERE key='version'" 2>/dev/null; then
+  if ! sqlite3 "$db" "UPDATE schema_meta SET value='0.8.3' WHERE key='version'" 2>/dev/null; then
     echo "[ERROR] No se pudo actualizar schema_meta.version en $db" >&2
     return 1
   fi
@@ -368,4 +368,36 @@ _has_control_char() {
     i=$((i + 1))
   done
   return 1
+}
+
+# teamdb_lock / teamdb_unlock: lock cross-platform basado en mkdir (v0.8.3).
+# Compatible con macOS (sin flock nativo), Linux y BSD. Sin dependencias externas.
+# Usa atomicidad de mkdir(2): o crea el directorio o falla si ya existe.
+# Uso:
+#   LOCK_DIR="$PROJECT/.opencode/context/.locks/team"
+#   mkdir -p "$(dirname "$LOCK_DIR")" 2>/dev/null || true
+#   teamdb_lock "$LOCK_DIR" 10 || exit 1
+#   trap 'teamdb_unlock "$LOCK_DIR"' EXIT
+teamdb_lock() {
+  local lock_dir="$1"
+  local max_wait="${2:-10}"
+  local waited=0
+
+  while ! mkdir "$lock_dir" 2>/dev/null; do
+    if [ "$waited" -ge "$max_wait" ]; then
+      echo "ERROR: no se pudo obtener lock en $lock_dir (esperado ${max_wait}s)" >&2
+      return 1
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+
+  echo $$ > "$lock_dir/pid"
+  return 0
+}
+
+teamdb_unlock() {
+  local lock_dir="$1"
+  rm -f "$lock_dir/pid" 2>/dev/null
+  rmdir "$lock_dir" 2>/dev/null
 }

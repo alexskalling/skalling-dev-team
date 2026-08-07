@@ -8,7 +8,7 @@ CACHE_FILE="$PROJECT/.opencode/context/.context-cache.json"
 mkdir -p "$(dirname "$CACHE_FILE")"
 
 if [ -f "$CACHE_FILE" ]; then
-  local age=$(($(date +%s) - $(stat -f%m "$CACHE_FILE" 2>/dev/null || stat -c%Y "$CACHE_FILE" 2>/dev/null)))
+  age=$(($(date +%s) - $(stat -f%m "$CACHE_FILE" 2>/dev/null || stat -c%Y "$CACHE_FILE" 2>/dev/null)))
   if [ "$age" -lt "$TTL_SECONDS" ]; then
     cat "$CACHE_FILE"
     exit 0

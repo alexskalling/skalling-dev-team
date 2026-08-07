@@ -175,7 +175,7 @@ check_global_install() {
 
     # Skills core
     if [[ -d "$OPENCODE_DIR/skills" ]]; then
-        local count; count="$(ls -1d "$OPENCODE_DIR/skills"/*/ 2>/dev/null | wc -l | tr -d ' ')"
+        local count; count="$(find "$OPENCODE_DIR/skills" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')"
         ok "$count skills core instaladas"
     else
         warn "Falta directorio skills (no es crítico)"
@@ -183,7 +183,7 @@ check_global_install() {
 
     # Comandos
     if [[ -d "$OPENCODE_DIR/command" ]]; then
-        local count; count="$(ls -1 "$OPENCODE_DIR/command"/skalling-*.md 2>/dev/null | wc -l | tr -d ' ')"
+        local count; count="$(find "$OPENCODE_DIR/command" -maxdepth 1 -name 'skalling-*.md' -type f 2>/dev/null | wc -l | tr -d ' ')"
         ok "$count comandos /skalling-* instalados"
     else
         warn "Falta directorio command"
@@ -386,7 +386,7 @@ check_inteligencia_codigo() {
 }
 
 check_receipts() {
-  local db="$HOME/.config/opencode/team.db"
+  local db="${OPENCODE_DIR:-$HOME/.config/opencode}/team.db"
   if [ -f "$db" ]; then
     local count=$(sqlite3 "$db" "SELECT COUNT(*) FROM receipts WHERE ts > datetime('now', '-1 day')" 2>/dev/null || echo 0)
     if [ "$count" -gt 0 ]; then
@@ -394,11 +394,18 @@ check_receipts() {
     else
       info "sin receipts recientes (opcional, OK si no hay tasks activas)"
     fi
+    # v0.8.3: receipts sellados con tree_hash (revisión congelada)
+    local sealed=$(sqlite3 "$db" "SELECT COUNT(*) FROM receipts WHERE tree_hash IS NOT NULL AND tree_hash != ''" 2>/dev/null || echo 0)
+    if [ "$sealed" -gt 0 ]; then
+      ok "receipts con tree_hash: $sealed"
+    else
+      info "sin receipts sellados con tree_hash (corré skalling-review.sh)"
+    fi
   fi
 }
 
 check_routing() {
-  local db="$HOME/.config/opencode/team.db"
+  local db="${OPENCODE_DIR:-$HOME/.config/opencode}/team.db"
   if [ -f "$db" ]; then
     local count=$(sqlite3 "$db" "SELECT COUNT(*) FROM routing_decisions" 2>/dev/null || echo 0)
     info "routing_decisions totales: $count"
@@ -409,7 +416,7 @@ check_teamdb() {
     section "teamdb (libSQL)"
 
     # team.db global
-    local global_db="$HOME/.config/opencode/team.db"
+    local global_db="${OPENCODE_DIR:-$HOME/.config/opencode}/team.db"
     if [[ -f "$global_db" ]]; then
         ok "team.db global presente"
         local gver
@@ -423,7 +430,10 @@ check_teamdb() {
         info "team.db global no existe (se crea con install-global.sh)"
     fi
 
-    # team.db per-project
+    # team.db per-project (solo cuando NO es --global-only)
+    if [[ "$GLOBAL_ONLY" == true ]]; then
+        return 0
+    fi
     local project_db="$PROJECT_DIR/.opencode/context/team.db"
     if [[ -f "$project_db" ]]; then
         ok "team.db proyecto presente"

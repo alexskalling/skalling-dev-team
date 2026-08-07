@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# pre-commit hook: RDD + fail-closed validation
-# Verifica receipts + tasks in_progress antes de commitear
+# pre-commit hook: RDD + fail-closed validation + recepción inmutable (v0.8.3)
+# Verifica receipts + tasks in_progress + tree_hash del candidato antes de commitear
 set -euo pipefail
 PROJECT="$(git rev-parse --show-toplevel)"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -20,7 +20,7 @@ fi
 
 # 2. Validar que el último commit tenga receipt reciente (fail si no)
 # Si hay cambios en código (no solo docs), exigir receipt
-CHANGED_CODE=$(git diff --cached --name-only | grep -E "\.(ts|tsx|js|jsx|py|rs|go|java|cpp|c)$" | wc -l | tr -d ' ')
+CHANGED_CODE=$(git diff --cached --name-only | grep -cE "\.(ts|tsx|js|jsx|py|rs|go|java|cpp|c|sh|bash)$" || true)
 if [ "$CHANGED_CODE" -gt 0 ]; then
   LAST_RECEIPT=$(sqlite3 "$DB" "SELECT ts FROM receipts ORDER BY ts DESC LIMIT 1" 2>/dev/null || echo "")
   if [ -z "$LAST_RECEIPT" ]; then
@@ -37,10 +37,53 @@ if [ "$CHANGED_CODE" -gt 0 ]; then
     echo "       Corré tests recientes para crear receipts frescos." >&2
     exit 1
   fi
+
+  # 2b. v0.8.3: inmutabilidad — el árbol staged debe coincidir con el último
+  # receipt sellado (tree_hash). El hash se calcula ANTES del export (el export
+  # escribe data_*.sql en el working tree, ajenos a la revisión sellada).
+  # Si una línea cambió después de la revisión, se bloquea hasta re-sellar.
+  CURRENT_HASH=""
+  if git -C "$PROJECT" rev-parse --verify HEAD >/dev/null 2>&1; then
+    DIFF_TEXT="$(git -C "$PROJECT" diff HEAD 2>/dev/null || DIFF_TEXT="")"
+    if [ -n "$DIFF_TEXT" ]; then
+      CURRENT_HASH="$(printf '%s' "$DIFF_TEXT" | shasum -a 256 | cut -c1-16)"
+    else
+      CURRENT_HASH="$(git -C "$PROJECT" rev-parse HEAD | cut -c1-16)"
+    fi
+  else
+    DIFF_TEXT="$(git -C "$PROJECT" diff --cached 2>/dev/null || DIFF_TEXT="")"
+    if [ -n "$DIFF_TEXT" ]; then
+      CURRENT_HASH="$(printf '%s' "$DIFF_TEXT" | shasum -a 256 | cut -c1-16)"
+    fi
+  fi
+
+  LAST_TREE_HASH=$(sqlite3 "$DB" "SELECT tree_hash FROM receipts WHERE tree_hash IS NOT NULL AND tree_hash != '' ORDER BY ts DESC LIMIT 1" 2>/dev/null || echo "")
+  if [ -n "$LAST_TREE_HASH" ] && [ -n "$CURRENT_HASH" ] && [ "$LAST_TREE_HASH" != "$CURRENT_HASH" ]; then
+    echo "ERROR: el árbol staged cambió desde el receipt de revisión (seal)." >&2
+    echo "       Corré bash scripts/teamdb-seal-receipt.sh <task> <agent> para re-sellar" >&2
+    echo "       o revertí los cambios no revisados." >&2
+    exit 1
+  fi
 fi
 
 # 3. Export DB → .sql
-bash "$SCRIPT_DIR/../teamdb-export.sh" "$PROJECT" 2>/dev/null || true
-git add "$PROJECT/.opencode/context/teamdb"/data_*.sql 2>/dev/null || true
+# Resolver teamdb-export.sh sin rutas relativas fragiles en .git/hooks/:
+# prioridad: SKALLING_ROOT (installer) > script junto al hook > repo
+EXPORT_SCRIPT=""
+for candidate in \
+  "${SKALLING_ROOT:-}/scripts/teamdb-export.sh" \
+  "$SCRIPT_DIR/teamdb-export.sh" \
+  "$PROJECT/scripts/teamdb-export.sh"; do
+  if [ -f "$candidate" ]; then
+    EXPORT_SCRIPT="$candidate"
+    break
+  fi
+done
+if [ -n "$EXPORT_SCRIPT" ]; then
+  bash "$EXPORT_SCRIPT" "$PROJECT"
+  if ls "$PROJECT/.opencode/context/teamdb"/data_*.sql >/dev/null 2>&1; then
+    git add "$PROJECT/.opencode/context/teamdb"/data_*.sql
+  fi
+fi
 
 exit 0

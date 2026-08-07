@@ -24,15 +24,19 @@ else
 fi
 
 PROJECT="${1:-}"
-# Lock file para evitar race conditions entre agentes
-LOCK_DIR="$PROJECT/.opencode/context"
-LOCK_FILE="$LOCK_DIR/team.lock"
-mkdir -p "$LOCK_DIR" 2>/dev/null || true
-if command -v flock >/dev/null 2>&1; then
-  exec 9>"$LOCK_FILE" 2>/dev/null || true
-  flock -w 10 9 || { echo "ERROR: no se pudo obtener lock en $LOCK_FILE" >&2; exit 1; }
+# Lock cross-platform (mkdir-based, sin flock). v0.8.3
+# El sync GLOBAL (sin proyecto) no compite por locks de proyecto: el
+# sync_project usa su propio lock con dir válido. Solo lockeamos si hay
+# proyecto (LOCK_DIR con ruta válida, no "/.opencode/...").
+if [ -n "$PROJECT" ]; then
+  LOCK_DIR="$PROJECT/.opencode/context/.locks/team"
+  mkdir -p "$(dirname "$LOCK_DIR")" 2>/dev/null || true
+  if ! teamdb_lock "$LOCK_DIR" 10; then
+    echo "ERROR: no se pudo obtener lock en $LOCK_DIR (esperado 10s)" >&2
+    exit 1
+  fi
+  trap 'teamdb_unlock "$LOCK_DIR"' EXIT
 fi
-trap 'exec 9>&- 2>/dev/null' EXIT
 
 AGENTS_SKILLS_DIR="${AGENTS_SKILLS_DIR:-$HOME/.agents/skills}"
 OPENCODE_SKILLS_DIR="${OPENCODE_SKILLS_DIR:-$(dirname "$(teamdb_global_path)")/skills}"

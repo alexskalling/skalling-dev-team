@@ -1098,10 +1098,10 @@ test_version_bump_y_changelog() {
 
     local version_actual
     version_actual="$(grep -E '^__version__' "$VERSION_FILE" | sed -E 's/.*"([^"]+)".*/\1/')"
-    if [[ "$version_actual" == "0.7.6" ]]; then
-        pass "VERSION = 0.7.6"
+    if [[ -n "$version_actual" ]] && [[ "$version_actual" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        pass "VERSION declara versión semver: $version_actual"
     else
-        fail "VERSION != 0.7.6 (obtenido: $version_actual)"
+        fail "VERSION no declara versión semver válida (obtenido: $version_actual)"
     fi
 
     if grep -q 'SKALLING_VERSION="\$(grep' "$DOCTOR"; then

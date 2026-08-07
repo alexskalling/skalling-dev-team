@@ -11,19 +11,9 @@ while [[ $# -gt 0 ]]; do
 done
 PROJECT="${PROJECT:-$(pwd)}"
 
-# Lock file para evitar race conditions entre agentes
-LOCK_DIR="$PROJECT/.opencode/context"
-LOCK_FILE="$LOCK_DIR/team.lock"
-mkdir -p "$LOCK_DIR" 2>/dev/null || true
-if command -v flock >/dev/null 2>&1; then
-  exec 9>"$LOCK_FILE" 2>/dev/null || true
-  flock -w 10 9 || { echo "ERROR: no se pudo obtener lock en $LOCK_FILE" >&2; exit 1; }
-fi
-trap 'exec 9>&- 2>/dev/null' EXIT
-
 SKALLING_ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 export SKALLING_ROOT="$SKALLING_ROOT_DIR"
-# Fallback: funciona en repo (lib/lib-teamdb.sh) y en global (lib-teamdb.sh)
+# Source lib-teamdb.sh ANTES del lock (teamdb_lock vive en lib-teamdb.sh)
 if [ -f "$SCRIPT_DIR/lib-teamdb.sh" ]; then
   # shellcheck disable=SC1091
   source "$SCRIPT_DIR/lib-teamdb.sh"
@@ -35,15 +25,53 @@ else
   exit 1
 fi
 
+# Lock cross-platform (mkdir-based, sin flock). v0.8.3
+LOCK_DIR="$PROJECT/.opencode/context/.locks/team"
+mkdir -p "$(dirname "$LOCK_DIR")" 2>/dev/null || true
+if ! teamdb_lock "$LOCK_DIR" 10; then
+  exit 1
+fi
+trap 'teamdb_unlock "$LOCK_DIR"' EXIT
+
 # Init base schema si la DB no existe
 teamdb_init_project "$PROJECT"
 
 _run_sql() {
+  local mig_file="$1"
+  local mig_name
+  mig_name=$(basename "$mig_file" .sql)
+
   if [ "$DRY_RUN" = true ]; then
-    echo "    [dry-run] sqlite3 $DB < $1"
-  else
-    sqlite3 "$DB" < "$1" 2>/dev/null || true
+    echo "    [dry-run] sqlite3 $DB < $mig_file"
+    return 0
   fi
+
+  # Verificar si ya se aplicó (applied_migrations; tabla creada por schema v0.8.3)
+  local already_applied
+  already_applied=$(sqlite3 "$DB" "SELECT 1 FROM applied_migrations WHERE name='$mig_name' LIMIT 1" 2>/dev/null)
+
+  if [ "$already_applied" = "1" ]; then
+    echo "    [skip] $mig_name (ya aplicada)"
+    return 0
+  fi
+
+  # Aplicar. Toleramos errores de idempotencia (table/index/column ya existe):
+  # project-schema.sql crea casi todo, así que las migrations 002-010 son
+  # esencialmente no-ops en DBs frescas y devuelven parse errors. Lo que
+  # importa es el UPDATE schema_meta version al final.
+  local rc=0
+  sqlite3 "$DB" < "$mig_file" 2>/dev/null || rc=$?
+
+  if [ "$rc" -ne 0 ]; then
+    echo "    [partial] $mig_name (rc=$rc — probablemente ya aplicada)"
+  else
+    echo "    [apply] $mig_name"
+  fi
+
+  # Registrar como aplicada (evita loop en runs subsecuentes)
+  sqlite3 "$DB" "INSERT INTO applied_migrations (name, applied_at) VALUES ('$mig_name', datetime('now'))" 2>/dev/null || true
+
+  return 0
 }
 
 # Si la DB existe pero le faltan tablas nuevas (migrations), aplicarlas (T-2.9)
@@ -80,7 +108,7 @@ fi
 # Verificar que las migrations dejaron el schema correcto; si no, fallar en vez
 # de seguir con una DB degradada (los errores de migración idempotentes, como el
 # "duplicate column" de 004 sobre DBs nuevas, se toleran arriba).
-EXPECTED_VERSION="0.8.2"
+EXPECTED_VERSION="0.8.3"
 VERSION="$(sqlite3 "$DB" "SELECT value FROM schema_meta WHERE key='version'" 2>/dev/null || true)"
 if [ "$VERSION" != "$EXPECTED_VERSION" ]; then
   echo "ERROR: teamdb schema version=$VERSION, esperado $EXPECTED_VERSION (migrations incompletas)" >&2

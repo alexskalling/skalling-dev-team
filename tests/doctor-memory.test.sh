@@ -14,6 +14,14 @@ fail() { FAIL=$((FAIL + 1)); printf 'FAIL: %s\n' "$1" >&2; }
 assert_output() { if [[ "$OUTPUT" == *"$1"* ]]; then pass "$2"; else fail "$2"; fi; }
 
 mkdir -p "$FIXTURE/.opencode/context/decisiones" "$FIXTURE/.opencode/context/trabajo-en-curso" "$GLOBAL/agents" "$GLOBAL/skills" "$GLOBAL/command" "$GLOBAL/templates" "$GLOBAL/skalling-data"
+printf '%s\n' '# Constitución de Skalling' '' '## 🏛️ Reglas Base' '' 'R13 design-system.md obligatorio' > "$GLOBAL/constitucion.md"
+for agente in Alex Pol Jes Sol Teo Jhon Luz Pau; do
+  if [[ "$agente" == "Alex" ]]; then
+    printf '%s\n' '---' 'mode: primary' "name: $agente" '---' > "$GLOBAL/agents/${agente}.md"
+  else
+    printf '%s\n' '---' 'mode: subagent' "name: $agente" '---' > "$GLOBAL/agents/${agente}.md"
+  fi
+done
 printf '%s\n' '- [a](a.md)' '- [b](b.md)' '- [super](super.md)' > "$FIXTURE/.opencode/context/decisiones/index.md"
 printf '%s\n' '---' 'title: Duplicado' '---' > "$FIXTURE/.opencode/context/decisiones/a.md"
 printf '%s\n' '---' 'title: duplicado' '---' > "$FIXTURE/.opencode/context/decisiones/b.md"

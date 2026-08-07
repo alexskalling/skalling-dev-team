@@ -7,6 +7,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Fallback
+# shellcheck disable=SC1091
 if [ -f "$SCRIPT_DIR/lib-teamdb.sh" ]; then
   source "$SCRIPT_DIR/lib-teamdb.sh"
 elif [ -f "$SCRIPT_DIR/lib/lib-teamdb.sh" ]; then
@@ -20,14 +21,12 @@ TASK_ID="${1:-}"
 AGENT="${2:-teo}"
 PROJECT="${3:-$(pwd)}"
 # Lock file para evitar race conditions entre agentes
-LOCK_DIR="$PROJECT/.opencode/context"
-LOCK_FILE="$LOCK_DIR/team.lock"
-mkdir -p "$LOCK_DIR" 2>/dev/null || true
-if command -v flock >/dev/null 2>&1; then
-  exec 9>"$LOCK_FILE" 2>/dev/null || true
-  flock -w 10 9 || { echo "ERROR: no se pudo obtener lock en $LOCK_FILE" >&2; exit 1; }
+LOCK_DIR="$PROJECT/.opencode/context/.locks/team"
+mkdir -p "$(dirname "$LOCK_DIR")" 2>/dev/null || true
+if ! teamdb_lock "$LOCK_DIR" 10; then
+  exit 1
 fi
-trap 'exec 9>&- 2>/dev/null' EXIT
+trap 'teamdb_unlock "$LOCK_DIR"' EXIT
 
 
 if [ -z "$TASK_ID" ]; then

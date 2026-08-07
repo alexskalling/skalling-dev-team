@@ -18,7 +18,8 @@ agent_to_key() {
   case "$1" in
     Alex) echo "primary" ;;
     Pol|Sol) echo "plan" ;;
-    Teo|Jhon|Luz|Pau|Jes) echo "build" ;;
+    Teo) echo "build" ;;
+    Jhon|Luz|Pau|Jes) echo "explore" ;;
     *) echo "" ;;
   esac
 }

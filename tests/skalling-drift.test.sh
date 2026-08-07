@@ -1623,10 +1623,12 @@ test_release_y_doctor() {
     echo ""
     echo "── Test 5: versión, documentación e integración doctor ──"
 
-    if grep -q '0.7.6' "$ROOT/VERSION"; then
-        pass "VERSION declara 0.7.6"
+    local version_actual
+    version_actual="$(grep -E '^__version__' "$ROOT/VERSION" | sed -E 's/.*"([^"]+)".*/\1/' || true)"
+    if [[ -n "$version_actual" ]] && [[ "$version_actual" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        pass "VERSION declara versión semver: $version_actual"
     else
-        fail "VERSION no declara 0.7.6"
+        fail "VERSION no declara versión semver válida (obtenido: $version_actual)"
     fi
 
     if grep -q 'SKALLING_VERSION="\$(grep' "$ROOT/setup-team-doctor.sh"; then

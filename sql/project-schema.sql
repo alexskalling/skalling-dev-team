@@ -114,7 +114,7 @@ CREATE TABLE schema_meta (
   value TEXT NOT NULL
 );
 
-INSERT INTO schema_meta VALUES ('version', '0.7.9');
+INSERT INTO schema_meta VALUES ('version', '0.8.3');
 INSERT INTO schema_meta VALUES ('type', 'project');
 
 CREATE VIRTUAL TABLE concepts_fts USING fts5(title, body_md, content='concepts', content_rowid='id');
@@ -417,7 +417,8 @@ CREATE TABLE receipts (
   command TEXT NOT NULL,
   exit_code INTEGER NOT NULL,
   output_summary TEXT,
-  ts TEXT NOT NULL
+  ts TEXT NOT NULL,
+  tree_hash TEXT               -- v0.8.3: hash del árbol revisado (seal inmutable)
 );
 CREATE INDEX idx_receipts_task ON receipts(task_id);
 CREATE INDEX idx_receipts_agent ON receipts(agent);
@@ -447,4 +448,12 @@ CREATE TABLE task_lock_history (
 );
 CREATE INDEX idx_task_lock_history_task ON task_lock_history(task_id);
 
-UPDATE schema_meta SET value = '0.8.0' WHERE key = 'version';
+-- ════════════════════════════════════════
+-- v0.8.3: Migration tracking (idempotente)
+-- Tabla que registra qué migrations ya se aplicaron.
+-- _run_sql() la consulta para no re-aplicar migrations en re-runs.
+-- ════════════════════════════════════════
+CREATE TABLE applied_migrations (
+  name TEXT PRIMARY KEY,
+  applied_at TEXT NOT NULL
+);

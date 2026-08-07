@@ -94,7 +94,10 @@ case "$SKALLING_OS" in
 esac
 
 # OpenCode dir (skalling lo respeta en todas las plataformas)
-SKALLING_OPENCODE_DIR="${SKALLING_HOME}/.config/opencode"
+# Permite override por env (tests/usuarios avanzados); solo default si no está seteado.
+if [[ -z "${SKALLING_OPENCODE_DIR:-}" ]]; then
+    SKALLING_OPENCODE_DIR="${SKALLING_HOME}/.config/opencode"
+fi
 
 # ──────────────────────────────────────────────────────────────────────────────
 # HELPERS DE LOGGING

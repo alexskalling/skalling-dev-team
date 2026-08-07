@@ -8,15 +8,6 @@ set -euo pipefail
 PROJECT="${PROJECT:-$(pwd)}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Lock file para evitar race conditions entre agentes
-LOCK_DIR="$PROJECT/.opencode/context"
-LOCK_FILE="$LOCK_DIR/team.lock"
-mkdir -p "$LOCK_DIR" 2>/dev/null || true
-if command -v flock >/dev/null 2>&1; then
-  exec 9>"$LOCK_FILE" 2>/dev/null || true
-  flock -w 10 9 || { echo "ERROR: no se pudo obtener lock en $LOCK_FILE" >&2; exit 1; }
-fi
-trap 'exec 9>&- 2>/dev/null' EXIT
-
 # shellcheck disable=SC1091
 if [ -f "$SCRIPT_DIR/lib-teamdb.sh" ]; then
   . "$SCRIPT_DIR/lib-teamdb.sh"
@@ -66,6 +57,13 @@ if [ "${1:-}" = "--resume" ]; then
     shift || break
   done
   [ -d "$PROJECT" ] || PROJECT="$PROJECT_DEFAULT"
+  # Lock cross-platform (mkdir-based, sin flock). v0.8.3
+  LOCK_DIR="$PROJECT/.opencode/context/.locks/team"
+  mkdir -p "$(dirname "$LOCK_DIR")" 2>/dev/null || true
+  if ! teamdb_lock "$LOCK_DIR" 10; then
+    exit 1
+  fi
+  trap 'teamdb_unlock "$LOCK_DIR"' EXIT
   DB="$(teamdb_project_path "$PROJECT")"
   [ -f "$DB" ] || { echo "[ERROR] no DB" >&2; exit 1; }
   # Resume: claims activos del actor con lease vigente (epoch comparison)
@@ -117,6 +115,13 @@ if [ "${1:-}" = "--release" ]; then
     shift || break
   done
   [ -d "$PROJECT" ] || PROJECT="$PROJECT_DEFAULT"
+  # Lock cross-platform (mkdir-based, sin flock). v0.8.3
+  LOCK_DIR="$PROJECT/.opencode/context/.locks/team"
+  mkdir -p "$(dirname "$LOCK_DIR")" 2>/dev/null || true
+  if ! teamdb_lock "$LOCK_DIR" 10; then
+    exit 1
+  fi
+  trap 'teamdb_unlock "$LOCK_DIR"' EXIT
   DB="$(teamdb_project_path "$PROJECT")"
   [ -f "$DB" ] || { echo "[ERROR] no DB" >&2; exit 1; }
   python3 - "$DB" "$CLAIM_ID" "$NEW_STATUS" "$RELEASE_BY" <<'PYEOF'
@@ -191,6 +196,13 @@ if [ "${1:-}" = "--advance" ]; then
     echo "ERROR: --to debe ser approved|resolved (recibido: $TARGET_STATUS)" >&2; exit 2
   fi
   [ -d "$PROJECT" ] || PROJECT="$PROJECT_DEFAULT"
+  # Lock cross-platform (mkdir-based, sin flock). v0.8.3
+  LOCK_DIR="$PROJECT/.opencode/context/.locks/team"
+  mkdir -p "$(dirname "$LOCK_DIR")" 2>/dev/null || true
+  if ! teamdb_lock "$LOCK_DIR" 10; then
+    exit 1
+  fi
+  trap 'teamdb_unlock "$LOCK_DIR"' EXIT
   DB="$(teamdb_project_path "$PROJECT")"
   [ -f "$DB" ] || { echo "[ERROR] no DB" >&2; exit 1; }
   python3 - "$DB" "$PLAN_SLUG" "$TASK_SLUG" "$TARGET_STATUS" "$ADVANCE_BY" <<'PYEOF'
@@ -254,6 +266,13 @@ done
 
 ACTOR="${ACTOR:-${TEAMDB_ACTOR:-unknown}}"
 [ -d "$PROJECT" ] || PROJECT="$PROJECT_DEFAULT"
+# Lock cross-platform (mkdir-based, sin flock). v0.8.3
+LOCK_DIR="$PROJECT/.opencode/context/.locks/team"
+mkdir -p "$(dirname "$LOCK_DIR")" 2>/dev/null || true
+if ! teamdb_lock "$LOCK_DIR" 10; then
+  exit 1
+fi
+trap 'teamdb_unlock "$LOCK_DIR"' EXIT
 DB="$(teamdb_project_path "$PROJECT")"
 [ -f "$DB" ] || { echo "[ERROR] DB no existe: $DB" >&2; exit 1; }
 
