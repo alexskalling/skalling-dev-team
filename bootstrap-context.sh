@@ -303,7 +303,9 @@ activate_teamdb_hooks() {
         return 0
     fi
     local installed=0
-    for hook in pre-commit post-merge; do
+    # Loop explícito: pre-commit (seal+inmutabilidad), post-merge (import),
+    # pre-push (gate de push). Agregar un hook nuevo acá.
+    for hook in pre-commit post-merge pre-push; do
         if [[ -f "$hooks_src/$hook" ]]; then
             run cp "$hooks_src/$hook" "$hooks_dst/$hook"
             run chmod +x "$hooks_dst/$hook"

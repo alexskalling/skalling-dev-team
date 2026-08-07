@@ -457,3 +457,28 @@ CREATE TABLE applied_migrations (
   name TEXT PRIMARY KEY,
   applied_at TEXT NOT NULL
 );
+
+-- ════════════════════════════════════════
+-- v0.8.3: Attempts ledger (idea de sdd-attempt, versión simple)
+-- Registro de intentos de implementación por change: cuántos se usaron,
+-- cuál es el tope (max_attempts / max_changed_lines) y el estado de la puerta.
+-- La escribe scripts/teamdb-attempt.sh (acquire/settle/status).
+-- ════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS attempts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  token TEXT UNIQUE NOT NULL,
+  change_name TEXT NOT NULL,
+  request_id TEXT NOT NULL,
+  work_unit TEXT,
+  evidence_goal TEXT,
+  max_attempts INTEGER NOT NULL DEFAULT 3,
+  max_changed_lines INTEGER NOT NULL DEFAULT 400,
+  attempts_used INTEGER NOT NULL DEFAULT 0,
+  state TEXT NOT NULL DEFAULT 'proceed',  -- proceed | blocked | complete
+  outcome TEXT,                           -- ok | fail | partial | abandoned
+  evidence TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_attempts_change ON attempts(change_name);
+CREATE INDEX IF NOT EXISTS idx_attempts_state ON attempts(state);

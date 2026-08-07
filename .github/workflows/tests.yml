@@ -48,7 +48,10 @@ jobs:
             tests/install-resolves-snippets.test.sh \
             tests/audit-log-actor-source.test.sh \
             tests/teamdb-global-heal.test.sh \
-            tests/agents-teamdb-integration.test.sh; do
+            tests/agents-teamdb-integration.test.sh \
+            tests/review-lenses.test.sh \
+            tests/pre-push.test.sh \
+            tests/attempts.test.sh; do
             [ -f "$t" ] || { echo "FAIL: $t no existe"; exit 1; }
             echo "Running $t"
             bash "$t" || { echo "FAIL: $t"; exit 1; }

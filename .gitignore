@@ -35,6 +35,9 @@ coverage/
 .opencode/context/.backup-*
 .opencode/context/.backups/
 .opencode/context/.legacy-backup-*
+# Export local del pre-commit (data_*.sql) y bundles de review --deep: output efímero
+.opencode/context/teamdb/
+.opencode/context/review/
 
 # Cambios efímeros (no son código, son output de ejecución)
 .opencode/changes/**/insert-proposal.sql

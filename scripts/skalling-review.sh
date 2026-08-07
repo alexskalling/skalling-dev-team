@@ -5,9 +5,15 @@
 #   resilience   → set -euo pipefail, mktemp sin trap, locks sin timeout
 #   readability  → funciones largas, vars genéricas, TODO/FIXME/HACK, líneas largas
 #   reliability  → scripts sin test que los cubra, tests sin asserts
+# Modo --deep: congela el diff en .opencode/context/review/<tree_hash>/ y genera
+#   un prompt por lens (risk→Luz, resilience→Jhon, readability→Pau, reliability→Jhon)
+#   para que el orchestrator delegue a subagentes. El script NO lanza subagentes.
+# Modo --collect <dir>: incorpora findings-<lens>.json producidos por agentes
+#   (BLOCKER → exit 1) y sella el receipt de la revisión con el tree_hash del bundle.
 # Kill switch: SKALLING_REVIEW_MODE=off desactiva (default: on).
 # Uso: bash skalling-review.sh [--lens risk|resilience|readability|reliability|all]
 #                              [--cwd <dir>] [--diff <range>]
+#                              [--deep] [--collect <bundle-dir>]
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -32,9 +38,11 @@ fi
 LENS="all"
 CWD="$(pwd)"
 DIFF_RANGE=""
+DEEP=0
+COLLECT_DIR=""
 
 usage() {
-  echo "Uso: bash skalling-review.sh [--lens risk|resilience|readability|reliability|all] [--cwd <dir>] [--diff <range>]"
+  echo "Uso: bash skalling-review.sh [--lens risk|resilience|readability|reliability|all] [--cwd <dir>] [--diff <range>] [--deep] [--collect <bundle-dir>]"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -49,6 +57,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --diff)
       DIFF_RANGE="$2"
+      shift 2
+      ;;
+    --deep)
+      DEEP=1
+      shift
+      ;;
+    --collect)
+      COLLECT_DIR="${2:-}"
       shift 2
       ;;
     --help|-h)
@@ -83,6 +99,104 @@ if [ -z "$PROJECT" ]; then
   exit 2
 fi
 
+# ── Modo --collect: incorpora findings de agentes (resultado de --deep) ──
+# Lee findings-<lens>.json del bundle congelado; cualquier BLOCKER falla el
+# review (exit 1, mismo contrato de severidad que los lenses heurísticos).
+if [ -n "$COLLECT_DIR" ]; then
+  if [ ! -d "$COLLECT_DIR" ]; then
+    echo "ERROR: bundle no encontrado: $COLLECT_DIR" >&2
+    exit 2
+  fi
+  TREE_HASH="$(basename "$COLLECT_DIR")"
+  BLOCKERS=0
+  WARNINGS=0
+  SUGGESTS=0
+
+  for lens in risk resilience readability reliability; do
+    # Solo lenses seleccionados (--lens all = los 4)
+    case "$LENS" in
+      all) ;;
+      "$lens") ;;
+      *) continue ;;
+    esac
+    JSON="$COLLECT_DIR/findings-$lens.json"
+    if [ ! -f "$JSON" ]; then
+      echo "WARN: $JSON no existe (el agente del lens $lens no reportó findings)" >&2
+      continue
+    fi
+    OUT="$(python3 - "$JSON" "$lens" <<'PYEOF'
+import json, sys
+path, lens = sys.argv[1], sys.argv[2]
+try:
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+except Exception:
+    sys.exit(0)
+if not isinstance(data, list):
+    sys.exit(0)
+blocker = warning = suggest = 0
+for item in data:
+    if not isinstance(item, dict):
+        continue
+    sev = str(item.get("severity", "SUGGESTION")).upper()
+    if sev not in ("BLOCKER", "WARNING", "SUGGESTION"):
+        sev = "SUGGESTION"
+    if sev == "BLOCKER":
+        blocker += 1
+    elif sev == "WARNING":
+        warning += 1
+    else:
+        suggest += 1
+    loc = str(item.get("file", "?"))
+    line = item.get("line")
+    if line not in (None, ""):
+        loc = "%s:%s" % (loc, line)
+    msg = str(item.get("message", "")).replace("\n", " ").strip()
+    icon = "\u2717" if sev == "BLOCKER" else ("\u26a0" if sev == "WARNING" else "\u2713")
+    print("%s [%s][%s] %s \u2014 %s" % (icon, sev, lens, loc, msg))
+print("COUNTS|%s|%s|%s" % (blocker, warning, suggest))
+PYEOF
+    )" || true
+    # Mostrar findings (todo menos la línea COUNTS)
+    printf '%s\n' "$OUT" | grep -vF 'COUNTS|'
+    COUNTS_LINE="$(printf '%s\n' "$OUT" | grep -F 'COUNTS|' | tail -1 || true)"
+    IFS='|' read -r _ B W S <<< "$COUNTS_LINE"
+    BLOCKERS=$((BLOCKERS + ${B:-0}))
+    WARNINGS=$((WARNINGS + ${W:-0}))
+    SUGGESTS=$((SUGGESTS + ${S:-0}))
+  done
+
+  TOTAL=$((BLOCKERS + WARNINGS + SUGGESTS))
+  if [ "$BLOCKERS" -eq 0 ]; then
+    RESULT="PASS"
+    RC=0
+  else
+    RESULT="FAIL"
+    RC=1
+  fi
+  SUMMARY="{\"collect\":true,\"blocker\":$BLOCKERS,\"warning\":$WARNINGS,\"total\":$TOTAL,\"tree_hash\":\"$TREE_HASH\"}"
+
+  # Sellar el receipt con el tree_hash del bundle (misma senda best-effort).
+  DB="$(teamdb_project_path "$PROJECT")"
+  if [ -f "$DB" ]; then
+    TASK_ID="${SKALLING_TASK_ID:-review}"
+    AGENT="${SKALLING_REVIEW_AGENT:-luz}"
+    SEAL_CMD="review --collect $(basename "$COLLECT_DIR") --lens $LENS"
+    if ! TEAMDB_CLAIM_COMMAND="$SEAL_CMD" \
+          TEAMDB_CLAIM_EXIT_CODE="$RC" \
+          TEAMDB_CLAIM_TREE_HASH="$TREE_HASH" \
+          TEAMDB_CLAIM_OUTPUT_SUMMARY="$SUMMARY" \
+          bash "$SCRIPT_DIR/teamdb-seal-receipt.sh" "$TASK_ID" "$AGENT" "$PROJECT" >/dev/null 2>&1; then
+      echo "WARN: no se pudo sellar receipt de review" >&2
+    fi
+  else
+    echo "WARN: no hay team.db ($DB); receipt de review NO sellado" >&2
+  fi
+
+  echo "REVIEW: $RESULT ($TOTAL findings, $BLOCKERS blockers, vía --collect)"
+  exit "$RC"
+fi
+
 # Candidato a revisar: diff y hash congelado (mismo criterio que el seal).
 if [ -n "$DIFF_RANGE" ]; then
   DIFF_TEXT="$(git -C "$PROJECT" diff "$DIFF_RANGE" 2>/dev/null || true)"
@@ -94,6 +208,136 @@ else
   else
     TREE_HASH="$(git -C "$PROJECT" rev-parse HEAD 2>/dev/null | cut -c1-16)"
   fi
+fi
+
+# ── Modo --deep: congela el diff y genera material para delegar a subagentes ──
+# El script NO lanza subagentes: produce el bundle y los prompts; luego
+# --collect incorpora los findings-<lens>.json que los agentes escriban.
+lens_agent() {
+  case "$1" in
+    risk) echo "agents-base/Luz.md" ;;
+    resilience) echo "agents-base/Jhon.md" ;;
+    readability) echo "agents-base/Pau.md" ;;
+    reliability) echo "agents-base/Jhon.md" ;;
+    *) echo "" ;;
+  esac
+}
+
+lens_guide() {
+  case "$1" in
+    risk)
+      cat <<'EOF'
+- `eval` sin comillas o con variable interpolada
+- `rm -rf` sin guarda de ruta (sin verificación previa de la variable objetivo)
+- `curl`/`wget` con `-k`/`--insecure`
+- URLs `http://` en vez de `https://`
+- `chmod 777`
+- Secretos hardcodeados (api_key, secret, password, token, ...)
+- SQL injection: variables interpoladas en queries de `sqlite3`
+EOF
+      ;;
+    resilience)
+      cat <<'EOF'
+- Scripts sin `set -euo pipefail`
+- `mktemp -d` sin trap de cleanup (EXIT)
+- Locks (`teamdb_lock`) sin timeout
+- Loops `while read` sin contador ni timeout
+EOF
+      ;;
+    readability)
+      cat <<'EOF'
+- Comentarios TODO/FIXME/HACK
+- Líneas > 120 chars
+- Nombres de variable genéricos (tmp, x, foo, bar)
+- Funciones > 50 líneas y archivos > 400 líneas
+- Estructura y nombres que no revelan intención
+EOF
+      ;;
+    reliability)
+      cat <<'EOF'
+- Scripts/modulos nuevos sin test que los cubra
+- Tests sin asserts ni PASS counter
+- Chequeos que dependen del entorno (paths frágiles, binaries no verificados)
+EOF
+      ;;
+  esac
+}
+
+deep_generate() {
+  local lens agent guide
+  local review_dir="$PROJECT/.opencode/context/review/$TREE_HASH"
+  if [ -d "$review_dir" ]; then
+    echo "WARN: bundle ya existe para $TREE_HASH (idempotente, no se sobreescribe): $review_dir" >&2
+  else
+    mkdir -p "$review_dir"
+    printf '%s' "$DIFF_TEXT" > "$review_dir/candidate.diff"
+    if [ -n "$DIFF_RANGE" ]; then
+      # shellcheck disable=SC2086
+      git -C "$PROJECT" diff $DIFF_RANGE --name-status > "$review_dir/files.txt" 2>/dev/null || true
+    else
+      git -C "$PROJECT" diff HEAD --name-status > "$review_dir/files.txt" 2>/dev/null || true
+    fi
+
+    for lens in risk resilience readability reliability; do
+      # Solo lenses seleccionados (--lens all = los 4)
+      case "$LENS" in
+        all) ;;
+        "$lens") ;;
+        *) continue ;;
+      esac
+      agent="$(lens_agent "$lens")"
+      guide="$(lens_guide "$lens")"
+      {
+        echo "# Revisión delegada — lens $lens"
+        echo ""
+        echo "Rol del agente: \`$agent\` (cargá ese archivo de rol para alinearte con su responsabilidad)."
+        echo ""
+        echo "## Regla de oro"
+        echo "REVISÁ SOLO EL DIFF CONGELADO (candidate.diff de este bundle). NO leas el working tree:"
+        echo "los archivos pueden haber cambiado desde que se congeló el candidato."
+        echo ""
+        echo "## Qué buscar ($lens)"
+        printf '%s\n' "$guide"
+        echo ""
+        echo "## Archivos del candidato (name-status)"
+        echo '```'
+        cat "$review_dir/files.txt" 2>/dev/null || true
+        echo '```'
+        echo ""
+        echo "## Diff congelado"
+        echo '```diff'
+        cat "$review_dir/candidate.diff"
+        echo '```'
+        echo ""
+        echo "## Formato de salida"
+        echo "Escribí tus findings en $review_dir/findings-$lens.json con este formato exacto:"
+        echo '[{"file": "ruta/al/archivo", "line": 12, "severity": "BLOCKER|WARNING|SUGGESTION", "message": "descripción corta"}]'
+        echo ""
+        echo "Severidad: BLOCKER (bloquea el merge), WARNING (a corregir idealmente), SUGGESTION (mejora opcional)."
+      } > "$review_dir/prompt-$lens.md"
+    done
+  fi
+  echo "Bundle congelado: $review_dir"
+  echo ""
+  echo "Delegación sugerida (un subagente por lens; el orchestrator la ejecuta):"
+  for lens in risk resilience readability reliability; do
+    case "$LENS" in
+      all) ;;
+      "$lens") ;;
+      *) continue ;;
+    esac
+    agent="$(basename "$(lens_agent "$lens")" .md)"
+    echo "  lens $lens → agente $agent: prompt en $review_dir/prompt-$lens.md"
+    echo "             findings → $review_dir/findings-$lens.json"
+  done
+  echo ""
+  echo "Cuando los agentes terminen, incorporá resultados:"
+  echo "  bash $0 --collect $review_dir --lens $LENS"
+}
+
+if [ "$DEEP" = "1" ]; then
+  deep_generate
+  exit 0
 fi
 
 # ── Estructura de findings ──

@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# pre-push hook: gate de inmutabilidad sobre lo que se va a publicar (v0.8.3)
+# Verifica que el diff congelado (merge-base..local_sha) de CADA ref a pushear
+# coincida con el último receipt sellado (tree_hash). Si no coincide (o no hay
+# receipt), bloquea el push (fail-closed). Mismo criterio de hash que pre-commit
+# y que teamdb-seal-receipt.sh: SHA-256 de 16 chars sobre el texto del diff.
+set -euo pipefail
+PROJECT="$(git rev-parse --show-toplevel)"
+DB="$PROJECT/.opencode/context/team.db"
+
+# Fail-open, mismo guard que post-merge: si el bundle teamdb no existe,
+# no hay nada que verificar aún (init/import no se ejecutó).
+[ -d "$PROJECT/.opencode/context/teamdb" ] || exit 0
+# Fail-open, mismo guard que pre-commit: sin DB no hay receipts.
+[ -f "$DB" ] || exit 0
+
+is_zero_sha() {
+  [[ "$1" =~ ^0+$ ]]
+}
+
+FAILED=0
+# El formato pre-push entrega una línea por ref:
+#   <local ref> <local sha> <remote ref> <remote sha>
+while read -r local_ref local_sha _remote_ref remote_sha; do
+  [ -n "$local_ref" ] || continue
+
+  # Deleción de branch remoto: no hay nada que verificar.
+  if is_zero_sha "$local_sha"; then
+    continue
+  fi
+
+  # Push de branch nuevo sin upstream (remote_sha todo-ceros): el remote no
+  # tiene base. Usamos el merge-base con HEAD local como base del diff; si no
+  # existe, no podemos verificar → warn y seguimos (nada que bloquear).
+  BASE=""
+  if is_zero_sha "$remote_sha"; then
+    BASE="$(git -C "$PROJECT" merge-base "$local_sha" HEAD 2>/dev/null || true)"
+    if [ -z "$BASE" ]; then
+      echo "WARN: [pre-push] branch nuevo sin merge-base con HEAD; no se puede verificar ($local_ref)" >&2
+      continue
+    fi
+  else
+    BASE="$(git -C "$PROJECT" merge-base "$local_sha" "$remote_sha" 2>/dev/null || true)"
+    if [ -z "$BASE" ]; then
+      echo "ERROR: [pre-push] no se pudo calcular merge-base para $local_ref" >&2
+      FAILED=1
+      continue
+    fi
+  fi
+
+  # Diff congelado del rango que se está pusheando (mismo cálculo que el seal).
+  DIFF_TEXT="$(git -C "$PROJECT" diff "$BASE".."$local_sha" 2>/dev/null || true)"
+  if [ -z "$DIFF_TEXT" ]; then
+    # Sin cambios entre base y local_sha: la ref ya está representada, nada que verificar.
+    continue
+  fi
+  PUSH_HASH="$(printf '%s' "$DIFF_TEXT" | shasum -a 256 | cut -c1-16)"
+
+  LAST_TREE_HASH=$(sqlite3 "$DB" "SELECT tree_hash FROM receipts WHERE tree_hash IS NOT NULL AND tree_hash != '' ORDER BY ts DESC LIMIT 1" 2>/dev/null || echo "")
+  if [ -z "$LAST_TREE_HASH" ]; then
+    echo "ERROR: [pre-push] no hay receipt sellado (tree_hash) en teamdb." >&2
+    echo "       Corré bash scripts/skalling-review.sh (o bash scripts/teamdb-seal-receipt.sh <task> <agent>) antes de pushear." >&2
+    FAILED=1
+    continue
+  fi
+  if [ "$LAST_TREE_HASH" != "$PUSH_HASH" ]; then
+    echo "ERROR: [pre-push] el diff a publicar no coincide con el último receipt sellado." >&2
+    echo "       recibido: $PUSH_HASH" >&2
+    echo "       sellado : $LAST_TREE_HASH" >&2
+    echo "       Re-revisá (bash scripts/skalling-review.sh) y re-sellá antes de pushear." >&2
+    FAILED=1
+    continue
+  fi
+  echo "OK: [pre-push] $local_ref coincide con el receipt sellado ($PUSH_HASH)"
+done
+
+if [ "$FAILED" = "1" ]; then
+  echo "ERROR: [pre-push] push bloqueado (fail-closed)" >&2
+  exit 1
+fi
+exit 0

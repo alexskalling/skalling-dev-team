@@ -47,8 +47,10 @@ _run_sql() {
   fi
 
   # Verificar si ya se aplicó (applied_migrations; tabla creada por schema v0.8.3)
+  # `|| true`: en DBs pre-v0.8.3 la tabla no existe y el query falla; eso no debe
+  # matar el script con set -e (bash 3.2 aborta en command substitution fallida).
   local already_applied
-  already_applied=$(sqlite3 "$DB" "SELECT 1 FROM applied_migrations WHERE name='$mig_name' LIMIT 1" 2>/dev/null)
+  already_applied="$(sqlite3 "$DB" "SELECT 1 FROM applied_migrations WHERE name='$mig_name' LIMIT 1" 2>/dev/null)" || true
 
   if [ "$already_applied" = "1" ]; then
     echo "    [skip] $mig_name (ya aplicada)"
@@ -85,11 +87,13 @@ if [ -f "$DB" ]; then
   BACKUP_FILE="$BACKUP_DIR/team.db.backup-$STAMP"
   if cp "$DB" "$BACKUP_FILE" 2>/dev/null; then
     echo "teamdb backup: $BACKUP_FILE"
-    # Rotación: mantener últimos 5
+    # Rotación: mantener últimos 5 (portable BSD/GNU; los stamps son ISO, el
+    # orden lexicográfico == orden cronológico, y head negativo es GNU-only)
     BACKUP_COUNT=$(find "$BACKUP_DIR" -maxdepth 1 -name 'team.db.backup-*' -type f 2>/dev/null | wc -l | tr -d ' ')
     if [ "$BACKUP_COUNT" -gt 5 ]; then
-      find "$BACKUP_DIR" -maxdepth 1 -name 'team.db.backup-*' -type f -printf '%T@ %p\n' 2>/dev/null \
-        | sort -n | head -n -5 | cut -d' ' -f2- \
+      TO_DELETE=$((BACKUP_COUNT - 5))
+      find "$BACKUP_DIR" -maxdepth 1 -name 'team.db.backup-*' -type f 2>/dev/null \
+        | sort | head -n "$TO_DELETE" \
         | while IFS= read -r f; do rm -f -- "$f"; done
     fi
   else

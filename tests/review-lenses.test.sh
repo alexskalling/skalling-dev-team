@@ -240,5 +240,112 @@ else
   assert_fail "gate: pre-commit sigue exportando data_*.sql"
 fi
 
+# ── 7. --deep: congela bundle con candidate.diff + files.txt + 4 prompts ──
+DEEP_REPO="$TMP/deep-repo"
+new_repo "$DEEP_REPO"
+printf '#!/usr/bin/env bash\nset -euo pipefail\nrm -rf "$TARGET"\n' > "$DEEP_REPO/bad.sh"
+git -C "$DEEP_REPO" add bad.sh
+set +e
+DEEP_OUT="$(bash "$ROOT/scripts/skalling-review.sh" --deep --cwd "$DEEP_REPO" 2>&1)"
+DEEP_RC=$?
+set -e
+if [ "$DEEP_RC" = "0" ]; then
+  assert_pass "deep: --deep → exit 0"
+else
+  assert_fail "deep: --deep → exit 0" "rc=$DEEP_RC out=$DEEP_OUT"
+fi
+DEEP_DIR="$(printf '%s\n' "$DEEP_OUT" | sed -n 's/^Bundle congelado: //p')"
+if [ -n "$DEEP_DIR" ] \
+   && [ -f "$DEEP_DIR/candidate.diff" ] \
+   && [ -f "$DEEP_DIR/files.txt" ] \
+   && [ -f "$DEEP_DIR/prompt-risk.md" ] \
+   && [ -f "$DEEP_DIR/prompt-resilience.md" ] \
+   && [ -f "$DEEP_DIR/prompt-readability.md" ] \
+   && [ -f "$DEEP_DIR/prompt-reliability.md" ]; then
+  assert_pass "deep: bundle con candidate.diff + files.txt + 4 prompts"
+else
+  assert_fail "deep: bundle con candidate.diff + files.txt + 4 prompts" "dir='$DEEP_DIR'"
+fi
+if grep -q "REVISÁ SOLO EL DIFF CONGELADO" "$DEEP_DIR/prompt-risk.md"; then
+  assert_pass "deep: prompt dice REVISÁ SOLO EL DIFF CONGELADO"
+else
+  assert_fail "deep: prompt dice REVISÁ SOLO EL DIFF CONGELADO"
+fi
+if grep -q "agents-base/Luz.md" "$DEEP_DIR/prompt-risk.md" \
+   && grep -q "agents-base/Jhon.md" "$DEEP_DIR/prompt-resilience.md" \
+   && grep -q "agents-base/Pau.md" "$DEEP_DIR/prompt-readability.md" \
+   && grep -q "agents-base/Jhon.md" "$DEEP_DIR/prompt-reliability.md"; then
+  assert_pass "deep: mapping lens → agente (Luz/Jhon/Pau/Jhon)"
+else
+  assert_fail "deep: mapping lens → agente (Luz/Jhon/Pau/Jhon)"
+fi
+
+# ── 7b. --deep idempotente: no sobreescribe bundle existente ──
+DEEP_OUT2="$(bash "$ROOT/scripts/skalling-review.sh" --deep --cwd "$DEEP_REPO" 2>&1)"
+if printf '%s' "$DEEP_OUT2" | grep -q "bundle ya existe"; then
+  assert_pass "deep: idempotente (2do run avisa, no sobreescribe)"
+else
+  assert_fail "deep: idempotente (2do run avisa, no sobreescribe)" "out=$DEEP_OUT2"
+fi
+
+# ── 8. --deep --lens risk → solo prompt-risk.md ──
+DEEP1_REPO="$TMP/deep1-repo"
+new_repo "$DEEP1_REPO"
+printf '#!/usr/bin/env bash\nset -euo pipefail\necho ok\n' > "$DEEP1_REPO/a.sh"
+git -C "$DEEP1_REPO" add a.sh
+DEEP1_OUT="$(bash "$ROOT/scripts/skalling-review.sh" --deep --lens risk --cwd "$DEEP1_REPO" 2>&1)"
+DEEP1_DIR="$(printf '%s\n' "$DEEP1_OUT" | sed -n 's/^Bundle congelado: //p')"
+if [ -f "$DEEP1_DIR/prompt-risk.md" ] && [ ! -f "$DEEP1_DIR/prompt-resilience.md" ]; then
+  assert_pass "deep: --lens risk genera solo prompt-risk.md"
+else
+  assert_fail "deep: --lens risk genera solo prompt-risk.md" "dir='$DEEP1_DIR'"
+fi
+
+# ── 9. --collect con BLOCKER → exit 1 ──
+cat > "$DEEP_DIR/findings-risk.json" <<'EOF'
+[{"file":"bad.sh","line":3,"severity":"BLOCKER","message":"rm -rf sin guarda de ruta"}]
+EOF
+set +e
+COLLECT_OUT="$(bash "$ROOT/scripts/skalling-review.sh" --collect "$DEEP_DIR" --cwd "$DEEP_REPO" --lens risk 2>&1)"
+COLLECT_RC=$?
+set -e
+if [ "$COLLECT_RC" = "1" ] && printf '%s' "$COLLECT_OUT" | grep -q "\[BLOCKER\]\[risk\]"; then
+  assert_pass "collect: findings con BLOCKER → exit 1"
+else
+  assert_fail "collect: findings con BLOCKER → exit 1" "rc=$COLLECT_RC out=$COLLECT_OUT"
+fi
+if printf '%s' "$COLLECT_OUT" | grep -q "REVIEW: FAIL"; then
+  assert_pass "collect: resume REVIEW: FAIL con blockers"
+else
+  assert_fail "collect: resume REVIEW: FAIL con blockers" "out=$COLLECT_OUT"
+fi
+
+# ── 10. --collect con WARNING/SUGGESTION (sin BLOCKER) → exit 0 ──
+rm -f "$DEEP_DIR"/findings-*.json
+cat > "$DEEP_DIR/findings-risk.json" <<'EOF'
+[{"file":"bad.sh","line":1,"severity":"WARNING","message":"podria validar la variable"}]
+EOF
+set +e
+COLLECT_OUT2="$(bash "$ROOT/scripts/skalling-review.sh" --collect "$DEEP_DIR" --cwd "$DEEP_REPO" --lens risk 2>&1)"
+COLLECT_RC2=$?
+set -e
+if [ "$COLLECT_RC2" = "0" ] && printf '%s' "$COLLECT_OUT2" | grep -q "REVIEW: PASS"; then
+  assert_pass "collect: solo WARNING → exit 0 (REVIEW: PASS)"
+else
+  assert_fail "collect: solo WARNING → exit 0 (REVIEW: PASS)" "rc=$COLLECT_RC2 out=$COLLECT_OUT2"
+fi
+
+# ── 11. --collect sin findings-*.json → warn + exit 0 ──
+rm -f "$DEEP_DIR"/findings-*.json
+set +e
+COLLECT_OUT3="$(bash "$ROOT/scripts/skalling-review.sh" --collect "$DEEP_DIR" --cwd "$DEEP_REPO" --lens all 2>&1)"
+COLLECT_RC3=$?
+set -e
+if [ "$COLLECT_RC3" = "0" ] && printf '%s' "$COLLECT_OUT3" | grep -q "no existe"; then
+  assert_pass "collect: findings ausentes → warn + exit 0"
+else
+  assert_fail "collect: findings ausentes → warn + exit 0" "rc=$COLLECT_RC3 out=$COLLECT_OUT3"
+fi
+
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

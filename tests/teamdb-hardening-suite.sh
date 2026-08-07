@@ -47,7 +47,10 @@ for t in tests/teamdb-safe-query.test.sh \
          tests/skalling-drift.test.sh \
          tests/concept-template.test.sh \
          tests/conflict-detection.test.sh \
-         tests/teamdb-link.test.sh; do
+         tests/teamdb-link.test.sh \
+         tests/review-lenses.test.sh \
+         tests/pre-push.test.sh \
+         tests/attempts.test.sh; do
   if [ -f "$t" ]; then
     if bash "$t" >/dev/null 2>&1; then
       echo "✓ $t"
