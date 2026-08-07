@@ -165,7 +165,7 @@ Pasos numerados:
 
 ```bash
 # Paso 1: refrescá ambos grafos (memoria + código)
-bash "$SKALLING_ROOT/scripts/teamdb-dashboard.sh" "$(pwd)"
+bash "$SKALLING_ROOT/scripts/teamdb-graph-refresh.sh" "$(pwd)"
 
 # Paso 2: buscá el tema en concepts (qué existe, qué es)
 bash "$SKALLING_ROOT/scripts/teamdb-search.sh" "<query>" concept
@@ -189,7 +189,7 @@ for n in d.get('nodes', [])[:20]:
 
 **Heurística de prioridad cuando una consulta involucra código**:
 1. `teamdb-related.sh <slug>` te dice qué módulos dependen de qué → ruta clara
-2. `teamdb-dashboard.sh` te da el code graph → módulos existentes
+2. `teamdb-graph-refresh.sh` te da el code graph → módulos existentes
 3. `grep`/`read` son el ÚLTIMO recurso, no el primero
 
 **CITA obligatoria** en tu respuesta al usuario:

@@ -201,7 +201,7 @@ teamdb_query_project "UPDATE work_in_progress SET status='approved', updated_at=
 ### Comando unificado
 
 ```bash
-bash "$SKALLING_ROOT/scripts/teamdb-dashboard.sh" "$(pwd)"
+bash "$SKALLING_ROOT/scripts/teamdb-graph-refresh.sh" --memory "$(pwd)"
 ```
 
 Refresca el grafo de memoria. Para el code graph (estructura, imports, dependencias), abrí `/skalling-dashboard` o usá `curl http://localhost:3741/api/codegraph`.
