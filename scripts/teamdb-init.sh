@@ -69,7 +69,7 @@ fi
 # Verificar que las migrations dejaron el schema correcto; si no, fallar en vez
 # de seguir con una DB degradada (los errores de migración idempotentes, como el
 # "duplicate column" de 004 sobre DBs nuevas, se toleran arriba).
-EXPECTED_VERSION="0.7.9"
+EXPECTED_VERSION="0.8.0"
 VERSION="$(sqlite3 "$DB" "SELECT value FROM schema_meta WHERE key='version'" 2>/dev/null || true)"
 if [ "$VERSION" != "$EXPECTED_VERSION" ]; then
   echo "ERROR: teamdb schema version=$VERSION, esperado $EXPECTED_VERSION (migrations incompletas)" >&2
@@ -80,6 +80,22 @@ if [ "${HAS_ACTOR_SOURCE:-0}" -lt 1 ]; then
   echo "ERROR: audit_log.actor_source ausente tras migrations (correr git pull + teamdb-init)" >&2
   exit 1
 fi
+
+# Fail-closed: si la DB no se puede abrir, abortar
+if ! sqlite3 "$DB" ".tables" >/dev/null 2>&1; then
+  echo "ERROR: team.db está corrupta o no se puede abrir" >&2
+  echo "       Para regenerar: rm $DB && bash $0 $PROJECT" >&2
+  exit 1
+fi
+
+# Fail-closed: verificar que todas las tablas críticas existen
+REQUIRED_TABLES="concepts decisions preferences work_in_progress memory_links receipts routing_decisions"
+for table in $REQUIRED_TABLES; do
+  if ! sqlite3 "$DB" ".tables" | grep -qw "$table"; then
+    echo "ERROR: tabla '$table' falta en $DB" >&2
+    exit 1
+  fi
+done
 
 echo "teamdb init: $PROJECT"
 

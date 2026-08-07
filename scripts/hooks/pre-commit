@@ -1,38 +1,46 @@
 #!/usr/bin/env bash
-# pre-commit hook: export teamdb data to .sql
+# pre-commit hook: RDD + fail-closed validation
+# Verifica receipts + tasks in_progress antes de commitear
 set -euo pipefail
-
 PROJECT="$(git rev-parse --show-toplevel)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DB="$PROJECT/.opencode/context/team.db"
 
-# Salir silenciosamente si no hay teamdb proyecto
-[ -f "$PROJECT/.opencode/context/team.db" ] || exit 0
-
-# Preferir install global; fallback al repo
-GLOBAL_SCRIPT="${SKALLING_ROOT:-$HOME/.config/opencode}/scripts/teamdb-export.sh"
-REPO_SCRIPT="$PROJECT/scripts/teamdb-export.sh"
-
-if [ -x "$GLOBAL_SCRIPT" ]; then
-  bash "$GLOBAL_SCRIPT" "$PROJECT"
-elif [ -x "$REPO_SCRIPT" ]; then
-  bash "$REPO_SCRIPT" "$PROJECT"
-else
-  echo "[WARN] teamdb-export.sh no encontrado (global: $GLOBAL_SCRIPT, repo: $REPO_SCRIPT)" >&2
+# Fail-closed: si DB no existe, no fallar (init aún no se ejecutó)
+if [ ! -f "$DB" ]; then
   exit 0
 fi
 
-SQL_FILES=$(ls "$PROJECT/.opencode/context/teamdb"/data_*.sql 2>/dev/null) || true
-if [ -n "$SQL_FILES" ]; then
-  # shellcheck disable=SC2086
-  git add $SQL_FILES
+# 1. Validar que no haya tasks in_progress sin cerrar (warn, no fail)
+TASKS_IN_PROGRESS=$(sqlite3 "$DB" "SELECT COUNT(*) FROM tasks WHERE status='in_progress'" 2>/dev/null || echo 0)
+if [ "$TASKS_IN_PROGRESS" -gt 0 ]; then
+  echo "WARN: hay $TASKS_IN_PROGRESS task(s) in_progress sin cerrar" >&2
+  echo "      Sugerencia: sqlite3 $DB \"UPDATE tasks SET status='resolved' WHERE status='in_progress'\"" >&2
 fi
 
-# Validar que haya receipts recientes para cambios importantes
-DB="$(git rev-parse --show-toplevel)/.opencode/context/team.db"
-if [ -f "$DB" ]; then
-  # Si hay tasks in_progress sin receipt reciente, fallar
-  HAS_INCOMPLETE=$(sqlite3 "$DB" "SELECT COUNT(*) FROM tasks WHERE status='in_progress'" 2>/dev/null || echo 0)
-  if [ "$HAS_INCOMPLETE" -gt 0 ]; then
-    echo "WARN: hay $HAS_INCOMPLETE task(s) in_progress sin cerrar" >&2
-    echo "      Corré: sqlite3 $DB \"UPDATE tasks SET status='resolved' WHERE status='in_progress'\"" >&2
+# 2. Validar que el último commit tenga receipt reciente (fail si no)
+# Si hay cambios en código (no solo docs), exigir receipt
+CHANGED_CODE=$(git diff --cached --name-only | grep -E "\.(ts|tsx|js|jsx|py|rs|go|java|cpp|c)$" | wc -l | tr -d ' ')
+if [ "$CHANGED_CODE" -gt 0 ]; then
+  LAST_RECEIPT=$(sqlite3 "$DB" "SELECT ts FROM receipts ORDER BY ts DESC LIMIT 1" 2>/dev/null || echo "")
+  if [ -z "$LAST_RECEIPT" ]; then
+    echo "ERROR: hay cambios en código pero no hay receipts en DB" >&2
+    echo "       Corré un test que cree un receipt primero." >&2
+    exit 1
+  fi
+  # Verificar que el receipt es reciente (< 10 min)
+  LAST_TS_EPOCH=$(date -j -f "%Y-%m-%d %H:%M:%S" "$LAST_RECEIPT" +%s 2>/dev/null || echo 0)
+  NOW_EPOCH=$(date +%s)
+  AGE=$((NOW_EPOCH - LAST_TS_EPOCH))
+  if [ "$AGE" -gt 600 ]; then
+    echo "ERROR: el último receipt tiene más de 10 minutos" >&2
+    echo "       Corré tests recientes para crear receipts frescos." >&2
+    exit 1
   fi
 fi
+
+# 3. Export DB → .sql
+bash "$SCRIPT_DIR/../teamdb-export.sh" "$PROJECT" 2>/dev/null || true
+git add "$PROJECT/.opencode/context/teamdb"/data_*.sql 2>/dev/null || true
+
+exit 0

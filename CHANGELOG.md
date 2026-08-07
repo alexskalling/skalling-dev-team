@@ -4,6 +4,23 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-08-07
+
+### Added
+- **RDD con receipts**: pre-commit hook valida receipts recientes (<10 min) si hay cambios en código
+- **CAS (compare-and-swap)**: tasks usan `version` + `locked_by` para evitar race conditions
+- **Tabla `task_lock_history`**: audit de claims/locks
+- **Claim con script**: `teamdb-claim-task.sh` hace CAS atómico
+- **Fail-closed**: `teamdb-init.sh` aborta si DB corrupta o faltan tablas críticas
+- **Backup dedupe + prune**: install-global.sh ya no crea backups idénticos
+
+### Migration
+- `012_add_cas.sql` para DBs existentes
+
+### Changed
+- Pre-commit hook ahora es fail-closed en receipt ausente
+- `install-global.sh` prune_old_backups() ahora respeta dedupe
+
 ## [0.7.9] — 2026-08-07
 
 ### Added

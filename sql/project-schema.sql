@@ -423,4 +423,28 @@ CREATE INDEX idx_receipts_task ON receipts(task_id);
 CREATE INDEX idx_receipts_agent ON receipts(agent);
 CREATE INDEX idx_receipts_ts ON receipts(ts);
 
-UPDATE schema_meta SET value = '0.7.9' WHERE key = 'version';
+-- ════════════════════════════════════════
+-- v0.8.0: CAS (compare-and-swap) para tasks
+-- Previene race conditions cuando 2 agentes intentan reclamar la misma task.
+-- version se incrementa en cada update; locked_by marca quién la está editando.
+-- ════════════════════════════════════════
+
+ALTER TABLE tasks ADD COLUMN version INTEGER DEFAULT 1;
+ALTER TABLE tasks ADD COLUMN locked_by TEXT;
+ALTER TABLE tasks ADD COLUMN locked_at TEXT;
+ALTER TABLE tasks ADD COLUMN last_modified_by TEXT;
+
+CREATE TABLE task_lock_history (
+  id INTEGER PRIMARY KEY,
+  task_id INTEGER NOT NULL,
+  agent TEXT NOT NULL,
+  action TEXT NOT NULL,                  -- 'lock' | 'unlock' | 'update'
+  ts TEXT NOT NULL,
+  old_version INTEGER,
+  new_version INTEGER,
+  details TEXT,
+  FOREIGN KEY (task_id) REFERENCES tasks(id)
+);
+CREATE INDEX idx_task_lock_history_task ON task_lock_history(task_id);
+
+UPDATE schema_meta SET value = '0.8.0' WHERE key = 'version';

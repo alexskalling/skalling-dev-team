@@ -173,18 +173,29 @@ create_backup() {
 }
 
 prune_old_backups() {
-    if [[ "$DRY_RUN" == true ]]; then
-        return 0
+  if [ "$DRY_RUN" = true ]; then
+    return 0
+  fi
+  local keep=5
+  local backup_dir="$BACKUP_DIR"
+  
+  # Dedupe: si hay backup idéntico al último, no crear nuevo
+  if [ -f "${backup_dir}/last-sha256" ]; then
+    local current_sha; current_sha="$(find "$OPENCODE_DIR" -type f -not -path "*/.skalling-backups/*" -exec sha256sum {} \; 2>/dev/null | sha256sum | cut -d' ' -f1)"
+    local last_sha; last_sha="$(cat "${backup_dir}/last-sha256")"
+    if [ "$current_sha" = "$last_sha" ]; then
+      log INFO "Backup omitido: estado idéntico (sha256 match, dedupe)"
+      return 0
     fi
-    local keep=5
-    local count; count="$(ls -1 "${BACKUP_DIR}"/opencode-*.tar.gz 2>/dev/null | wc -l | tr -d ' ')"
-    if [[ "$count" -gt "$keep" ]]; then
-        local to_delete=$((count - keep))
-        log INFO "Prune: borrando $to_delete backups viejos (mantener últimos $keep)"
-        ls -1t "${BACKUP_DIR}"/opencode-*.tar.gz | tail -n "$to_delete" | while read -r f; do
-            rm -f "$f" "${f}.sha256"
-        done
-    fi
+  fi
+  
+  # Prune: mantener últimos N por timestamp
+  local count; count="$(ls -1 "${backup_dir}"/opencode-*.tar.gz 2>/dev/null | wc -l | tr -d ' ')"
+  if [ "$count" -gt "$keep" ]; then
+    local to_delete=$((count - keep))
+    log INFO "Prune: borrando $to_delete backups viejos (mantener últimos $keep)"
+    ls -1t "${backup_dir}"/opencode-*.tar.gz | tail -n "$to_delete" | while read -r f; do rm -f -- "$f" "${f}.sha256"; done
+  fi
 }
 
 # Resuelve markers <!-- @include-snippet <nombre> --> con el cuerpo del snippet

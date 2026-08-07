@@ -60,7 +60,7 @@ assert "export" "bash $SKALLING_ROOT/scripts/teamdb-export.sh '$TEST_DIR'"
 assert "data_concepts.sql" "[ -f '$TEST_DIR/.opencode/context/teamdb/data_concepts.sql' ]"
 
 # Test 8: versión
-assert "version 0.7.9" "sqlite3 '$TEST_DIR/.opencode/context/team.db' \"SELECT value FROM schema_meta WHERE key='version'\" | grep -q '0.7.9'"
+assert "version 0.8.0" "sqlite3 '$TEST_DIR/.opencode/context/team.db' \"SELECT value FROM schema_meta WHERE key='version'\" | grep -q '0.8.0'"
 
 # Test 9-15: scripts bash
 assert "teamdb-init.sh existe" "[ -x '$SKALLING_ROOT/scripts/teamdb-init.sh' ]"
@@ -247,6 +247,33 @@ assert "routing_decisions existe" "sqlite3 '$DB_R' 'SELECT 1 FROM routing_decisi
 sqlite3 "$DB_R" "INSERT INTO receipts (id, task_id, agent, command, exit_code, ts) VALUES ('r1', 't1', 'teo', 'npm test', 0, datetime('now'))"
 assert "receipts existe" "sqlite3 '$DB_R' 'SELECT 1 FROM receipts'"
 rm -rf "$TEST_R"
+
+# ────────────────────────────────────────────────────────────────────────────
+# v0.8.0: CAS (compare-and-swap) para tasks
+# ────────────────────────────────────────────────────────────────────────────
+
+# Test CAS
+TEST_CAS=$(mktemp -d)
+mkdir -p "$TEST_CAS/.opencode/context"
+SKALLING_ROOT="$SKALLING_ROOT" bash "$SKALLING_ROOT/scripts/teamdb-init.sh" "$TEST_CAS" >/dev/null 2>&1
+DB_CAS="$TEST_CAS/.opencode/context/team.db"
+
+# Crear task
+sqlite3 "$DB_CAS" "INSERT INTO tasks (plan_id, slug, title, status) VALUES (0, 'test-cas', 'CAS test', 'pending')"
+TASK_ID=$(sqlite3 "$DB_CAS" "SELECT id FROM tasks WHERE slug='test-cas'")
+
+# Primer claim: debe funcionar
+out=$(bash "$SKALLING_ROOT/scripts/teamdb-claim-task.sh" "$TASK_ID" teo "$TEST_CAS" 2>&1)
+assert "primer claim OK" "echo '$out' | grep -q 'claimed'"
+
+# Segundo claim: debe fallar (ya in_progress)
+out2=$(bash "$SKALLING_ROOT/scripts/teamdb-claim-task.sh" "$TASK_ID" teo "$TEST_CAS" 2>&1 || true)
+assert "segundo claim falla" "echo '$out2' | grep -q 'no estaba pending'"
+
+# Lock history existe
+count=$(sqlite3 "$DB_CAS" "SELECT COUNT(*) FROM task_lock_history WHERE task_id=$TASK_ID")
+assert "lock history registrado" "[ \"$count\" -ge 1 ]"
+rm -rf "$TEST_CAS"
 
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
