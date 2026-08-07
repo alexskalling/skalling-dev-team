@@ -1,14 +1,8 @@
 #!/usr/bin/env bash
 # teamdb-related.sh — Ver relaciones (T-2.10: bound-param via teamdb_exec_query)
-# Lock file para evitar race conditions entre agentes
-LOCK_DIR="${PROJECT:-$(pwd)}/.opencode/context"
-LOCK_FILE="$LOCK_DIR/team.lock"
-mkdir -p "$LOCK_DIR" 2>/dev/null || true
-exec 9>"$LOCK_FILE" 2>/dev/null || true
-if command -v flock >/dev/null 2>&1; then
-  flock -w 10 9 || { echo "ERROR: no se pudo obtener lock en $LOCK_FILE" >&2; exit 1; }
-fi
+# Lock file (se aplica al final, después de parsing $PROJECT)
 set -euo pipefail
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ -f "$SCRIPT_DIR/lib-teamdb.sh" ]; then
@@ -25,6 +19,16 @@ fi
 SLUG="${1:-}"
 TYPE="${2:-concept}"
 PROJECT="${3:-$(pwd)}"
+# Lock file para evitar race conditions entre agentes
+LOCK_DIR="$PROJECT/.opencode/context"
+LOCK_FILE="$LOCK_DIR/team.lock"
+mkdir -p "$LOCK_DIR" 2>/dev/null || true
+if command -v flock >/dev/null 2>&1; then
+  exec 9>"$LOCK_FILE" 2>/dev/null || true
+  flock -w 10 9 || { echo "ERROR: no se pudo obtener lock en $LOCK_FILE" >&2; exit 1; }
+fi
+trap 'exec 9>&- 2>/dev/null' EXIT
+
 
 if [ -z "$SLUG" ]; then
   echo "Uso: bash teamdb-related.sh <slug> [type] [project]"

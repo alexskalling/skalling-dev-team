@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
 # teamdb-amend.sh — Amendment in-place real con version + history + preservación de aprobadas
 # T-2.12
+# Lock file (se aplica al final, después de parsing $PROJECT)
+set -euo pipefail
+
+PROJECT="${PROJECT:-$(pwd)}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Lock file para evitar race conditions entre agentes
-LOCK_DIR="${PROJECT:-$(pwd)}/.opencode/context"
+LOCK_DIR="$PROJECT/.opencode/context"
 LOCK_FILE="$LOCK_DIR/team.lock"
 mkdir -p "$LOCK_DIR" 2>/dev/null || true
-exec 9>"$LOCK_FILE" 2>/dev/null || true
 if command -v flock >/dev/null 2>&1; then
+  exec 9>"$LOCK_FILE" 2>/dev/null || true
   flock -w 10 9 || { echo "ERROR: no se pudo obtener lock en $LOCK_FILE" >&2; exit 1; }
 fi
-set -euo pipefail
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+trap 'exec 9>&- 2>/dev/null' EXIT
+
 # shellcheck disable=SC1091
 if [ -f "$SCRIPT_DIR/lib-teamdb.sh" ]; then
   . "$SCRIPT_DIR/lib-teamdb.sh"

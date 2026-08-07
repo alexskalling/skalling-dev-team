@@ -1,13 +1,5 @@
 #!/usr/bin/env bash
 # teamdb-init.sh — Inicializa teamdb proyecto (idempotente, aplica migrations pendientes)
-# Lock file para evitar race conditions entre agentes
-LOCK_DIR="${PROJECT:-$(pwd)}/.opencode/context"
-LOCK_FILE="$LOCK_DIR/team.lock"
-mkdir -p "$LOCK_DIR" 2>/dev/null || true
-exec 9>"$LOCK_FILE" 2>/dev/null || true
-if command -v flock >/dev/null 2>&1; then
-  flock -w 10 9 || { echo "ERROR: no se pudo obtener lock en $LOCK_FILE" >&2; exit 1; }
-fi
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DRY_RUN=false
@@ -18,6 +10,17 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 PROJECT="${PROJECT:-$(pwd)}"
+
+# Lock file para evitar race conditions entre agentes
+LOCK_DIR="$PROJECT/.opencode/context"
+LOCK_FILE="$LOCK_DIR/team.lock"
+mkdir -p "$LOCK_DIR" 2>/dev/null || true
+if command -v flock >/dev/null 2>&1; then
+  exec 9>"$LOCK_FILE" 2>/dev/null || true
+  flock -w 10 9 || { echo "ERROR: no se pudo obtener lock en $LOCK_FILE" >&2; exit 1; }
+fi
+trap 'exec 9>&- 2>/dev/null' EXIT
+
 SKALLING_ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 export SKALLING_ROOT="$SKALLING_ROOT_DIR"
 # Fallback: funciona en repo (lib/lib-teamdb.sh) y en global (lib-teamdb.sh)
@@ -96,9 +99,9 @@ if ! sqlite3 "$DB" ".tables" >/dev/null 2>&1; then
   exit 1
 fi
 
-# Validar con timeout (DB corrupta o bloqueada = respuesta >5s)
-if ! timeout 5 sqlite3 "$DB" ".tables" >/dev/null 2>&1; then
-  echo "ERROR: team.db no responde en 5 segundos (corrupta o bloqueada)" >&2
+# Validar que la DB responde (sin timeout porque macOS no tiene gtimeout)
+if ! sqlite3 "$DB" ".tables" >/dev/null 2>&1; then
+  echo "ERROR: team.db no responde (corrupta o bloqueada)" >&2
   exit 1
 fi
 
