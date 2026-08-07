@@ -139,13 +139,53 @@ cmd_settle() {
     exit 1
   fi
 
+  # ── Idempotencia del settle (audit v0.8.3) ──
+  # Un replay del MISMO token con el MISMO outcome NO debe volver a incrementar
+  # attempts_used: un retry tras timeout agotaba el presupuesto del change
+  # (reproducido 1/3 → 2/3 → 3/3 con el mismo token+request).
+  #   - complete + mismo outcome   → replay legítimo: no incrementa, exit 0.
+  #   - complete + outcome distinto → contradicción de estados: ERROR, exit 1.
+  #   - proceed → UPDATE condicional (WHERE state='proceed'); si changes()=0
+  #     otro proceso ganó la race y se re-aplica el criterio sin incrementar.
+  CUR_STATE="$(teamdb_exec_value "$DB" "SELECT state FROM attempts WHERE token=?" "$token")"
+  if [ "$CUR_STATE" = "complete" ]; then
+    CUR_OUTCOME="$(teamdb_exec_value "$DB" "SELECT outcome FROM attempts WHERE token=?" "$token")"
+    if [ "$CUR_OUTCOME" = "$outcome" ]; then
+      CUR_USED="$(teamdb_exec_value "$DB" "SELECT attempts_used FROM attempts WHERE token=?" "$token")"
+      CUR_MAX="$(teamdb_exec_value "$DB" "SELECT max_attempts FROM attempts WHERE token=?" "$token")"
+      echo "state=complete token=$token outcome=$outcome attempts=${CUR_USED:-0}/${CUR_MAX:-3} (replay idempotente, no se incrementó)"
+      exit 0
+    fi
+    echo "ERROR: token ya está complete con outcome '$CUR_OUTCOME' (recibido '$outcome'); contradicción de estados, no se incrementó" >&2
+    exit 1
+  fi
+
   # Incremento condicional: abandoned NO consume intento.
   local inc=0
   [ "$outcome" != "abandoned" ] && inc=1
   if ! OUT="$(teamdb_exec_write "$DB" \
-    "UPDATE attempts SET state='complete', outcome=?, evidence=?, attempts_used = attempts_used + ?, updated_at=datetime('now') WHERE token=?" \
+    "UPDATE attempts SET state='complete', outcome=?, evidence=?, attempts_used = attempts_used + ?, updated_at=datetime('now') WHERE token=? AND state='proceed'" \
     "$outcome" "$evidence" "$inc" "$token" 2>&1)"; then
     echo "ERROR: no se pudo actualizar el intento ($OUT)" >&2
+    exit 1
+  fi
+  # Verificar changes(): 0 → otro proceso settleó primero (race) → sin incrementar.
+  CHANGES="$(printf '%s' "$OUT" | python3 -c "
+import json, sys
+try:
+    print(json.load(sys.stdin).get('changes', 0))
+except Exception:
+    print(0)
+")"
+  if [ "${CHANGES:-0}" = "0" ]; then
+    CUR_OUTCOME2="$(teamdb_exec_value "$DB" "SELECT outcome FROM attempts WHERE token=?" "$token")"
+    if [ "$CUR_OUTCOME2" = "$outcome" ]; then
+      CUR_USED2="$(teamdb_exec_value "$DB" "SELECT attempts_used FROM attempts WHERE token=?" "$token")"
+      CUR_MAX2="$(teamdb_exec_value "$DB" "SELECT max_attempts FROM attempts WHERE token=?" "$token")"
+      echo "state=complete token=$token outcome=$outcome attempts=${CUR_USED2:-0}/${CUR_MAX2:-3} (otro proceso settleó primero con el mismo outcome, no se incrementó)"
+      exit 0
+    fi
+    echo "ERROR: token ya complete con outcome '$CUR_OUTCOME2' (recibido '$outcome'); contradicción de estados" >&2
     exit 1
   fi
 

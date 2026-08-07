@@ -102,6 +102,11 @@ fi
 # ── Modo --collect: incorpora findings de agentes (resultado de --deep) ──
 # Lee findings-<lens>.json del bundle congelado; cualquier BLOCKER falla el
 # review (exit 1, mismo contrato de severidad que los lenses heurísticos).
+# Contrato del JSON (escrito por agentes en --deep):
+#   [ {"file": "ruta", "line": 12, "severity": "BLOCKER|WARNING|SUGGESTION", "message": "..."} ]
+# Fail-closed: si el JSON NO parsea o NO es una lista, el review NUNCA es PASS
+# silencioso (un bundle corrupto reporta 1 BLOCKER de "resultado ilegible";
+# antes `sys.exit(0)` sin output → 0 findings → PASS falso).
 if [ -n "$COLLECT_DIR" ]; then
   if [ ! -d "$COLLECT_DIR" ]; then
     echo "ERROR: bundle no encontrado: $COLLECT_DIR" >&2
@@ -130,9 +135,12 @@ path, lens = sys.argv[1], sys.argv[2]
 try:
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
-except Exception:
-    sys.exit(0)
-if not isinstance(data, list):
+    if not isinstance(data, list):
+        raise ValueError("se esperaba una lista de findings")
+except Exception as e:
+    # Fail-closed: findings ilegible = 1 BLOCKER, nunca PASS silencioso.
+    print("\u2717 [BLOCKER][%s] findings-%s.json \u2014 resultado ilegible: %s" % (lens, lens, e))
+    print("COUNTS|1|0|0")
     sys.exit(0)
 blocker = warning = suggest = 0
 for item in data:
@@ -400,28 +408,52 @@ diff_files() {
 # ── Lens risk ──
 lens_risk() {
   local diff_text="$1"
-  local file ln content lines
+  local file ln content lines content_trim
   local pat_eval='eval[[:space:]]+'
   local pat_eval_var="eval[[:space:]]+[\"']?\\\$"
   local pat_eval_quoted="eval[[:space:]]*['\"]"
   local pat_rm='rm[[:space:]]+-[rf]+'
-  local pat_rm_guard='\$TMP|/tmp/|/var/folders|\[[[:space:]]+-[nzfd]'
+  # Guardas que NO protegen las rutas BARE del sistema: al negar con substring,
+  # incluir /var/tmp/ en el guard "protegería" también a `rm -rf /var/tmp/*`
+  # (las rutas absolutas del sistema van en pat_rm_sys, chequeo positivo aparte).
+  # $TMP/$TMPDIR/$HOME y ~/ sí son variables controladas (dependen de la sesión,
+  # no son destructivas por sí solas); `[ -n/-z/-f/-d ]` en la MISMA línea es la
+  # verificación previa que exige el repo antes de rm sobre una variable.
+  # NOTA: $TMP_DIR/$TARGET_DIR NO protegen → siguen siendo BLOCKER (el repo pide
+  # verificación explícita en la misma línea antes de rm sobre variables propias).
+  local pat_rm_guard='\$TMPDIR|\$TMP\b|\$HOME|~/|\[[[:space:]]+-[nzfd]'
+  local pat_rm_sys='rm[[:space:]]+-[rf]+[[:space:]]+/(tmp|var/tmp|var/folders)/'
   local pat_curl='(curl|wget)[^|;]*( -k|--insecure)'
   local pat_http='http://'
   local pat_chmod='chmod[[:space:]]+777'
   local pat_secret="(api[_-]?key|secret|password|passwd|token)[[:space:]]*=[[:space:]]*[\"']?[^\"'[:space:]$]"
   local pat_sqli="sqlite3[^;]*'\\\$[A-Za-z_]"
+  # Interpolación de variables dentro de la QUERY (comillas dobles). Pide keyword
+  # SQL (SELECT/INSERT/UPDATE/DELETE) en la MISMA línea para no apuntar al path
+  # `"$DB"` suelto; `$(` (command substitution) no matchea por [A-Za-z_], así
+  # `$(_sql_quote "$x")` — el escape seguro que ya usa el repo — NO da falso
+  # positivo (antes el falso negativo: `id = $ID` dentro de comillas se escapaba).
+  local pat_sqli_dq='sqlite3[^;]*"[^"]*(SELECT|INSERT|UPDATE|DELETE)[^"]*\$[A-Za-z_][A-Za-z0-9_]*'
 
   while IFS=$'\t' read -r file ln content; do
+    # Saltar líneas comentadas: el lens mira código ejecutable, no ejemplos
+    # (un `# eval "$x"` documentando un anti-patrón no es un riesgo real).
+    content_trim="$(printf '%s' "$content" | sed -e 's/^[[:space:]]*//')"
+    case "$content_trim" in
+      \#*) continue ;;
+    esac
     if printf '%s' "$content" | grep -qE "$pat_eval" \
        && ! printf '%s' "$content" | grep -qE "$pat_eval_quoted"; then
       add_finding "BLOCKER" "risk" "$file:$ln" "eval sin comillas"
     elif printf '%s' "$content" | grep -qE "$pat_eval_var"; then
       add_finding "BLOCKER" "risk" "$file:$ln" "eval con variable"
     fi
-    if printf '%s' "$content" | grep -qE "$pat_rm" \
-       && ! printf '%s' "$content" | grep -qE "$pat_rm_guard"; then
-      add_finding "BLOCKER" "risk" "$file:$ln" "rm -rf sin guarda de ruta"
+    if printf '%s' "$content" | grep -qE "$pat_rm"; then
+      if printf '%s' "$content" | grep -qE "$pat_rm_sys"; then
+        add_finding "BLOCKER" "risk" "$file:$ln" "rm -rf sobre ruta temp del sistema (/tmp,/var/tmp,/var/folders)"
+      elif ! printf '%s' "$content" | grep -qE "$pat_rm_guard"; then
+        add_finding "BLOCKER" "risk" "$file:$ln" "rm -rf sin guarda de ruta"
+      fi
     fi
     if printf '%s' "$content" | grep -qE "$pat_curl"; then
       add_finding "BLOCKER" "risk" "$file:$ln" "curl/wget con -k/--insecure"
@@ -437,6 +469,8 @@ lens_risk() {
     fi
     if printf '%s' "$content" | grep -qE "$pat_sqli"; then
       add_finding "BLOCKER" "risk" "$file:$ln" "posible SQL injection: variable interpolada en query sqlite3"
+    elif printf '%s' "$content" | grep -qE "$pat_sqli_dq"; then
+      add_finding "BLOCKER" "risk" "$file:$ln" "posible SQL injection: variable interpolada en query sqlite3 (comillas dobles)"
     fi
   done <<< "$(added_lines "$diff_text")"
 }

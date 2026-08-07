@@ -158,5 +158,55 @@ else
   assert_fail "pre-push: branch nuevo (remote todo-ceros) → exit 0" "rc=$NEWBR_RC out=$NEWBR_OUT"
 fi
 
+# ── 7. BUG 2: to_epoch portable en pre-commit (GNU date / BSD date) ──
+# El hook DEBE detectar el flavor de `date` antes de usar date -j: en Linux
+# (GNU) `date -j` no existe y devolvía 0 → AGE>600 → bloqueaba commits con
+# receipts frescos en CI (reproducido en la auditoría).
+# Estructural: la única aparición de `date -j` vive dentro del branch BSD de
+# to_epoch (delimitado por los marcadores BEGIN/END-TO-EPOCH).
+if awk '
+  /^# BEGIN-TO-EPOCH/ { active=1 }
+  /^# END-TO-EPOCH/ { active=0 }
+  active && /date -j/ { ok=1 }
+  !active && /date -j/ { bad=1 }
+  END { exit !(ok && !bad) }
+' "$ROOT/scripts/hooks/pre-commit"; then
+  assert_pass "pre-commit: date -j solo en el branch BSD de to_epoch"
+else
+  assert_fail "pre-commit: date -j solo en el branch BSD de to_epoch"
+fi
+# Funcional: to_epoch autoselecciona el flavor (GNU -d / BSD -j) y convierte un
+# timestamp fresco de receipt (formato datetime('now')) a epoch reciente.
+eval "$(sed -n '/^# BEGIN-TO-EPOCH/,/^# END-TO-EPOCH/p' "$ROOT/scripts/hooks/pre-commit" | grep -v '^#')"
+FRESH="$(date +"%Y-%m-%d %H:%M:%S")"
+NOW="$(date +%s)"
+EPOCH="$(to_epoch "$FRESH" 2>/dev/null || true)"
+if [ -n "$EPOCH" ] && [ "$EPOCH" -gt $((NOW - 120)) ] && [ "$EPOCH" -le "$NOW" ]; then
+  assert_pass "pre-commit: to_epoch convierte receipt fresco ($EPOCH, ahora=$NOW)"
+else
+  assert_fail "pre-commit: to_epoch convierte receipt fresco" "epoch=$EPOCH now=$NOW fresh=$FRESH"
+fi
+# El mismo patrón de flavor-guard aplica al lib de memory-check (ISO 8601).
+if grep -q "date --version" "$ROOT/scripts/lib/lib-memory-check.sh"; then
+  assert_pass "lib-memory-check: _skalling_timestamp_to_epoch detecta flavor de date"
+else
+  assert_fail "lib-memory-check: _skalling_timestamp_to_epoch detecta flavor de date"
+fi
+set +e
+NOW="$(date +%s)"
+LIB_EPOCH="$(bash -c '
+  set -euo pipefail
+  source "$1"
+  ts="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  _skalling_timestamp_to_epoch "$ts"
+' _ "$ROOT/scripts/lib/lib-memory-check.sh" 2>/dev/null)"
+LIB_RC=$?
+set -e
+if [ "$LIB_RC" = "0" ] && [ -n "$LIB_EPOCH" ] && [ "$LIB_EPOCH" -gt $((NOW - 120)) ] && [ "$LIB_EPOCH" -le "$NOW" ]; then
+  assert_pass "lib-memory-check: _skalling_timestamp_to_epoch convierte ISO fresco ($LIB_EPOCH)"
+else
+  assert_fail "lib-memory-check: _skalling_timestamp_to_epoch convierte ISO fresco" "rc=$LIB_RC epoch=$LIB_EPOCH"
+fi
+
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

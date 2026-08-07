@@ -51,6 +51,16 @@ assert "project-schema: sin lineas UPDATE schema_meta version (legacy)" \
 assert "README menciona VERSION" \
   "grep -qE \"Versi[oó]n actual:[[:space:]]*0\\.7\\.[0-9]+\" '$ROOT/README.md' || grep -q \"$VERSION\" '$ROOT/README.md'"
 
+# Coherencia con declaradores de versión en scripts (setup.sh stale dio 0.1.0
+# en la auditoría; cada declaración debe apuntar al MISMO VERSION file).
+SETUP_VERSION="$(extract_version "$ROOT/setup.sh")"
+assert "setup.sh: SKALLING_VERSION coincide con VERSION file" \
+  "[ \"$SETUP_VERSION\" = \"$VERSION\" ]"
+
+INIT_VERSION="$(extract_version "$ROOT/scripts/teamdb-init.sh")"
+assert "teamdb-init.sh: EXPECTED_VERSION coincide con VERSION file" \
+  "[ \"$INIT_VERSION\" = \"$VERSION\" ]"
+
 # Coherencia con DB real (round-trip)
 TMP_DB="$(mktemp -d)/coherence.db"
 sqlite3 "$TMP_DB" < "$PROJ_SCHEMA"

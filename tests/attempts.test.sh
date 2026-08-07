@@ -169,5 +169,48 @@ else
   assert_fail "acquire: falta --change → error de uso" "rc=$NOCHANGE_RC out=$NOCHANGE"
 fi
 
+# ── 12. settle replay idempotente: mismo token+request NO vuelve a incrementar ──
+TOKEN5="$(bash "$ROOT/scripts/teamdb-attempt.sh" acquire --change feat-w --request-id req-4 --max-attempts 3 "$TEST_DIR" | sed -n 's/^state=proceed token=//p')"
+bash "$ROOT/scripts/teamdb-attempt.sh" settle --token "$TOKEN5" --request-id req-4 --outcome fail "$TEST_DIR" >/dev/null
+REPLAY="$(bash "$ROOT/scripts/teamdb-attempt.sh" settle --token "$TOKEN5" --request-id req-4 --outcome fail "$TEST_DIR")"
+USED_REPLAY=$(sqlite3 "$DB" "SELECT attempts_used FROM attempts WHERE token='$TOKEN5'")
+if printf '%s' "$REPLAY" | grep -q "replay idempotente" && [ "$USED_REPLAY" = "1" ]; then
+  assert_pass "settle: replay del mismo token+outcome → no incrementa (sigue 1/3)"
+else
+  assert_fail "settle: replay del mismo token+outcome → no incrementa" "used=$USED_REPLAY out=$REPLAY"
+fi
+# El replay NO quemó el presupuesto: un nuevo acquire del change sigue con
+# intentos restantes (el bug original agotaba 1/3→2/3→3/3 sin trabajo real).
+TOKEN5B="$(bash "$ROOT/scripts/teamdb-attempt.sh" acquire --change feat-w --request-id req-4 --max-attempts 3 "$TEST_DIR" | sed -n 's/^state=proceed token=//p')"
+if [ -n "$TOKEN5B" ]; then
+  assert_pass "settle: tras el replay el change sigue con presupuesto (acquire → proceed)"
+else
+  assert_fail "settle: tras el replay el change sigue con presupuesto (acquire → proceed)" "out=$TOKEN5B"
+fi
+# Y el tope (3) sigue aplicando con fails REALES: cada fail usa un token nuevo.
+bash "$ROOT/scripts/teamdb-attempt.sh" settle --token "$TOKEN5B" --request-id req-4 --outcome fail "$TEST_DIR" >/dev/null
+TOKEN5C="$(bash "$ROOT/scripts/teamdb-attempt.sh" acquire --change feat-w --request-id req-4 --max-attempts 3 "$TEST_DIR" | sed -n 's/^state=proceed token=//p')"
+bash "$ROOT/scripts/teamdb-attempt.sh" settle --token "$TOKEN5C" --request-id req-4 --outcome fail "$TEST_DIR" >/dev/null
+BLOCKED5="$(bash "$ROOT/scripts/teamdb-attempt.sh" acquire --change feat-w --request-id req-4 --max-attempts 3 "$TEST_DIR")"
+if printf '%s' "$BLOCKED5" | grep -q "^state=blocked"; then
+  assert_pass "settle: 3 fails reales → acquire bloqueado (tope respetado)"
+else
+  assert_fail "settle: 3 fails reales → acquire bloqueado (tope respetado)" "out=$BLOCKED5"
+fi
+
+# ── 13. settle post-complete con outcome DISTINTO → error, no incrementa ──
+TOKEN6="$(bash "$ROOT/scripts/teamdb-attempt.sh" acquire --change feat-v --request-id req-5 "$TEST_DIR" | sed -n 's/^state=proceed token=//p')"
+bash "$ROOT/scripts/teamdb-attempt.sh" settle --token "$TOKEN6" --request-id req-5 --outcome ok "$TEST_DIR" >/dev/null
+set +e
+CONTRADICT="$(bash "$ROOT/scripts/teamdb-attempt.sh" settle --token "$TOKEN6" --request-id req-5 --outcome fail "$TEST_DIR" 2>&1)"
+CONTRADICT_RC=$?
+set -e
+USED6=$(sqlite3 "$DB" "SELECT attempts_used FROM attempts WHERE token='$TOKEN6'")
+if [ "$CONTRADICT_RC" != "0" ] && printf '%s' "$CONTRADICT" | grep -q "contradicción de estados" && [ "$USED6" = "1" ]; then
+  assert_pass "settle: complete con outcome distinto → error y no incrementa"
+else
+  assert_fail "settle: complete con outcome distinto → error y no incrementa" "rc=$CONTRADICT_RC used=$USED6 out=$CONTRADICT"
+fi
+
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -39,6 +39,9 @@ coverage/
 .opencode/context/teamdb/
 .opencode/context/review/
 
+# Índice local de CodeGraph (generado por gentile-ai codegraph init)
+.codegraph/
+
 # Cambios efímeros (no son código, son output de ejecución)
 .opencode/changes/**/insert-proposal.sql
 .opencode/changes/**/receipts/

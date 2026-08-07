@@ -347,5 +347,80 @@ else
   assert_fail "collect: findings ausentes → warn + exit 0" "rc=$COLLECT_RC3 out=$COLLECT_OUT3"
 fi
 
+# ── 12. BUG 3+4: falsos negativos del lens risk + fail-closed de --collect ──
+# Patrones legítimos que ANTES daban falso positivo: rm sobre $TMP con guarda,
+# sqlite con $(_sql_quote ...) (escape seguro del repo) y líneas comentadas.
+BUG34_REPO="$TMP/bug34-repo"
+new_repo "$BUG34_REPO"
+cat > "$BUG34_REPO/ok.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+rm -rf "$TMP"
+sqlite3 "$DB" "SELECT id FROM attempts WHERE id = $(_sql_quote "$ID")"
+# eval "$USER_INPUT"
+EOF
+git -C "$BUG34_REPO" add ok.sh
+set +e
+OK34_OUT="$(bash "$ROOT/scripts/skalling-review.sh" --lens risk --cwd "$BUG34_REPO" 2>&1)"
+OK34_RC=$?
+set -e
+if [ "$OK34_RC" = "0" ]; then
+  assert_pass "risk: \$TMP con guarda + _sql_quote + eval comentado → exit 0"
+else
+  assert_fail "risk: \$TMP con guarda + _sql_quote + eval comentado → exit 0" "rc=$OK34_RC out=$OK34_OUT"
+fi
+# Falsos negativos que la auditoría detectó: rm sobre ruta temp del sistema y
+# SQLi dentro de comillas dobles — ahora SÍ deben dar BLOCKER.
+cat > "$BUG34_REPO/bad.sh" <<'EOF'
+#!/usr/bin/env bash
+rm -rf /var/tmp/cache/*
+rm -rf "$CACHE"
+sqlite3 "$DB" "SELECT id FROM attempts WHERE id = $ID"
+EOF
+git -C "$BUG34_REPO" add bad.sh
+set +e
+BAD34_OUT="$(bash "$ROOT/scripts/skalling-review.sh" --lens risk --cwd "$BUG34_REPO" 2>&1)"
+BAD34_RC=$?
+set -e
+if [ "$BAD34_RC" = "1" ] && printf '%s' "$BAD34_OUT" | grep -q "ruta temp del sistema"; then
+  assert_pass "risk: rm -rf /var/tmp/cache/* → BLOCKER ruta temp del sistema"
+else
+  assert_fail "risk: rm -rf /var/tmp/cache/* → BLOCKER ruta temp del sistema" "rc=$BAD34_RC out=$BAD34_OUT"
+fi
+if printf '%s' "$BAD34_OUT" | grep -q "rm -rf sin guarda de ruta"; then
+  assert_pass "risk: rm -rf \$CACHE sin guarda sigue → BLOCKER"
+else
+  assert_fail "risk: rm -rf \$CACHE sin guarda sigue → BLOCKER" "out=$BAD34_OUT"
+fi
+if printf '%s' "$BAD34_OUT" | grep -q "SQL injection.*comillas dobles"; then
+  assert_pass "risk: sqlite3 ... \"WHERE id = \$ID\" → BLOCKER SQLi comillas dobles"
+else
+  assert_fail "risk: sqlite3 ... \"WHERE id = \$ID\" → BLOCKER SQLi comillas dobles" "out=$BAD34_OUT"
+fi
+
+# Fail-closed: findings-<lens>.json ilegible (malformado o no-lista) → NUNCA PASS
+BUG34_DIR="$TMP/bug34-bundle"
+mkdir -p "$BUG34_DIR"
+printf 'esto no es json\n' > "$BUG34_DIR/findings-risk.json"
+set +e
+MALFORM_OUT="$(bash "$ROOT/scripts/skalling-review.sh" --collect "$BUG34_DIR" --cwd "$BUG34_REPO" --lens risk 2>&1)"
+MALFORM_RC=$?
+set -e
+if [ "$MALFORM_RC" = "1" ] && printf '%s' "$MALFORM_OUT" | grep -q "resultado ilegible"; then
+  assert_pass "collect: JSON malformado → fail-closed (exit 1, BLOCKER ilegible)"
+else
+  assert_fail "collect: JSON malformado → fail-closed (exit 1, BLOCKER ilegible)" "rc=$MALFORM_RC out=$MALFORM_OUT"
+fi
+printf '{"nop": true}\n' > "$BUG34_DIR/findings-risk.json"
+set +e
+NOTLIST_OUT="$(bash "$ROOT/scripts/skalling-review.sh" --collect "$BUG34_DIR" --cwd "$BUG34_REPO" --lens risk 2>&1)"
+NOTLIST_RC=$?
+set -e
+if [ "$NOTLIST_RC" = "1" ] && printf '%s' "$NOTLIST_OUT" | grep -q "resultado ilegible"; then
+  assert_pass "collect: JSON válido no-lista → fail-closed (exit 1, BLOCKER ilegible)"
+else
+  assert_fail "collect: JSON válido no-lista → fail-closed (exit 1, BLOCKER ilegible)" "rc=$NOTLIST_RC out=$NOTLIST_OUT"
+fi
+
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

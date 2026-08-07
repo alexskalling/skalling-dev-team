@@ -80,16 +80,23 @@ _skalling_is_referenced() {
 
 # _skalling_timestamp_to_epoch <ts>
 # Convierte timestamp YAML (YYYY-MM-DDTHH:MM:SSZ) a epoch segundos.
-# Compatible con BSD date (macOS) y GNU date (Linux).
-_skalling_timestamp_to_epoch() {
-    local ts="$1"
-    [[ -n "$ts" ]] || { echo 0; return 0; }
-    local epoch
-    epoch="$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$ts" +%s 2>/dev/null \
-        || date -d "$ts" +%s 2>/dev/null \
-        || echo 0)"
-    echo "$epoch"
-}
+# GNU date -d vs BSD date -j: se detecta el flavor UNA vez al cargar el lib
+# (mismo patrón que scripts/hooks/pre-commit; sin esto Linux daba 0).
+# El sufijo Z indica UTC → en BSD se parsea con -u (sin -u interpretaba hora
+# local y devolvía epochs corridos por el offset de TZ de la máquina).
+if date --version >/dev/null 2>&1; then
+    _skalling_timestamp_to_epoch() {
+        local ts="$1"
+        [[ -n "$ts" ]] || { echo 0; return 0; }
+        date -d "$ts" +%s 2>/dev/null || echo 0
+    }
+else
+    _skalling_timestamp_to_epoch() {
+        local ts="$1"
+        [[ -n "$ts" ]] || { echo 0; return 0; }
+        date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$ts" +%s 2>/dev/null || echo 0
+    }
+fi
 
 # ──────────────────────────────────────────────────────────────────────────────
 # API PÚBLICA

@@ -6,6 +6,17 @@ PROJECT="$(git rev-parse --show-toplevel)"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DB="$PROJECT/.opencode/context/team.db"
 
+# to_epoch <"YYYY-MM-DD HH:MM:SS"> → epoch. GNU date -d vs la flag BSD: se
+# detecta el flavor UNA vez. Sin esto, Linux CI (GNU sin la flag BSD) devolvía 0 →
+# AGE>600 → commits bloqueados en CI pese a receipts frescos.
+# BEGIN-TO-EPOCH
+if date --version >/dev/null 2>&1; then
+  to_epoch() { date -d "$1" +%s; }
+else
+  to_epoch() { date -j -f "%Y-%m-%d %H:%M:%S" "$1" +%s; }
+fi
+# END-TO-EPOCH
+
 # Fail-closed: si DB no existe, no fallar (init aún no se ejecutó)
 if [ ! -f "$DB" ]; then
   exit 0
@@ -29,7 +40,7 @@ if [ "$CHANGED_CODE" -gt 0 ]; then
     exit 1
   fi
   # Verificar que el receipt es reciente (< 10 min)
-  LAST_TS_EPOCH=$(date -j -f "%Y-%m-%d %H:%M:%S" "$LAST_RECEIPT" +%s 2>/dev/null || echo 0)
+  LAST_TS_EPOCH=$(to_epoch "$LAST_RECEIPT" 2>/dev/null || echo 0)
   NOW_EPOCH=$(date +%s)
   AGE=$((NOW_EPOCH - LAST_TS_EPOCH))
   if [ "$AGE" -gt 600 ]; then
