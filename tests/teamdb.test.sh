@@ -60,7 +60,7 @@ assert "export" "bash $SKALLING_ROOT/scripts/teamdb-export.sh '$TEST_DIR'"
 assert "data_concepts.sql" "[ -f '$TEST_DIR/.opencode/context/teamdb/data_concepts.sql' ]"
 
 # Test 8: versión
-assert "version 0.7.6" "sqlite3 '$TEST_DIR/.opencode/context/team.db' \"SELECT value FROM schema_meta WHERE key='version'\" | grep -q '0.7.6'"
+assert "version 0.7.9" "sqlite3 '$TEST_DIR/.opencode/context/team.db' \"SELECT value FROM schema_meta WHERE key='version'\" | grep -q '0.7.9'"
 
 # Test 9-15: scripts bash
 assert "teamdb-init.sh existe" "[ -x '$SKALLING_ROOT/scripts/teamdb-init.sh' ]"
@@ -234,6 +234,19 @@ assert "install-global.sh sin version hardcoded" "! grep -q 'SKALLING_VERSION=\"
 
 assert ".gitattributes tiene data_*.sql" "grep -q 'data_\\*.sql' '$SKALLING_ROOT/templates/gitattributes.template'"
 assert ".gitattributes usa merge=union para sql" "grep -q 'data_\\*.sql merge=union' '$SKALLING_ROOT/templates/gitattributes.template'"
+
+# Test routing_decisions
+TEST_R=$(mktemp -d)
+mkdir -p "$TEST_R/.opencode/context"
+SKALLING_ROOT="$SKALLING_ROOT" bash "$SKALLING_ROOT/scripts/teamdb-init.sh" "$TEST_R" >/dev/null
+DB_R="$TEST_R/.opencode/context/team.db"
+sqlite3 "$DB_R" "INSERT INTO routing_decisions (ts, user_intent, chosen_route) VALUES (datetime('now'), 'test', 'SDD')"
+assert "routing_decisions existe" "sqlite3 '$DB_R' 'SELECT 1 FROM routing_decisions'"
+
+# Test receipts
+sqlite3 "$DB_R" "INSERT INTO receipts (id, task_id, agent, command, exit_code, ts) VALUES ('r1', 't1', 'teo', 'npm test', 0, datetime('now'))"
+assert "receipts existe" "sqlite3 '$DB_R' 'SELECT 1 FROM receipts'"
+rm -rf "$TEST_R"
 
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -51,6 +51,32 @@ Director de orquesta. Clasifico intención y delego al agente correcto por rol �
 | Bump de major version | **Alex** | **SÍ** pedir |
 | Cambio que afecta múltiples agentes simultáneamente | **Alex** | **SÍ** pedir |
 
+## 📊 Tracking de routing (audit)
+
+Cada decisión de ruta se registra en la DB:
+
+```bash
+# Cuando decides una ruta
+sqlite3 "$(teamdb_project_path "$(pwd)")" <<SQL
+INSERT INTO routing_decisions (ts, user_intent, chosen_route, route_reason, agents_involved)
+VALUES (
+  datetime('now'),
+  '<qué pidió el usuario, resumido en 1 línea>',
+  '<INLINE|INTERVENTION|FAST-TRACK|SDD|DIRECT|RESEARCH>',
+  '<por qué esta ruta, 1 línea>',
+  '<JSON: [Sol, Teo]>'
+);
+SQL
+
+# Al cerrar (SUCCESS/FAIL/CANCELLED)
+sqlite3 "$(teamdb_project_path "$(pwd")" "UPDATE routing_decisions SET outcome='SUCCESS', completed_at=datetime('now') WHERE id=<id>"
+
+# Query: ¿qué decisiones tomé hoy?
+sqlite3 "$(teamdb_project_path "$(pwd)")" "SELECT chosen_route, outcome, COUNT(*) FROM routing_decisions WHERE ts > datetime('now', '-1 day') GROUP BY chosen_route, outcome"
+```
+
+**Esto audita tu routing** y te permite mejorar con el tiempo.
+
 ## Cuándo SÍ pedir permiso al usuario
 - **Intención ambigua**: no detecto con claridad qué quiere lograr.
 - **Cambio cross-cutting**: afecta a varios agentes a la vez (ej: refactor que toca código + memoria + workflow).

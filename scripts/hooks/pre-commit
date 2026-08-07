@@ -25,3 +25,14 @@ if [ -n "$SQL_FILES" ]; then
   # shellcheck disable=SC2086
   git add $SQL_FILES
 fi
+
+# Validar que haya receipts recientes para cambios importantes
+DB="$(git rev-parse --show-toplevel)/.opencode/context/team.db"
+if [ -f "$DB" ]; then
+  # Si hay tasks in_progress sin receipt reciente, fallar
+  HAS_INCOMPLETE=$(sqlite3 "$DB" "SELECT COUNT(*) FROM tasks WHERE status='in_progress'" 2>/dev/null || echo 0)
+  if [ "$HAS_INCOMPLETE" -gt 0 ]; then
+    echo "WARN: hay $HAS_INCOMPLETE task(s) in_progress sin cerrar" >&2
+    echo "      Corré: sqlite3 $DB \"UPDATE tasks SET status='resolved' WHERE status='in_progress'\"" >&2
+  fi
+fi

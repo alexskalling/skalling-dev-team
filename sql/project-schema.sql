@@ -114,7 +114,7 @@ CREATE TABLE schema_meta (
   value TEXT NOT NULL
 );
 
-INSERT INTO schema_meta VALUES ('version', '0.7.6');
+INSERT INTO schema_meta VALUES ('version', '0.7.9');
 INSERT INTO schema_meta VALUES ('type', 'project');
 
 CREATE VIRTUAL TABLE concepts_fts USING fts5(title, body_md, content='concepts', content_rowid='id');
@@ -392,3 +392,35 @@ CREATE TABLE IF NOT EXISTS skills_registry (
   load_path TEXT,
   added_at TEXT DEFAULT (datetime('now'))
 );
+
+-- ════════════════════════════════════════
+-- v0.7.9: Routing + Receipts (mejores prácticas adaptadas)
+-- ════════════════════════════════════════
+
+CREATE TABLE routing_decisions (
+  id INTEGER PRIMARY KEY,
+  ts TEXT NOT NULL,
+  user_intent TEXT NOT NULL,
+  chosen_route TEXT NOT NULL CHECK (chosen_route IN ('INLINE','INTERVENTION','FAST-TRACK','SDD','DIRECT','RESEARCH')),
+  route_reason TEXT,
+  agents_involved TEXT,
+  outcome TEXT DEFAULT 'PENDING' CHECK (outcome IN ('PENDING','SUCCESS','FAIL','CANCELLED')),
+  completed_at TEXT
+);
+CREATE INDEX idx_routing_decisions_ts ON routing_decisions(ts);
+CREATE INDEX idx_routing_decisions_route ON routing_decisions(chosen_route);
+
+CREATE TABLE receipts (
+  id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  agent TEXT NOT NULL,
+  command TEXT NOT NULL,
+  exit_code INTEGER NOT NULL,
+  output_summary TEXT,
+  ts TEXT NOT NULL
+);
+CREATE INDEX idx_receipts_task ON receipts(task_id);
+CREATE INDEX idx_receipts_agent ON receipts(agent);
+CREATE INDEX idx_receipts_ts ON receipts(ts);
+
+UPDATE schema_meta SET value = '0.7.9' WHERE key = 'version';

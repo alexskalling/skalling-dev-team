@@ -385,6 +385,26 @@ check_inteligencia_codigo() {
     fi
 }
 
+check_receipts() {
+  local db="$HOME/.config/opencode/team.db"
+  if [ -f "$db" ]; then
+    local count=$(sqlite3 "$db" "SELECT COUNT(*) FROM receipts WHERE ts > datetime('now', '-1 day')" 2>/dev/null || echo 0)
+    if [ "$count" -gt 0 ]; then
+      ok "receipts recientes: $count"
+    else
+      info "sin receipts recientes (opcional, OK si no hay tasks activas)"
+    fi
+  fi
+}
+
+check_routing() {
+  local db="$HOME/.config/opencode/team.db"
+  if [ -f "$db" ]; then
+    local count=$(sqlite3 "$db" "SELECT COUNT(*) FROM routing_decisions" 2>/dev/null || echo 0)
+    info "routing_decisions totales: $count"
+  fi
+}
+
 check_teamdb() {
     section "teamdb (libSQL)"
 
@@ -444,6 +464,8 @@ main() {
     fi
     check_inteligencia_codigo
     check_teamdb
+    check_receipts
+    check_routing
 
     echo ""
     printf "${c_blue}━━━ Resumen ━━━${c_reset}\n"

@@ -4,6 +4,18 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.7.9] — 2026-08-07
+
+### Added
+- Tabla `routing_decisions` — audita decisiones de ruta de Alex
+- Tabla `receipts` — evidencia de completitud (command, exit_code, output)
+- Alex registra decisiones de routing en DB
+- Pre-commit hook valida que no haya tasks in_progress sin cerrar
+- Doctor chequea receipts y routing_decisions
+
+### Migration
+- `sql/migrations/011_add_routing_receipts.sql` para DBs existentes
+
 ## [0.7.4] — 2026-08-05
 
 ### Added
