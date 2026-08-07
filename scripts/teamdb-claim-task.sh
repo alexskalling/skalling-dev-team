@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 # teamdb-claim-task.sh — Claim task con CAS (compare-and-swap)
 # Previene que 2 agentes editen la misma task simultáneamente
+# Lock file para evitar race conditions entre agentes
+LOCK_DIR="${PROJECT:-$(pwd)}/.opencode/context"
+LOCK_FILE="$LOCK_DIR/team.lock"
+mkdir -p "$LOCK_DIR" 2>/dev/null || true
+exec 9>"$LOCK_FILE" 2>/dev/null || true
+if command -v flock >/dev/null 2>&1; then
+  flock -w 10 9 || { echo "ERROR: no se pudo obtener lock en $LOCK_FILE" >&2; exit 1; }
+fi
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -58,6 +66,17 @@ SQL
 fi
 
 if [ "$RESULT" = "claimed" ]; then
+  # Validación: que el comando realmente corrió
+  # Si el comando es test/build, guardar el exit_code real
+  COMMAND="${TEAMDB_CLAIM_COMMAND:-}"
+  EXIT_CODE="${TEAMDB_CLAIM_EXIT_CODE:-}"
+
+  if [ -n "$COMMAND" ] && [ -n "$EXIT_CODE" ]; then
+    DB="$(teamdb_project_path "$PROJECT")"
+    RECEIPT_ID="rcpt_$(date +%s%N | head -c 16)"
+    sqlite3 "$DB" "INSERT INTO receipts (id, task_id, agent, command, exit_code, ts) VALUES ('$RECEIPT_ID', $TASK_ID, '$AGENT', '$COMMAND', $EXIT_CODE, datetime('now'))"
+  fi
+
   echo "OK: task $TASK_ID claimed por $AGENT"
   exit 0
 else

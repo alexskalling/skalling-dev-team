@@ -1,5 +1,13 @@
 #!/usr/bin/env bash
 # teamdb-search.sh — Búsqueda amigable en teamdb (T-2.10: bound-param via teamdb_exec_query)
+# Lock file para evitar race conditions entre agentes
+LOCK_DIR="${PROJECT:-$(pwd)}/.opencode/context"
+LOCK_FILE="$LOCK_DIR/team.lock"
+mkdir -p "$LOCK_DIR" 2>/dev/null || true
+exec 9>"$LOCK_FILE" 2>/dev/null || true
+if command -v flock >/dev/null 2>&1; then
+  flock -w 10 9 || { echo "ERROR: no se pudo obtener lock en $LOCK_FILE" >&2; exit 1; }
+fi
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 

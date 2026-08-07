@@ -4,6 +4,20 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.8.2] — 2026-08-07
+
+### Fixed
+- **Race conditions**: flock en 18 scripts teamdb-* (protege multi-writer)
+- **SQL injection**: escape de slug en migrate-plans-md-to-db.sh
+- **Timeouts**: helper teamdb-with-timeout.sh + validación con timeout en init
+- **Sin tracking de tiempo**: columna estimated_minutes en tasks
+- **Sin límite de delegación**: regla R-NEW en Alex (max 3 niveles)
+- **Sin TTL en cache**: teamdb-context-cache.sh (TTL 30 min)
+- **Receipts sin validación**: comando + exit_code al claim
+
+### Migration
+- `013_add_time_tracking.sql` para DBs existentes
+
 ## [0.8.0] — 2026-08-07
 
 ### Added

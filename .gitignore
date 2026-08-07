@@ -42,3 +42,7 @@ coverage/
 .opencode/changes/**/logs/
 .atl/
 .opencode/context/.pre-preference-edit-*.db
+
+# TeamDB locks (flock para evitar race conditions entre agentes)
+.opencode/context/team.lock
+.opencode/context/*.lock

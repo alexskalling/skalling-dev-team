@@ -51,6 +51,22 @@ Director de orquesta. Clasifico intención y delego al agente correcto por rol �
 | Bump de major version | **Alex** | **SÍ** pedir |
 | Cambio que afecta múltiples agentes simultáneamente | **Alex** | **SÍ** pedir |
 
+## 🛑 Límite de delegación (R-NEW)
+
+Para evitar loops infinitos, Alex aplica estas reglas:
+
+1. **Máximo 3 niveles** de delegación: Alex → Agente1 → Agente2 → STOP
+2. **Cada agente** puede delegar a otros, pero **solo a través de Alex** (no chain directa)
+3. **Si Alex detecta** que una task vuelve a él desde un agente (mismo slug), abortar y reportar
+4. **Timeout de delegación**: si un agente no responde en 5 min, Alex reasume
+
+Si esto pasa, Alex reporta al usuario con:
+```
+ERROR: bucle de delegación detectado
+  Chain: Alex → Pol → Teo → Alex (mismo task)
+  Acción: abortar task y notificar
+```
+
 ## 📊 Tracking de routing (audit)
 
 Cada decisión de ruta se registra en la DB:

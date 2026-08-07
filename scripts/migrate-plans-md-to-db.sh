@@ -156,8 +156,9 @@ for f in "${md_files[@]}"; do
   # Sufijo legacy para evitar colisiones con proposals ya en la DB
   slug_imported="${base_slug}-legacy-imported"
 
-  # Verificar si ya existe
-  existing="$(sqlite3 "$DB" "SELECT COUNT(*) FROM proposals WHERE slug='$slug_imported'" 2>/dev/null || echo "0")"
+  # Verificar si ya existe (con escape SQL para slugs con apostrofes)
+  slug_escaped=$(printf "%s" "$slug_imported" | sed "s/'/''/g")
+  existing="$(sqlite3 "$DB" "SELECT COUNT(*) FROM proposals WHERE slug='$slug_escaped'" 2>/dev/null || echo "0")"
   if [ "$existing" != "0" ]; then
     echo "  SKIP: $f → $slug_imported (ya existe)"
     skipped=$((skipped + 1))

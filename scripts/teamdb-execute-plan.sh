@@ -2,6 +2,14 @@
 # teamdb-execute-plan.sh — Descubre la siguiente task runnable y la ofrece al caller.
 # T-2.17v2 / DC-3: solo orquesta. NO ejecuta shell arbitrario desde la DB.
 # Compatible: delega a teamdb-claim.sh; el caller (Teo) hace el trabajo de ingeniería.
+# Lock file para evitar race conditions entre agentes
+LOCK_DIR="${PROJECT:-$(pwd)}/.opencode/context"
+LOCK_FILE="$LOCK_DIR/team.lock"
+mkdir -p "$LOCK_DIR" 2>/dev/null || true
+exec 9>"$LOCK_FILE" 2>/dev/null || true
+if command -v flock >/dev/null 2>&1; then
+  flock -w 10 9 || { echo "ERROR: no se pudo obtener lock en $LOCK_FILE" >&2; exit 1; }
+fi
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
