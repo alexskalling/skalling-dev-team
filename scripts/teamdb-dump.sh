@@ -132,6 +132,8 @@ PY_OUT="$(python3 -c "$PYGEN" "$DB" "${DUMP_TABLES[@]}" 2>&1)" || {
 
 if [ "$STDOUT_MODE" = true ]; then
   printf '%s\n' "-- teamdb dump v1"
+  printf '%s\n' "-- Generado por teamdb-dump.sh. NO editar a mano; el diff se mergea por fila."
+  printf '%s\n' "-- Source of truth: .opencode/context/team.db (la DB local). Este archivo es su fotografía."
   printf '%s\n' "$PY_OUT"
   exit 0
 fi

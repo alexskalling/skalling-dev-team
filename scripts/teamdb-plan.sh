@@ -226,5 +226,11 @@ except Exception as e:
 PYEOF
 PLAN_RC=$?
 
+# FASE 1: dump fresco post-escritura — la fotografía del working tree queda
+# actualizada apenas cambia la DB, no recién en el pre-commit.
+if [ "$PLAN_RC" = "0" ]; then
+  teamdb_refresh_dump "$PROJECT" >/dev/null 2>&1 || true
+fi
+
 rm -rf "$TMP_DIR"
 exit $PLAN_RC

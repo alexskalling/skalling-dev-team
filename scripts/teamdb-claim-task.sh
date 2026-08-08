@@ -80,6 +80,9 @@ if [ "$RESULT" = "claimed" ]; then
     sqlite3 "$DB" "INSERT INTO receipts (id, task_id, agent, command, exit_code, ts) VALUES ('$RECEIPT_ID', $TASK_ID, '$AGENT', '$COMMAND', $EXIT_CODE, datetime('now'))"
   fi
 
+  # FASE 1: dump fresco post-escritura
+  teamdb_refresh_dump "$PROJECT" >/dev/null 2>&1 || true
+
   echo "OK: task $TASK_ID claimed por $AGENT"
   exit 0
 else

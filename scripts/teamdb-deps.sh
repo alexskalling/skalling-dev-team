@@ -83,6 +83,8 @@ PYEOF
     teamdb_exec_write "$DB" \
       "INSERT INTO task_dependencies(task_id, depends_on_task_id, type, created_at) VALUES(?, ?, 'blocks', ?)" \
       "$TASK_ID" "$DEP_ID" "$NOW" >/dev/null
+    # FASE 1: dump fresco post-escritura
+    teamdb_refresh_dump "$PROJECT" >/dev/null 2>&1 || true
     echo "added: $TASK_SLUG depends on $DEPENDS_ON"
     ;;
 
@@ -104,6 +106,8 @@ PYEOF
     teamdb_exec_write "$DB" \
       "DELETE FROM task_dependencies WHERE task_id = ? AND depends_on_task_id = ?" \
       "$TASK_ID" "$DEP_ID" >/dev/null
+    # FASE 1: dump fresco post-escritura
+    teamdb_refresh_dump "$PROJECT" >/dev/null 2>&1 || true
     echo "removed: $TASK_SLUG no longer depends on $DEPENDS_ON"
     ;;
 

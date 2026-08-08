@@ -105,6 +105,8 @@ cmd_acquire() {
     echo "ERROR: no se pudo registrar el intento ($OUT)" >&2
     exit 1
   fi
+  # FASE 1: dump fresco post-escritura
+  teamdb_refresh_dump "$PROJECT" >/dev/null 2>&1 || true
   echo "state=proceed token=$token"
   exit 0
 }
@@ -202,6 +204,8 @@ except Exception:
   else
     RESULT="proceed"
   fi
+  # FASE 1: dump fresco post-escritura (solo si el settle mutó la DB)
+  teamdb_refresh_dump "$PROJECT" >/dev/null 2>&1 || true
   echo "state=$RESULT token=$token outcome=$outcome attempts=$USED_A/$MAX_A"
   exit 0
 }

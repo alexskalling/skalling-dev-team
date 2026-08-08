@@ -23,15 +23,16 @@ assert_fail() {
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-# helper: repo con DB teamdb inicializada + dir de export (guarda del hook)
+# helper: repo con DB teamdb inicializada + dump versionado (guarda del hook,
+# Fase 0: el guard es db/teamdb/team.dump.sql, no el dir legacy gitignored)
 new_repo() {
   local repo="$1"
   mkdir -p "$repo"
   git -C "$repo" init -q
   git -C "$repo" config user.email "test@test.com"
   git -C "$repo" config user.name "Test"
-  mkdir -p "$repo/.opencode/context/teamdb"
   bash "$ROOT/scripts/teamdb-init.sh" "$repo" >/dev/null 2>&1
+  bash "$ROOT/scripts/teamdb-dump.sh" "$repo" >/dev/null 2>&1
   printf '#!/usr/bin/env bash\nset -euo pipefail\necho ok\n' > "$repo/base.sh"
   git -C "$repo" add -A
   git -C "$repo" commit -qm init
@@ -55,7 +56,7 @@ run_pre_push() {
   return $?
 }
 
-# ── 1. Guard: sin .opencode/context/teamdb → exit 0 ──
+# ── 1. Guard: sin db/teamdb/team.dump.sql → exit 0 ──
 NODB_REPO="$TMP/nodb-repo"
 mkdir -p "$NODB_REPO"
 git -C "$NODB_REPO" init -q
@@ -69,9 +70,9 @@ GUARD_OUT="$(run_hook "$NODB_REPO" "refs/heads/main $(git -C "$NODB_REPO" rev-pa
 GUARD_RC=$?
 set -e
 if [ "$GUARD_RC" = "0" ]; then
-  assert_pass "pre-push: sin teamdb/ → exit 0 (guard post-merge)"
+  assert_pass "pre-push: sin dump versionado → exit 0 (guard Fase 0)"
 else
-  assert_fail "pre-push: sin teamdb/ → exit 0 (guard post-merge)" "rc=$GUARD_RC out=$GUARD_OUT"
+  assert_fail "pre-push: sin dump versionado → exit 0 (guard Fase 0)" "rc=$GUARD_RC out=$GUARD_OUT"
 fi
 
 # ── 2. Ref con local_sha todo-ceros (deleción) → skip, exit 0 ──
@@ -234,6 +235,39 @@ if [ "$LIB_RC" = "0" ] && [ -n "$LIB_EPOCH" ] && [ "$LIB_EPOCH" -gt $((NOW - 120
   assert_pass "lib-memory-check: _skalling_timestamp_to_epoch convierte ISO fresco ($LIB_EPOCH)"
 else
   assert_fail "lib-memory-check: _skalling_timestamp_to_epoch convierte ISO fresco" "rc=$LIB_RC epoch=$LIB_EPOCH"
+fi
+
+# ── 8. FASE 1: dump desactualizado (DB mutada sin refresh) → exit 1 ──
+STALE_REPO="$TMP/stale-repo"
+new_repo "$STALE_REPO"
+# Mutar la DB directamente, simulando un script de escritura SIN teamdb_refresh_dump
+sqlite3 "$STALE_REPO/.opencode/context/team.db" "INSERT INTO concepts(slug, title, body_md, category, updated_at) VALUES('stale-test', 'Stale Test', 'sin refresh', 'test', datetime('now'))" >/dev/null 2>&1
+LOCAL_SHA="$(git -C "$STALE_REPO" rev-parse HEAD)"
+set +e
+STALE_OUT="$(run_pre_push "$STALE_REPO" "$LOCAL_SHA" "$LOCAL_SHA")"
+STALE_RC=$?
+set -e
+if [ "$STALE_RC" = "1" ] && printf '%s' "$STALE_OUT" | grep -q "DESACTUALIZADO"; then
+  assert_pass "pre-push: FASE 1 dump desactualizado → exit 1"
+else
+  assert_fail "pre-push: FASE 1 dump desactualizado → exit 1" "rc=$STALE_RC out=$STALE_OUT"
+fi
+
+# ── 9. FASE 1: DB mutada + refresh del dump → gate barato pasa ──
+FRESH_REPO="$TMP/fresh-repo"
+new_repo "$FRESH_REPO"
+sqlite3 "$FRESH_REPO/.opencode/context/team.db" "INSERT INTO concepts(slug, title, body_md, category, updated_at) VALUES('fresh-test', 'Fresh Test', 'con refresh', 'test', datetime('now'))" >/dev/null 2>&1
+# Simular teamdb_refresh_dump (lo que hacen los scripts de escritura en Fase 1)
+bash "$ROOT/scripts/teamdb-dump.sh" "$FRESH_REPO" >/dev/null 2>&1
+LOCAL_SHA="$(git -C "$FRESH_REPO" rev-parse HEAD)"
+set +e
+FRESH_OUT="$(run_pre_push "$FRESH_REPO" "$LOCAL_SHA" "$LOCAL_SHA")"
+FRESH_RC=$?
+set -e
+if [ "$FRESH_RC" = "0" ] && ! printf '%s' "$FRESH_OUT" | grep -q "DESACTUALIZADO"; then
+  assert_pass "pre-push: FASE 1 dump fresco tras refresh → exit 0"
+else
+  assert_fail "pre-push: FASE 1 dump fresco tras refresh → exit 0" "rc=$FRESH_RC out=$FRESH_OUT"
 fi
 
 echo "PASS=$PASS FAIL=$FAIL"

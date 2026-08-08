@@ -142,5 +142,7 @@ PY
 sync_global
 if [ -n "$PROJECT" ]; then
   sync_project "$PROJECT"
+  # FASE 1: dump fresco post-escritura (solo la DB de proyecto tiene dump)
+  teamdb_refresh_dump "$PROJECT" >/dev/null 2>&1 || true
 fi
 echo "skills registry sync: ok (global +${PROJECT:+ proyecto $PROJECT})"

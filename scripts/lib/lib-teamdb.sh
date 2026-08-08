@@ -434,3 +434,41 @@ teamdb_unlock() {
   rm -f "$lock_dir/pid" 2>/dev/null
   rmdir "$lock_dir" 2>/dev/null
 }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FASE 1 — Dump fresco post-escritura.
+#
+# teamdb_refresh_dump [<project>]
+#   Regenera db/teamdb/team.dump.sql desde la DB del proyecto. Los scripts de
+#   ESCRITURA (plan/claim/execute/amend/seal/...) la llaman al final, así la
+#   fotografía en el working tree queda fresca ANTES del commit y el pre-commit
+#   no tiene que rescatar un diff grande de golpe.
+#
+#   - No-op si la DB o el script de dump no existen (repo sin Fase 0).
+#   - Silencioso en éxito (el dump lo escribe teamdb-dump.sh).
+#   - En fallo imprime WARN y NO aborta: el pre-commit sigue siendo el gate
+#     final y el commit fallará ahí si el dump no se puede fotografiar.
+teamdb_refresh_dump() {
+  local project="${1:-$(pwd)}"
+  local db dump_script
+  db="$(teamdb_project_path "$project")"
+  [ -f "$db" ] || return 0
+  dump_script="${TEAMDB_DUMP_SCRIPT:-}"
+  if [ -z "$dump_script" ]; then
+    for candidate in \
+      "${SKALLING_ROOT:-}/scripts/teamdb-dump.sh" \
+      "$(dirname "${BASH_SOURCE[0]}")/../teamdb-dump.sh" \
+      "$project/scripts/teamdb-dump.sh"; do
+      if [ -f "$candidate" ]; then
+        dump_script="$candidate"
+        break
+      fi
+    done
+  fi
+  [ -n "$dump_script" ] || return 0
+  bash "$dump_script" "$project" >/dev/null 2>&1 || {
+    echo "WARN: teamdb_refresh_dump no pudo regenerar el dump (verificá secretos en la DB)" >&2
+    return 1
+  }
+  return 0
+}

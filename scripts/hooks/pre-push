@@ -1,17 +1,34 @@
 #!/usr/bin/env bash
-# pre-push hook: gate de inmutabilidad sobre lo que se va a publicar (v0.8.3)
-# Verifica que el diff congelado (merge-base..local_sha) de CADA ref a pushear
-# coincida con el último receipt sellado (tree_hash). Si no coincide (o no hay
-# receipt), bloquea el push (fail-closed). Mismo criterio de hash que pre-commit
-# y que teamdb-seal-receipt.sh: SHA-256 de 16 chars sobre el texto del diff.
+# pre-push hook: gates sobre lo que se va a publicar (v0.9 Fase 1)
+# 1) Gate barato O(1): el dump versionado db/teamdb/team.dump.sql debe estar
+#    FRESCO — regenerado en memoria y comparado por hash con el del working
+#    tree. Si la DB local cambió y el dump no se refrescó, bloquea (un script
+#    de escritura no corrió su teamdb_refresh_dump, o falló silenciosamente).
+# 2) Gate de inmutabilidad: el diff congelado (merge-base..local_sha) de CADA
+#    ref a pushear debe coincidir con el último receipt sellado (tree_hash),
+#    EXCLUYENDO db/teamdb/team.dump.sql (artefacto derivado, mismo pathspec
+#    que pre-commit y teamdb-seal-receipt.sh). Fail-closed.
 set -euo pipefail
 PROJECT="$(git rev-parse --show-toplevel)"
 DB="$PROJECT/.opencode/context/team.db"
+DUMP="$PROJECT/db/teamdb/team.dump.sql"
 
-# Fail-open, mismo guard que post-merge: si el bundle teamdb no existe,
-# no hay nada que verificar aún (init/import no se ejecutó).
-[ -d "$PROJECT/.opencode/context/teamdb" ] || exit 0
-# Fail-open, mismo guard que pre-commit: sin DB no hay receipts.
+# Resolver el script de dump con cascada (producción: el del proyecto; tests o
+# hooks instalados en otro repo: el que vive junto al hook).
+DUMP_SCRIPT=""
+for candidate in \
+  "$PROJECT/scripts/teamdb-dump.sh" \
+  "$(dirname "$(dirname "$0")")/teamdb-dump.sh"; do
+  if [ -f "$candidate" ]; then
+    DUMP_SCRIPT="$candidate"
+    break
+  fi
+done
+
+# Fail-open, mismo guard que post-merge/pre-commit: sin dump versionado no hay
+# nada que verificar aún (repo sin Fase 0).
+[ -f "$DUMP" ] || exit 0
+# Fail-open: sin DB no hay receipts ni dump fresco que comparar.
 [ -f "$DB" ] || exit 0
 
 is_zero_sha() {
@@ -19,8 +36,28 @@ is_zero_sha() {
 }
 
 FAILED=0
-# El formato pre-push entrega una línea por ref:
-#   <local ref> <local sha> <remote ref> <remote sha>
+
+# ── Gate barato (Fase 1): el dump debe reflejar la DB local ──
+# Regenerar a STDOUT (sin tocar el working tree) y comparar hash contra el
+# dump del working tree. Diferencia ⇒ DB mutada sin refresh post-escritura.
+if [ -n "$DUMP_SCRIPT" ]; then
+  TMP_DUMP="$(mktemp "${TMPDIR:-/tmp}/teamdb-push-dump.XXXXXX.sql")"
+  if bash "$DUMP_SCRIPT" "$PROJECT" --stdout >"$TMP_DUMP" 2>/dev/null; then
+    FRESH_HASH="$(shasum -a 256 "$TMP_DUMP" | cut -c1-16)"
+    CUR_HASH="$(shasum -a 256 "$DUMP" | cut -c1-16)"
+    if [ "$FRESH_HASH" != "$CUR_HASH" ]; then
+      echo "ERROR: [pre-push] el dump versionado está DESACTUALIZADO." >&2
+      echo "       La DB local cambió pero db/teamdb/team.dump.sql no la refleja." >&2
+      echo "       Regeneralo antes de pushear: bash scripts/teamdb-dump.sh $PROJECT" >&2
+      echo "       (recibido: $CUR_HASH, esperado fresco: $FRESH_HASH)" >&2
+      FAILED=1
+    fi
+    echo "OK: [pre-push] dump fresco (hash $FRESH_HASH)"
+  fi
+  rm -f "$TMP_DUMP"
+fi
+
+# ── Gate de inmutabilidad (v0.8.3, pathspec actualizado a Fase 0) ──
 while read -r local_ref local_sha _remote_ref remote_sha; do
   [ -n "$local_ref" ] || continue
 
@@ -29,9 +66,8 @@ while read -r local_ref local_sha _remote_ref remote_sha; do
     continue
   fi
 
-  # Push de branch nuevo sin upstream (remote_sha todo-ceros): el remote no
-  # tiene base. Usamos el merge-base con HEAD local como base del diff; si no
-  # existe, no podemos verificar → warn y seguimos (nada que bloquear).
+  # Push de branch nuevo sin upstream (remote_sha todo-ceros): usamos el
+  # merge-base con HEAD local; si no existe, warn y seguimos.
   BASE=""
   if is_zero_sha "$remote_sha"; then
     BASE="$(git -C "$PROJECT" merge-base "$local_sha" HEAD 2>/dev/null || true)"
@@ -48,10 +84,11 @@ while read -r local_ref local_sha _remote_ref remote_sha; do
     fi
   fi
 
-  # Diff congelado del rango que se está pusheando (mismo cálculo que el seal).
-  DIFF_TEXT="$(git -C "$PROJECT" diff "$BASE".."$local_sha" 2>/dev/null || true)"
+  # Diff congelado del rango que se está pusheando, EXCLUYENDO el dump
+  # (artefacto derivado; mismo pathspec que el seal y el pre-commit).
+  DIFF_TEXT="$(git -C "$PROJECT" diff "$BASE".."$local_sha" -- . ':(exclude)db/teamdb/team.dump.sql' 2>/dev/null || true)"
   if [ -z "$DIFF_TEXT" ]; then
-    # Sin cambios entre base y local_sha: la ref ya está representada, nada que verificar.
+    # Sin cambios (fuera del dump) entre base y local_sha: nada que verificar.
     continue
   fi
   PUSH_HASH="$(printf '%s' "$DIFF_TEXT" | shasum -a 256 | cut -c1-16)"

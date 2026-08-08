@@ -186,4 +186,9 @@ if [ "$JSONL_FOUND" = "0" ] && [ ! -d "$CTX_DIR/concept" ]; then
   echo "[WARN] no legacy .jsonl or .md concept files to migrate" >&2
 fi
 
+# FASE 1: dump fresco post-escritura (los datos migrados viven en el dump)
+if [ "$DRY_RUN" = false ]; then
+  teamdb_refresh_dump "$PROJECT" >/dev/null 2>&1 || true
+fi
+
 echo "migrated: $local_db"

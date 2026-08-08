@@ -168,6 +168,8 @@ except Exception as e:
     json.dump({'error': str(e)}, sys.stdout)
     sys.exit(1)
 PYEOF
+  # FASE 1: dump fresco post-escritura
+  teamdb_refresh_dump "$PROJECT" >/dev/null 2>&1 || true
   exit 0
 fi
 
@@ -242,6 +244,8 @@ except Exception as e:
     json.dump({'error': str(e)}, sys.stdout)
     sys.exit(1)
 PYEOF
+  # FASE 1: dump fresco post-escritura
+  teamdb_refresh_dump "$PROJECT" >/dev/null 2>&1 || true
   exit 0
 fi
 
@@ -388,3 +392,6 @@ except Exception as e:
     json.dump({'error': str(e)}, sys.stdout)
     sys.exit(1)
 PYEOF
+
+# FASE 1: dump fresco post-escritura
+teamdb_refresh_dump "$PROJECT" >/dev/null 2>&1 || true

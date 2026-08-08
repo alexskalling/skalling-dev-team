@@ -176,5 +176,10 @@ else
   out "  references (decision -> concept): $references_before existentes"
 fi
 
+# FASE 1: dump fresco post-escritura (solo si se escribió)
+if [ "$DRY_RUN" = "0" ]; then
+  teamdb_refresh_dump "$PROJECT" >/dev/null 2>&1 || true
+fi
+
 out ""
 out "Grafo: bash $(dirname "$0")/teamdb-graph.sh \"$PROJECT\" text"

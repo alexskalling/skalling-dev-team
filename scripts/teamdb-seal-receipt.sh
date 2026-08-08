@@ -129,4 +129,7 @@ else
   echo "OK: receipt $RECEIPT_ID (sin tree_hash)"
 fi
 
+# FASE 1: dump fresco post-escritura (el receipt es data sincronizable)
+teamdb_refresh_dump "$PROJECT" >/dev/null 2>&1 || true
+
 exit 0

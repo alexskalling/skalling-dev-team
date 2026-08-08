@@ -95,6 +95,8 @@ case "$OP" in
       IFS=',' read -ra BL <<< "$PROBS"
       for s in "${BL[@]}"; do [ -n "$s" ] && insert_capsule "known_problems" "$s"; done
     fi
+    # FASE 1: dump fresco post-escritura
+    teamdb_refresh_dump "$PROJECT" >/dev/null 2>&1 || true
     echo "linked: task=$TASK_SLUG"
     ;;
 

@@ -208,4 +208,6 @@ if [ "$DRY_RUN" = true ]; then
   python3 -c "$MERGE_PY" "$DB" "$DUMP" 1
 else
   python3 -c "$MERGE_PY" "$DB" "$DUMP" 0
+  # FASE 1: dump fresco post-escritura (la DB es la fuente, el dump la fotografía)
+  teamdb_refresh_dump "$PROJECT" >/dev/null 2>&1 || true
 fi

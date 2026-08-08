@@ -220,4 +220,7 @@ except Exception as e:
     sys.exit(1)
 PYEOF
 
+# FASE 1: dump fresco post-escritura
+teamdb_refresh_dump "$PROJECT" >/dev/null 2>&1 || true
+
 echo "amended: $SLUG v$NEW_VERSION ($OP) by $ACTOR"

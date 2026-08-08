@@ -682,3 +682,4 @@ UPDATE schema_meta SET value = ''0.7.7'' WHERE key = ''version'';
 
 <!-- Footer: regenerar desde DB con teamdb-export-md.sh -->',NULL,'draft','pol','legacy-import','2026-08-06T14:25:15Z','2026-08-06T14:25:15Z',NULL);
 INSERT INTO "receipts" ("id","task_id","agent","command","exit_code","output_summary","ts","tree_hash") VALUES ('rcpt_1786150845_5220','1000','teo','review-seal',0,'','2026-08-08 01:00:45','ef2d4380aed49030');
+INSERT INTO "receipts" ("id","task_id","agent","command","exit_code","output_summary","ts","tree_hash") VALUES ('rcpt_1786151556_51426','1001','teo','review-seal',0,'','2026-08-08 01:12:36','9df021410071a179');
