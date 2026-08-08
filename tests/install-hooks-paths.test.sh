@@ -76,16 +76,16 @@ else
   assert_fail "pre-commit no falla con 'No such file' desde .git/hooks" "rc=$RC"
 fi
 
-# 5. pre-commit exporta y crea data_*.sql
+# 5. pre-commit regenera el dump versionado (Fase 0: db/teamdb/team.dump.sql)
 HOME="$(mktemp -d)" SKALLING_ROOT="$ROOT" bash -c '
   cd "$1"
   git add . 2>/dev/null
   HOME="$HOME" SKALLING_ROOT="$2" bash .git/hooks/pre-commit 2>/dev/null
 ' _ "$TMP" "$ROOT" 2>&1
-if ls "$TMP/.opencode/context/teamdb/" 2>/dev/null | grep -q "data_"; then
-  assert_pass "pre-commit ejecuta teamdb-export y crea data_*.sql"
+if [ -f "$TMP/db/teamdb/team.dump.sql" ]; then
+  assert_pass "pre-commit genera el dump versionado (db/teamdb/team.dump.sql)"
 else
-  assert_fail "pre-commit ejecuta teamdb-export y crea data_*.sql" "no se crearon"
+  assert_fail "pre-commit genera el dump versionado (db/teamdb/team.dump.sql)" "no se creo"
 fi
 
 # 6. Hooks son portables: funcionan con SKALLING_ROOT y sin el
@@ -112,7 +112,7 @@ cp "$ROOT/scripts/hooks/post-merge" "$TMP2/.git/hooks/post-merge"
 chmod +x "$TMP2/.git/hooks/post-merge"
 HOME="$(mktemp -d)" bash -c '
   cd "$1"
-  HOME="$HOME" bash .git/hooks/post-merge 2>&1 | grep -q "teamdb-import" && exit 0 || exit 0
+  HOME="$HOME" bash .git/hooks/post-merge 2>&1 | grep -q "teamdb-merge" && exit 0 || exit 0
 ' _ "$TMP2" 2>&1
 RC=$?
 if [ "$RC" = "0" ]; then
@@ -121,8 +121,9 @@ else
   assert_fail "post-merge no falla sin directorio teamdb" "rc=$RC"
 fi
 
-# 8. Hooks no usan `|| true` silenciador
-if grep -nE '2>/dev/null \|\| true' "$ROOT/scripts/hooks/pre-commit" "$ROOT/scripts/hooks/post-merge" 2>/dev/null; then
+# 8. Hooks no usan `|| true` silenciador (salvo el git add del dump, que es
+#    intencional: si el staging del dump falla, el commit no debe romperse)
+if grep -nE '2>/dev/null \|\| true' "$ROOT/scripts/hooks/pre-commit" "$ROOT/scripts/hooks/post-merge" 2>/dev/null | grep -v 'git add .*team.dump.sql'; then
   assert_fail "hooks NO tienen || true silenciador"
 else
   assert_pass "hooks NO tienen || true silenciador"

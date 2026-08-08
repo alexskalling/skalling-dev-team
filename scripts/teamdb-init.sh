@@ -34,6 +34,10 @@ fi
 trap 'teamdb_unlock "$LOCK_DIR"' EXIT
 
 # Init base schema si la DB no existe
+DB_WAS_MISSING=false
+if [ ! -f "$(teamdb_project_path "$PROJECT")" ]; then
+  DB_WAS_MISSING=true
+fi
 teamdb_init_project "$PROJECT"
 
 _run_sql() {
@@ -107,6 +111,27 @@ if [ -d "$MIG_DIR" ]; then
     [ -f "$mig" ] || continue
     _run_sql "$mig"
   done
+fi
+
+# FASE 0: si la DB no existía (clon fresco / nunca instalado) y el repo trae un
+# dump versionado, restaurar el estado completo desde git. El dump tiene SOLO
+# INSERTs con PK explícita; la DB ya se creó desde el schema arriba.
+if [ "$DB_WAS_MISSING" = true ] && [ -f "$PROJECT/db/teamdb/team.dump.sql" ]; then
+  RESTORE_SCRIPT=""
+  for candidate in \
+    "$SKALLING_ROOT_DIR/scripts/teamdb-restore.sh" \
+    "$SCRIPT_DIR/teamdb-restore.sh"; do
+    if [ -f "$candidate" ]; then
+      RESTORE_SCRIPT="$candidate"
+      break
+    fi
+  done
+  if [ -n "$RESTORE_SCRIPT" ]; then
+    echo "teamdb: dump versionado encontrado, restaurando estado..."
+    bash "$RESTORE_SCRIPT" "$PROJECT" --force || {
+      echo "WARN: restore desde dump falló; continúo con DB vacía (revisar db/teamdb/team.dump.sql)" >&2
+    }
+  fi
 fi
 
 # Verificar que las migrations dejaron el schema correcto; si no, fallar en vez

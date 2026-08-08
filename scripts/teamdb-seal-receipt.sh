@@ -72,11 +72,15 @@ SUMMARY="${TEAMDB_CLAIM_OUTPUT_SUMMARY:-}"
 # - Con cambios staged/unstaged: git diff HEAD (NO write-tree, incluye archivos no staged).
 # - Sin cambios respecto a HEAD (árbol limpio): NO se sella — fail-closed (bug D).
 # - Repo sin commits: hash de lo staged (diff --cached); sin staged, tampoco.
+# FASE 0: el dump versionado (db/teamdb/team.dump.sql) se EXCLUYE del hash —
+# es un artefacto derivado de la DB, no código revisado. El pre-commit usa el
+# mismo pathspec, así el seal y el gate siempre coinciden aunque la DB cambie.
 TREE_HASH="${TEAMDB_CLAIM_TREE_HASH:-}"
+DUMP_EXCLUDE=':(exclude)db/teamdb/team.dump.sql'
 if [ -z "$TREE_HASH" ]; then
   HEAD_SHA="$(git -C "$PROJECT" rev-parse --verify HEAD 2>/dev/null || echo "")"
   if [ -n "$HEAD_SHA" ]; then
-    DIFF_TEXT="$(git -C "$PROJECT" diff HEAD 2>/dev/null || true)"
+    DIFF_TEXT="$(git -C "$PROJECT" diff HEAD -- . "$DUMP_EXCLUDE" 2>/dev/null || true)"
     if [ -n "$DIFF_TEXT" ]; then
       TREE_HASH="$(printf '%s' "$DIFF_TEXT" | shasum -a 256 | cut -c1-16)"
     else
@@ -91,7 +95,7 @@ if [ -z "$TREE_HASH" ]; then
       exit 1
     fi
   else
-    DIFF_TEXT="$(git -C "$PROJECT" diff --cached 2>/dev/null || true)"
+    DIFF_TEXT="$(git -C "$PROJECT" diff --cached -- . "$DUMP_EXCLUDE" 2>/dev/null || true)"
     if [ -n "$DIFF_TEXT" ]; then
       TREE_HASH="$(printf '%s' "$DIFF_TEXT" | shasum -a 256 | cut -c1-16)"
     else

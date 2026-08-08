@@ -41,6 +41,7 @@ for t in tests/teamdb-safe-query.test.sh \
          tests/teamdb-python-bindparams.test.sh \
          tests/teamdb-write-wal.test.sh \
          tests/teamdb.test.sh \
+         tests/test-teamdb-dump-sync.test.sh \
          tests/code-intelligence.test.sh \
          tests/memory-protocol.test.sh \
          tests/spec-memory-link.test.sh \

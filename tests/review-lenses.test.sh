@@ -255,10 +255,10 @@ if [ "$HOOK_RC2" = "0" ]; then
 else
   assert_fail "gate: pre-commit pasa tras re-seal" "rc=$HOOK_RC2 out=$HOOK_OUT2"
 fi
-if ls "$GATE_REPO/.opencode/context/teamdb/" >/dev/null 2>&1 && ls "$GATE_REPO/.opencode/context/teamdb/" | grep -q "data_"; then
-  assert_pass "gate: pre-commit sigue exportando data_*.sql"
+if [ -f "$GATE_REPO/db/teamdb/team.dump.sql" ]; then
+  assert_pass "gate: pre-commit genera el dump versionado (db/teamdb/team.dump.sql)"
 else
-  assert_fail "gate: pre-commit sigue exportando data_*.sql"
+  assert_fail "gate: pre-commit genera el dump versionado (db/teamdb/team.dump.sql)" "no se creo"
 fi
 
 # ── 7. --deep: congela bundle con candidate.diff + files.txt + 4 prompts ──

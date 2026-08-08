@@ -26,7 +26,9 @@ __pycache__/
 coverage/
 .nyc_output/
 
-# TeamDB: la DB cruda no se commitea; git guarda el export .sql (.opencode/context/teamdb/)
+# TeamDB: la DB cruda no se commitea; git guarda la fotografía en db/teamdb/team.dump.sql
+# (generada por scripts/teamdb-dump.sh, versionada en git — NO ignorada).
+# Solo se ignoran los artefactos locales efímeros:
 .opencode/context/team.db
 .opencode/context/team.db-shm
 .opencode/context/team.db-wal
@@ -35,7 +37,7 @@ coverage/
 .opencode/context/.backup-*
 .opencode/context/.backups/
 .opencode/context/.legacy-backup-*
-# Export local del pre-commit (data_*.sql) y bundles de review --deep: output efímero
+# Export local legacy del pre-commit (data_*.sql) y bundles de review --deep: output efímero
 .opencode/context/teamdb/
 .opencode/context/review/
 

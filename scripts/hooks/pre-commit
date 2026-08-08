@@ -58,10 +58,13 @@ if [ "$CHANGED_CODE" -gt 0 ]; then
   # 2b. v0.8.3: inmutabilidad — el árbol staged debe coincidir con el último
   # receipt sellado (tree_hash). El hash se calcula ANTES del export (el export
   # escribe data_*.sql en el working tree, ajenos a la revisión sellada).
+  # FASE 0: el dump versionado (db/teamdb/team.dump.sql) también se excluye del
+  # hash — es un artefacto derivado de la DB, no código revisado; se regenera
+  # en el paso 3 y se stagea después del check de inmutabilidad.
   # Si una línea cambió después de la revisión, se bloquea hasta re-sellar.
   CURRENT_HASH=""
   if git -C "$PROJECT" rev-parse --verify HEAD >/dev/null 2>&1; then
-    DIFF_TEXT="$(git -C "$PROJECT" diff HEAD 2>/dev/null || DIFF_TEXT="")"
+    DIFF_TEXT="$(git -C "$PROJECT" diff HEAD -- . ':(exclude)db/teamdb/team.dump.sql' 2>/dev/null || DIFF_TEXT="")"
     if [ -n "$DIFF_TEXT" ]; then
       CURRENT_HASH="$(printf '%s' "$DIFF_TEXT" | shasum -a 256 | cut -c1-16)"
     else
@@ -73,7 +76,7 @@ if [ "$CHANGED_CODE" -gt 0 ]; then
       CURRENT_HASH="$(git -C "$PROJECT" rev-parse HEAD | cut -c1-16)"
     fi
   else
-    DIFF_TEXT="$(git -C "$PROJECT" diff --cached 2>/dev/null || DIFF_TEXT="")"
+    DIFF_TEXT="$(git -C "$PROJECT" diff --cached -- . ':(exclude)db/teamdb/team.dump.sql' 2>/dev/null || DIFF_TEXT="")"
     if [ -n "$DIFF_TEXT" ]; then
       CURRENT_HASH="$(printf '%s' "$DIFF_TEXT" | shasum -a 256 | cut -c1-16)"
     fi
@@ -88,23 +91,31 @@ if [ "$CHANGED_CODE" -gt 0 ]; then
   fi
 fi
 
-# 3. Export DB → .sql
-# Resolver teamdb-export.sh sin rutas relativas fragiles en .git/hooks/:
-# prioridad: SKALLING_ROOT (installer) > script junto al hook > repo
-EXPORT_SCRIPT=""
+# 3. FASE 0: regenerar el dump versionado (db/teamdb/team.dump.sql) y stagearlo.
+# Reemplaza el export data_*.sql a .opencode/context/teamdb/ (gitignored, muerto).
+# El dump es la fotografía de la DB; se actualiza en cada commit para que git
+# guarde la copia más reciente. Si la DB no cambió, el dump queda byte-idéntico
+# (determinista) → git add es no-op.
+DUMP_SCRIPT=""
 for candidate in \
-  "${SKALLING_ROOT:-}/scripts/teamdb-export.sh" \
-  "$SCRIPT_DIR/teamdb-export.sh" \
-  "$PROJECT/scripts/teamdb-export.sh"; do
+  "${SKALLING_ROOT:-}/scripts/teamdb-dump.sh" \
+  "$SCRIPT_DIR/teamdb-dump.sh" \
+  "$PROJECT/scripts/teamdb-dump.sh"; do
   if [ -f "$candidate" ]; then
-    EXPORT_SCRIPT="$candidate"
+    DUMP_SCRIPT="$candidate"
     break
   fi
 done
-if [ -n "$EXPORT_SCRIPT" ]; then
-  bash "$EXPORT_SCRIPT" "$PROJECT"
-  if ls "$PROJECT/.opencode/context/teamdb"/data_*.sql >/dev/null 2>&1; then
-    git add "$PROJECT/.opencode/context/teamdb"/data_*.sql
+if [ -n "$DUMP_SCRIPT" ] && [ -f "$PROJECT/.opencode/context/team.db" ]; then
+  if bash "$DUMP_SCRIPT" "$PROJECT" >/dev/null 2>&1; then
+    if [ -f "$PROJECT/db/teamdb/team.dump.sql" ]; then
+      git add "$PROJECT/db/teamdb/team.dump.sql" 2>/dev/null || true
+    fi
+  else
+    # El dump puede fallar por secretos detectados (fail-closed): el commit NO
+    # debe avanzar con un estado que no se puede fotografiar.
+    echo "ERROR: teamdb-dump falló (posible secreto en la DB). Corregí y reintentá." >&2
+    exit 1
   fi
 fi
 

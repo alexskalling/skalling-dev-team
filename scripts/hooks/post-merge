@@ -1,29 +1,31 @@
 #!/usr/bin/env bash
-# post-merge hook: import .sql files to teamdb
-# Errores son visibles (no se suprimen) — la salud de teamdb es importante.
+# post-merge hook: mergea el dump versionado (git) hacia la DB local por fila.
+# FASE 0: la DB es la fuente de la verdad; tras un pull, el dump de la otra
+# máquina se fusiona en la DB local (INSERTs nuevos + último-write-gana).
+# Errores son visibles — la salud de teamdb es importante.
 set -euo pipefail
 
 PROJECT="$(git rev-parse --show-toplevel)"
 
-# Salir silenciosamente si no hay directorio teamdb
-[ -d "$PROJECT/.opencode/context/teamdb" ] || exit 0
+# Fail-open: sin dump versionado no hay nada que mergear (repo sin Fase 0).
+[ -f "$PROJECT/db/teamdb/team.dump.sql" ] || exit 0
 
-GLOBAL_SCRIPT="${SKALLING_ROOT:-$HOME/.config/opencode}/scripts/teamdb-import.sh"
-REPO_SCRIPT="$PROJECT/scripts/teamdb-import.sh"
+GLOBAL_SCRIPT="${SKALLING_ROOT:-$HOME/.config/opencode}/scripts/teamdb-merge.sh"
+REPO_SCRIPT="$PROJECT/scripts/teamdb-merge.sh"
 
 if [ -x "$GLOBAL_SCRIPT" ]; then
   bash "$GLOBAL_SCRIPT" "$PROJECT" || {
-    echo "[ERROR] teamdb-import.sh falló. El merge continúa, pero teamdb puede estar desincronizado." >&2
+    echo "[ERROR] teamdb-merge.sh falló. El merge continúa, pero teamdb puede estar desincronizado." >&2
     exit 1
   }
 elif [ -x "$REPO_SCRIPT" ]; then
   bash "$REPO_SCRIPT" "$PROJECT" || {
-    echo "[ERROR] teamdb-import.sh falló." >&2
+    echo "[ERROR] teamdb-merge.sh falló." >&2
     exit 1
   }
 else
-  echo "[WARN] teamdb-import.sh no encontrado" >&2
+  echo "[WARN] teamdb-merge.sh no encontrado" >&2
   exit 0
 fi
 
-echo "teamdb: imported .sql from git"
+echo "teamdb: dump mergeado hacia la DB local"
