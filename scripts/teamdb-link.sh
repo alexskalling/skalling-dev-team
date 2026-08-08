@@ -72,6 +72,19 @@ WHERE NOT EXISTS (
 SQL
 )
 
+SQL_R1B=$(cat <<'SQL'
+INSERT INTO memory_links(from_table, from_id, to_table, to_id, link_type, confidence)
+SELECT 'concepts', c.id, 'concepts', cat.id, 'part_of', 1.0
+FROM concepts c
+JOIN concepts cat ON cat.category = c.category AND cat.category IS NOT NULL AND cat.slug = 'category-' || c.category
+WHERE NOT EXISTS (
+  SELECT 1 FROM memory_links ml
+  WHERE ml.from_table='concepts' AND ml.from_id=c.id
+    AND ml.to_table='concepts' AND ml.to_id=cat.id AND ml.link_type='part_of'
+)
+SQL
+)
+
 SQL_R2=$(cat <<'SQL'
 INSERT INTO memory_links(from_table, from_id, to_table, to_id, link_type, confidence)
 SELECT a.memory_table, a.memory_id, b.memory_table, b.memory_id, 'related', 0.8
@@ -157,6 +170,9 @@ if [ "$DRY_RUN" = "0" ]; then
   TEAMDB_ACTOR="skalling-link" teamdb_write_project "$DB" "$SQL_R1"
   report "related (categoría)" "$related_before" "$(count_type related)"
   related_before="$(count_type related)"
+  TEAMDB_ACTOR="skalling-link" teamdb_write_project "$DB" "$SQL_R1B"
+  report "part_of (concept -> categoría)" "$part_of_before" "$(count_type part_of)"
+  part_of_before="$(count_type part_of)"
   TEAMDB_ACTOR="skalling-link" teamdb_write_project "$DB" "$SQL_R2"
   report "related (tags)" "$related_before" "$(count_type related)"
   uses_before="$(count_type uses)"

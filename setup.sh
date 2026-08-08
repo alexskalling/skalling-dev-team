@@ -28,7 +28,7 @@ skalling_log_os
 # ──────────────────────────────────────────────────────────────────────────────
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKALLING_VERSION="0.9.0"
+SKALLING_VERSION="0.9.1"
 
 DRY_RUN=false
 FORCE=false

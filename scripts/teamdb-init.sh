@@ -25,7 +25,7 @@ else
   exit 1
 fi
 
-# Lock cross-platform (mkdir-based, sin flock). v0.9.0
+# Lock cross-platform (mkdir-based, sin flock). v0.9.1
 LOCK_DIR="$PROJECT/.opencode/context/.locks/team"
 mkdir -p "$(dirname "$LOCK_DIR")" 2>/dev/null || true
 if ! teamdb_lock "$LOCK_DIR" 10; then
@@ -50,8 +50,8 @@ _run_sql() {
     return 0
   fi
 
-  # Verificar si ya se aplicó (applied_migrations; tabla creada por schema v0.9.0)
-  # `|| true`: en DBs pre-v0.9.0 la tabla no existe y el query falla; eso no debe
+  # Verificar si ya se aplicó (applied_migrations; tabla creada por schema v0.9.1)
+  # `|| true`: en DBs pre-v0.9.1 la tabla no existe y el query falla; eso no debe
   # matar el script con set -e (bash 3.2 aborta en command substitution fallida).
   local already_applied
   already_applied="$(sqlite3 "$DB" "SELECT 1 FROM applied_migrations WHERE name='$mig_name' LIMIT 1" 2>/dev/null)" || true
@@ -137,7 +137,7 @@ fi
 # Verificar que las migrations dejaron el schema correcto; si no, fallar en vez
 # de seguir con una DB degradada (los errores de migración idempotentes, como el
 # "duplicate column" de 004 sobre DBs nuevas, se toleran arriba).
-EXPECTED_VERSION="0.9.0"
+EXPECTED_VERSION="0.9.1"
 VERSION="$(sqlite3 "$DB" "SELECT value FROM schema_meta WHERE key='version'" 2>/dev/null || true)"
 if [ "$VERSION" != "$EXPECTED_VERSION" ]; then
   echo "ERROR: teamdb schema version=$VERSION, esperado $EXPECTED_VERSION (migrations incompletas)" >&2

@@ -14,4 +14,4 @@ CREATE TABLE IF NOT EXISTS workflow_state (
 INSERT OR IGNORE INTO workflow_state (id, active_cycle_slug, phase, actor, started_at, updated_at)
 VALUES (1, NULL, NULL, NULL, NULL, NULL);
 
-UPDATE schema_meta SET value = '0.9.0' WHERE key = 'version';
+UPDATE schema_meta SET value = '0.9.1' WHERE key = 'version';

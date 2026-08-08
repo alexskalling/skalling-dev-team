@@ -165,19 +165,27 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 nodes["c" + str(c["id"])] = {"slug": c["slug"], "type": "concept", "category": c.get("category", "")}
             for d in query_db("SELECT id, slug, status FROM decisions"):
                 nodes["d" + str(d["id"])] = {"slug": d["slug"], "type": "decision", "status": d.get("status", "")}
+            for p in query_db("SELECT id, slug, status FROM plans"):
+                nodes["p" + str(p["id"])] = {"slug": p["slug"], "type": "plan", "status": p.get("status", "")}
+            for t in query_db("SELECT id, slug, status, plan_id FROM tasks"):
+                nodes["t" + str(t["id"])] = {"slug": t["slug"], "type": "task", "status": t.get("status", ""), "plan_id": t.get("plan_id", "")}
             for w in query_db("SELECT id, slug, type, status FROM work_in_progress WHERE type IN ('feature','task')"):
                 nodes["w" + w["slug"]] = {"slug": w["slug"], "type": w["type"], "category": "wip", "status": w.get("status", "")}
 
             links = query_db("""
                 SELECT ml.*,
-                       COALESCE(c1.slug,d1.slug,w1.slug) as fs, COALESCE(c2.slug,d2.slug,w2.slug) as ts
+                       COALESCE(c1.slug,d1.slug,w1.slug,p1.slug,t1.slug) as fs, COALESCE(c2.slug,d2.slug,w2.slug,p2.slug,t2.slug) as ts
                 FROM memory_links ml
                 LEFT JOIN concepts c1 ON ml.from_table='concepts' AND c1.id=ml.from_id
                 LEFT JOIN decisions d1 ON ml.from_table='decisions' AND d1.id=ml.from_id
                 LEFT JOIN work_in_progress w1 ON ml.from_table='work_in_progress' AND w1.id=ml.from_id
+                LEFT JOIN plans p1 ON ml.from_table='plans' AND p1.id=ml.from_id
+                LEFT JOIN tasks t1 ON ml.from_table='tasks' AND t1.id=ml.from_id
                 LEFT JOIN concepts c2 ON ml.to_table='concepts' AND c2.id=ml.to_id
                 LEFT JOIN decisions d2 ON ml.to_table='decisions' AND d2.id=ml.to_id
                 LEFT JOIN work_in_progress w2 ON ml.to_table='work_in_progress' AND w2.id=ml.to_id
+                LEFT JOIN plans p2 ON ml.to_table='plans' AND p2.id=ml.to_id
+                LEFT JOIN tasks t2 ON ml.to_table='tasks' AND t2.id=ml.to_id
             """)
             links = [l for l in links if l.get("fs") and l.get("ts")]
             self.send_json({"nodes": nodes, "links": links})
