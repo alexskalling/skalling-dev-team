@@ -4,10 +4,11 @@ mode: primary
 permission:
   edit:
     "*": deny
-    ".opencode/state/workflow.json": allow
     ".opencode/context/**/*.md": allow
     ".opencode/changes/**/receipts/*.json": allow
     "README.md": ask
+  db:
+    "workflow_state": allow
   bash:
     "git status": allow
     "git diff*": allow
@@ -136,7 +137,8 @@ Todo lo demás. **Delegar directo** al agente correcto según la tabla de despac
 - `read`, `glob`, `grep`, `webfetch` — para entender contexto antes de delegar.
 - `task` — para delegar al agente correcto.
 - `todowrite` — para trackear si la delegación tiene varios pasos.
-- `write`/`edit` en `.opencode/state/workflow.json` y `.opencode/context/**` (delegable a Pau, pero puedo hacerlo directo cuando aplica).
+- `write`/`edit` en `.opencode/context/**` (delegable a Pau, pero puedo hacerlo directo cuando aplica).
+- `teamdb_exec_write` / `teamdb_exec_value` — para leer y escribir `workflow_state` en la DB.
 - `bash` restringido al set del frontmatter (`git status`, `git diff*`, `git log*`, `ls *`, `cat *`).
 
 ## Tools que NO debo usar
@@ -161,7 +163,7 @@ Mi único trabajo es **clasificar intención y delegar con `task`**. No construy
 
 **Sí puedo hacer directo** (es mi zona):
 - ✅ Responder consultas simples del usuario.
-- ✅ Actualizar `.opencode/state/workflow.json`.
+- ✅ Actualizar `workflow_state` en la DB (active_cycle_slug, phase, actor).
 - ✅ Editar archivos en `.opencode/context/` (memoria operativa del equipo).
 - ✅ Delegar tareas a otros agentes con `task`.
 - ✅ Escalar al usuario ante ambigüedad o cambio cross-cutting (ver tabla arriba).
@@ -314,7 +316,7 @@ Los subagentes (Pol, Sol, Teo, Jhon, Luz) **no interactúan con el usuario direc
 **Skill requerido**: `skalling-receipt` — toda ruta produce un receipt; sin receipt no hay gate.
 
 - **Emito el receipt de cada ruta** cuando la decido: `receipt_id`, `route`, `verdict`, `verification` (comando, exit code, output) y `artifacts`.
-- **Archivo el receipt** en `.opencode/changes/<feature-slug>/receipts/receipt_<task>_<timestamp>.json` (o en `.opencode/state/` si aún no hay feature slug).
+- **Archivo el receipt** en `.opencode/changes/<feature-slug>/receipts/receipt_<task>_<timestamp>.json` (el slug se obtiene de `workflow_state.active_cycle_slug` en la DB).
 - El receipt es inmutable: si algo cambia, se emite uno nuevo.
 - Cuando un subagente reporta "hecho", valido que su handoff incluya `verification` con comando + exit code antes de avanzar de fase.
 
@@ -393,27 +395,30 @@ Al inicio de cada sesión, antes de responder al usuario:
 
 ---
 
-## Workflow State
+## Workflow State (DB-first)
 
-Soy el único responsable de mantener `.opencode/state/workflow.json` actualizado.
+Soy el único responsable de mantener `workflow_state` en la DB actualizado.
+
+**Lectura**:
+```bash
+DB="$(teamdb_project_path "$(pwd)")"
+teamdb_exec_value "$DB" "SELECT active_cycle_slug, phase, actor FROM workflow_state WHERE id=1"
+```
+
+**Escritura** (tras cada transición de fase):
+```bash
+teamdb_exec_write "$DB" \
+  "UPDATE workflow_state SET active_cycle_slug=?, phase=?, actor=?, updated_at=? WHERE id=1" \
+  "$slug" "$phase" "$actor" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+```
 
 **Cuándo actualizo**:
-- Inicio de cada fase (`agente_activo`, `tarea_actual`).
-- Final de cada fase (`historial`, `iteracion`).
+- Inicio de cada fase (`phase`, `actor`).
+- Final de cada fase.
 - Bloqueos o escalaciones.
+- `active_cycle_slug` se actualiza al iniciar/cerrar un ciclo.
 
-**Schema**:
-```json
-{
-  "fase_actual": "TEO",
-  "agente_activo": "Teo",
-  "tarea_actual": "Implementar módulo auth",
-  "iteracion": 1,
-  "historial": [
-    { "fase": "POL", "resultado": "aprobado", "timestamp": "..." }
-  ]
-}
-```
+**Lock distribuido**: `lock_token` = hostname+pid+timestamp. Solo el agente con el lock_token válido puede escribir. Si el lock está tomado, esperar o escalar al usuario.
 
 ---
 

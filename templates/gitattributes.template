@@ -3,14 +3,8 @@
 # Este archivo define cómo git maneja conflictos en `.opencode/`.
 # Vive en `.opencode/.gitattributes` para aplicarse solo a archivos de Skalling.
 
-# ────────────────────────────────────────────────────────────────────────────
-# ESTADO DEL WORKFLOW — proteger contra ciclos concurrentes
-# ────────────────────────────────────────────────────────────────────────────
-
-# workflow.json: solo UN ciclo activo a la vez. Si dos devs intentan,
-# el segundo DEBE resolver manualmente (no se puede auto-mergear).
-# Lock = bloquea el merge y obliga a hablar con el otro dev.
-.opencode/state/workflow.json merge=lock
+# Workflow state now lives in DB (workflow_state table) — not in filesystem.
+# The DB enforces singleton constraint (CHECK id=1) and lock_token for concurrency.
 
 # ────────────────────────────────────────────────────────────────────────────
 # BUNDLE OKF — append-friendly y regeneración trivial

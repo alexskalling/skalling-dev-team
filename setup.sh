@@ -78,7 +78,6 @@ AGENTS_DEST_DIR="$OPENCODE_DIR/agents"
 SKILLS_DEST_DIR="$OPENCODE_DIR/skills"
 CHANGES_DEST_DIR="$OPENCODE_DIR/changes"
 CONTEXT_DIR="$OPENCODE_DIR/context"
-STATE_DIR="$OPENCODE_DIR/state"
 DOCS_DIR="$TARGET_DIR/docs"
 TARGET_AGENTS_FILE="$TARGET_DIR/AGENTS.md"
 BACKUP_DIR="$TARGET_DIR/.skalling-backups"
@@ -201,7 +200,7 @@ step_create_directories() {
     log INFO "Creando estructura de directorios en $OPENCODE_DIR"
 
     # Detectar symlinks rotos en .opencode/ (heredados de instalaciones anteriores o apps externas)
-    for path in "$AGENTS_DEST_DIR" "$SKILLS_DEST_DIR" "$CHANGES_DEST_DIR" "$CONTEXT_DIR" "$STATE_DIR"; do
+    for path in "$AGENTS_DEST_DIR" "$SKILLS_DEST_DIR" "$CHANGES_DEST_DIR" "$CONTEXT_DIR"; do
         if [[ -L "$path" && ! -e "$path" ]]; then
             local target; target="$(readlink "$path" 2>/dev/null || echo '?')"
             log WARN "Symlink roto en $path -> $target. Eliminando."
@@ -213,7 +212,6 @@ step_create_directories() {
     run mkdir -p "$SKILLS_DEST_DIR"
     run mkdir -p "$CHANGES_DEST_DIR"
     run mkdir -p "$CONTEXT_DIR"
-    run mkdir -p "$STATE_DIR"
 
     if [[ ! -d "$DOCS_DIR" ]]; then
         run mkdir -p "$DOCS_DIR"
@@ -222,15 +220,6 @@ step_create_directories() {
         log INFO "docs/ ya existe"
     fi
 
-    if [[ ! -f "$STATE_DIR/workflow.json" ]]; then
-        if [[ "$DRY_RUN" == true ]]; then
-            echo "    [dry-run] crear workflow.json inicial"
-        else
-            printf '{"fase_actual":"INICIO","agente_activo":null,"tarea_actual":null,"iteracion":0,"historial":[]}\n' \
-                > "$STATE_DIR/workflow.json"
-            log OK "workflow.json inicializado"
-        fi
-    fi
 }
 
 step_install_agents() {
@@ -369,14 +358,13 @@ step_summary() {
   │  Skalling v${SKALLING_VERSION} configurado en el proyecto   │
   ╰──────────────────────────────────────────────────────────────╯
 
-  📂 Target: $TARGET_DIR
-     ├── .opencode/
-     │   ├── agents/      (8 agentes per-project, commiteable)
-     │   ├── skills/      (skills core, stack-specific on-demand)
-     │   ├── changes/     (SDD artifacts, vacíos hasta el primer feature)
-     │   ├── context/     (bundle OKF, se llena con /skalling-init)
-     │   └── state/       (workflow.json del ciclo)
-     └── docs/            (documentación pública)
+   📂 Target: $TARGET_DIR
+      ├── .opencode/
+      │   ├── agents/      (8 agentes per-project, commiteable)
+      │   ├── skills/      (skills core, stack-specific on-demand)
+      │   ├── changes/     (SDD artifacts, vacíos hasta el primer feature)
+      │   └── context/     (bundle OKF + DB, se llena con /skalling-init)
+      └── docs/            (documentación pública)
 
   📦 Backups: $BACKUP_DIR (mantiene últimos 5)
   📋 Log:     $INSTALL_LOG
@@ -428,14 +416,6 @@ do_uninstall() {
             log INFO "Bundle OKF borrado"
         else
             log INFO "Bundle OKF preservado"
-        fi
-    fi
-
-    # Preguntar antes de borrar state
-    if [[ -d "$STATE_DIR" ]]; then
-        if [[ "$FORCE" == true ]] || ask_yes_no "    ¿Borrar .opencode/state/ (workflow.json)?" "n"; then
-            rm -rf "$STATE_DIR"
-            log INFO "State borrado"
         fi
     fi
 

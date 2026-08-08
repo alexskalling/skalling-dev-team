@@ -297,7 +297,7 @@ test_collaborative_memory() {
     assert_file_contains "$REPO_ROOT/templates/gitattributes.template" "merge=lock" "merge=lock presente"
 
     # Protege archivos críticos
-    assert_file_contains "$REPO_ROOT/templates/gitattributes.template" "workflow.json" "workflow.json protegido"
+    assert_file_contains "$REPO_ROOT/templates/gitattributes.template" "workflow_state" "workflow_state (DB) referenciado"
     assert_file_contains "$REPO_ROOT/templates/gitattributes.template" "log.md" "log.md protegido"
     assert_file_contains "$REPO_ROOT/templates/gitattributes.template" "constitucion.md" "constitucion.md protegido"
 

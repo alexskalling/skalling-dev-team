@@ -339,7 +339,7 @@ Los frontmatter de los agentes **no incluyen `model:`**. Heredan del provider gl
 ### Reglas
 1. El agente receptor debe confirmar recepción.
 2. Si hay errores, el handoff incluye razón específica.
-3. El handoff se registra en `.opencode/state/workflow.json`.
+3. El handoff se registra en la tabla `workflow_state` de la DB.
 4. **Handoff a Teo/Luz SIN project_context es inválido** — agente debe solicitar contexto antes de proceder.
 
 ---
@@ -435,7 +435,7 @@ D) Lo explico yo con mis palabras
 | `context/log.md` | `merge=union` | Append-only, ambas entradas son válidas |
 | `context/index.md` | `merge=union` | Regenerable, Pau deduplica |
 | `context/README.md` | `merge=union` | Regenerable |
-| `state/workflow.json` | `merge=lock` | Solo UN ciclo activo a la vez |
+| `workflow_state` (DB) | CHECK(id=1) | Solo UN ciclo activo a la vez (singleton) |
 | `context/constitucion.md` | `merge=lock` | Cambios requieren consenso |
 | `decisiones/*.md` | Manual | Concept docs pueden tener contenido distinto |
 | `trabajo-en-curso/*.md` | Manual | Features distintas pueden tener mismo slug |
@@ -447,7 +447,7 @@ D) Lo explico yo con mis palabras
 
 1. **Un feature por branch** — minimiza conflictos en `trabajo-en-curso/` y `cambios/`.
 2. **Sufijo de autor en ADRs** — `YYYY-MM-DD-titulo-JPM.md` para evitar colisiones.
-3. **Lock del ciclo** — si `workflow.json` está en lock, hablar con el otro dev antes de iniciar.
+3. **Lock del ciclo** — si `workflow_state.lock_token` está ocupado, hablar con el otro dev antes de iniciar.
 4. **Git worktrees para features grandes** — `git worktree add ../mi-feature feat/auth`.
 5. **NO aceptar ours/theirs sin leer** — pérdida silenciosa de información.
 6. **Regenerar cuando aplica** — `index.md` y `project.yaml` se pueden borrar y regenerar.
@@ -467,7 +467,7 @@ D) Lo explico yo con mis palabras
 | Dos devs crean mismo `2026-XX-XX-titulo.md` | Renombrar uno con sufijo de autor |
 | Mismo feature en distintas branches | Serializar o mergear manualmente |
 | log.md conflictivo | Verificar `.gitattributes`, regenerar si se rompió |
-| workflow.json conflictivo | Decidir quién continúa, el otro toma `theirs` o `ours` |
+| workflow_state lock activo | Consultar al otro dev; el que tiene lock_token válido continúa |
 | Constitución conflictiva | Escalar al equipo, decisión colectiva |
 | Preferencias contradictorias | Escalar, son reglas del equipo |
 

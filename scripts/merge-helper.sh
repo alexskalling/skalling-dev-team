@@ -7,7 +7,7 @@
 #   - Archivos `.opencode/**` en estado de conflicto git.
 #   - Decisiones ADRs con el mismo nombre en distintas branches.
 #   - Conflictos en log.md / index.md (que con merge=union se auto-resuelven).
-#   - Conflictos en workflow.json (lock).
+#   - Lock activo en workflow_state (DB).
 #
 # Para cada conflicto, sugiere la acción correcta.
 
@@ -113,17 +113,16 @@ suggest_resolution() {
     case "$file" in
         */.opencode/state/workflow.json)
             cat <<EOF
-    [Tipo] Estado del workflow (lock — no auto-mergeable)
+    [Tipo] Workflow state ahora vive en la DB (workflow_state table)
 
-    [Problema] Alguien más está corriendo un ciclo activo.
-    Conflictos en este archivo SIEMPRE requieren coordinación.
+    [Nota] .opencode/state/workflow.json ya no existe como archivo.
+    El estado del ciclo está en la tabla workflow_state de team.db.
+    El lock se maneja via lock_token en la DB (no via git merge=lock).
 
     [Resolución]
-      1. Hablar con el otro dev: ¿quién continúa el ciclo?
-      2. Si seguís vos: tomar theirs ("git checkout --theirs $file")
-      3. Si sigue el otro: tomar ours ("git checkout --ours $file")
-      4. Si ambos terminaron ciclos diferentes: regenerar manualmente
-         (workflow.json refleja el ciclo activo, no histórico)
+      1. Consultar lock_token en workflow_state: SELECT lock_token FROM workflow_state WHERE id=1
+      2. Si hay lock activo, coordinar con el dev que lo posee
+      3. El lock se libera al terminar el ciclo o hacer UPDATE con lock_token=NULL
 EOF
             ;;
 
@@ -364,7 +363,7 @@ main() {
     cat <<EOF
   • Concept docs con NOMBRES distintos = no hay conflicto, mergea solo.
   • log.md con merge=union (si .gitattributes aplicado) = auto-resuelto.
-  • workflow.json con merge=lock = SIEMPRE coordinación con el otro dev.
+  • workflow_state (DB) con lock_token = SIEMPRE coordinación con el otro dev.
   • Un feature = un branch de git = menos conflictos.
   • Para features grandes: usar 'git worktree' y mergear al final.
 EOF

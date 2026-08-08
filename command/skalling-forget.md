@@ -62,7 +62,7 @@ Si el doctor detecta errores o warnings, advertir al usuario y cerrar con estado
 
 - Nunca borrar la constitución.
 - Nunca borrar `index.md`, `README.md` ni `log.md`.
-- Nunca tocar `.opencode/changes/`, `docs/` ni `.opencode/state/`.
+- Nunca tocar `.opencode/changes/`, `docs/` ni `workflow_state` en la DB.
 - Nunca modificar un candidato sin confirmación individual.
 - Preferir archivar sobre borrar porque la historia es valiosa.
 

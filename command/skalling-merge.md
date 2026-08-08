@@ -26,7 +26,7 @@ bash ~/skalling-dev-team/scripts/merge-helper.sh
 El script detecta:
 - Archivos `.opencode/` en estado de conflicto git (`<<<<<<<`, `=======`, `>>>>>>>`).
 - Colisiones de nombres entre branches (mismo `YYYY-MM-DD-titulo.md` creado por dos devs).
-- Conflictos en archivos protegidos (workflow.json, constitución).
+- Conflictos en archivos protegidos (constitución) y lock activo en `workflow_state` de la DB.
 
 Para cada conflicto, da **una sugerencia concreta** según el tipo de archivo.
 
@@ -37,7 +37,7 @@ Para cada conflicto, da **una sugerencia concreta** según el tipo de archivo.
 | `context/log.md` | `merge=union` (auto si .gitattributes OK) | Conservar ambas entradas, deduplicar si es necesario |
 | `context/index.md` | `merge=union` | Regenerar con `/skalling-refresh` |
 | `context/constitucion.md` | `merge=lock` | Escalar al equipo, decisión colectiva |
-| `state/workflow.json` | `merge=lock` | Decidir quién continúa el ciclo |
+| `workflow_state` (DB) | lock_token | Consultar al dev con lock_token activo |
 | `decisiones/<file>.md` | Manual | Leer ambas versiones, quedarse con la más completa o renombrar |
 | `trabajo-en-curso/<file>.md` | Manual | Serializar trabajo o renombrar |
 | `stack/<file>.md` | Manual o union | Considerar ignorar en git (es auto-regenerable) |
@@ -97,11 +97,12 @@ YYYY-MM-DD-titulo-corto-autor-iniciales.md
 
 Si dos devs crean `<mismo-nombre>.md`, hay conflicto. Con sufijo de autor, no.
 
-#### Recomendación 3: Lock del ciclo activo
+#### Recomendación 3: Lock del ciclo activo (DB)
 
-`workflow.json` con `merge=lock` evita que dos ciclos corran en paralelo. Si dos devs inician ciclo simultáneo:
-- El segundo debe esperar a que el primero termine.
+`workflow_state.lock_token` en la DB evita que dos ciclos corran en paralelo. Si dos devs inician ciclo simultáneo:
+- El segundo debe esperar a que el primero termine o libere el lock.
 - O el primero aborta y deja que el segundo tome.
+- Consultar: `SELECT lock_token FROM workflow_state WHERE id=1`.
 
 #### Recomendación 4: Git worktrees para features grandes
 
