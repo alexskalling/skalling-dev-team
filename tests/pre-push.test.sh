@@ -37,11 +37,21 @@ new_repo() {
   git -C "$repo" commit -qm init
 }
 
-# helper: simula el stdin del hook pre-push
+# helper: simula el stdin del hook pre-push. El stdin se pasa por ARCHIVO, no por
+# pipe: los guards tempranos del hook (ej: sin teamdb/) hacen exit ANTES de leer
+# stdin, y bajo pipefail un productor por pipe podía recibir EPIPE (write con el
+# reader ya cerrado) → exit code corrido (rc≠0 sin output) → flake intermitente.
+run_hook() {
+  local cwd="$1" stdin_text="$2"
+  local stdin_file="$TMP/hook-stdin"
+  printf '%s\n' "$stdin_text" > "$stdin_file"
+  (cd "$cwd" && bash "$ROOT/scripts/hooks/pre-push" < "$stdin_file" 2>&1)
+  return $?
+}
+
 run_pre_push() {
   local repo="$1" local_sha="$2" remote_sha="$3"
-  (cd "$repo" && printf '%s %s %s %s\n' "refs/heads/main" "$local_sha" "refs/heads/main" "$remote_sha" \
-    | bash "$ROOT/scripts/hooks/pre-push" 2>&1)
+  run_hook "$repo" "refs/heads/main $local_sha refs/heads/main $remote_sha"
   return $?
 }
 
@@ -55,7 +65,7 @@ printf 'x\n' > "$NODB_REPO/a.txt"
 git -C "$NODB_REPO" add -A
 git -C "$NODB_REPO" commit -qm init
 set +e
-GUARD_OUT="$(cd "$NODB_REPO" && printf 'refs/heads/main %s refs/heads/main %s\n' "$(git -C "$NODB_REPO" rev-parse HEAD)" "0000000000000000000000000000000000000000" | bash "$ROOT/scripts/hooks/pre-push" 2>&1)"
+GUARD_OUT="$(run_hook "$NODB_REPO" "refs/heads/main $(git -C "$NODB_REPO" rev-parse HEAD) refs/heads/main 0000000000000000000000000000000000000000")"
 GUARD_RC=$?
 set -e
 if [ "$GUARD_RC" = "0" ]; then
@@ -68,7 +78,7 @@ fi
 DEL_REPO="$TMP/del-repo"
 new_repo "$DEL_REPO"
 set +e
-DEL_OUT="$(cd "$DEL_REPO" && printf 'refs/heads/main %s refs/heads/main %s\n' "0000000000000000000000000000000000000000" "0000000000000000000000000000000000000000" | bash "$ROOT/scripts/hooks/pre-push" 2>&1)"
+DEL_OUT="$(run_hook "$DEL_REPO" "refs/heads/main 0000000000000000000000000000000000000000 refs/heads/main 0000000000000000000000000000000000000000")"
 DEL_RC=$?
 set -e
 if [ "$DEL_RC" = "0" ]; then
@@ -148,7 +158,7 @@ git -C "$NEWBR_REPO" commit -qm "feat: candidato"
 git -C "$NEWBR_REPO" branch -M main 2>/dev/null || true
 LOCAL_SHA="$(git -C "$NEWBR_REPO" rev-parse HEAD)"
 set +e
-NEWBR_OUT="$(cd "$NEWBR_REPO" && printf 'refs/heads/main %s refs/heads/main %s\n' "$LOCAL_SHA" "0000000000000000000000000000000000000000" | bash "$ROOT/scripts/hooks/pre-push" 2>&1)"
+NEWBR_OUT="$(run_hook "$NEWBR_REPO" "refs/heads/main $LOCAL_SHA refs/heads/main 0000000000000000000000000000000000000000")"
 NEWBR_RC=$?
 set -e
 # base = merge-base(local_sha, HEAD) = local_sha → diff vacío → skip (exit 0)
@@ -158,33 +168,49 @@ else
   assert_fail "pre-push: branch nuevo (remote todo-ceros) → exit 0" "rc=$NEWBR_RC out=$NEWBR_OUT"
 fi
 
-# ── 7. BUG 2: to_epoch portable en pre-commit (GNU date / BSD date) ──
+# ── 7. BUG A: to_epoch parsea UTC en pre-commit (GNU date / BSD date) ──
 # El hook DEBE detectar el flavor de `date` antes de usar date -j: en Linux
 # (GNU) `date -j` no existe y devolvía 0 → AGE>600 → bloqueaba commits con
-# receipts frescos en CI (reproducido en la auditoría).
-# Estructural: la única aparición de `date -j` vive dentro del branch BSD de
-# to_epoch (delimitado por los marcadores BEGIN/END-TO-EPOCH).
+# receipts frescos en CI (reproducido en la auditoría). Y el timestamp del
+# receipt (sqlite datetime('now')) es UTC: parsearlo como hora LOCAL corría el
+# epoch por el offset de TZ (en TZ positiva un receipt fresco se veía futuro).
+# Estructural: dentro del bloque BEGIN/END-TO-EPOCH, la rama BSD usa `-u` y la
+# GNU el sufijo " UTC"; fuera del bloque no puede haber `date -j`.
 if awk '
   /^# BEGIN-TO-EPOCH/ { active=1 }
   /^# END-TO-EPOCH/ { active=0 }
-  active && /date -j/ { ok=1 }
+  active && /date -j/ && /-u/ { bsd=1 }
+  active && /\$1 UTC/ { gnu=1 }
   !active && /date -j/ { bad=1 }
-  END { exit !(ok && !bad) }
+  END { exit !(bsd && gnu && !bad) }
 ' "$ROOT/scripts/hooks/pre-commit"; then
-  assert_pass "pre-commit: date -j solo en el branch BSD de to_epoch"
+  assert_pass "pre-commit: to_epoch parsea UTC (BSD -u + GNU ' UTC', solo en el bloque)"
 else
-  assert_fail "pre-commit: date -j solo en el branch BSD de to_epoch"
+  assert_fail "pre-commit: to_epoch parsea UTC (BSD -u + GNU ' UTC', solo en el bloque)"
 fi
 # Funcional: to_epoch autoselecciona el flavor (GNU -d / BSD -j) y convierte un
-# timestamp fresco de receipt (formato datetime('now')) a epoch reciente.
-eval "$(sed -n '/^# BEGIN-TO-EPOCH/,/^# END-TO-EPOCH/p' "$ROOT/scripts/hooks/pre-commit" | grep -v '^#')"
-FRESH="$(date +"%Y-%m-%d %H:%M:%S")"
+# timestamp UTC reciente (formato datetime('now') de sqlite) a epoch reciente.
+eval "$(sed -n '/^# BEGIN-TO-EPOCH/,/^# END-TO-EPOCH/p' "$ROOT/scripts/hooks/pre-commit" | grep -vE '^[[:space:]]*#')"
+FRESH="$(date -u +"%Y-%m-%d %H:%M:%S")"
 NOW="$(date +%s)"
 EPOCH="$(to_epoch "$FRESH" 2>/dev/null || true)"
 if [ -n "$EPOCH" ] && [ "$EPOCH" -gt $((NOW - 120)) ] && [ "$EPOCH" -le "$NOW" ]; then
-  assert_pass "pre-commit: to_epoch convierte receipt fresco ($EPOCH, ahora=$NOW)"
+  assert_pass "pre-commit: to_epoch convierte receipt fresco UTC ($EPOCH, ahora=$NOW)"
 else
-  assert_fail "pre-commit: to_epoch convierte receipt fresco" "epoch=$EPOCH now=$NOW fresh=$FRESH"
+  assert_fail "pre-commit: to_epoch convierte receipt fresco UTC" "epoch=$EPOCH now=$NOW fresh=$FRESH"
+fi
+# Funcional 2: un timestamp UTC conocido, parseado bajo una TZ NO-UTC, debe dar
+# el MISMO epoch canónico UTC. Si to_epoch interpretara hora local (el bug),
+# TZ=America/Argentina/Buenos_Aires sumaría 3h → epoch ≠ esperado.
+KNOWN="2026-08-07 23:42:00"
+EXPECTED="$(date -u -j -f "%Y-%m-%d %H:%M:%S" "$KNOWN" +%s 2>/dev/null || date -u -d "$KNOWN" +%s 2>/dev/null || echo "")"
+set +e
+TZ_EPOCH="$(TZ=America/Argentina/Buenos_Aires to_epoch "$KNOWN" 2>/dev/null || true)"
+set -e
+if [ -n "$EXPECTED" ] && [ -n "$TZ_EPOCH" ] && [ "$TZ_EPOCH" = "$EXPECTED" ]; then
+  assert_pass "pre-commit: to_epoch convierte timestamp UTC como UTC, no hora local ($TZ_EPOCH)"
+else
+  assert_fail "pre-commit: to_epoch convierte timestamp UTC como UTC" "expected=$EXPECTED got=$TZ_EPOCH"
 fi
 # El mismo patrón de flavor-guard aplica al lib de memory-check (ISO 8601).
 if grep -q "date --version" "$ROOT/scripts/lib/lib-memory-check.sh"; then
@@ -193,7 +219,6 @@ else
   assert_fail "lib-memory-check: _skalling_timestamp_to_epoch detecta flavor de date"
 fi
 set +e
-NOW="$(date +%s)"
 LIB_EPOCH="$(bash -c '
   set -euo pipefail
   source "$1"
@@ -202,6 +227,9 @@ LIB_EPOCH="$(bash -c '
 ' _ "$ROOT/scripts/lib/lib-memory-check.sh" 2>/dev/null)"
 LIB_RC=$?
 set -e
+# NOW se captura DESPUÉS de la conversión: si el subshell cruzara un cambio de
+# segundo, LIB_EPOCH = segundo siguiente y LIB_EPOCH -le NOW daría falso (flake).
+NOW="$(date +%s)"
 if [ "$LIB_RC" = "0" ] && [ -n "$LIB_EPOCH" ] && [ "$LIB_EPOCH" -gt $((NOW - 120)) ] && [ "$LIB_EPOCH" -le "$NOW" ]; then
   assert_pass "lib-memory-check: _skalling_timestamp_to_epoch convierte ISO fresco ($LIB_EPOCH)"
 else

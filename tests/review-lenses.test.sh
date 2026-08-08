@@ -203,12 +203,33 @@ GATE_REPO="$TMP/gate-repo"
 new_repo "$GATE_REPO"
 mkdir -p "$GATE_REPO/.opencode/context"
 bash "$ROOT/scripts/teamdb-init.sh" "$GATE_REPO" >/dev/null 2>&1 || true
+
+# BUG D: sellar con el árbol LIMPIO (recién commiteado, sin cambios) → exit 1
+# con mensaje claro. Antes sellaba el hash de HEAD y el pre-push jamás lo
+# matcheaba con un diff de rango (push bloqueado con error confuso).
+set +e
+SEAL_CLEAN_OUT="$(bash "$ROOT/scripts/teamdb-seal-receipt.sh" 7 luz "$GATE_REPO" 2>&1)"
+SEAL_CLEAN_RC=$?
+set -e
+if [ "$SEAL_CLEAN_RC" = "1" ] && printf '%s' "$SEAL_CLEAN_OUT" | grep -q "nada que sellar"; then
+  assert_pass "seal: árbol limpio (sin cambios) → exit 1 con mensaje claro"
+else
+  assert_fail "seal: árbol limpio (sin cambios) → exit 1 con mensaje claro" "rc=$SEAL_CLEAN_RC out=$SEAL_CLEAN_OUT"
+fi
+
+# sellar con cambios staged → exit 0 (flujo correcto: staged → sellar → commitear)
 printf '#!/usr/bin/env bash\nset -euo pipefail\nprintf "v1\\n"\n' > "$GATE_REPO/app.sh"
 git -C "$GATE_REPO" add app.sh
+set +e
+SEAL_STAGED_OUT="$(bash "$ROOT/scripts/teamdb-seal-receipt.sh" 7 luz "$GATE_REPO" 2>&1)"
+SEAL_STAGED_RC=$?
+set -e
+if [ "$SEAL_STAGED_RC" = "0" ]; then
+  assert_pass "seal: cambios staged → exit 0"
+else
+  assert_fail "seal: cambios staged → exit 0" "rc=$SEAL_STAGED_RC out=$SEAL_STAGED_OUT"
+fi
 git -C "$GATE_REPO" commit -qm "base con codigo"
-
-# seal del estado actual (v1)
-bash "$ROOT/scripts/teamdb-seal-receipt.sh" 7 luz "$GATE_REPO" >/dev/null 2>&1
 
 # tocar el código después del seal → el hook debe bloquear
 printf '#!/usr/bin/env bash\nset -euo pipefail\nprintf "v2\\n"\n' > "$GATE_REPO/app.sh"
@@ -335,16 +356,39 @@ else
   assert_fail "collect: solo WARNING → exit 0 (REVIEW: PASS)" "rc=$COLLECT_RC2 out=$COLLECT_OUT2"
 fi
 
-# ── 11. --collect sin findings-*.json → warn + exit 0 ──
+# ── 11. BUG B: findings AUSENTES → fail-closed (NUNCA PASS) ──
+# Bundle sin NINGÚN findings-*.json (vacío/recién creado) → exit != 0 con
+# mensaje claro. Antes: WARN + continue → 0 blockers → PASS sin revisión (bug).
 rm -f "$DEEP_DIR"/findings-*.json
 set +e
 COLLECT_OUT3="$(bash "$ROOT/scripts/skalling-review.sh" --collect "$DEEP_DIR" --cwd "$DEEP_REPO" --lens all 2>&1)"
 COLLECT_RC3=$?
 set -e
-if [ "$COLLECT_RC3" = "0" ] && printf '%s' "$COLLECT_OUT3" | grep -q "no existe"; then
-  assert_pass "collect: findings ausentes → warn + exit 0"
+if [ "$COLLECT_RC3" != "0" ] && printf '%s' "$COLLECT_OUT3" | grep -q "sin resultados de agentes"; then
+  assert_pass "collect: bundle sin findings-*.json → exit != 0 (fail-closed)"
 else
-  assert_fail "collect: findings ausentes → warn + exit 0" "rc=$COLLECT_RC3 out=$COLLECT_OUT3"
+  assert_fail "collect: bundle sin findings-*.json → exit != 0 (fail-closed)" "rc=$COLLECT_RC3 out=$COLLECT_OUT3"
+fi
+
+# ── 11b. BUG B: lens seleccionado sin findings → BLOCKER + exit != 0 ──
+# Contrato: un lens seleccionado sin findings-<lens>.json = el agente no reportó
+# = 1 BLOCKER; el review FALLA (antes: WARN + continue → 0 blockers → PASS).
+PARTIAL_DIR="$TMP/partial-bundle"
+mkdir -p "$PARTIAL_DIR"
+printf '%s\n' '[{"file":"x.sh","line":1,"severity":"SUGGESTION","message":"opcional"}]' > "$PARTIAL_DIR/findings-risk.json"
+set +e
+PARTIAL_OUT="$(bash "$ROOT/scripts/skalling-review.sh" --collect "$PARTIAL_DIR" --cwd "$DEEP_REPO" --lens all 2>&1)"
+PARTIAL_RC=$?
+set -e
+if [ "$PARTIAL_RC" != "0" ] && printf '%s' "$PARTIAL_OUT" | grep -q "no reportó findings"; then
+  assert_pass "collect: lens sin findings-<lens>.json → BLOCKER + exit != 0"
+else
+  assert_fail "collect: lens sin findings-<lens>.json → BLOCKER + exit != 0" "rc=$PARTIAL_RC out=$PARTIAL_OUT"
+fi
+if printf '%s' "$PARTIAL_OUT" | grep -q "\[BLOCKER\]\[resilience\]"; then
+  assert_pass "collect: el BLOCKER ausente nombra al lens (resilience)"
+else
+  assert_fail "collect: el BLOCKER ausente nombra al lens (resilience)" "out=$PARTIAL_OUT"
 fi
 
 # ── 12. BUG 3+4: falsos negativos del lens risk + fail-closed de --collect ──

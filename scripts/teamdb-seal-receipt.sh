@@ -70,8 +70,8 @@ SUMMARY="${TEAMDB_CLAIM_OUTPUT_SUMMARY:-}"
 
 # TREE_HASH: hash del contenido que se va a commitear.
 # - Con cambios staged/unstaged: git diff HEAD (NO write-tree, incluye archivos no staged).
-# - Sin cambios: hash del commit HEAD.
-# - Repo sin commits: hash de lo staged (diff --cached), o "empty".
+# - Sin cambios respecto a HEAD (árbol limpio): NO se sella — fail-closed (bug D).
+# - Repo sin commits: hash de lo staged (diff --cached); sin staged, tampoco.
 TREE_HASH="${TEAMDB_CLAIM_TREE_HASH:-}"
 if [ -z "$TREE_HASH" ]; then
   HEAD_SHA="$(git -C "$PROJECT" rev-parse --verify HEAD 2>/dev/null || echo "")"
@@ -80,14 +80,25 @@ if [ -z "$TREE_HASH" ]; then
     if [ -n "$DIFF_TEXT" ]; then
       TREE_HASH="$(printf '%s' "$DIFF_TEXT" | shasum -a 256 | cut -c1-16)"
     else
-      TREE_HASH="$(printf '%s' "$HEAD_SHA" | cut -c1-16)"
+      # v0.8.3 (bug D): NO sellar un árbol limpio con el hash de HEAD. El
+      # pre-push compara el hash del DIFF del rango (base..local), que jamás
+      # matchea un sha de HEAD → push bloqueado con error confuso. Fail-closed:
+      # sin diff no hay nada que sellar → error claro. Orden correcto:
+      # 1) cambios staged (git add), 2) sellar, 3) commitear, 4) pushear.
+      echo "ERROR: nada que sellar — el árbol de trabajo está limpio (sin diff respecto a HEAD)." >&2
+      echo "       Sellar y commitear siguen el orden: staged (git add) → sellar → commitear." >&2
+      echo "       Si ya commiteaste, revertí o hacé amend y re-sellá antes de commitear de nuevo." >&2
+      exit 1
     fi
   else
     DIFF_TEXT="$(git -C "$PROJECT" diff --cached 2>/dev/null || true)"
     if [ -n "$DIFF_TEXT" ]; then
       TREE_HASH="$(printf '%s' "$DIFF_TEXT" | shasum -a 256 | cut -c1-16)"
     else
-      TREE_HASH="empty"
+      # Repo sin commits y sin nada staged: nada que sellar tampoco.
+      echo "ERROR: nada que sellar — no hay cambios staged ni commits." >&2
+      echo "       Modificá el código y stagealo antes de sellar." >&2
+      exit 1
     fi
   fi
 fi

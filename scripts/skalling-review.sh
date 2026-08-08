@@ -104,15 +104,26 @@ fi
 # review (exit 1, mismo contrato de severidad que los lenses heurísticos).
 # Contrato del JSON (escrito por agentes en --deep):
 #   [ {"file": "ruta", "line": 12, "severity": "BLOCKER|WARNING|SUGGESTION", "message": "..."} ]
-# Fail-closed: si el JSON NO parsea o NO es una lista, el review NUNCA es PASS
-# silencioso (un bundle corrupto reporta 1 BLOCKER de "resultado ilegible";
-# antes `sys.exit(0)` sin output → 0 findings → PASS falso).
+# CONTRATO DE AUSENCIA (fail-closed, v0.8.3): un lens SELECCIONADO sin
+# findings-<lens>.json = el agente no reportó = 1 BLOCKER → el review FALLA,
+# NUNCA es PASS. Un bundle sin NINGÚN findings-*.json (recién creado/vacío)
+# también FAIL con mensaje claro: sellar un PASS sin evidencia de revisión
+# sería un falso green. Antes el archivo ausente era WARN + continue → 0
+# blockers → PASS sin revisión (contrato inconsistente: el JSON ilegible ya era
+# BLOCKER; el archivo ausente no podía ser PASS silencioso).
 if [ -n "$COLLECT_DIR" ]; then
   if [ ! -d "$COLLECT_DIR" ]; then
     echo "ERROR: bundle no encontrado: $COLLECT_DIR" >&2
     exit 2
   fi
   TREE_HASH="$(basename "$COLLECT_DIR")"
+  # Bundle sin ningún findings-*.json → no hay resultados que incorporar.
+  N_FINDINGS="$(find "$COLLECT_DIR" -maxdepth 1 -name 'findings-*.json' 2>/dev/null | wc -l | tr -d ' ')"
+  if [ "$N_FINDINGS" = "0" ]; then
+    echo "ERROR: bundle sin resultados de agentes — no hay findings-*.json en $COLLECT_DIR" >&2
+    echo "       Corré --deep y esperá a que los agentes escriban findings antes de --collect." >&2
+    exit 1
+  fi
   BLOCKERS=0
   WARNINGS=0
   SUGGESTS=0
@@ -126,7 +137,10 @@ if [ -n "$COLLECT_DIR" ]; then
     esac
     JSON="$COLLECT_DIR/findings-$lens.json"
     if [ ! -f "$JSON" ]; then
-      echo "WARN: $JSON no existe (el agente del lens $lens no reportó findings)" >&2
+      # Fail-closed (bug B): lens seleccionado sin findings = el agente no
+      # revisó → 1 BLOCKER. Un lens que no reportó NUNCA puede pasar el review.
+      echo "✗ [BLOCKER][$lens] findings-$lens.json no existe — el agente del lens $lens no reportó findings" >&2
+      BLOCKERS=$((BLOCKERS + 1))
       continue
     fi
     OUT="$(python3 - "$JSON" "$lens" <<'PYEOF'

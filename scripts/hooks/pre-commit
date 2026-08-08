@@ -6,14 +6,20 @@ PROJECT="$(git rev-parse --show-toplevel)"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DB="$PROJECT/.opencode/context/team.db"
 
-# to_epoch <"YYYY-MM-DD HH:MM:SS"> → epoch. GNU date -d vs la flag BSD: se
-# detecta el flavor UNA vez. Sin esto, Linux CI (GNU sin la flag BSD) devolvía 0 →
-# AGE>600 → commits bloqueados en CI pese a receipts frescos.
 # BEGIN-TO-EPOCH
+# to_epoch <"YYYY-MM-DD HH:MM:SS"> → epoch. El timestamp del receipt sale de
+# sqlite datetime('now'), que guarda UTC. GNU date -d vs la flag BSD date -j: se
+# detecta el flavor UNA vez. Sin esto, Linux CI (GNU sin la flag BSD) devolvía 0 →
+# AGE>600 → commits bloqueados en CI pese a receipts frescos. Y parsear como hora
+# LOCAL corría el epoch por el offset de TZ: en TZ positiva un receipt fresco se
+# veía FUTURO (AGE negativo → bloqueaba) y en TZ negativa daba horas de ventana.
+# POR ESO ambas ramas parsean UTC (mismo criterio que lib-memory-check.sh:97).
 if date --version >/dev/null 2>&1; then
-  to_epoch() { date -d "$1" +%s; }
+  # GNU: sufijo " UTC" (el formato de sqlite no lleva zona horaria).
+  to_epoch() { date -d "$1 UTC" +%s; }
 else
-  to_epoch() { date -j -f "%Y-%m-%d %H:%M:%S" "$1" +%s; }
+  # BSD: -u fuerza UTC; sin -u interpretaba hora local.
+  to_epoch() { date -j -u -f "%Y-%m-%d %H:%M:%S" "$1" +%s; }
 fi
 # END-TO-EPOCH
 
@@ -59,6 +65,11 @@ if [ "$CHANGED_CODE" -gt 0 ]; then
     if [ -n "$DIFF_TEXT" ]; then
       CURRENT_HASH="$(printf '%s' "$DIFF_TEXT" | shasum -a 256 | cut -c1-16)"
     else
+      # v0.8.3 (bug D): este branch (árbol idéntico a HEAD → hash de HEAD) es
+      # inalcanzable en la práctica: se llega acá solo si CHANGED_CODE>0, que
+      # implica `git diff --cached` no vacío → `git diff HEAD` es no vacío.
+      # Se mantiene por defensa; un commit sin cambios es un no-op que git
+      # rechaza igual (el seal sí bloquea el caso, ver teamdb-seal-receipt.sh).
       CURRENT_HASH="$(git -C "$PROJECT" rev-parse HEAD | cut -c1-16)"
     fi
   else

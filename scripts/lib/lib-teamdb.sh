@@ -373,6 +373,15 @@ _has_control_char() {
 # teamdb_lock / teamdb_unlock: lock cross-platform basado en mkdir (v0.8.3).
 # Compatible con macOS (sin flock nativo), Linux y BSD. Sin dependencias externas.
 # Usa atomicidad de mkdir(2): o crea el directorio o falla si ya existe.
+# RECUPERACIÓN DE LOCKS STALE (v0.8.3): si mkdir falla y el lock pertenece a un
+# pid MUERTO (o no tiene pid), se limpia y se reintenta. Sin esto, un SIGKILL
+# dejaba el lock para siempre → todos los teamdb-* fallaban tras 10s con
+# recuperación solo manual. NUNCA se toca un lock con pid vivo (kill -0 ok).
+# Race: dos procesos pueden ver el mismo lock stale y limpiarlo a la vez; la
+# atomicidad de mkdir(2) decide quién queda con el lock — el que logra el mkdir
+# tras la limpieza es el dueño legítimo (los rm/rmdir del perdedor son no-ops).
+# Un lock sin archivo pid puede ser un dueño en plena adquisición (mkdir hecho,
+# pid por escribir): se da UNA vuelta de cortesía antes de declararlo stale.
 # Uso:
 #   LOCK_DIR="$PROJECT/.opencode/context/.locks/team"
 #   mkdir -p "$(dirname "$LOCK_DIR")" 2>/dev/null || true
@@ -382,14 +391,38 @@ teamdb_lock() {
   local lock_dir="$1"
   local max_wait="${2:-10}"
   local waited=0
+  local lock_pid=""
 
   while ! mkdir "$lock_dir" 2>/dev/null; do
+    # Timeout global: cubre dueño vivo, lock sin pid y limpieza que no pudo
+    # completarse. El mensaje final dice cómo recuperar manualmente.
     if [ "$waited" -ge "$max_wait" ]; then
-      echo "ERROR: no se pudo obtener lock en $lock_dir (esperado ${max_wait}s)" >&2
+      echo "ERROR: no se pudo obtener lock en $lock_dir (esperado ${max_wait}s)." >&2
+      echo "       Si el lock quedó stale (proceso muerto): rm -f $lock_dir/pid && rmdir $lock_dir" >&2
       return 1
     fi
-    sleep 1
-    waited=$((waited + 1))
+    lock_pid=""
+    if [ -f "$lock_dir/pid" ]; then
+      read -r lock_pid < "$lock_dir/pid" || true
+    fi
+    if [ -n "$lock_pid" ] && kill -0 "$lock_pid" 2>/dev/null; then
+      # Dueño vivo → esperar el tick completo (nunca limpiar un lock vivo).
+      sleep 1
+      waited=$((waited + 1))
+      continue
+    fi
+    # Stale: pid muerto/inválido/ausente → limpiar y reintentar el mkdir.
+    if [ ! -f "$lock_dir/pid" ]; then
+      # Vuelta de cortesía: si el dueño recién hizo mkdir y aún no escribió el
+      # pid, no robarle el lock; si sigue sin pid, es stale de verdad.
+      sleep 1
+      waited=$((waited + 1))
+      if [ -f "$lock_dir/pid" ]; then
+        continue
+      fi
+    fi
+    rm -f "$lock_dir/pid" 2>/dev/null
+    rmdir "$lock_dir" 2>/dev/null
   done
 
   echo $$ > "$lock_dir/pid"

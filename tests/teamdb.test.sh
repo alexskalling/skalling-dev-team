@@ -275,5 +275,53 @@ count=$(sqlite3 "$DB_CAS" "SELECT COUNT(*) FROM task_lock_history WHERE task_id=
 assert "lock history registrado" "[ \"$count\" -ge 1 ]"
 rm -rf "$TEST_CAS"
 
+# ────────────────────────────────────────────────────────────────────────────
+# BUG C — teamdb_lock recupera locks stale (pid muerto) y respeta locks vivos
+# ────────────────────────────────────────────────────────────────────────────
+
+LOCK_TMP="$(mktemp -d)"
+LOCK_DIR="$LOCK_TMP/.opencode/context/.locks/team"
+
+# lock_probe <lib> <lock_dir> <pid> <mode>: crea un lock cuyo pid es <pid> y
+# llama teamdb_lock con timeout 3.
+#   mode=dead → espera ADQUIRIR (el pid es de un proceso muerto → lock stale).
+#   mode=live → espera NO adquirir y que el lock siga (pid de un proceso vivo).
+lock_probe() {
+  local lib="$1" lock_dir="$2" pid="$3" mode="$4"
+  mkdir -p "$(dirname "$lock_dir")"
+  rm -rf "$lock_dir"
+  mkdir "$lock_dir"
+  echo "$pid" > "$lock_dir/pid"
+  local rc out
+  set +e
+  out="$(bash -c '
+    source "$1"
+    if teamdb_lock "$2" 3; then
+      echo acquired
+      teamdb_unlock "$2"
+      exit 0
+    fi
+    if [ -d "$2" ]; then echo still-held; else echo stolen; fi
+    exit 1
+  ' _ "$lib" "$lock_dir" 2>&1)"
+  rc=$?
+  set -e
+  echo "rc=$rc out=$out"
+}
+
+# pid muerto determinístico: spawnear y reapear un proceso (kill -0 debe fallar)
+false & DEAD_PID=$!
+wait "$DEAD_PID" 2>/dev/null || true
+
+STALE="$(lock_probe "$SKALLING_ROOT/scripts/lib/lib-teamdb.sh" "$LOCK_DIR" "$DEAD_PID" dead)"
+assert "lock: recupera lock stale (pid muerto) y adquiere" \
+  "printf '%s' '$STALE' | grep -q 'rc=0' && printf '%s' '$STALE' | grep -q 'acquired'"
+
+LIVE="$(lock_probe "$SKALLING_ROOT/scripts/lib/lib-teamdb.sh" "$LOCK_DIR" "$$" live)"
+assert "lock: lock de proceso vivo NO se recupera (espera y falla)" \
+  "printf '%s' '$LIVE' | grep -q 'rc=1' && printf '%s' '$LIVE' | grep -q 'still-held'"
+
+rm -rf "$LOCK_TMP"
+
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
