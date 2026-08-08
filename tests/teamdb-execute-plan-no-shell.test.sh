@@ -126,7 +126,21 @@ else
   assert_fail "teamdb-execute-plan.sh sin eval/sh -c con variables DB"
 fi
 
-# 7. shellcheck
+# 7. gate de lifecycle: plan draft NO es ejecutable (DC-4)
+NOW2="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+teamdb_exec_write "$DB" "INSERT INTO proposals(slug,title,intent_md,status,agent,created_at,updated_at) VALUES(?,?,?,'draft','pol',?,?)" \
+  "draft-plan" "Draft plan" "# I" "$NOW2" "$NOW2" >/dev/null
+PID2=$(teamdb_exec_value "$DB" "SELECT id FROM proposals WHERE slug=?" "draft-plan")
+teamdb_exec_write "$DB" "INSERT INTO plans(slug,title,proposal_id,design_md,status,agent,created_at,updated_at) VALUES(?,?,?,?,'draft','sol',?,?)" \
+  "draft-plan" "Draft plan" "$PID2" "# D" "$NOW2" "$NOW2" >/dev/null
+run_capture "bash '$ROOT/scripts/teamdb-execute-plan.sh' 'draft-plan' '$TEST_DIR'"
+if [ "$CAPTURE_RC" != "0" ] && echo "$CAPTURE_OUT" | grep -qE "no es ejecutable|approved|in_progress"; then
+  assert_pass "plan draft rechazado (gate lifecycle)"
+else
+  assert_fail "plan draft rechazado (gate lifecycle)" "rc=$CAPTURE_RC out=$CAPTURE_OUT"
+fi
+
+# 8. shellcheck
 SHELLCHECK_RC=0
 shellcheck "$ROOT/scripts/teamdb-execute-plan.sh" >/dev/null 2>&1 || SHELLCHECK_RC=$?
 if [ "$SHELLCHECK_RC" = "0" ]; then

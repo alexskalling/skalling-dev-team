@@ -36,6 +36,7 @@ for t in tests/teamdb-safe-query.test.sh \
          tests/teamdb-claim-history.test.sh \
          tests/teamdb-context-issue8.test.sh \
          tests/teamdb-execute-plan-no-shell.test.sh \
+         tests/teamdb-ingest-change.test.sh \
          tests/teamdb-migration-003-unique.test.sh \
          tests/teamdb-plan-atomic-idempotent.test.sh \
          tests/teamdb-python-bindparams.test.sh \

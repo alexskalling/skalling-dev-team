@@ -46,6 +46,11 @@ for i in 1 2; do
 done
 teamdb_exec_write "$DB" "INSERT INTO design_notes(plan_id,slug,title,context_md,decision_md,status,created_at,updated_at,decided_at) VALUES(?,?,?,?,?,'accepted',?,?,?)" \
   "$PLAN_ID" "use-jwt" "Use JWT" "Need auth" "Use JWT" "$NOW" "$NOW" "$NOW" >/dev/null
+teamdb_exec_write "$DB" "INSERT INTO specs(plan_id,slug,title,body_md,order_index,created_at,updated_at) VALUES(?,?,?,?,1,?,?)" \
+  "$PLAN_ID" "spec-01-jwt" "Spec 01: JWT" "# Spec 01: JWT
+
+**Given** credenciales válidas
+**Then** se emite un token" "$NOW" "$NOW" >/dev/null
 
 # 1. Export genera los 3 archivos
 run_capture "bash '$ROOT/scripts/teamdb-export-md.sh' '$TEST_DIR'"
@@ -143,7 +148,20 @@ else
   assert_fail "export idempotente" "no se regeneró"
 fi
 
-# 12. SINCRONIA: el archivo exportado refleja el estado actual de la DB
+# 12b. specs: export regenera specs/NN-nombre.md con header GENERATED
+if [ -f "$TEST_DIR/.opencode/changes/auth-jwt/specs/01-jwt.md" ] && \
+   head -3 "$TEST_DIR/.opencode/changes/auth-jwt/specs/01-jwt.md" | grep -q "GENERATED"; then
+  assert_pass "specs/01-jwt.md exportado con header GENERATED"
+else
+  assert_fail "specs/01-jwt.md exportado con header GENERATED" "no existe"
+fi
+if grep -q "JWT" "$TEST_DIR/.opencode/changes/auth-jwt/specs/01-jwt.md"; then
+  assert_pass "specs exportado refleja body de la DB"
+else
+  assert_fail "specs exportado refleja body de la DB"
+fi
+
+# 12c. SINCRONIA: el archivo exportado refleja el estado actual de la DB
 # Cambio una task title y re-exporto
 teamdb_exec_write "$DB" "UPDATE tasks SET title='MODIFIED task 1' WHERE plan_id=? AND slug='task-1'" "$PLAN_ID" >/dev/null
 run_capture "bash '$ROOT/scripts/teamdb-export-md.sh' '$TEST_DIR'"

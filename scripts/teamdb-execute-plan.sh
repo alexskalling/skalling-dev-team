@@ -49,9 +49,17 @@ trap 'teamdb_unlock "$LOCK_DIR"' EXIT
 DB="$(teamdb_project_path "$PROJECT")"
 [ -f "$DB" ] || { echo "[ERROR] DB no existe: $DB" >&2; exit 1; }
 
-# Validar que el plan existe
+# Validar que el plan existe y es ejecutable (DC-4: solo approved/in_progress)
 PLAN_ID="$(teamdb_exec_value "$DB" "SELECT id FROM plans WHERE slug = ?" "$PLAN_SLUG")"
 [ -n "$PLAN_ID" ] || { echo "[ERROR] plan no encontrado: $PLAN_SLUG" >&2; exit 1; }
+PLAN_STATUS="$(teamdb_exec_value "$DB" "SELECT status FROM plans WHERE slug = ?" "$PLAN_SLUG")"
+case "$PLAN_STATUS" in
+  approved|in_progress) ;;
+  *)
+    echo "[ERROR] plan '$PLAN_SLUG' no es ejecutable (status='$PLAN_STATUS'). Debe ser 'approved' o 'in_progress'." >&2
+    exit 1
+    ;;
+esac
 
 # Descubrir la siguiente task runnable
 NEXT_JSON="$(teamdb_exec_query "$DB" "

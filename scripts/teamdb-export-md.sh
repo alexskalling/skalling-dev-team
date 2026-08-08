@@ -170,6 +170,31 @@ except Exception as e:
     echo "<!-- Footer -->"
   } > "$PLAN_DIR/tasks.md"
 
+  # specs/*.md — un archivo GENERATED por spec. El nombre sale del slug
+  # (ingesta: 'spec-NN-<nombre>' → 'NN-<nombre>.md'). No borra archivos stale.
+  # Exporta title + body_md (title viene de la columna title del schema, no del body).
+  python3 - "$DB" "$PLAN_ID" "$PLAN_DIR/specs" "$HEADER" <<'PYEOF'
+import sqlite3, sys, os
+db, plan_id, specs_dir, header = sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4]
+conn = sqlite3.connect(db, timeout=5)
+rows = conn.execute(
+    "SELECT slug, COALESCE(title, ''), COALESCE(body_md, '') FROM specs WHERE plan_id = ? ORDER BY order_index", (plan_id,)).fetchall()
+conn.close()
+for slug, title, body in rows:
+    base = slug[len("spec-"):] if slug.startswith("spec-") else slug
+    title = title.strip()
+    body = body or ""
+    with open(os.path.join(specs_dir, base + ".md"), "w") as f:
+        f.write(header)
+        f.write("\n\n")
+        if title:
+            f.write("# " + title + "\n\n")
+        f.write(body)
+        if body and not body.endswith("\n"):
+            f.write("\n")
+        f.write("\n<!-- Footer: regenerar desde DB -->\n")
+PYEOF
+
   GENERATED_COUNT=$((GENERATED_COUNT + 1))
 done
 
