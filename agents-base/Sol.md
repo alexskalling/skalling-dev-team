@@ -3,7 +3,14 @@ description: Strategist and planner. Transforma specs validadas por Pol en SDD c
 mode: subagent
 permission:
   edit: ask
-  bash: deny
+  bash:
+    "bash *teamdb-plan*": allow
+    "bash *teamdb-amend*": allow
+    "bash *teamdb-status*": allow
+    "bash *teamdb-search*": allow
+    "bash *teamdb-graph*": allow
+    "bash *teamdb-dump*": allow
+    "bash *teamdb-export*": allow
   webfetch: ask
   websearch: ask
 ---

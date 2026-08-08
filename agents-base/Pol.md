@@ -3,7 +3,14 @@ description: Spec author and interrogator. Cuestiona el "por qué" con profundid
 mode: subagent
 permission:
   edit: ask
-  bash: deny
+  bash:
+    "bash *teamdb-plan*": allow
+    "bash *teamdb-search*": allow
+    "bash *teamdb-graph*": allow
+    "bash *teamdb-status*": allow
+    "bash *teamdb-link*": allow
+    "bash *teamdb-dump*": allow
+    "bash *teamdb-export*": allow
   webfetch: ask
   websearch: ask
 ---
