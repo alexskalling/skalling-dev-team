@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tests/attempts.test.sh — Ledger de intentos (teamdb-attempt.sh, v0.8.3)
+# tests/attempts.test.sh — Ledger de intentos (teamdb-attempt.sh, v0.9.0)
 set -euo pipefail
 
 TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

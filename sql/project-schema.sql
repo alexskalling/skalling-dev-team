@@ -114,7 +114,7 @@ CREATE TABLE schema_meta (
   value TEXT NOT NULL
 );
 
-INSERT INTO schema_meta VALUES ('version', '0.8.3');
+INSERT INTO schema_meta VALUES ('version', '0.9.0');
 INSERT INTO schema_meta VALUES ('type', 'project');
 
 CREATE VIRTUAL TABLE concepts_fts USING fts5(title, body_md, content='concepts', content_rowid='id');
@@ -309,6 +309,7 @@ CREATE TABLE tasks (
   resolution_md TEXT,
   order_index INTEGER DEFAULT 0,
   estimated_minutes INTEGER,
+  due_date TEXT,                          -- v0.9.0: deadline ISO YYYY-MM-DD (overdue en teamdb-status.sh)
   created_at TEXT,
   updated_at TEXT,
   started_at TEXT,

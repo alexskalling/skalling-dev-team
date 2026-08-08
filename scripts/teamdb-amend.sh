@@ -34,6 +34,7 @@ Otros:
   --by <actor>                               actor (default: TEAMDB_ACTOR o 'sol')
   --purpose <text>                           purpose obligatorio al --add-task (v0.7.7 Bloque 2)
   --acceptance <text>                        acceptance_md opcional al --add-task
+  --due-date YYYY-MM-DD                      deadline opcional (v0.9.0; add y modify-task)
 
 El plan no debe tener status 'completed' o 'abandoned' para ser amendable.
 Las tasks en status 'approved', 'resolved', 'in_progress' o 'in_review' son
@@ -56,6 +57,7 @@ PROJECT=""
 SHOW="0"
 PURPOSE=""
 ACCEPTANCE=""
+DUE_DATE=""
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -70,6 +72,8 @@ while [ "$#" -gt 0 ]; do
     --purpose) shift; PURPOSE="${1:-}" ;;
     --acceptance=*) ACCEPTANCE="${1#--acceptance=}" ;;
     --acceptance) shift; ACCEPTANCE="${1:-}" ;;
+    --due-date=*) DUE_DATE="${1#--due-date=}" ;;
+    --due-date) shift; DUE_DATE="${1:-}" ;;
     --show) SHOW="1" ;;
     -*) echo "[ERROR] opción desconocida: $1" >&2; exit 2 ;;
     *) PROJECT="$1" ;;
@@ -127,6 +131,13 @@ esac
 ACTOR="${ACTOR:-${TEAMDB_ACTOR:-sol}}"
 NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
+# v0.9.0: validar --due-date (ISO YYYY-MM-DD) antes de tocar la DB
+if [ -n "$DUE_DATE" ] && ! printf '%s' "$DUE_DATE" | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'; then
+  echo "[ERROR] --due-date debe ser YYYY-MM-DD (recibido: '$DUE_DATE')" >&2
+  exit 2
+fi
+DUE_OR_NULL="${DUE_DATE:-}"
+
 # Snapshot ANTES del cambio
 SNAPSHOT="$(teamdb_exec_value "$DB" "SELECT json_group_array(json_object('slug',slug,'status',status,'title',title)) FROM tasks WHERE plan_id = ?" "$PLAN_ID")"
 NEW_VERSION="$(teamdb_exec_value "$DB" "SELECT COALESCE(MAX(version)+1, 1) FROM plan_history WHERE plan_id = ?" "$PLAN_ID")"
@@ -147,11 +158,11 @@ case "$OP" in
       NEW_TASK_SLUG="${NEW_TASK_SLUG}-${NEW_VERSION}"
     fi
     NEXT_ORDER="$(teamdb_exec_value "$DB" "SELECT COALESCE(MAX(order_index)+1, 1) FROM tasks WHERE plan_id = ?" "$PLAN_ID")"
-    TASK_SQL="INSERT INTO tasks(plan_id,slug,title,purpose,acceptance_md,status,priority,order_index,owner,created_at,updated_at) VALUES(?,?,?,?,?,'pending',2,?,?,?,?)"
-    TASK_PARAMS_JSON="$(python3 -c "import json,sys; print(json.dumps(list(sys.argv[1:])))" "$PLAN_ID" "$NEW_TASK_SLUG" "$TITLE" "$PURPOSE" "$ACCEPTANCE" "$NEXT_ORDER" "$ACTOR" "$NOW" "$NOW")"
+    TASK_SQL="INSERT INTO tasks(plan_id,slug,title,purpose,acceptance_md,status,priority,order_index,owner,due_date,created_at,updated_at) VALUES(?,?,?,?,?,'pending',2,?,?,?,?,?)"
+    TASK_PARAMS_JSON="$(python3 -c "import json,sys; print(json.dumps([None if a == 'None' else a for a in sys.argv[1:]]))" "$PLAN_ID" "$NEW_TASK_SLUG" "$TITLE" "$PURPOSE" "$ACCEPTANCE" "$NEXT_ORDER" "$ACTOR" "${DUE_OR_NULL:-None}" "$NOW" "$NOW")"
     TARGET_TASK="$NEW_TASK_SLUG"
     HIST_OP="amended"
-    DIFF="add task: $NEW_TASK_SLUG (purpose: ${PURPOSE:0:60})"
+    DIFF="add task: $NEW_TASK_SLUG (purpose: ${PURPOSE:0:60}${DUE_DATE:+; due: $DUE_DATE})"
     ;;
   modify)
     [ -n "$TARGET_TASK" ] || { echo "[ERROR] --modify-task requiere slug" >&2; exit 2; }
@@ -164,10 +175,15 @@ case "$OP" in
         exit 3
         ;;
     esac
-    TASK_SQL="UPDATE tasks SET title = ?, updated_at = ? WHERE plan_id = ? AND slug = ?"
-    TASK_PARAMS_JSON="$(python3 -c "import json,sys; print(json.dumps(list(sys.argv[1:])))" "$NEW_TITLE" "$NOW" "$PLAN_ID" "$TARGET_TASK")"
+    if [ -n "$DUE_DATE" ]; then
+      TASK_SQL="UPDATE tasks SET title = ?, due_date = ?, updated_at = ? WHERE plan_id = ? AND slug = ?"
+      TASK_PARAMS_JSON="$(python3 -c "import json,sys; print(json.dumps(list(sys.argv[1:])))" "$NEW_TITLE" "$DUE_DATE" "$NOW" "$PLAN_ID" "$TARGET_TASK")"
+    else
+      TASK_SQL="UPDATE tasks SET title = ?, updated_at = ? WHERE plan_id = ? AND slug = ?"
+      TASK_PARAMS_JSON="$(python3 -c "import json,sys; print(json.dumps(list(sys.argv[1:])))" "$NEW_TITLE" "$NOW" "$PLAN_ID" "$TARGET_TASK")"
+    fi
     HIST_OP="amended"
-    DIFF="modify $TARGET_TASK: title -> $NEW_TITLE"
+    DIFF="modify $TARGET_TASK: title -> $NEW_TITLE${DUE_DATE:+; due -> $DUE_DATE}"
     ;;
   deprecate)
     [ -n "$TARGET_TASK" ] || { echo "[ERROR] --deprecate-task requiere slug" >&2; exit 2; }

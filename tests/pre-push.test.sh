@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tests/pre-push.test.sh — Gate pre-push con tree_hash (v0.8.3)
+# tests/pre-push.test.sh — Gate pre-push con tree_hash (v0.9.0)
 set -euo pipefail
 
 TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

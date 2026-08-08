@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tests/review-lenses.test.sh — Review con 4 lenses + receipt sellado (v0.8.3)
+# tests/review-lenses.test.sh — Review con 4 lenses + receipt sellado (v0.9.0)
 set -euo pipefail
 
 TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

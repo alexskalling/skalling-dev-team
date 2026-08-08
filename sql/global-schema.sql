@@ -82,7 +82,7 @@ CREATE TABLE schema_meta (
   value TEXT NOT NULL
 );
 
-INSERT INTO schema_meta VALUES ('version', '0.8.3');
+INSERT INTO schema_meta VALUES ('version', '0.9.0');
 INSERT INTO schema_meta VALUES ('type', 'global');
 
 CREATE INDEX idx_user_prefs_scope ON user_preferences(scope, scope_value);

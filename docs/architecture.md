@@ -4,7 +4,7 @@
 > agentes, el esquema de datos, los hooks de integridad y el flujo de trabajo
 > end-to-end del repositorio `skalling-dev-team`.
 >
-> Versión de schema: 0.8.3 (ver `sql/project-schema.sql`).
+> Versión de schema: 0.9.0 (ver `sql/project-schema.sql`).
 
 ## 1. Visión
 
@@ -51,7 +51,7 @@ tabla `applied_migrations`.
   `task_dependencies`, `task_claims`, `plan_history`,
   `task_context_capsules`, `routing_decisions`, `task_lock_history`.
 - **Integridad y trazabilidad**: `receipts` (sellos de revisión, incluye
-  `tree_hash`), `attempts` (ledger de intentos, v0.8.3), `audit_log`.
+  `tree_hash`), `attempts` (ledger de intentos, v0.9.0), `audit_log`.
 - **Infraestructura**: `schema_meta` (versión y metadatos), `skills_registry`,
   `applied_migrations`.
 
@@ -123,7 +123,7 @@ los scripts de `scripts/hooks/` por glob).
 - **`pre-commit`**: fail-closed. Compara el hash del diff contra el último
   `tree_hash` de `receipts`; además exporta los `data_*.sql` del contexto.
 - **`post-merge`**: fail-open. Si el bundle `teamdb` no existe, no hace nada.
-- **`pre-push`** (v0.8.3): fail-closed. Lee el stdin de git pre-push (una línea
+- **`pre-push`** (v0.9.0): fail-closed. Lee el stdin de git pre-push (una línea
   por ref: `local_ref local_sha remote_ref remote_sha`), calcula el hash del
   rango `merge-base..local_sha` de cada ref y lo compara contra el último
   receipt sellado. Reglas:
