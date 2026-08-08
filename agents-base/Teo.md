@@ -248,20 +248,31 @@ Ningún cambio se commitea sin aprobación explícita del usuario (constitución
 
 ---
 
-## TeamDB: WIP Updates
+## TeamDB: Claims (WIP Updates)
 
-Teo lee concepts antes de codear, actualiza WIP:
+Teo reclama tasks del plan y actualiza su estado con los scripts de ciclo (NO SQL crudo sobre `work_in_progress`):
 
 ```bash
-# Antes de empezar
+# Antes de empezar: leé concepts relevantes (read-only)
 teamdb_query_project "SELECT title, body_md FROM concepts WHERE category='modulo' AND has_ui=0"
 
-# Cambiar status al empezar
-teamdb_query_project "UPDATE work_in_progress SET status='in_progress', owner='teo', updated_at=datetime('now') WHERE slug='task-endpoint'"
+# Ver tablero del plan (status, owner, due_date)
+bash "$SKALLING_ROOT/scripts/teamdb-status.sh" "<feature-slug>" "$(pwd)"
 
-# Crear log de auditoría (opcional)
-teamdb_query_project "INSERT INTO audit_log (ts, agent, action, table_name, row_id, details) VALUES (datetime('now'), 'teo', 'start', 'work_in_progress', (SELECT id FROM work_in_progress WHERE slug='task-endpoint'), '{\"status\":\"in_progress\"}')"
+# Claim de task (CAS + lease; solo si status='pending')
+bash "$SKALLING_ROOT/scripts/teamdb-claim.sh" "<feature-slug>" "<task-slug>" --actor=teo "$(pwd)"
+
+# Al terminar con tests en verde: release → in_review (handoff a Jhon)
+bash "$SKALLING_ROOT/scripts/teamdb-claim.sh" --release "<claim-id>" --status=done --by=teo "$(pwd)"
+
+# Si fallé o quedé bloqueado: release con --status=failed
+bash "$SKALLING_ROOT/scripts/teamdb-claim.sh" --release "<claim-id>" --status=failed --by=teo "$(pwd)"
+
+# Retomar mi claim activo (lease vigente)
+bash "$SKALLING_ROOT/scripts/teamdb-claim.sh" --resume --actor=teo "$(pwd)"
 ```
+
+El `<claim-id>` y `<task-slug>` salen del output del claim y del tablero `teamdb-status.sh`.
 
 ## TeamDB: Verificar sync antes de commit
 
@@ -296,18 +307,18 @@ bash scripts/teamdb-init.sh .
 
 ```bash
 # Paso 1: buscá el plan activo por slug (NO por nombre de archivo)
-sqlite3 "$(teamdb_project_path "$(pwd)")" "SELECT id, slug, title, status FROM plans WHERE slug='<feature-slug>' AND status IN ('approved', 'in_progress') ORDER BY version DESC LIMIT 1"
+teamdb_query_project "SELECT id, slug, title, status FROM plans WHERE slug='<feature-slug>' AND status IN ('approved', 'in_progress') ORDER BY version DESC LIMIT 1"
 
 # Paso 2: listá las tasks ordenadas por order_index
-sqlite3 "$(teamdb_project_path "$(pwd)")" "SELECT id, title, purpose, acceptance_md, order_index FROM tasks WHERE plan_id=? ORDER BY order_index"
+teamdb_query_project "SELECT id, slug, title, purpose, acceptance_md, order_index FROM tasks WHERE plan_id=<plan_id> ORDER BY order_index"
 
 # El plan y sus tasks son la fuente DB; no se INSERTAN proposals ni se UPDATEAN plans durante la implementación.
 # Teo no hace INSERT INTO proposals ni UPDATE plans durante la implementación.
-# Solo Teo reclama tasks existentes con status='open'.
+# Solo Teo reclama tasks existentes con status='pending' vía teamdb-claim.sh.
 
 # Paso 3: si status del plan NO está en ('approved', 'in_progress'), ABORT y avisale a Alex
-# Paso 4: claim la primera task con status='open'
-sqlite3 "$(teamdb_project_path "$(pwd)")" "UPDATE tasks SET status='in_progress', assigned_to='teo' WHERE id=? AND status='open'"
+# Paso 4: claim la primera task con status='pending'
+bash "$SKALLING_ROOT/scripts/teamdb-claim.sh" "<feature-slug>" "<task-slug>" --actor=teo "$(pwd)"
 ```
 
 **REGLA ANTI-TÍTULOS-POÉTICOS**: si encontrás una task con `purpose` vacío o `acceptance_md` vacío, NO la implementés. Reportá bug a Sol.

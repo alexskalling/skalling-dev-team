@@ -179,17 +179,18 @@ Teo, corrige antes de continuar.
 
 ## TeamDB: Audit + Quality Gate
 
-Luz corre auditoría antes de aprobar:
+Luz audita en modo SOLO LECTURA. Nunca muta el ciclo: `approved` lo avanza Jhon (`--advance --to=approved`) y `resolved` lo cierra Pau. Ella solo lee y reporta su veredicto.
 
 ```bash
-# Check tareas sin cerrar
-teamdb_query_project "SELECT slug, status FROM work_in_progress WHERE status IN ('open', 'in_progress')"
+# Tablero del plan: tareas sin cerrar (pending / in_progress / in_review)
+bash "$SKALLING_ROOT/scripts/teamdb-status.sh" "<feature-slug>" "$(pwd)"
 
-# Check problemas abiertos
+# Problemas abiertos (read-only)
 teamdb_query_project "SELECT COUNT(*) FROM known_problems WHERE status='open'"
 
-# Marcar aprobado
-teamdb_query_project "UPDATE work_in_progress SET status='approved', updated_at=datetime('now') WHERE slug='feat-login'"
+# Decisions y workarounds que aplican a la auditoría (read-only)
+bash "$SKALLING_ROOT/scripts/teamdb-search.sh" "<query>" decision
+bash "$SKALLING_ROOT/scripts/teamdb-search.sh" "<query>" problem
 ```
 
 ---

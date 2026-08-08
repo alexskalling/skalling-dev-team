@@ -886,19 +886,19 @@ test_plan_protocol_no_parallel_files
 
 test_migration_009_plan_contract() {
   echo ""
-  echo "── Test FIX 1.5: migration 009 plan_contract (v0.7.7) ──"
+  echo "── Test FIX 1.5: migration 009 plan_contract (v0.9.0) ──"
 
   local DB="$REPO_ROOT/.opencode/context/team.db"
   [ -f "$DB" ] || { echo "FAIL: DB no existe: $DB"; return 1; }
 
-  # 1. Version bumped a 0.7.7
+  # 1. Version bumped (sigue el valor de schema_meta, hoy 0.9.0)
   local version
   version=$(sqlite3 "$DB" "SELECT value FROM schema_meta WHERE key='version'" 2>/dev/null)
-  if [ "$version" != "0.7.8" ]; then
-    echo "FAIL: version esperada 0.7.8, obtenida: $version"
+  if [ "$version" != "0.9.0" ]; then
+    echo "FAIL: version esperada 0.9.0, obtenida: $version"
     return 1
   fi
-  echo "  ✓ version = 0.7.8"
+  echo "  ✓ version = 0.9.0"
 
   # 2. plans tiene columnas nuevas: intent_md, version, created_by, updated_by
   local cols

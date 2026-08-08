@@ -226,9 +226,13 @@ bash "$SKALLING_ROOT/scripts/teamdb-graph-refresh.sh" --memory "$(pwd)"
 bash "$SKALLING_ROOT/scripts/teamdb-search.sh" "<topic-o-slug>" decision
 
 # Paso 3: si ya existe, leélo para NO crear duplicado
-sqlite3 "$(teamdb_project_path "$(pwd)")" "SELECT slug, title, intent_md FROM proposals WHERE slug LIKE '%<topic>%'"
+teamdb_query_project "SELECT slug, title, intent_md FROM proposals WHERE slug LIKE '%<topic>%'"
 
-# Paso 4: solo si NO existe, INSERT el proposal nuevo en la DB
+# Paso 4: solo si NO existe, INSERT el proposal nuevo en la DB.
+# No hay script de proposal-only: teamdb-plan.sh (lo corre Sol) crea
+# proposal+plan+tasks en UNA transacción y reutiliza el mismo slug con
+# ON CONFLICT(slug). Este INSERT es la base que el plan script retoma.
+# Tabla objetivo: proposals (NO work_in_progress).
 sqlite3 "$(teamdb_project_path "$(pwd)")" <<SQL
 INSERT INTO proposals (slug, title, intent_md, status, agent, created_at, updated_at)
 VALUES ('<feature-slug>', '<título>', '<contenido>', 'draft', 'pol', datetime('now'), datetime('now'));

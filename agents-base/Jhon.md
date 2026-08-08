@@ -180,14 +180,24 @@ El handoff a Luz **DEBE incluir `project_context`** (Luz necesita saber stack y 
 
 ## TeamDB: Verification Receipts
 
-Jhon corre tests y cierra task:
+Jhon corre tests, avanza la task a `approved` y sella el receipt (NO escribe en `work_in_progress`):
 
 ```bash
-# Update con receipt
-teamdb_query_project "UPDATE work_in_progress SET status='in_review', resolution_md='tests: 5/5 pass, coverage 87%', updated_at=datetime('now') WHERE slug='task-endpoint'"
+# Tablero de estado (read-only): qué tasks están en in_review esperando veredicto
+bash "$SKALLING_ROOT/scripts/teamdb-status.sh" "<feature-slug>" "$(pwd)"
 
-# Log de receipt
-teamdb_query_project "INSERT INTO audit_log (ts, agent, action, table_name, row_id, details) VALUES (datetime('now'), 'jhon', 'verify', 'work_in_progress', (SELECT id FROM work_in_progress WHERE slug='task-endpoint'), '{\"tests\":\"5/5\",\"coverage\":\"87%\"}')"
+# Verificación (read-only): contexto + estado de la task
+teamdb_query_project "SELECT id, slug, status, owner FROM tasks WHERE slug='<task-slug>' AND status='in_review'"
+
+# Advance in_review → approved (solo jhon)
+bash "$SKALLING_ROOT/scripts/teamdb-claim.sh" --advance "<feature-slug>" "<task-slug>" --to=approved --by=jhon "$(pwd)"
+
+# Seal receipt con tree_hash (revisión congelada). <task_id> es el id numérico de la DB.
+TEAMDB_CLAIM_COMMAND="<comando exacto>" \
+TEAMDB_CLAIM_EXIT_CODE=0 \
+TEAMDB_CLAIM_TREE_HASH="<hash del árbol revisado>" \
+TEAMDB_CLAIM_OUTPUT_SUMMARY='{"tests":"5/5","coverage":"87%"}' \
+bash "$SKALLING_ROOT/scripts/teamdb-seal-receipt.sh" "<task_id>" jhon "$(pwd)"
 ```
 
 ---

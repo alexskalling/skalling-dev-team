@@ -181,22 +181,26 @@ Cada tarea pasa por Teo → Jhon antes de avanzar. Luz audita el plan completo a
 
 ---
 
-## TeamDB: WIP Lifecycle
+## TeamDB: Plan Lifecycle
 
-Sol crea row en `work_in_progress` al recibir plan de Pol:
+Sol crea el plan en las tablas cycle al recibir el proposal validado de Pol (NO escribe en `work_in_progress`):
 
 ```bash
-# 1. Crear plan
-teamdb_query_project "INSERT INTO work_in_progress (slug, type, title, body_md, status, priority, owner, created_at, updated_at) VALUES ('plan-auth', 'plan', 'Sistema Auth', '# JWT\n\nObjetivo: login + refresh + logout', 'open', 2, 'sol', datetime('now'), datetime('now'))"
+# 1. Crear proposal+plan+tasks en una pasada (atómicamente, con DAG + plan_history)
+bash "$SKALLING_ROOT/scripts/teamdb-plan.sh" "$(pwd)" "<feature-slug>" "<Título del plan>" tasks.md \
+  --by=sol \
+  --purpose="<purpose default aplicado a cada task>" \
+  --acceptance="<acceptance_md default aplicado a cada task>"
 
-# 2. Crear feature bajo el plan
-teamdb_query_project "INSERT INTO work_in_progress (slug, type, parent_id, title, status, priority, owner, created_at, updated_at) SELECT 'feat-login', 'feature', id, 'Login con JWT', 'open', 2, 'teo', datetime('now'), datetime('now') FROM work_in_progress WHERE slug='plan-auth'"
-
-# 3. Crear task bajo la feature
-teamdb_query_project "INSERT INTO work_in_progress (slug, type, parent_id, title, status, priority, owner, created_at, updated_at) SELECT 'task-endpoint', 'task', id, 'POST /login endpoint', 'open', 2, 'teo', datetime('now'), datetime('now') FROM work_in_progress WHERE slug='feat-login'"
+# 2. Ajustes posteriores al plan (solo si el plan no está completed/abandoned)
+bash "$SKALLING_ROOT/scripts/teamdb-amend.sh" "<feature-slug>" --add-task "<título>" --by=sol --purpose="<purpose>"
+bash "$SKALLING_ROOT/scripts/teamdb-amend.sh" "<feature-slug>" --modify-task=<task-slug> --new-title="<nuevo título>" --by=sol
+bash "$SKALLING_ROOT/scripts/teamdb-amend.sh" "<feature-slug>" --deprecate-task=<task-slug> --by=sol
 ```
 
-**Status flow:** `open` (Sol) → `in_progress` (Teo) → `in_review` (Jhon) → `approved` (Luz) → `resolved` (Pau).
+**Status flow:** `pending` (Sol) → `in_progress` (Teo claim) → `in_review` (Teo release) → `approved` (Jhon advance) → `resolved` (Pau advance).
+
+**REGLAS**: tasks en `approved`/`resolved`/`in_progress`/`in_review` son inmutables (amend las rechaza). El tablero se consulta con `bash "$SKALLING_ROOT/scripts/teamdb-status.sh" "<feature-slug>" "$(pwd)"`.
 
 ## TeamDB: Git Sync
 
@@ -230,16 +234,21 @@ d = json.load(sys.stdin)
 print('Code graph:', len(d.get('nodes', [])), 'archivos')
 "
 
-# Paso 2: buscá el proposal que Pol dejó aprobado
-sqlite3 "$(teamdb_project_path "$(pwd)")" "SELECT id, slug, status FROM proposals WHERE slug='<feature-slug>' ORDER BY created_at DESC LIMIT 1"
+# Paso 2: buscá el proposal que Pol dejó en la DB (read-only)
+bash "$SKALLING_ROOT/scripts/teamdb-search.sh" "<feature-slug>" decision
+teamdb_query_project "SELECT id, slug, title, status FROM proposals WHERE slug='<feature-slug>' ORDER BY created_at DESC LIMIT 1"
 
-# Paso 3: si el proposal existe, hacé UPDATE del plan asociado (NO INSERT)
+# Paso 3: el plan se crea/actualiza con teamdb-plan.sh (crea proposal+plan+tasks
+# en UNA transacción; reutiliza el slug del proposal). El único campo SIN script
+# dedicado es design_md (teamdb-plan.sh lo setea a un default al crear). Si lo
+# actualizás, hacé UPDATE contra `plans` (NO work_in_progress):
 sqlite3 "$(teamdb_project_path "$(pwd)")" <<SQL
-UPDATE plans SET design_md='<tu diseño técnico>', version=version+1, updated_at=datetime('now'), updated_by='sol' WHERE proposal_id=?;
+UPDATE plans SET design_md='<tu diseño técnico>', version=version+1, updated_at=datetime('now'), updated_by='sol' WHERE slug='<feature-slug>';
 SQL
 
-# Paso 4: insertá las tasks con purpose + acceptance (NO títulos poéticos)
-# Cada task DEBE tener: title descriptivo, purpose (1-2 frases), acceptance_md (criterios verificables), order_index
+# Paso 4: las tasks se cargan desde tasks.md con purpose + acceptance (NO títulos poéticos)
+bash "$SKALLING_ROOT/scripts/teamdb-plan.sh" "$(pwd)" "<feature-slug>" "<Título del plan>" tasks.md \
+  --strict-contract --by=sol --purpose="<purpose>" --acceptance="<acceptance>"
 ```
 
 **CITA obligatoria** en tu handoff a Teo:

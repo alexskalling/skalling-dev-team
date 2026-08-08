@@ -85,7 +85,7 @@ VALUES (
 SQL
 
 # Al cerrar (SUCCESS/FAIL/CANCELLED)
-sqlite3 "$(teamdb_project_path "$(pwd")" "UPDATE routing_decisions SET outcome='SUCCESS', completed_at=datetime('now') WHERE id=<id>"
+sqlite3 "$(teamdb_project_path "$(pwd)")" "UPDATE routing_decisions SET outcome='SUCCESS', completed_at=datetime('now') WHERE id=<id>"
 
 # Query: ¿qué decisiones tomé hoy?
 sqlite3 "$(teamdb_project_path "$(pwd)")" "SELECT chosen_route, outcome, COUNT(*) FROM routing_decisions WHERE ts > datetime('now', '-1 day') GROUP BY chosen_route, outcome"
@@ -495,8 +495,9 @@ bash "$SKALLING_ROOT/scripts/teamdb-graph-refresh.sh" --memory "$(pwd)"
 # Paso 2: buscá si ya hay proposal sobre esto
 bash "$SKALLING_ROOT/scripts/teamdb-search.sh" "<query-del-usuario>" concept
 
-# Paso 3: si encontraste, leé el proposal/plan asociado
-sqlite3 "$(teamdb_project_path "$(pwd)")" "SELECT slug, intent_md FROM proposals WHERE slug LIKE '%<topic>%>'"
+# Paso 3: si encontraste, leé el proposal/plan asociado (read-only)
+teamdb_query_project "SELECT slug, title, intent_md FROM proposals WHERE slug LIKE '%<topic>%'"
+bash "$SKALLING_ROOT/scripts/teamdb-status.sh" "<feature-slug>" "$(pwd)"
 
 # Paso 4: construí el handoff con `feature-slug` o `proposal_id`, NO con paths
 ```

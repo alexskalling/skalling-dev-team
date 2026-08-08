@@ -263,9 +263,23 @@ teamdb_query_project "SELECT slug, title FROM concepts_fts WHERE concepts_fts MA
 
 **Pre-commit:** antes de commitear, corro `bash scripts/teamdb-export.sh` para volcar las tablas de datos a `.sql` (formato git-friendly). Pau es la responsable de mantener la DB y el export sincronizados.
 
-**Jerarquía plan/feature/task:** la tabla `work_in_progress` tiene `type` (`plan`/`feature`/`task`) y `parent_id` para anidar. Uso `scripts/wip-tree.sh` para ver el árbol.
+**Ciclo en tablas cycle:** el ciclo SDD vive en `proposals` → `plans` → `tasks` (con `task_claims` + `plan_history`). `work_in_progress` queda como tabla legacy del bundle OKF — no la usés para el ciclo. `bash scripts/teamdb-status.sh <plan-slug> <project>` muestra el tablero del plan.
 
 **Grafo de relaciones:** `memory_links` con `link_type` (`extends`/`contradicts`/`uses`/`supersedes`/`related`) + `memory_tags` para etiquetas transversales.
+
+## TeamDB: Cierre del ciclo (read-only + advance)
+
+Cuando Luz emite Quality Gate PASSED y la documentación quedó validada, cierro la última transición del ciclo:
+
+```bash
+# Estado del plan (read-only)
+bash "$SKALLING_ROOT/scripts/teamdb-status.sh" "<feature-slug>" "$(pwd)"
+
+# Advance approved → resolved (solo pau) para cada task aprobada
+bash "$SKALLING_ROOT/scripts/teamdb-claim.sh" --advance "<feature-slug>" "<task-slug>" --to=resolved --by=pau "$(pwd)"
+```
+
+**Regla**: nunca muto las tablas del ciclo por fuera de `teamdb-claim.sh`. Mi memoria definitiva (concepts/decisions/preferencias) sí se escribe con `teamdb_query_project` — son tablas de memoria, no el ciclo.
 
 ## TeamDB: Git Workflow
 
