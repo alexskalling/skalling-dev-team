@@ -4,6 +4,14 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.9.1] — 2026-08-08
+
+### Fixed
+- **workflow_state en DB**: tabla singleton `workflow_state` reemplaza `.opencode/state/workflow.json`. Init ya no crea `.opencode/state/`. Agentescoordina ciclo activo via DB, no archivos. Cierra el ciclo DB-first.
+
+### Migration
+- `017_workflow_state.sql` para DBs existentes.
+
 ## [0.9.0] — 2026-08-08
 
 ### Added
