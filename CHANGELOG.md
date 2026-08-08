@@ -4,6 +4,23 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-08-08
+
+### Added
+- **Fase 0 — Dump por fila mergeable**: dump versionado por fila (`teamdb-dump.sh --by-row`), `teamdb-merge.sh` aplica filas una a una con clave primaria estable, backup antes de merge, audit_log de decisiones.
+- **Fase 1 — Dump fresco post-escritura + gates baratos**: scripts de escritura regeneran dump automáticamente; pre-commit compara hash (O(1)); pre-push valida dump==DB y receipt.
+- **Fase 2 — Estados y fechas**: columna `due_date` en tasks (migration 016), `teamdb-status.sh` muestra `[OVERDUE]`, circuito de estados `pending→in_progress→in_review→approved/resolved`.
+- **Fase 3 — Agentes DB-first real**: skill `skalling-cycle` reescrito a DB-first (la DB es fuente de verdad, no filesystem); 7 agentes actualizados para usar `teamdb-plan.sh`, `teamdb-claim.sh`, `teamdb-status.sh`, `teamdb-seal-receipt.sh` en vez de SQL crudo y tabla legacy `work_in_progress`.
+- **Fase 4 — Puente .opencode/changes↔DB**: nuevo script `teamdb-ingest-change.sh` ingiere un change dir completo (proposal.md + tasks.md + specs/*.md + design.md) a la DB de forma idempotente y atómica; `teamdb-export-md.sh` extiende para regenerar `specs/*.md` desde la tabla `specs`; gate de lifecycle en `teamdb-execute-plan.sh` (solo acepta planes `approved` o `in_progress`).
+- **Skill `skalling-cycle` DB-first**: el ciclo ahora enseña a consultar/escribir en la DB con los scripts del circuito, no con archivos `.opencode/changes/`.
+- **Test suite expandida**: 46 tests en `teamdb-hardening-suite.sh`.
+
+### Fixed
+- **Test setup.test.sh**: versión hardcodeada `0.7.8` → `0.9.0`.
+
+### Migration
+- `016_add_due_date.sql` para DBs existentes.
+
 ## [0.8.2] — 2026-08-07
 
 ### Fixed
