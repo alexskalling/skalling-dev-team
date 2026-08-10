@@ -343,7 +343,7 @@ Bootstrap completo:
 
 Estado del teamdb:
 - DB: .opencode/context/team.db
-- Schema: v0.7.2
+- Schema: $(sqlite3 .opencode/context/team.db "SELECT value FROM schema_meta WHERE key='version'" 2>/dev/null || echo "desconocida")
 - Conceptos: [N]
 - Decisiones: [N]
 - Hooks git: [activos | no aplica]

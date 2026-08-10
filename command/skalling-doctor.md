@@ -59,7 +59,7 @@ Spec ↔ Memory link también es solo informativo y de ejecución manual: `bash 
 
 El doctor chequea:
 
-- `~/.config/opencode/team.db` existe y schema v0.7.6
+- `~/.config/opencode/team.db` existe y schema $(sqlite3 ~/.config/opencode/team.db "SELECT value FROM schema_meta WHERE key='version'" 2>/dev/null || echo "desconocida")
 - `scripts/teamdb-*.sh` ejecutables
 - `skills_active` poblado (skills registry: se re-indexa con `teamdb-skills-sync.sh`)
 - Hooks git activos (si hay `.git`)
