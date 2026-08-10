@@ -8,29 +8,39 @@ Muestra el estado actual de Skalling en este proyecto.
 
 ## Qué reportar
 
-### 1. Conteo del bundle OKF
+### 1. Conteo del bundle OKF (desde DB)
 
 ```bash
-echo "Concept docs por tipo:"
-for type in Concept Decision Preference Workaround WorkInProgress Context; do
-    count=$(find .opencode/context -name "*.md" -not -name "index.md" -not -name "log.md" -not -name "README.md" -exec grep -l "^type: $type" {} \; 2>/dev/null | wc -l | tr -d ' ')
-    echo "  $type: $count"
-done
-
-echo ""
-echo "Total concept docs: $(find .opencode/context -name "*.md" -not -name "index.md" -not -name "log.md" -not -name "README.md" | wc -l | tr -d ' ')"
+DB=".opencode/context/team.db"
+if [ -f "$DB" ]; then
+    echo "Concept docs por tipo:"
+    for type in concept decision preference known_problem work_in_progress; do
+        count=$(sqlite3 "$DB" "SELECT COUNT(*) FROM $type" 2>/dev/null || echo 0)
+        echo "  ${type}: $count"
+    done
+    echo ""
+    echo "Total concepts: $(sqlite3 "$DB" "SELECT COUNT(*) FROM concepts" 2>/dev/null || echo 0)"
+else
+    echo "  (team.db no existe — correr /skalling-init)"
+fi
 ```
 
-### 2. Trabajo en curso
+### 2. Trabajo en curso (desde DB)
 
 ```bash
-ls .opencode/context/trabajo-en-curso/*.md 2>/dev/null | grep -v index.md
+DB=".opencode/context/team.db"
+if [ -f "$DB" ]; then
+    sqlite3 "$DB" "SELECT slug, type, title, status, owner FROM work_in_progress ORDER BY updated_at DESC LIMIT 20" 2>/dev/null
+fi
 ```
 
-### 3. Cambios SDD activos
+### 3. Cambios SDD activos (desde DB)
 
 ```bash
-find .opencode/changes -name "proposal.md" 2>/dev/null | head -10
+DB=".opencode/context/team.db"
+if [ -f "$DB" ]; then
+    sqlite3 "$DB" "SELECT p.slug, p.title, p.status, p.agent, pr.title as plan_title, pr.status as plan_status FROM proposals p LEFT JOIN plans pr ON pr.proposal_id = p.id WHERE p.status IN ('draft','active','in_review') ORDER BY p.updated_at DESC LIMIT 20" 2>/dev/null
+fi
 ```
 
 ### 4. Stack detectado
@@ -47,14 +57,16 @@ fi
 tail -30 .opencode/context/log.md
 ```
 
-### 6. Frontend check (REGLA #13)
+### 6. Frontend check (REGLA #13) — desde DB
 
 ```bash
-if grep -q "has_ui: true" .opencode/project.yaml 2>/dev/null; then
-    if [ -f .opencode/context/proyecto/design-system.md ]; then
-        echo "  ✓ design-system.md presente"
+DB=".opencode/context/team.db"
+if [ -f "$DB" ] && grep -q "has_ui: true" .opencode/project.yaml 2>/dev/null; then
+    ds_count=$(sqlite3 "$DB" "SELECT COUNT(*) FROM concepts WHERE slug='design-system' AND category='design-system'" 2>/dev/null || echo 0)
+    if [ "$ds_count" -gt 0 ]; then
+        echo "  ✓ design-system en DB (REGLA #13 OK)"
     else
-        echo "  ⚠ REGLA #13 violada: falta design-system.md en bundle OKF"
+        echo "  ⚠ REGLA #13 violada: falta design-system en concepts table"
     fi
 fi
 ```
