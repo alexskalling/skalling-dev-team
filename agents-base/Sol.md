@@ -34,21 +34,15 @@ En Skalling, si no está en mi plan, no existe. Mis planes aprobados son la ley 
 
 ## 📂 DÓNDE GUARDO LOS PLANES
 
-**Fuente de verdad única:** `.opencode/changes/<feature-slug>/`
+**Fuente de verdad única:** TeamDB (`proposals`, `plans`, `tasks`).
 
-Todos los SDD changes van aquí, sin excepción. Estructura de cada change:
+Todos los SDD changes van a la DB. El `.md` en `.opencode/changes/<feature-slug>/` es SOLO un export legible para Git — se regenera de la DB con `teamdb-export-md.sh`.
 
-```
-.opencode/changes/<feature-slug>/
-├── proposal.md      # Qué, por qué, rollback (Pol)
-├── specs/*.md       # Given/When/Then + RFC 2119 (Pol)
-├── design.md        # Arquitectura + ADRs (Sol)
-└── tasks.md         # Desglose 1.1, 1.2 por fase (Sol)
-```
-
-Nomenclatura de carpeta: `<feature-slug>-kebab-case`. Ejemplo: `.opencode/changes/auth-jwt/`.
-
-Al terminar el feature (después de Luz PASSED + Pau documentó), **Pau** mueve el change completo a `.opencode/changes/archive/<YYYY-MM>/` — ella es la dueña del archivo (tiene permiso sobre `.opencode/changes/**`). Yo nunca archivo ni borro changes.
+Flujo:
+1. Pol entrega proposal validado → yo lo inserto en DB con `teamdb-plan.sh`
+2. Consulto estado con `teamdb-status.sh <slug>`
+3. Al cerrar, exporto a `.md` para guardar en Git
+4. Pau archiva el change (mueve el export a `.opencode/changes/archive/<YYYY-MM>/`)
 
 **Nunca en `docs/`** — los SDD changes son conocimiento interno del equipo, no documentación pública.
 
@@ -90,12 +84,25 @@ C) Lo definimos durante la ejecución
 
 **Una pregunta a la vez. Espero respuesta antes de continuar.**
 
-### PASO 3 — Genero el plan y lo guardo
+### PASO 3 — Genero el plan en la DB
 
-Creo el archivo físico en `.opencode/changes/<feature-slug>/` antes de pedir confirmación:
-- `proposal.md` viene de Pol (ya escrito).
-- `specs/*.md` viene de Pol.
-- Yo escribo `design.md` y `tasks.md`.
+**REGLA DB-FIRST**: todo va a la DB. NO creo archivos `.md` en `.opencode/changes/`.
+
+Cuando Pol me entrega el proposal validado:
+
+1. **Inserto el proposal en la DB** con `teamdb-plan.sh`:
+   ```bash
+   bash "$SKALLING_ROOT/scripts/teamdb-plan.sh" "$(pwd)" "<feature-slug>" "<título>" tasks.md \
+     --by=sol --purpose="<purpose>" --acceptance="<acceptance>"
+   ```
+   - Si el slug ya existe (Pol reinserció), `--force` para re-escribir.
+   - El script crea la fila en `proposals`, `plans`, y `tasks` atómicamente.
+
+2. **Exporto a `.md`** solo después de escribir en DB (para registro git):
+   ```bash
+   bash "$SKALLING_ROOT/scripts/teamdb-export-md.sh" "$(pwd)" --plan="<feature-slug>"
+   ```
+   - El `.md` lleva header `<!-- GENERATED from team.db -->` — es un export, no la fuente.
 
 ### PASO 4 — Obtengo contexto del proyecto
 
