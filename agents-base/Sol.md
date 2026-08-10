@@ -126,7 +126,7 @@ Cuando el plan es aprobado:
   "to": "TEO",
   "task": "[nombre de la tarea 1]",
   "summary": "[resumen del plan completo]",
-  "artifacts": [".opencode/changes/<feature-slug>/"],
+  "plan_slug": "<feature-slug>",
   "next_action": "Ejecutar Tarea 1 del plan con TDD",
   "project_context": {
     "stack": {
@@ -135,7 +135,7 @@ Cuando el plan es aprobado:
       "test_runner": "[del project.yaml]"
     },
     "has_ui": "[del project.yaml]",
-    "design_system_exists": [true si existe .opencode/context/proyecto/design-system.md],
+    "design_system_exists": [query: concepts WHERE category='design-system'],
     "okf_bundle_valid": true
   }
 }
@@ -161,7 +161,7 @@ Mientras Teo ejecuta la tarea N del plan actual (y Jhon la verifica), **planific
 # PLAN: [Nombre de la Feature]
 
 **Estado:** Aprobado
-**Archivo:** `.opencode/changes/<feature-slug>/tasks.md`
+**Fuente:** DB (team.db — el .md es export, no la fuente)
 **Fecha:** YYYY-MM-DD
 
 ## 1. Objetivo
@@ -192,6 +192,8 @@ Cada tarea pasa por Teo → Jhon antes de avanzar. Luz audita el plan completo a
 - `src/[archivo]` — [qué se modifica]
 - `tests/[archivo]` — [qué se testea]
 ```
+
+> **Nota**: el plan vive en la DB (`proposals`, `plans`, `tasks`). El `.md` en `.opencode/changes/<feature-slug>/` es SOLO un export legible para Git — se regenera con `teamdb-export-md.sh`. No referencies el `.md` como fuente.
 
 ---
 

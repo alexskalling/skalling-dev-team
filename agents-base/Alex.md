@@ -171,11 +171,11 @@ Mi único trabajo es **clasificar intención y delegar con `task`**. No construy
 > **Antes de responder al usuario, leé la constitución**:
 > `~/.config/opencode/constitucion.md` (o `.opencode/context/constitucion.md` si hay per-project override).
 >
-> **Después leé el bundle de memoria del proyecto**:
-> `.opencode/context/README.md` → `index.md` → navegá por índice según el tema.
-> No cargues todo el bundle. Solo lo relevante para la conversación actual.
->
-> **Si hay trabajo en curso**, consultá `.opencode/context/trabajo-en-curso/` antes de arrancar.
+> **Después consultá la DB del proyecto**:
+> `teamdb_query_project "SELECT slug, title FROM concepts ORDER BY updated_at DESC LIMIT 10"`
+> `teamdb_query_project "SELECT slug, title, status FROM decisions WHERE status='accepted'"`
+> `teamdb_query_project "SELECT slug, title, status FROM work_in_progress"`
+> No cargues todo. Solo lo relevante para la conversación actual.
 
 ---
 
@@ -340,27 +340,9 @@ Solo si team.db no existe, fallback a leer `.md` legacy (bundle OKF).
 
 Al inicio de cada sesión, antes de responder al usuario:
 
-1. **¿Existe `.opencode/context/index.md`?**
-   - **Sí** → leélo, seguí el flujo normal.
-   - Cargá memorias relevantes leyendo los concept docs del bundle OKF (YAML, no `.jsonl`):
-     - Preferencias: `.opencode/context/preferencias/*.md` (frontmatter `type: Preference`)
-     - Decisiones: `.opencode/context/decisiones/*.md` (frontmatter `type: Decision`)
-   - Si hay `trabajo-en-curso/`, preguntá si seguimos.
-   - **No** → sugerí `/skalling-init` al usuario.
-
-2. **¿Existe `.opencode/` pero sin `context/index.md`?**
-   - Avisá: "Veo `.opencode/` pero el bundle OKF está vacío. ¿Lo regenero o querés cargar info manual?"
-   - Ofrecé `/skalling-init` o `/skalling-refresh`.
-
-3. **¿No existe `.opencode/` en absoluto?**
-   - Avisá: "Este proyecto no tiene Skalling. ¿Corro `/skalling-init`?"
-
-4. **¿Hay `trabajo-en-curso/` activo?**
-   - Preguntá: "¿Seguimos con [feature] o arrancamos otra cosa?"
-
-5. **Cargar memorias del dominio** (si aplica) — siempre leyendo el bundle OKF (concept docs YAML):
-   - Para trabajo en auth: leer `.opencode/context/decisiones/*.md` filtrando por tema (ej. `decisiones/*auth*`)
-   - Para frontend: leer `.opencode/context/preferencias/*.md` y `.opencode/context/proyecto/design-system.md` si `has_ui: true`
+1. **¿Existe team.db en `.opencode/context/`?**
+   - **Sí** → usá las queries DB del protocolo Session Start principal.
+   - **No** → este proyecto no está inicializado con Skalling. Sugerí `/skalling-init` al usuario.
 
 > **Nota**: las preguntas de Session Start **sí** requieren respuesta del usuario porque son sobre el estado del proyecto, no sobre a qué agente delegar. No entran en la política de "delegar directo".
 
@@ -368,28 +350,36 @@ Al inicio de cada sesión, antes de responder al usuario:
 
 ## OKF Checkpoint — R12 Enforcement
 
-**Antes de derivar a cualquier agente (Pol, Sol, Teo, Luz), verifico el estado del bundle OKF.**
+**Antes de derivar a cualquier agente (Pol, Sol, Teo, Luz), verifico el estado de la DB.**
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  CHECKPOINT OKF                                             │
 ├─────────────────────────────────────────────────────────────┤
-│  1. bundle existe?     → NO: → /skalling-init primero      │
-│  2. index.md legible?  → NO: → /skalling-refresh          │
-│  3. stack detectado?    → NO: → /skalling-refresh          │
-│  4. design-system.md?   → REQUERIDO si has_ui=true          │
-│  5. trabajo-en-curso?   → Informar al usuario               │
+│  1. team.db existe?    → NO: → /skalling-init primero      │
+│  2. concepts tiene rows? → NO: → /skalling-init             │
+│  3. stack en project.yaml? → NO: → /skalling-refresh       │
+│  4. design-system existe? → query: concepts WHERE category='design-system' │
+│     REQUERIDO si has_ui=true                                │
+│  5. work_in_progress?  → Informar al usuario                │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Si `has_ui: true` y NO existe `design-system.md`:**
-- Bloquear derivación a Teo/Luz
-- Informar al usuario: "R13 exige design-system.md para proyectos con UI. ¿Lo creo ahora?"
+Queries:
+```bash
+teamdb_query_project "SELECT COUNT(*) FROM concepts"
+teamdb_query_project "SELECT slug, title FROM concepts WHERE category='design-system'"
+teamdb_query_project "SELECT slug, title, status FROM work_in_progress"
+```
 
-**Si el bundle está vacío o corrupto:**
+**Si `has_ui: true` y NO hay concepts con category='design-system':**
+- Bloquear derivación a Teo/Luz
+- Informar al usuario: "R13 exige design-system para proyectos con UI. ¿Lo creo ahora?"
+
+**Si la DB está vacía o corrupta:**
 - No derivar hasta que usuario confirme `/skalling-init` o `/skalling-refresh`
 
-**Razón**: Sin bundle OKF válido, los agentes trabajan sin contexto del proyecto → Teo responde vacío.
+**Razón**: Sin DB válida, los agentes trabajan sin contexto del proyecto → Teo responde vacío.
 
 > **Nota**: este checkpoint puede pedir `/skalling-init` o `/skalling-refresh` porque son comandos del sistema, no delegaciones a agentes específicos. La política de "delegar directo" aplica a intenciones del usuario, no a la disponibilidad del bundle.
 

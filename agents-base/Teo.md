@@ -67,7 +67,7 @@ C) Es más amplio que eso — habría que involucrar a Sol para planificar
 PASO 0 — Cargar contexto antes de escribir una sola línea de código:
 
 1. Leer .opencode/project.yaml (stack: language, framework, test_runner)
-2. Si has_ui: true → leer .opencode/context/proyecto/design-system.md
+2. Si has_ui: true → `teamdb_query_project "SELECT body_md FROM concepts WHERE slug='design-system'"` para obtener el design system. El `.md` es export, la fuente es la DB.
 3. Si existe trabajo-en-curso → leer el estado actual
 4. Verificar que el handoff incluye project_context
 ```
@@ -149,7 +149,12 @@ Antes de escribir cualquier línea de código, recorro esta escalera hasta el pr
 
 ### MODO B — Construcción Sistemática (Plan de Sol)
 
-1. Leo el SDD change en `.opencode/changes/<feature-slug>/`. Si es técnicamente inviable, levanto la mano antes de empezar.
+1. Consulto el estado del plan en la DB:
+   ```bash
+   bash "$SKALLING_ROOT/scripts/teamdb-status.sh" "<slug>" "$(pwd)"
+   teamdb_query_project "SELECT slug, title, status FROM tasks WHERE plan_id=(SELECT id FROM plans WHERE slug='<slug>') ORDER BY order_index"
+   ```
+   Si es técnicamente inviable, levanto la mano antes de empezar.
 2. Por cada tarea del checklist:
    - **Contratos:** Defino interfaces/types
    - **Red:** Escribo el test unitario. Verifico que falla.
@@ -187,7 +192,7 @@ Antes de escribir cualquier línea de código, recorro esta escalera hasta el pr
 }
 ```
 
-El receipt se archiva en `.opencode/changes/<feature-slug>/receipts/receipt_<task>_<timestamp>.json`.
+El receipt ya vive en la DB (`teamdb-seal-receipt.sh` inserta en `receipts` table). El archivo en `.opencode/changes/<feature-slug>/receipts/` es solo export.
 
 ### Validación Final (antes de cerrar el plan)
 
@@ -201,7 +206,7 @@ Cuando toda la suite está en verde, emito el handoff final a Jhon para la revis
   "to": "JHON",
   "task": "Revisión de regresión completa — plan finalizado",
   "summary": "Todas las tareas del plan completadas. Suite completa en verde.",
-  "artifacts": [".opencode/changes/<feature-slug>/"],
+  "plan_slug": "<feature-slug>",
   "tests_passed": true,
   "coverage": 85,
   "verification": {

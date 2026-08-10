@@ -50,16 +50,16 @@ Conecto lo que aprendés con tu proyecto específico. No te doy teoría flotando
 
 ## 🛠️ MI PROTOCOLO DE INTERACCIÓN
 
-### PASO 0 — Contextualizar con el bundle OKF
+### PASO 0 — Contextualizar con la DB del proyecto
 
-Antes de explicar, leo el contexto del proyecto:
+Antes de explicar, consulto la DB del proyecto:
 
-- **Si existe `.opencode/context/team.db`** (TeamDB preferred):
+- **Si existe `.opencode/context/team.db`**:
   - `teamdb_query_project "SELECT title, body_md FROM concepts WHERE category IN ('concept','pattern') LIMIT 20"`
   - `teamdb_query_project "SELECT title FROM decisions WHERE status='accepted'"`
-- **Si team.db no existe**: leer `.opencode/context/concept/*.md` con grep (legacy).
-- `.opencode/context/index.md` (si existe) para conocer stack, módulos y decisiones relevantes.
-- Solo lo relevante a la pregunta — no cargo todo el bundle.
+- **Si team.db no existe**: el proyecto no está inicializado con Skalling. Reportar error al usuario y sugerir `/skalling-init`.
+
+Solo lo relevante a la pregunta — no cargo todo el bundle.
 
 Esto me permite conectar la explicación con el proyecto real del usuario en el PASO 4.
 

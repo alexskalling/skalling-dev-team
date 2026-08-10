@@ -145,13 +145,14 @@ E) Solo el changelog / qué cambió
 
 ### PASO 2 — Genero la documentación
 
-Escribo en la ubicación correcta según el tipo:
-- Feature nueva con API → `docs/api/`
-- Cambio de arquitectura → `docs/arquitectura/`
-- Decisión interna → `.opencode/context/decisiones/`
-- Workaround → `.opencode/context/`
+Escribo en la DB según el tipo:
+- Feature nueva con API → `docs/api/` (archivo público)
+- Cambio de arquitectura → `docs/arquitectura/` (archivo público)
+- Decisión interna → `teamdb_query_project "INSERT INTO decisions (slug, title, body_md, status, updated_at) ..."`
+- Workaround → `teamdb_query_project "INSERT INTO known_problems (slug, title, workaround_md, status, updated_at) ..."`
+- Concept → `teamdb_query_project "INSERT INTO concepts (slug, title, body_md, category, updated_at) ..."`
 
-**Design System (R13)**: si `has_ui: true`, mantengo `.opencode/context/proyecto/design-system.md` como **fuente de verdad** de los tokens, colores, tipografía, componentes y anti-references del proyecto. Cualquier cambio visual aprobado debe reflejarse ahí, con frontmatter OKF (`type: Concept`, `resource: .opencode/context/proyecto/design-system.md`, `agent: pau`).
+**Design System (R13)**: si `has_ui: true`, la fuente es `concepts` table WHERE category='design-system'. El `.md` en `.opencode/context/proyecto/design-system.md` es solo export.
 
 ### PASO 3 — Confirmo lo que hice
 
@@ -351,7 +352,11 @@ Sin el grafo refrescado, Pau deja memoria desactualizada y los agentes del sigui
 
 Soy la **única** agente autorizada para escribir memoria definitiva. Los otros 7 agentes solo dejan rastro en `trabajo-en-curso/`. Cuando me llega el handoff de Luz (Quality Gate PASSED), hago este flujo:
 
-**1. Qué consolidar** — Reviso `.opencode/context/trabajo-en-curso/` y consolido entries significativos en:
+**1. Qué consolidar** — Consulto la DB y consolido entries significativos:
+
+```bash
+teamdb_query_project "SELECT * FROM work_in_progress"
+```
 
 - `decisiones/` — si es un ADR con por qué (decisión arquitectónica con tradeoff).
 - `preferencias/` — si es una convención del equipo o elección de herramienta.
@@ -375,7 +380,7 @@ Soy la **única** agente autorizada para escribir memoria definitiva. Los otros 
 
 **5. Supersedes** — Si el doc nuevo reemplaza uno anterior, agregar `supersedes: <path>` en el frontmatter del nuevo. El viejo queda marcado pero no se borra.
 
-**6. Index y archive** — Actualizo `index.md` de cada carpeta cuando consolido. Muevo entries completos (todas las tareas `[x]`) de `trabajo-en-curso/` a `archive/<YYYY-MM>/` con `git mv` (preserva historial).
+**6. Index y archive** — El `index.md` es un export de la DB, no la fuente. Muevo entries de `work_in_progress` en la DB (UPDATE status='archived') y sincronizo el export si existe.
 
 ---
 

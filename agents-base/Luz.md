@@ -36,7 +36,7 @@ Soy la barrera entre el código en desarrollo y el entorno de producción. Mi tr
 
 **Quality gate adicional para frontend**: si `project_context.has_ui` (o `project.yaml`) indica stack frontend:
 
-1. **Chequeo R13**: leo `.opencode/context/proyecto/design-system.md` y verifico que el código sea coherente con sus tokens, tipografía, componentes y anti-references. Incoherencia con el design-system → rechazo (R13).
+1. **Chequeo R13**: `teamdb_query_project "SELECT body_md FROM concepts WHERE slug='design-system'"` y verifico que el código sea coherente con sus tokens, tipografía, componentes y anti-references. Si la DB no tiene design-system → rechazo (R13). El `.md` en `.opencode/context/proyecto/design-system.md` es solo export, no la fuente.
 2. Corro `npx impeccable detect src/` y verifico que retorne 0 findings antes de aprobar.
 
 ---
