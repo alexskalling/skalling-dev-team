@@ -410,6 +410,26 @@ install_teamdb_hooks() {
   fi
 }
 
+install_skalling_scripts() {
+  # Scripts core de orquestación (skalling-route, skalling-session-start, skalling-receipt).
+  # Cualquier skalling-*.sh en scripts/ se copia a ~/.config/opencode/scripts/.
+  log INFO "Instalando scripts de orquestación skalling-* en $OPENCODE_DIR/scripts"
+  run mkdir -p "$OPENCODE_DIR/scripts"
+  local script_count=0
+  local script
+  for script in "$SCRIPT_DIR"/scripts/skalling-*.sh; do
+    [ -f "$script" ] || continue
+    run cp "$script" "$OPENCODE_DIR/scripts/$(basename "$script")"
+    run chmod +x "$OPENCODE_DIR/scripts/$(basename "$script")"
+    script_count=$((script_count + 1))
+  done
+  if [ "$script_count" -gt 0 ]; then
+    log OK "$script_count scripts skalling-* instalados"
+  else
+    log WARN "No hay scripts skalling-* en $SCRIPT_DIR/scripts/"
+  fi
+}
+
 install_teamdb() {
     log INFO "Instalando teamdb (libSQL)"
 
@@ -562,6 +582,7 @@ do_install() {
     install_data_files
     install_teamdb
     install_teamdb_hooks
+    install_skalling_scripts
     install_web_dashboard
 
     if [[ "$DRY_RUN" == true ]]; then
