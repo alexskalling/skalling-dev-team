@@ -411,6 +411,18 @@ CREATE TABLE routing_decisions (
 CREATE INDEX idx_routing_decisions_ts ON routing_decisions(ts);
 CREATE INDEX idx_routing_decisions_route ON routing_decisions(chosen_route);
 
+-- workflow_state: tracking del ciclo activo. Singleton id=1.
+-- Added 2026-08-17 to keep project-schema.sql in sync with global-schema.sql.
+CREATE TABLE workflow_state (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  active_cycle_slug TEXT,
+  phase TEXT,
+  actor TEXT,
+  started_at TEXT,
+  lock_token TEXT,
+  updated_at TEXT
+);
+
 CREATE TABLE receipts (
   id TEXT PRIMARY KEY,
   task_id TEXT NOT NULL,
