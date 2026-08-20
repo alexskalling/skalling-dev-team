@@ -18,11 +18,11 @@ fi
 # Cache miss o expired: regenerar
 CONTEXT=$(sqlite3 "$PROJECT/.opencode/context/team.db" "
   SELECT json_object(
-    'concepts', (SELECT json_group_array(title) FROM concepts),
-    'decisions', (SELECT json_group_array(title) FROM decisions WHERE status='accepted'),
-    'preferences', (SELECT json_group_array(slug) FROM preferences),
-    'problems', (SELECT json_group_array(title) FROM known_problems WHERE status='open'),
-    'wip', (SELECT json_group_array(title) FROM work_in_progress WHERE status IN ('in_progress','in_review'))
+    'concepts', (SELECT json_group_array(title) FROM concepts LIMIT 100),
+    'decisions', (SELECT json_group_array(title) FROM decisions WHERE status='accepted' LIMIT 100),
+    'preferences', (SELECT json_group_array(slug) FROM preferences LIMIT 50),
+    'problems', (SELECT json_group_array(title) FROM known_problems WHERE status='open' LIMIT 50),
+    'wip', (SELECT json_group_array(title) FROM work_in_progress WHERE status IN ('in_progress','in_review') LIMIT 50)
   )
 " 2>/dev/null || echo '{}')
 

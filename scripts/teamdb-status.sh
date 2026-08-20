@@ -42,20 +42,33 @@ params = []
 if plan_filter:
     plan_sql += " AND slug = ?"
     params.append(plan_filter)
+
 plans = conn.execute(plan_sql + " ORDER BY id", params).fetchall()
 if not plans:
     print(f"status: no plans{' matching ' + plan_filter if plan_filter else ''}")
     sys.exit(0)
 
+# Single query: JOIN plans + tasks to eliminate N+1
+plan_ids = [p['id'] for p in plans]
+all_tasks = conn.execute(f"""
+    SELECT t.plan_id, t.slug, t.title, t.status, t.owner, t.due_date, t.order_index
+    FROM tasks t
+    WHERE t.plan_id IN ({','.join('?' * len(plan_ids))})
+    ORDER BY t.plan_id,
+        CASE WHEN t.due_date IS NULL THEN 1 ELSE 0 END,
+        t.due_date,
+        t.order_index
+""", plan_ids).fetchall()
+
+# Index tasks by plan_id
+tasks_by_plan = {}
+for t in all_tasks:
+    tasks_by_plan.setdefault(t['plan_id'], []).append(t)
+
 total_by_status = {}
 
 for plan in plans:
-    tasks = conn.execute("""
-        SELECT slug, title, status, owner, due_date, order_index
-        FROM tasks
-        WHERE plan_id = ?
-        ORDER BY CASE WHEN due_date IS NULL THEN 1 ELSE 0 END, due_date, order_index
-    """, (plan['id'],)).fetchall()
+    tasks = tasks_by_plan.get(plan['id'], [])
     if not tasks:
         continue
 

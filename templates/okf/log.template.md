@@ -1,9 +1,10 @@
 # Log — Historial cronológico del bundle
 
-> Append-only. Cada cambio al bundle se registra acá.
-> Pau mantiene este archivo. Lo actualiza en cada consolidación.
+> **DEPRECADO a partir de v0.9.3.** El historial del bundle ya NO vive en este archivo.
+> El log cronológico se migra a la tabla `audit_log` de `team.db`.
+> Este archivo es un export legacy. No editar — regenerar de `audit_log`.
 
-## Formato
+## Formato legacy (ya no usar)
 
 ```
 ## [YYYY-MM-DD HH:MM] [acción]
@@ -15,9 +16,9 @@
 
 ---
 
-## YYYY-MM-DD HH:MM — Bootstrap inicial
+## Migración
 
-**Por:** alex
-**Acción:** Bundle OKF creado con detección automática de stack.
-**Path:** `.opencode/context/` completo
-**Razón:** Primer arranque de Skalling en este proyecto.
+Para regenerar este archivo desde la DB:
+```bash
+sqlite3 .opencode/context/team.db "SELECT agent, action, path, reason, ts FROM audit_log ORDER BY ts DESC LIMIT 100"
+```

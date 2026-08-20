@@ -30,24 +30,25 @@ npx impeccable install
 
 If install fails (no Node 22+, no network), **degrade gracefully**: continue with Skalling's own design checks, notify user that Impeccable is unavailable.
 
-### Step 2 — Read context from OKF bundle
+### Step 2 — Read context from DB (NOT .md files)
 
-Before activating any Impeccable command, read:
+Before activating any Impeccable command, query the DB:
 
-```yaml
-# From .opencode/context/proyecto/que-es.md
-- What is this project?
-- Who is the audience?
+```bash
+# Project concept (what is this project, audience)
+teamdb_query_project "SELECT slug, title, body_md FROM concepts WHERE category IN ('proyecto', 'project', 'context') LIMIT 5"
 
-# From .opencode/context/proyecto/publico-objetivo.md (if exists)
-- Who uses this UI?
+# Design system (existing tokens, components)
+teamdb_query_project "SELECT slug, title, body_md FROM concepts WHERE category='design-system' LIMIT 1"
 
-# From .opencode/context/proyecto/design-system.md (if exists)
-- Existing design tokens, components, conventions.
+# Team preferences about UI
+teamdb_query_project "SELECT slug, title, body_md FROM preferences WHERE title LIKE '%ui%' OR title LIKE '%design%' OR title LIKE '%frontend%'"
 
-# From .opencode/context/preferencias/*.md
-- Team preferences about UI.
+# Target audience from decisions
+teamdb_query_project "SELECT slug, title, body_md FROM decisions WHERE title LIKE '%audiencia%' OR title LIKE '%usuario%' LIMIT 5"
 ```
+
+**REGLA DURA: No leas archivos `.md` en `.opencode/context/proyecto/` como fuente.** La DB es la única fuente. Los `.md` en esa ruta son exports legacy — si hay contenido que no está en la DB, migrarlo primero.
 
 ### Step 3 — Activate the right Impeccable command
 
@@ -63,25 +64,26 @@ Before activating any Impeccable command, read:
 ### Step 4 — Pass Skalling context to Impeccable
 
 When invoking Impeccable, inject:
-- The PRODUCT.md brief (or extract from `.opencode/context/proyecto/que-es.md`).
-- The design-system.md rules (or note "no design-system.md exists — create one").
-- The team's preferences from `.opencode/context/preferencias/`.
+- The PRODUCT.md brief (from DB: concepts with category='proyecto' or 'project').
+- The design-system rules (from DB: concepts with category='design-system').
+- The team's UI preferences (from DB: preferences table).
 
-### Step 5 — Log + sync design-system.md
+### Step 5 — Save design-system to DB (NOT .md files)
 
 After Impeccable finishes:
-1. Append to `.opencode/context/log.md` what was changed.
-2. If Impeccable generated a `DESIGN.md`:
-   - Convert it to `.opencode/context/proyecto/design-system.md` (source of truth, NOT committed).
-   - The `DESIGN.md` output is ephemeral — only `design-system.md` persists.
+1. If Impeccable generated a `DESIGN.md`, **INSERT it into the DB** — do NOT write to filesystem as source.
+   ```bash
+   teamdb_query_project "INSERT INTO concepts (slug, title, body_md, category, updated_at) VALUES ('design-system', 'Design System', '\$(cat DESIGN.md)', 'design-system', datetime('now')) ON CONFLICT(slug) DO UPDATE SET body_md=excluded.body_md, updated_at=datetime('now')"
+   ```
+2. The `DESIGN.md` output is ephemeral. Only the DB row persists.
 
-## REGLA #13 — design-system.md enforcement
+## REGLA #13 — design-system enforcement
 
-If the project has UI but no `.opencode/context/proyecto/design-system.md`:
+If the project has UI but no design-system concept in DB:
 
-1. Tell the user: *"Detecté stack frontend pero no hay design-system.md en el bundle OKF. La constitución R13 lo exige."*
-2. Suggest: *"¿Lo creo con Impeccable? Primero corro `/impeccable init` para crear el contexto, después `/impeccable document` para el sistema visual. O preferís template manual."*
-3. If user agrees, run `npx impeccable install` (si no está instalado), luego `/impeccable init` (crea PRODUCT.md + ofrece correr document), luego `/impeccable document` (genera DESIGN.md), y copiar DESIGN.md a `.opencode/context/proyecto/design-system.md`.
+1. Tell the user: *"Detecté stack frontend pero no hay design-system en la DB. La constitución R13 lo exige."*
+2. Suggest: *"¿Lo creo con Impeccable? Primero corro `/impeccable init` para crear el contexto, después `/impeccable document` para el sistema visual. El output va directo a la DB, no a archivos."*
+3. If user agrees, run `npx impeccable install` (si no está instalado), luego `/impeccable init` (crea PRODUCT.md + ofrece correr document), luego `/impeccable document` (genera DESIGN.md), e **INSERTAR el contenido en la DB** (concepts table, category='design-system'), no escribir archivos.
 
 ## When NOT to Activate
 
@@ -93,8 +95,8 @@ If the project has UI but no `.opencode/context/proyecto/design-system.md`:
 ## Anti-Patterns
 
 - ❌ Don't use Impeccable commands blindly — match them to actual intent.
-- ❌ Don't skip reading OKF context — Impeccable works better with product brief.
-- ❌ Don't modify design-system.md without informing the user (it's the source of truth).
+- ❌ Don't skip reading DB context — Impeccable works better with product brief.
+- ❌ Don't write design-system to .md files as source — insert to DB.
 - ❌ Don't run Impeccable on non-UI code — it's wasted tokens.
 
 ## Degraded Mode (no Impeccable available)
