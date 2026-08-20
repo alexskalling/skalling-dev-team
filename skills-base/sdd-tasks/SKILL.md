@@ -89,9 +89,9 @@ bash ~/.config/opencode/scripts/teamdb-amend.sh "{change-name}" \
   "$PROJECT"
 ```
 
-After DB write, export to filesystem if user visibility is needed:
+**NO export automático**. Para generar .md manualmente:
 ```bash
-bash ~/.config/opencode/scripts/teamdb-export-md.sh "$PROJECT" --plan={change-name}
+bash ~/.config/opencode/scripts/skalling-snapshot.sh "$PROJECT" {change-name}
 ```
 
 **IF mode is `engram`**: Use `mem_save` per Section C (persistence).
@@ -232,8 +232,8 @@ Phase 5: Cleanup (if needed)
 **This step is MANDATORY — do NOT skip it.**
 
 - **engram**: Follow **Section C** from `skills/_shared/sdd-phase-common.md` — save to Engram.
-- **openspec**: After the DB write in Step 3, export to filesystem via `teamdb-export-md.sh`. The file is GENERATED, not source.
-- **hybrid**: Do BOTH — save to Engram AND export to filesystem.
+- **openspec**: **NO export automático**. La DB es la fuente de verdad. Si se necesita visibilidad en Git, el usuario corre `skalling-snapshot` manualmente.
+- **hybrid**: Save to Engram. **NO export automático a filesystem**.
 - **none**: Return result inline only.
 
 ### Step 5: Return Summary

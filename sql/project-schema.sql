@@ -114,7 +114,7 @@ CREATE TABLE schema_meta (
   value TEXT NOT NULL
 );
 
-INSERT INTO schema_meta VALUES ('version', '0.9.1');
+INSERT INTO schema_meta VALUES ('version', '0.9.3');
 INSERT INTO schema_meta VALUES ('type', 'project');
 
 CREATE VIRTUAL TABLE concepts_fts USING fts5(title, body_md, content='concepts', content_rowid='id');

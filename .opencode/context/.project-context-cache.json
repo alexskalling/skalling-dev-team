@@ -1,0 +1,23 @@
+{
+  "project_context": {
+    "stack": {
+      "language": "typescript",
+      "framework": "nextjs",
+      "test_runner": "vitest"
+    },
+    "has_ui": false,
+    "design_system_exists": false,
+    "design_system_md": "",
+    "okf_bundle_valid": true
+  },
+  "concepts_by_category": {},
+  "decisions_accepted": [],
+  "known_problems_open": [],
+  "db_counts": {
+    "concepts": 0,
+    "decisions": 0,
+    "preferences": 0
+  },
+  "project_yaml_mtime": 0,
+  "generated_at": "2026-08-18T18:27:50Z"
+}

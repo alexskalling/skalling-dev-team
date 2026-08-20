@@ -49,8 +49,8 @@ From the orchestrator:
 **CRITICAL**: DB is source of truth for task status. `[x]` marks in `.md` files are GENERATED exports, not updates.
 
 - **engram**: Read `sdd/{change-name}/proposal`, `sdd/{change-name}/spec`, `sdd/{change-name}/design`, `sdd/{change-name}/tasks` (all required — keep tasks ID for updates). Mark tasks complete via `mem_update(id: {tasks-observation-id}, content: "...")`. Save progress as `sdd/{change-name}/apply-progress`.
-- **openspec**: Read from DB via `teamdb_exec_query`. Update task status in DB via `teamdb_exec.py --mode write` or `teamdb-amend.sh --task=<slug> --status=done`. Export to filesystem via `teamdb-export-md.sh` AFTER DB update if user visibility needed.
-- **hybrid**: Follow BOTH — update DB (primary source) AND Engram. Export to filesystem via `teamdb-export-md.sh` after DB update.
+- **openspec**: Read from DB via `teamdb_exec_query`. Update task status in DB via `teamdb_exec.py --mode write` or `teamdb-amend.sh --task=<slug> --status=done`. **NO export automático**. Para generar .md manualmente: `skalling-snapshot`.
+- **hybrid**: Follow BOTH — update DB (primary source) AND Engram. **NO export automático a filesystem**.
 - **none**: Return progress only. Do not update project artifacts.
 
 ## Status and Workspace Guard

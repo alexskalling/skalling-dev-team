@@ -156,7 +156,9 @@ SQL
     echo "[ERROR] teamdb heal: schema incompleto (audit_log=$has_audit actor_source=$has_actor skills_active=$has_skills schema_meta=$has_schema_meta); no se bumpeó version" >&2
     return 1
   fi
-  if ! sqlite3 "$db" "UPDATE schema_meta SET value='0.9.1' WHERE key='version'" 2>/dev/null; then
+  local current_version
+  current_version="$(sqlite3 "$db" "SELECT value FROM schema_meta WHERE key='version'" 2>/dev/null || echo '0.9.1')"
+  if ! sqlite3 "$db" "UPDATE schema_meta SET value='$current_version' WHERE key='version'" 2>/dev/null; then
     echo "[ERROR] No se pudo actualizar schema_meta.version en $db" >&2
     return 1
   fi

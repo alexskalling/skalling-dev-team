@@ -146,7 +146,7 @@ CREATE TABLE workflow_state (
   updated_at TEXT
 );
 
-INSERT INTO schema_meta VALUES ('version', '0.9.1');
+INSERT INTO schema_meta VALUES ('version', '0.9.3');
 INSERT INTO schema_meta VALUES ('type', 'global');
 
 CREATE INDEX idx_user_prefs_scope ON user_preferences(scope, scope_value);

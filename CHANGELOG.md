@@ -4,6 +4,18 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.9.2] — 2026-08-18
+
+### Fixed
+- **DB-First enforcement en Sol**: bloque `⛔ REGLA ABSOLUTA — DB-FIRST NO NEGOCIABLE` agregado arriba del PASO 1 del protocolo. Obliga a verificar `team.db` antes de planificar, prohíbe editar `.md` en `.opencode/changes/<slug>/`, y define la "violación detectable" (artefacto sin fila en DB) que Pau auditara.
+- **Delegación forzada en Alex**: bloque `⛔ REGLA ABSOLUTA — DELEGACIÓN NO NEGOCIABLE` agregado debajo de la tabla de despacho. Prohíbe que el orquestador edite `.opencode/changes/<slug>/SPEC.md | PLAN.md | TASKS.md` directamente — debe delegar a Sol.
+
+### Problema cerrado
+Sesiones que pedían "plan X" generaban `.md` huérfanos en `.opencode/changes/<slug>/` mientras `team.db` quedaba vacía para ese slug. El modelo ejecutaba el contrato SDD legacy (filesystem-first) en lugar del flujo Skalling DB-first.
+
+### Migración
+- Ninguna. Cambio solo de prompts; no toca schema ni scripts.
+
 ## [0.9.1] — 2026-08-08
 
 ### Fixed
