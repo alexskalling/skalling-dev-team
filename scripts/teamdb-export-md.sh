@@ -70,14 +70,7 @@ if [ -n "$PLAN_FILTER" ]; then
   [ -n "$PLAN_ID" ] || { echo "[ERROR] plan no encontrado: $PLAN_FILTER" >&2; exit 1; }
   PLAN_IDS="$PLAN_ID"
 else
-  PLAN_IDS="$(teamdb_exec_query "$DB" "SELECT id FROM plans" | python3 -c "
-import json, sys
-try:
-    rows = json.loads(sys.stdin.read())
-    print('\n'.join(str(r['id']) for r in rows))
-except Exception:
-    pass
-")"
+  PLAN_IDS="$(sqlite3 "$DB" "SELECT id FROM plans" 2>/dev/null | tr '\n' ' ')"
 fi
 
 if [ -z "$PLAN_IDS" ]; then

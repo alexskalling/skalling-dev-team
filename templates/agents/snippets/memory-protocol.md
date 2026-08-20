@@ -21,23 +21,17 @@ Evaluá **antes de cerrar tu handoff al siguiente agente** (o tu propio ciclo si
 
 ## Dónde guardar
 
-Paths exactos según el tipo de memoria:
+DB tables (fuente de verdad, NO archivos):
 
-### Memoria operativa (transitoria, entre ciclos)
+| Tabla | Uso |
+|---|---|
+| `concepts` | Cosas concretas del proyecto (stack, módulo, API, tabla) |
+| `decisions` | ADRs (decisiones arquitectónicas con por qué) |
+| `preferences` | Convenciones del equipo / elección de herramientas |
+| `known_problems` | Workarounds activos |
+| `work_in_progress` | Features/tareas activas |
 
-- **`.opencode/context/trabajo-en-curso/<plan-slug>.md`** — entries de features/tareas activas, decisiones pendientes, próximos pasos, gotchas no obvios.
-  - Template: `templates/okf/work-in-progress.template.md`.
-  - **Todos los agentes pueden escribir acá** (es tu zona de notas mientras trabajás).
-
-### Memoria definitiva (consolidada por Pau)
-
-- **`.opencode/context/concept/<slug>.md`** — cosas concretas del proyecto (stack, módulo, API, tabla).
-- **`.opencode/context/decisiones/<slug>.md`** — ADRs (decisiones arquitectónicas con por qué).
-- **`.opencode/context/preferencias/<slug>.md`** — convenciones del equipo / elección de herramientas.
-- **`.opencode/context/problemas-conocidos/<slug>.md`** — workarounds activos.
-- **`.opencode/context/contexto/<slug>.md`** — información general que no encaja en las anteriores.
-
-**Los agentes NO escriben memoria definitiva.** Solo Pau la consolida cuando Luz emite Quality Gate PASSED. Si tenés algo que merece ser definitivo, dejalo en `trabajo-en-curso/` y avisale a Alex para que Pau lo recoja al cierre.
+**Los `.md` en `.opencode/context/` son EXPORTS derivados, nunca la fuente.** Los agentes INSERTAN en las tablas. Solo Pau consolida al cerrar.
 
 ---
 
