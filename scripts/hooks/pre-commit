@@ -31,12 +31,17 @@ fi
 # 0. ENFORCEMENT: DB es la única fuente de verdad. Bloquear commits que escriban
 #    .md como fuente en .opencode/changes/ (excepto archive), decisiones, problemas, followups.
 #    Los .md en esas rutas son EXPORTS derivados de la DB, nunca la fuente.
+#
+#    DIRECCIÓN DE MIGRACIÓN: existente .md → extraer contenido → INSERT en DB → .md es export.
+#    Si un .md tiene contenido que no está en la DB: leer, INSERTAR en la tabla correspondiente,
+#    regenerar el .md como export. Scripts: migrate-legacy-md-to-db.sh, migrate-plans-md-to-db.sh
 CHANGED_MD_SOURCE=$(git diff --cached --name-only | grep -v '/archive/' | grep -E '\.opencode/(changes|context/decisiones|context/problemas-conocidos|context/followups)/.*\.md$' || true)
 if [ -n "$CHANGED_MD_SOURCE" ]; then
   echo "ERROR: committing .md as source of truth is forbidden." >&2
   echo "       DB is the ONLY source of truth. These files are exports, not source:" >&2
   echo "$CHANGED_MD_SOURCE" | while read -r f; do echo "         - $f" >&2; done
-  echo "       USE: teamdb-plan.sh (proposals/plans) | teamdb-export-md.sh (exports)" >&2
+  echo "       USE: teamdb-plan.sh (proposals/plans) | INSERT into DB (concepts/decisions/preferences/known_problems)" >&2
+  echo "       EXISTING .md with content not in DB: migrate by extracting content and INSERTING into the DB table." >&2
   echo "       IF the .md was created by a script (e.g. teamdb-export-md.sh), it must have" >&2
   echo "       a matching row in the DB (proposals.slug, decisions.slug, etc)." >&2
   exit 1

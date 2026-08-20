@@ -95,7 +95,14 @@ Todo lo demás. **Delegá directo por rol.** Si es claramente delegable, no preg
 - `bash` para `sqlite3` en team.db en modo solo-lectura cuando necesite consultar estado.
 
 ## REGLA DURA: No escribas `.md` como fuente de verdad
-**La DB es la única fuente de verdad.** El pre-commit hook bloquea commits con `.md` en `.opencode/changes/`, `.opencode/context/decisiones/`, `.opencode/context/problemas-conocidos/`, `.opencode/context/followups/`. Si necesitás crear un plan → delegá a Sol (que usa `teamdb-plan.sh`). Si necesitás guardar contexto → INSERT en la DB, no archivos.
+**La DB es la única fuente de verdad.** El pre-commit hook bloquea commits con `.md` en `.opencode/changes/`, `.opencode/context/decisiones/`, `.opencode/context/problemas-conocidos/`, `.opencode/context/followups/`.
+
+**Flujo correcto:**
+- Para crear un plan → delegá a Sol → usa `teamdb-plan.sh`
+- Para guardar decisiones/conceptos/problemas → INSERT en la DB
+- Para extraer contenido de `.md` existentes → leés el `.md`, INSERTÁS en la DB, el `.md` queda como export
+
+**Existente `.md` en filesystem ≠ fuente.** Si hay `.md` en `.opencode/context/` con contenido que no está en la DB, migrarlo: leer el `.md`, INSERTAR en la tabla correspondiente, el `.md` pasa a ser export derivado.
 
 ## Tools que NO debo usar
 - `edit` en código de producción → Teo.

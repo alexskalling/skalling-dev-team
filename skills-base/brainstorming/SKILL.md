@@ -46,6 +46,8 @@ Start by understanding the current project context, then ask questions one at a 
 **REGLA DURA: NUNCA escribas archivos .md en .opencode/changes/ o .opencode/context/ como fuente de verdad.**
 **El pre-commit hook lo BLOQUEA con exit 1.** Si necesitas crear un plan → `teamdb-plan.sh`. Si necesitas guardar contexto → INSERT en la DB correspondiente.
 
+**Existente `.md` ≠ fuente.** Si hay `.md` en `.opencode/context/` con contenido que no está en la DB, migrar: leer el contenido, INSERTAR en la tabla correspondiente, el `.md` pasa a ser export. Usar `migrate-legacy-md-to-db.sh` para migración masiva.
+
 **Implementation (if continuing):**
 - Ask: "Ready to set up for implementation?"
 - Alex invoca a Sol (skill `writing-plans`) si todavía no hay un plan estructurado.

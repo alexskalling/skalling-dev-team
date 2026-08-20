@@ -1,262 +1,148 @@
 ---
 name: skalling-memory
-description: "Trigger: memory, context, remember, project history, past decisions, previous work, learned, known. Self-hosted memory using local files — Engram-style without external service."
+description: "Trigger: memory, context, remember, project history, past decisions, previous work, learned, known. DB is the ONLY source of truth — SQLite via team.db, NOT files."
 license: MIT
 metadata:
   author: skalling-team
-  version: "1.0"
+  version: "2.0"
 ---
 
-# Skalling Memory — Self-Hosted Engram-Style Memory
+# Skalling Memory — DB as ONLY Source of Truth
 
 ## Overview
 
-Engram-style memory using local files. No external service required. Works with OpenCode native file system.
-
-**Principle:** Memory should reduce context loading time, not add overhead. Each memory save = one line summary. Each recall = < 10 lines.
+**REGLA DURA: La única fuente de verdad es `team.db` (SQLite).**
+Los archivos en `.opencode/context/` son EXPORTS derivados de la DB, nunca la fuente.
+El pre-commit hook bloquea commits que escriban `.md` o `.jsonl` como fuente en esas rutas.
 
 ## Hard Rules
 
-1. **One line per memory.** No essays, no logs, no trivia.
-2. **Memory is for context, not storage.** Only save what affects decisions.
-3. **Recall before acting.** Every agent starts with context load.
-4. **Memory never replaces verification.** Saved decisions can be overridden.
+1. **DB first.** Cada decisión, concepto, preferencia o problema conocido va a una tabla de `team.db`, no a un archivo.
+2. **Archivos son exports.** Los `.md` en `.opencode/context/` se regeneran de la DB con `teamdb-export-md.sh`.
+3. **Pre-commit blocks violations.** Si un commit intenta escribir `.md` o `.jsonl` nuevo en `.opencode/context/` sin INSERT previo en la DB, el hook rechaza con exit 1.
+4. **Memory nunca reemplaza verificación.** Decisiones guardadas pueden sobrescribirse con nueva evidencia.
 
-## Memory Types
+## DB Schema (source of truth)
 
-### DECISION — Architectural choices that stick
-
-```json
-{
-  "type": "DECISION",
-  "topic": "auth",
-  "decision": "JWT with refresh tokens, not sessions",
-  "reason": "Stateless. Better for API-first.",
-  "date": "2026-07-15",
-  "agents": ["Pol", "Sol"]
-}
-```
-
-### PATTERN — Reusable solutions
-
-```json
-{
-  "type": "PATTERN",
-  "name": "repository-pattern",
-  "description": "One repository per aggregate root",
-  "example": "UserRepository, OrderRepository",
-  "context": "Domain-driven design, TypeScript"
-}
-```
-
-### PROJECT — Project-specific facts
-
-```json
-{
-  "type": "PROJECT",
-  "key": "db",
-  "value": "PostgreSQL via Drizzle ORM",
-  "note": "Migrations in /drizzle/"
-}
-```
-
-### PREFERENCE — User/team preferences
-
-```json
-{
-  "type": "PREFERENCE",
-  "scope": "code-style",
-  "preference": "No else statements. Early return only.",
-  "enforced_by": "Luz"
-}
-```
-
-### REJECTION — What didn't work and why
-
-```json
-{
-  "type": "REJECTION",
-  "attempted": "Monorepo with Turborepo",
-  "reason": "Overkill for 2 packages. Slowed down CI.",
-  "date": "2026-07-20",
-  "alternative": "Simple npm workspaces"
-}
-```
-
-## Decision Gates
-
-| Situation | Action |
-| --- | --- |
-| New decision made | Save to memory immediately |
-| Working on known topic | Load context first |
-| Decision being challenged | Retrieve original reasoning |
-| Pattern discovered | Save for reuse |
-
-## Memory Files Location
-
-```
-.opencode/context/
-├── DECISIONS.jsonl    # Architectural decisions
-├── PATTERNS.jsonl     # Reusable patterns
-├── PROJECT.jsonl      # Project facts
-├── PREFERENCES.jsonl  # User preferences
-├── REJECTIONS.jsonl   # What didn't work
-└── receipts/          # Verification receipts
-```
-
-Format: `.jsonl` (JSON Lines) — one JSON object per line. Append-only.
+| Tabla | Uso |
+|---|---|
+| `decisions` | Decisiones arquitectónicas (ADR) |
+| `concepts` | Conceptos del proyecto (stack, módulo, API, tabla) |
+| `preferences` | Preferencias del equipo / del usuario |
+| `known_problems` | Workarounds activos |
+| `memory_links` | Relaciones entre concepts/decisions |
+| `memory_tags` | Tags transversales |
 
 ## Memory Operations
 
-### SAVE — Adding a memory
+### SAVE — Adding to memory
 
 ```bash
-# Manual save (rarely needed, usually automatic)
-echo '{"type":"DECISION","topic":"auth","decision":"JWT","date":"2026-08-03"}' >> .opencode/context/DECISIONS.jsonl
-```
+# Decision arquitectónica
+teamdb_query_project "INSERT INTO decisions (slug, title, body_md, status, updated_at)
+  VALUES ('jwt-auth', 'JWT over sessions', '# Why\nStateless, better for APIs.\n\n## Tradeoffs\n...', 'accepted', datetime('now'))"
 
-**When to save automatically:**
-- Sol completes design.md → save key decisions
-- Luz rejects something → save rejection reason
-- User states preference → save to PREFERENCES
-- Pattern identified → save to PATTERNS
+# Concepto del proyecto
+teamdb_query_project "INSERT INTO concepts (slug, title, body_md, category, updated_at)
+  VALUES ('api-rest', 'REST API design', '# REST\n...', 'api', datetime('now'))"
+
+# Preferencia del equipo
+teamdb_query_project "INSERT INTO preferences (slug, title, body_md, updated_at)
+  VALUES ('no-else', 'No else statements', 'Early return only. eslint-plugin.', datetime('now'))"
+
+# Problema conocido
+teamdb_query_project "INSERT INTO known_problems (slug, title, workaround_md, status, updated_at)
+  VALUES ('prod-timeout', 'Production timeout', 'Set DB timeout to 30s in prod.', 'open', datetime('now'))"
+
+# Enlazar concepts/decisions
+teamdb_query_project "INSERT INTO memory_links (from_table, from_id, to_table, to_id, link_type)
+  VALUES ('concepts', (SELECT id FROM concepts WHERE slug='api-rest'),
+          'decisions', (SELECT id FROM decisions WHERE slug='jwt-auth'), 'uses')"
+```
 
 ### RECALL — Loading context
 
 ```bash
-# By topic
-grep '"topic":"auth"' .opencode/context/DECISIONS.jsonl
+# Buscar decisions aceptadas
+teamdb_query_project "SELECT slug, title FROM decisions WHERE status='accepted'"
 
-# By type
-grep '"type":"PATTERN"' .opencode/context/PATTERNS.jsonl
+# Buscar concept por categoría
+teamdb_query_project "SELECT slug, title FROM concepts WHERE category='api'"
 
-# By date range
-grep '2026-07' .opencode/context/DECISIONS.jsonl
+# Buscar con full-text search
+sqlite3 .opencode/context/team.db "SELECT slug, title FROM decisions_fts WHERE decisions_fts MATCH 'JWT'"
+
+# Cargar preferencias del equipo
+teamdb_query_project "SELECT slug, title FROM preferences"
+
+# Buscar problemas abiertos
+teamdb_query_project "SELECT slug, title, workaround_md FROM known_problems WHERE status='open'"
 ```
 
 ### SEARCH — Finding related
 
 ```bash
-# Full-text search across all memory
-grep -h "JWT" .opencode/context/*.jsonl
+# Ver concepts enlazados a una decision
+teamdb_query_project "SELECT c.slug, c.title FROM memory_links ml
+  JOIN concepts c ON c.id=ml.from_id
+  WHERE ml.to_table='decisions'
+  AND ml.to_id=(SELECT id FROM decisions WHERE slug='jwt-auth')"
 
-# Recent memories (last 10)
-tail -10 .opencode/context/DECISIONS.jsonl
+# Buscar decisions por topic
+teamdb_query_project "SELECT slug, title FROM decisions WHERE title LIKE '%auth%'"
 ```
 
 ## Agent Context Loading Protocol
 
-Every agent MUST load context at start:
+Cada agente DEBE cargar contexto de la DB al arrancar:
 
-```
-1. Identify relevant memory types for this task
-2. Load DECISIONS for your domain
-3. Load PREFERENCES (always)
-4. Load recent REJECTIONS if working on similar scope
-5. Proceed with work
-```
-
-**Example for Teo starting auth work:**
 ```bash
-# Load auth decisions
-grep '"topic":"auth"' .opencode/context/DECISIONS.jsonl
-# → "JWT with refresh tokens, not sessions"
+# 1. Decisiones aceptadas del dominio
+teamdb_query_project "SELECT slug, title FROM decisions WHERE status='accepted'"
 
-# Load code preferences
-grep '"scope":"code-style"' .opencode/context/PREFERENCES.jsonl
-# → "No else statements. Early return only."
-```
+# 2. Preferences (siempre)
+teamdb_query_project "SELECT slug, title FROM preferences"
 
-## Memory Size Budget
+# 3. Problemas abiertos del proyecto
+teamdb_query_project "SELECT slug, title FROM known_problems WHERE status='open'"
 
-| Type | Max entries | Max age |
-| --- | --- | --- |
-| DECISION | 50 | Forever |
-| PATTERN | 30 | Forever |
-| PROJECT | 20 | Until stale |
-| PREFERENCE | 15 | Forever |
-| REJECTION | 20 | 6 months |
-
-**If budget exceeded:** Archive oldest to `.opencode/context/archive/`
-
-## Context vs Memory
-
-| Context (system) | Memory (project) |
-|---|---|
-| OKF files | DECISIONS.jsonl |
-| AGENTS.md | PATTERNS.jsonl |
-| SKILL.md files | PREFERENCES.jsonl |
-| Project config | REJECTIONS.jsonl |
-
-**Memory augments context, doesn't replace it.**
-
-## Token Optimization
-
-Goal: Reduce context by 80-90% through selective loading.
-
-**Before (no memory):**
-- Load all OKF files: ~5000 tokens
-- Load all skill files: ~3000 tokens
-- Total: ~8000 tokens per task
-
-**After (with memory):**
-- Load relevant memories: ~200 tokens
-- Load current task context: ~500 tokens
-- Total: ~700 tokens per task
-
-**Savings: ~90%**
-
-## Integration with Routing
-
-Memory loads AFTER routing decision:
-
-```
-Route: INLINE
-→ Load relevant memories only
-→ Proceed
-
-Route: SDD
-→ Load all memories for this domain
-→ Pol starts with context
-→ Sol saves decisions at end
+# 4. Si trabaja en un módulo específico, cargar sus concepts
+teamdb_query_project "SELECT slug, title FROM concepts WHERE category='$MODULE'"
 ```
 
 ## Memory Anti-Patterns
 
 | Anti-pattern | Problem | Correct |
-| --- | --- | --- |
-| Saving logs | Memory bloat | Don't save |
-| Saving everything | Noise | Only decisions |
-| Not loading | Context loss | Load at start |
-| Overriding facts | Confusion | Add new, don't edit |
+|---|---|---|
+| Guardar en `.jsonl` | viola la regla DB-first | `INSERT INTO` en la tabla correspondiente |
+| Guardar en `.md` como fuente | el hook lo bloquea | `INSERT INTO` → luego export |
+| Guardar todo | noise | Solo decisiones que afectan otras decisiones |
+| No cargar al arrancar | context loss | `teamdb_query_project` al inicio |
+| Sobrescribir hechos sin evidencia | confusión | Nueva fila + link, no UPDATE destructivo |
 
-## Engram vs Self-Hosted
+## Integración con el Ciclo
 
-| Feature | Engram (cloud) | Self-hosted (this) |
-| --- | --- | --- |
-| Search | Semantic | Grep |
-| Storage | Cloud | Local files |
-| Setup | MCP required | None |
-| Cost | Free tier | Free |
-| Privacy | Data leaves machine | Data stays local |
-| Speed | API latency | Instant |
-
-**This implementation prioritizes privacy and zero-setup over semantic search.**
+- **Pol** valida con el usuario → INSERT en `proposals` (vía `teamdb-plan.sh`)
+- **Sol** planifica → INSERT en `plans` + `tasks` (vía `teamdb-plan.sh`)
+- **Teo** ejecuta → solo código, no guarda memoria
+- **Pau** consolida al cerrar → INSERT en `decisions`/`concepts`/`preferences`/`known_problems`
+- **Todos** consultan → `teamdb_query_project` SELECT
 
 ## Quick Reference
 
 ```bash
-# Save a decision
-echo '{"type":"DECISION","topic":"api","decision":"REST not GraphQL","reason":"Simpler","date":"2026-08-03"}' >> .opencode/context/DECISIONS.jsonl
+# Guardar una decisión
+teamdb_query_project "INSERT INTO decisions (slug, title, body_md, status, updated_at)
+  VALUES ('api-rest', 'REST over GraphQL', '# Why...', 'accepted', datetime('now'))"
 
-# Load context for a task
-grep '"topic":"auth"' .opencode/context/DECISIONS.jsonl
-grep '"type":"PREFERENCE"' .opencode/context/PREFERENCES.jsonl
+# Cargar contexto para una tarea
+teamdb_query_project "SELECT slug, title FROM decisions WHERE status='accepted'"
+teamdb_query_project "SELECT slug, title FROM preferences"
 
-# Search across all
-grep -h "JWT\|auth\|token" .opencode/context/*.jsonl
+# Buscar en todo
+sqlite3 .opencode/context/team.db "SELECT slug, title FROM decisions_fts WHERE decisions_fts MATCH 'JWT OR auth'"
 ```
 
 ---
 
-**Memory is a second brain, not a diary. Save decisions, not events.**
+**Memory es un segundo cerebro, no un diario. Guardá decisiones que afectan otras decisiones, no eventos.**

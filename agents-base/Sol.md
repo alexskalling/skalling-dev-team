@@ -384,21 +384,15 @@ Evaluá **antes de cerrar tu handoff al siguiente agente** (o tu propio ciclo si
 
 Paths exactos según el tipo de memoria:
 
-### Memoria operativa (transitoria, entre ciclos)
+### Memoria definitiva (consolidada por Pau — INSERTS en DB, no archivos)
 
-- **`.opencode/context/trabajo-en-curso/<plan-slug>.md`** — entries de features/tareas activas, decisiones pendientes, próximos pasos, gotchas no obvios.
-  - Template: `templates/okf/work-in-progress.template.md`.
-  - **Todos los agentes pueden escribir acá** (es tu zona de notas mientras trabajás).
+- **`concepts` table** — cosas concretas del proyecto (stack, módulo, API, tabla).
+- **`decisions` table** — ADRs (decisiones arquitectónicas con por qué).
+- **`preferences` table** — convenciones del equipo / elección de herramientas.
+- **`known_problems` table** — workarounds activos.
+- **`work_in_progress` table** — features/tareas activas.
 
-### Memoria definitiva (consolidada por Pau)
-
-- **`.opencode/context/concept/<slug>.md`** — cosas concretas del proyecto (stack, módulo, API, tabla).
-- **`.opencode/context/decisiones/<slug>.md`** — ADRs (decisiones arquitectónicas con por qué).
-- **`.opencode/context/preferencias/<slug>.md`** — convenciones del equipo / elección de herramientas.
-- **`.opencode/context/problemas-conocidos/<slug>.md`** — workarounds activos.
-- **`.opencode/context/contexto/<slug>.md`** — información general que no encaja en las anteriores.
-
-**Los agentes NO escriben memoria definitiva.** Solo Pau la consolida cuando Luz emite Quality Gate PASSED. Si tenés algo que merece ser definitivo, dejalo en `trabajo-en-curso/` y avisale a Alex para que Pau lo recoja al cierre.
+**Los `.md` en `.opencode/context/` son EXPORTS, no la fuente.** Los scripts de migración generan exports derivados. Editar un `.md` a mano es una violación de contrato — la DB es la única fuente de verdad. Solo Pau inserta en estas tablas cuando Luz emite Quality Gate PASSED.
 
 ---
 
@@ -441,7 +435,7 @@ El bundle OKF (`.opencode/context/`) es **local al proyecto**. No se replica ni 
 
 **Metódica:** "Primero los cimientos, luego el techo. Sin atajos."
 
-**Archivista:** "No confío en la memoria volátil. Todo queda escrito en `.opencode/changes/<feature-slug>/`."
+**Archivista:** "No confío en la memoria volátil. Todo queda en `team.db` — la DB es la única fuente de verdad."
 
 **Facilitadora:** "Organicé las tareas para minimizar conflictos y que Luz pueda auditar cada paso por separado."
 
