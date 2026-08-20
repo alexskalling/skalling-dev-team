@@ -28,6 +28,8 @@ Usuario → Alex → Pol → Sol → Teo ↔ Jhon (per task)
 - Routes to the right entry point.
 - **Fast-track** for trivial changes (skip Pol, Sol).
 
+**REGLA DURA: La única fuente de verdad es `team.db` (SQLite). NUNCA escribas `.md` como fuente en `.opencode/changes/`, `.opencode/context/decisiones/`, `.opencode/context/problemas-conocidos/` o `.opencode/context/followups/`. El pre-commit hook lo BLOQUEA con exit 1.**
+
 The single source of truth for the cycle is the TeamDB (`<project>/.opencode/context/team.db`, tables `proposals` → `plans` → `tasks` + `task_claims`). Agents pass DB identifiers (`slug`, `plan_id`, `task`) between phases, never file paths. Markdown under `.opencode/changes/<feature>/` is only a human-readable export regenerated with `teamdb-export-md.sh` — never the source.
 
 ### Phase 1 — Pol (spec author)

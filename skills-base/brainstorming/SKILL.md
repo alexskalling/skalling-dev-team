@@ -38,10 +38,13 @@ Start by understanding the current project context, then ask questions one at a 
 
 ## After the Design
 
-**Documentation (Skalling protocol — DB como source of truth):**
+**Documentation (Skalling protocol — DB como source of truth, NO se escriben .md):**
 - Pol NO escribe el design validado como archivo. Devuelve el texto del proposal a Alex vía relay.
 - Alex invoca a Sol, quien INSERT en la tabla `proposals` de team.db (vía `teamdb-plan.sh`) y SOLO si el usuario lo pide, exporta un `.md` derivado vía `teamdb-export-md.sh`.
 - El header del `.md` debe decir `GENERATED from teamdb`. El export es derivado, no fuente.
+
+**REGLA DURA: NUNCA escribas archivos .md en .opencode/changes/ o .opencode/context/ como fuente de verdad.**
+**El pre-commit hook lo BLOQUEA con exit 1.** Si necesitas crear un plan → `teamdb-plan.sh`. Si necesitas guardar contexto → INSERT en la DB correspondiente.
 
 **Implementation (if continuing):**
 - Ask: "Ready to set up for implementation?"

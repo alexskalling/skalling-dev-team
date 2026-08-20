@@ -28,6 +28,26 @@ if [ ! -f "$DB" ]; then
   exit 0
 fi
 
+# 0. ENFORCEMENT: DB es la única fuente de verdad. Bloquear commits que escriban
+#    .md como fuente en .opencode/changes/ (excepto archive), decisiones, problemas, followups.
+#    Los .md en esas rutas son EXPORTS derivados de la DB, nunca la fuente.
+CHANGED_MD_SOURCE=$(git diff --cached --name-only | grep -v '/archive/' | grep -E '\.opencode/(changes|context/decisiones|context/problemas-conocidos|context/followups)/.*\.md$' || true)
+if [ -n "$CHANGED_MD_SOURCE" ]; then
+  echo "ERROR: committing .md as source of truth is forbidden." >&2
+  echo "       DB is the ONLY source of truth. These files are exports, not source:" >&2
+  echo "$CHANGED_MD_SOURCE" | while read -r f; do echo "         - $f" >&2; done
+  echo "       USE: teamdb-plan.sh (proposals/plans) | teamdb-export-md.sh (exports)" >&2
+  echo "       IF the .md was created by a script (e.g. teamdb-export-md.sh), it must have" >&2
+  echo "       a matching row in the DB (proposals.slug, decisions.slug, etc)." >&2
+  exit 1
+fi
+
+# 0b. Excepciones: skills/*.md, command/*.md, docs/*.md, constitution/*.md, README, CHANGELOG
+EXEMPT_MD=$(git diff --cached --name-only | grep -E '^((skills|command|docs|constitution|tests?)/.*\.md|README\.md|CHANGELOG\.md|\.md)$' || true)
+if [ -n "$EXEMPT_MD" ]; then
+  : # these are exempt from the MD source-of-truth rule
+fi
+
 # 1. Validar que no haya tasks in_progress sin cerrar (warn, no fail)
 TASKS_IN_PROGRESS=$(sqlite3 "$DB" "SELECT COUNT(*) FROM tasks WHERE status='in_progress'" 2>/dev/null || echo 0)
 if [ "$TASKS_IN_PROGRESS" -gt 0 ]; then
