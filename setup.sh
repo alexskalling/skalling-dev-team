@@ -87,6 +87,10 @@ AGENTS_BASE_DIR="$SCRIPT_DIR/agents-base"
 SKILLS_BASE_DIR="$SCRIPT_DIR/skills-base"
 CONSTITUTION_SRC="$SCRIPT_DIR/constitution/constitucion.md"
 GITATTRIBUTES_TEMPLATE="$SCRIPT_DIR/templates/gitattributes.template"
+SCRIPTS_SRC_DIR="$SCRIPT_DIR/scripts"
+HOOKS_SRC_DIR="$SCRIPT_DIR/scripts/hooks"
+SCRIPTS_DEST_DIR="$OPENCODE_DIR/scripts"
+HOOKS_DEST_DIR="$OPENCODE_DIR/hooks"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # FUNCIONES AUXILIARES
@@ -212,6 +216,8 @@ step_create_directories() {
     run mkdir -p "$SKILLS_DEST_DIR"
     run mkdir -p "$CHANGES_DEST_DIR"
     run mkdir -p "$CONTEXT_DIR"
+    run mkdir -p "$SCRIPTS_DEST_DIR"
+    run mkdir -p "$HOOKS_DEST_DIR"
 
     if [[ ! -d "$DOCS_DIR" ]]; then
         run mkdir -p "$DOCS_DIR"
@@ -267,6 +273,124 @@ step_install_skills() {
         count=$((count+1))
     done
     log OK "Skills core sincronizadas"
+}
+
+step_install_scripts() {
+    log INFO "Instalando scripts teamdb en $SCRIPTS_DEST_DIR"
+
+    run mkdir -p "$SCRIPTS_DEST_DIR"
+
+    local count=0
+
+    for script in "$SCRIPTS_SRC_DIR"/teamdb-*.sh; do
+        [[ -f "$script" ]] || continue
+        run cp "$script" "$SCRIPTS_DEST_DIR/"
+        run chmod +x "$SCRIPTS_DEST_DIR/$(basename "$script")"
+        count=$((count+1))
+    done
+
+    for script in "$SCRIPTS_SRC_DIR"/skalling-*.sh; do
+        [[ -f "$script" ]] || continue
+        run cp "$script" "$SCRIPTS_DEST_DIR/"
+        run chmod +x "$SCRIPTS_DEST_DIR/$(basename "$script")"
+        count=$((count+1))
+    done
+
+    if [[ -f "$SCRIPTS_SRC_DIR"/lib/lib-teamdb.sh ]]; then
+        run cp "$SCRIPTS_SRC_DIR"/lib/lib-teamdb.sh "$SCRIPTS_DEST_DIR/lib-teamdb.sh"
+        run chmod +x "$SCRIPTS_DEST_DIR/lib-teamdb.sh"
+        count=$((count+1))
+    fi
+    if [[ -f "$SCRIPTS_SRC_DIR"/lib/lib-os.sh ]]; then
+        run cp "$SCRIPTS_SRC_DIR"/lib/lib-os.sh "$SCRIPTS_DEST_DIR/lib-os.sh"
+        run chmod +x "$SCRIPTS_DEST_DIR/lib-os.sh"
+        count=$((count+1))
+    fi
+    if [[ -f "$SCRIPTS_SRC_DIR"/lib/lib-stack-detect.sh ]]; then
+        run cp "$SCRIPTS_SRC_DIR"/lib/lib-stack-detect.sh "$SCRIPTS_DEST_DIR/lib-stack-detect.sh"
+        run chmod +x "$SCRIPTS_DEST_DIR/lib-stack-detect.sh"
+        count=$((count+1))
+    fi
+    if [[ -f "$SCRIPTS_SRC_DIR"/teamdb_exec.py ]]; then
+        run cp "$SCRIPTS_SRC_DIR"/teamdb_exec.py "$SCRIPTS_DEST_DIR/"
+        run chmod +x "$SCRIPTS_DEST_DIR/teamdb_exec.py"
+        count=$((count+1))
+    fi
+
+    if [[ $count -gt 0 ]]; then
+        log OK "$count scripts instalados"
+    else
+        log WARN "No se encontraron scripts para copiar"
+    fi
+}
+
+step_install_hooks() {
+    log INFO "Instalando git hooks en .git/hooks/"
+
+    if [[ ! -d "$TARGET_DIR/.git" ]]; then
+        log WARN "No hay repositorio git en $TARGET_DIR. Ejecutá git init primero o inicializá con skalling-init."
+        return 0
+    fi
+
+    if [[ ! -d "$HOOKS_SRC_DIR" ]]; then
+        log WARN "No hay hooks en $HOOKS_SRC_DIR, skip"
+        return 0
+    fi
+
+    run mkdir -p "$HOOKS_DEST_DIR"
+    run cp "$HOOKS_SRC_DIR"/pre-commit "$HOOKS_DEST_DIR/"
+    run cp "$HOOKS_SRC_DIR"/pre-push "$HOOKS_DEST_DIR/"
+    run cp "$HOOKS_SRC_DIR"/post-merge "$HOOKS_DEST_DIR/"
+    run chmod +x "$HOOKS_DEST_DIR"/pre-commit "$HOOKS_DEST_DIR"/pre-push "$HOOKS_DEST_DIR"/post-merge
+
+    local hook
+    for hook in pre-commit pre-push post-merge; do
+        local githook="$TARGET_DIR/.git/hooks/$hook"
+        local ourscript="$SCRIPTS_DEST_DIR/../hooks/$hook"
+        if [[ ! -L "$githook" || "$(readlink "$githook")" != "$ourscript" ]]; then
+            run rm -f "$githook"
+            run ln -sf "$ourscript" "$githook"
+            log OK "Hook $hook -> $ourscript"
+        else
+            log INFO "Hook $hook ya instalado"
+        fi
+    done
+}
+
+step_init_teamdb() {
+    log INFO "Inicializando teamdb en el proyecto"
+
+    if ! command -v sqlite3 >/dev/null 2>&1; then
+        log WARN "sqlite3 no disponible, teamdb no se inicializó"
+        log INFO "  Installalo: brew install sqlite3 (macOS) o apt install sqlite3 (linux)"
+        return 0
+    fi
+
+    local db="$CONTEXT_DIR/team.db"
+    if [[ -f "$db" ]]; then
+        log INFO "teamdb ya existe en $db"
+        return 0
+    fi
+
+    local schema="$SCRIPTS_SRC_DIR/../sql/project-schema.sql"
+    if [[ -f "$schema" ]]; then
+        if sqlite3 "$db" < "$schema" 2>/dev/null; then
+            log OK "teamdb inicializado: $db"
+
+            if [[ -d "$SCRIPTS_SRC_DIR/../sql/migrations" ]]; then
+                for mig in "$SCRIPTS_SRC_DIR/../sql/migrations"/[0-9]*.sql; do
+                    [[ -f "$mig" ]] || continue
+                    if sqlite3 "$db" < "$mig" 2>/dev/null; then
+                        log INFO "  migración $(basename "$mig") aplicada"
+                    fi
+                done
+            fi
+        else
+            log WARN "No se pudo inicializar teamdb"
+        fi
+    else
+        log WARN "Schema no encontrado en $schema, skip"
+    fi
 }
 
 step_install_gitattributes() {
@@ -354,22 +478,28 @@ AGENTS_MD_EOF
 step_summary() {
     cat <<EOF
 
-  ╭──────────────────────────────────────────────────────────────╮
+   ╭──────────────────────────────────────────────────────────────╮
   │  Skalling v${SKALLING_VERSION} configurado en el proyecto   │
   ╰──────────────────────────────────────────────────────────────╯
 
    📂 Target: $TARGET_DIR
       ├── .opencode/
-      │   ├── agents/      (8 agentes per-project, commiteable)
-      │   ├── skills/      (skills core, stack-specific on-demand)
-      │   ├── changes/     (SDD artifacts, vacíos hasta el primer feature)
-      │   └── context/     (bundle OKF + DB, se llena con /skalling-init)
+      │   ├── agents/      (8 agentes, commiteable)
+      │   ├── skills/      (skills core)
+      │   ├── scripts/     (teamdb + skalling scripts)
+      │   ├── hooks/       (pre-commit, pre-push, post-merge)
+      │   ├── changes/     (SDD artifacts)
+      │   └── context/     (bundle OKF + team.db, listo para usar)
+      ├── .git/hooks/
+      │   ├── pre-commit   (DB-first enforcement)
+      │   ├── pre-push     (receipt + tree_hash seal)
+      │   └── post-merge   (DB sync from .sql)
       └── docs/            (documentación pública)
 
-  📦 Backups: $BACKUP_DIR (mantiene últimos 5)
-  📋 Log:     $INSTALL_LOG
+   📦 Backups: $BACKUP_DIR (mantiene últimos 5)
+   📋 Log:     $INSTALL_LOG
 
-  🚀 Próximo paso: abrí opencode en este proyecto y corré /skalling-init.
+   🚀 Abrí opencode en este proyecto. Los hooks ya están activos.
 
 EOF
 }
@@ -453,6 +583,9 @@ main() {
     step_install_agents
     step_install_skills
     step_install_gitattributes
+    step_install_scripts
+    step_install_hooks
+    step_init_teamdb
     step_install_agents_md
 
     if [[ "$DRY_RUN" == true ]]; then
