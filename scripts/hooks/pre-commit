@@ -37,17 +37,60 @@ fi
 #    regenerar el .md como export. Scripts: migrate-legacy-md-to-db.sh, migrate-plans-md-to-db.sh
 CHANGED_MD_SOURCE=$(git diff --cached --name-only | grep -v '/archive/' | grep -E '\.opencode/(changes|context/decisiones|context/problemas-conocidos|context/followups)/.*\.md$' || true)
 if [ -n "$CHANGED_MD_SOURCE" ]; then
-  echo "ERROR: committing .md as source of truth is forbidden." >&2
-  echo "       DB is the ONLY source of truth. These files are exports, not source:" >&2
-  echo "$CHANGED_MD_SOURCE" | while read -r f; do echo "         - $f" >&2; done
-  echo "       USE: teamdb-plan.sh (proposals/plans) | INSERT into DB (concepts/decisions/preferences/known_problems)" >&2
-  echo "       EXISTING .md with content not in DB: migrate by extracting content and INSERTING into the DB table." >&2
-  echo "       IF the .md was created by a script (e.g. teamdb-export-md.sh), it must have" >&2
-  echo "       a matching row in the DB (proposals.slug, decisions.slug, etc)." >&2
-  exit 1
-fi
+  # Fail-closed: si DB no existe, bloquear (no hay DB → no hay exports legítimos)
+  if [ ! -f "$DB" ]; then
+    echo "ERROR: DB not found at $DB. Cannot verify .md exports." >&2
+    exit 1
+  fi
 
-# 0b. Excepciones: skills/*.md, command/*.md, docs/*.md, constitution/*.md, README, CHANGELOG
+  VIOLATIONS=""
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    # Extraer slug del path para verificar en DB
+    case "$f" in
+      *.opencode/changes/*/*.md)
+        SLUG="$(echo "$f" | sed 's|.*.opencode/changes/||' | sed 's|/.*||')"
+        SLUG_IN_DB="$(sqlite3 "$DB" "SELECT 1 FROM plans WHERE slug='$SLUG' LIMIT 1" 2>/dev/null || echo "")"
+        if [ -z "$SLUG_IN_DB" ]; then
+          VIOLATIONS="${VIOLATIONS}  - $f (slug='$SLUG' not in DB plans table)
+"
+        fi
+        ;;
+      *.opencode/context/decisiones/*.md)
+        SLUG="$(basename "$f" .md)"
+        SLUG_IN_DB="$(sqlite3 "$DB" "SELECT 1 FROM decisions WHERE slug='$SLUG' LIMIT 1" 2>/dev/null || echo "")"
+        if [ -z "$SLUG_IN_DB" ]; then
+          VIOLATIONS="${VIOLATIONS}  - $f (slug='$SLUG' not in DB decisions table)
+"
+        fi
+        ;;
+      *.opencode/context/problemas-conocidos/*.md)
+        SLUG="$(basename "$f" .md)"
+        SLUG_IN_DB="$(sqlite3 "$DB" "SELECT 1 FROM known_problems WHERE slug='$SLUG' LIMIT 1" 2>/dev/null || echo "")"
+        if [ -z "$SLUG_IN_DB" ]; then
+          VIOLATIONS="${VIOLATIONS}  - $f (slug='$SLUG' not in DB known_problems table)
+"
+        fi
+        ;;
+      *.opencode/context/followups/*.md)
+        SLUG="$(basename "$f" .md)"
+        SLUG_IN_DB="$(sqlite3 "$DB" "SELECT 1 FROM work_in_progress WHERE slug='$SLUG' OR slug='followup-'||'$SLUG' LIMIT 1" 2>/dev/null || echo "")"
+        if [ -z "$SLUG_IN_DB" ]; then
+          VIOLATIONS="${VIOLATIONS}  - $f (slug='$SLUG' not in DB work_in_progress table)
+"
+        fi
+        ;;
+    esac
+  done <<< "$CHANGED_MD_SOURCE"
+
+  if [ -n "$VIOLATIONS" ]; then
+    echo "ERROR: committing .md without DB record is forbidden." >&2
+    echo "       These files have no matching row in team.db:" >&2
+    echo "$VIOLATIONS" >&2
+    echo "       Use: teamdb-plan.sh (plans) | INSERT INTO decisions/proposals/known_problems" >&2
+    exit 1
+  fi
+fi
 EXEMPT_MD=$(git diff --cached --name-only | grep -E '^((skills|command|docs|constitution|tests?)/.*\.md|README\.md|CHANGELOG\.md|\.md)$' || true)
 if [ -n "$EXEMPT_MD" ]; then
   : # these are exempt from the MD source-of-truth rule
