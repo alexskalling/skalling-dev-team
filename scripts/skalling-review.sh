@@ -220,11 +220,13 @@ PYEOF
 fi
 
 # Candidato a revisar: diff y hash congelado (mismo criterio que el seal).
+# Siempre excluye db/teamdb/team.dump.sql (artefacto derivado).
+DUMP_EXCLUDE='-- . :(exclude)db/teamdb/team.dump.sql'
 if [ -n "$DIFF_RANGE" ]; then
-  DIFF_TEXT="$(git -C "$PROJECT" diff "$DIFF_RANGE" 2>/dev/null || true)"
+  DIFF_TEXT="$(git -C "$PROJECT" diff "$DIFF_RANGE" $DUMP_EXCLUDE 2>/dev/null || true)"
   TREE_HASH="$(printf '%s' "$DIFF_TEXT" | shasum -a 256 | cut -c1-16)"
 else
-  DIFF_TEXT="$(git -C "$PROJECT" diff HEAD 2>/dev/null || true)"
+  DIFF_TEXT="$(git -C "$PROJECT" diff HEAD $DUMP_EXCLUDE 2>/dev/null || true)"
   if [ -n "$DIFF_TEXT" ]; then
     TREE_HASH="$(printf '%s' "$DIFF_TEXT" | shasum -a 256 | cut -c1-16)"
   else
