@@ -261,6 +261,8 @@ Luz — re-auditoría del release v0.7.2 (teamdb-hardening) + observaciones de c
 - Commits: `9d3f120`, `84226b3`, `cfbf3f3`, `6ad8944`, `9e56b79` en rama `teamdb`
 - Regresión: 45/45
 - Quality Gate: PASSED',NULL,NULL,'2026-08-20T15:36:43Z','2026-08-20T15:36:43Z',NULL);
+INSERT INTO "memory_links" ("id","from_table","from_id","to_table","to_id","link_type","confidence") VALUES (1,'decisions',1,'concepts',1,'references',0.9);
+INSERT INTO "memory_links" ("id","from_table","from_id","to_table","to_id","link_type","confidence") VALUES (2,'decisions',2,'concepts',1,'references',0.9);
 INSERT INTO "proposals" ("id","slug","title","intent_md","questions_json","status","agent","decided_by","created_at","updated_at","decided_at") VALUES (1,'agentes-db-primera-2026-08-06-legacy-imported','Protocolo DB-primera: agentes consultan team.db antes de leer el proyecto','# Protocolo DB-primera: agentes consultan team.db antes de leer el proyecto
 
 **Slug:** agentes-db-primera-2026-08-06
