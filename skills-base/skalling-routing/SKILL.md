@@ -102,8 +102,8 @@ Usuario → Alex → Pol → Sol → Teo ↔ Jhon → Luz → Pau
 ```
 
 **Stages:**
-1. **Pol:** Questions → proposal.md
-2. **Sol:** design.md + tasks.md → `.opencode/changes/<slug>/`
+1. **Pol:** Questions → DB (plans table)
+2. **Sol:** design → DB (plans.body_md) + tasks → DB (tasks table) via `bash scripts/teamdb-plan.sh`
 3. **Teo:** RED → GREEN → REFACTOR per task
 4. **Jhon:** Per-task verification + regression
 5. **Luz:** Quality gate

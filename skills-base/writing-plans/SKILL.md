@@ -94,19 +94,24 @@ Constraint de unicidad: solo puede haber UN plan activo por `slug` (status en `d
 ## Workflow recomendado
 
 1. **Leer contexto**: `teamdb-search.sh "<query>"` y `teamdb-related.sh <concept-slug>` antes de planear. Si no hay proposal válido, escalar a Alex.
-2. **Definir el plan completo** en un `tasks.md` temporal con el formato:
+2. **Definir el plan completo** con el formato:
    ```markdown
    - [ ] Título de la task _depends: [task-1, task-2]
    - [ ] Otra task
    ```
-3. **Ejecutar `teamdb-plan.sh`** con `--strict-contract`:
+3. **Ejecutar `teamdb-plan.sh`** con `--strict-contract` — pasar tasks por stdin:
    ```bash
-   teamdb-plan.sh "$PROJECT" "<slug>" "<title>" /tmp/tasks.md \
+   teamdb-plan.sh "$PROJECT" "<slug>" "<title>" - \
      --purpose="Feature global purpose" \
      --acceptance="AC global (override per-task si hace falta)" \
      --strict-contract \
-     --by=pol
+     --by=pol \
+     <<'TASKS'
+   - [ ] Título de la task _depends: [task-1, task-2]
+   - [ ] Otra task
+   TASKS
    ```
+   El `-` como 4to argumento indica stdin. NO escribir archivos temporales.
 4. **Verificar** con `teamdb-execute-plan.sh --slug=<slug> --dry-run`.
 5. **Exportar** a `.md` legible: `teamdb-export-md.sh --slug=<slug>`.
 6. **Commitear** el export (no la DB) a git.

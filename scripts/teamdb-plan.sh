@@ -94,7 +94,14 @@ fi
 
 DB="$(teamdb_project_path "$PROJECT")"
 [ -f "$DB" ] || { echo "[ERROR] DB no existe: $DB" >&2; exit 1; }
-[ -f "$TASKS_MD" ] || { echo "[ERROR] tasks.md no existe: $TASKS_MD" >&2; exit 1; }
+if [ "$TASKS_MD" = "-" ]; then
+  TASKS_CONTENT="$(cat)" || { echo "[ERROR] stdin vacío" >&2; exit 1; }
+  TMP_DIR="$(mktemp -d)"
+  TASKS_MD="$TMP_DIR/tasks.md"
+  printf '%s' "$TASKS_CONTENT" > "$TASKS_MD"
+else
+  [ -f "$TASKS_MD" ] || { echo "[ERROR] tasks.md no existe: $TASKS_MD" >&2; exit 1; }
+fi
 
 NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 

@@ -531,6 +531,19 @@ install_web_dashboard() {
     fi
 }
 
+install_global_config() {
+    local cfg="$OPENCODE_DIR/opencode.jsonc"
+    local proj_cfg="$SCRIPT_DIR/.opencode/opencode.json"
+    if [ -f "$proj_cfg" ]; then
+        if [[ "$FORCE" == true ]] || [ ! -f "$cfg" ]; then
+            run cp "$proj_cfg" "$cfg"
+            log OK "opencode.jsonc instalado"
+        else
+            log INFO "opencode.jsonc ya existe (usá --force para sobreescribir)"
+        fi
+    fi
+}
+
 print_summary() {
     cat <<EOF
 
@@ -584,6 +597,7 @@ do_install() {
     install_teamdb_hooks
     install_skalling_scripts
     install_web_dashboard
+    install_global_config
 
     if [[ "$DRY_RUN" == true ]]; then
         log INFO "Dry-run completo. Nada fue modificado."
