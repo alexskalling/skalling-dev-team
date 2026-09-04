@@ -41,7 +41,10 @@ _run_sql() {
   if [ "$DRY_RUN" = true ]; then
     echo "    [dry-run] sqlite3 $local_db < $1"
   else
-    sqlite3 "$local_db" < "$1" 2>/dev/null || true
+    if ! sqlite3 "$local_db" < "$1"; then
+      echo "ERROR: migración SQL falló: $1" >&2
+      return 1
+    fi
   fi
 }
 CTX_DIR="$PROJECT/.opencode/context"
@@ -77,7 +80,7 @@ if [ "$JSONL_FOUND" = "1" ]; then
           decision_e=$(sql_escape "$decision")
           teamdb_exec_write "$local_db" \
             "INSERT OR IGNORE INTO decisions(slug, title, body_md, status, decided_at, decided_by) VALUES(?, ?, ?, 'accepted', datetime('now'), 'migrated')" \
-            "$topic_e" "$topic_e" "$decision_e" >/dev/null 2>&1 || true
+            "$topic_e" "$topic_e" "$decision_e" >/dev/null
         done < "$jsonl"
         ;;
       PATTERNS|PROJECT)
@@ -90,7 +93,7 @@ if [ "$JSONL_FOUND" = "1" ]; then
           desc_e=$(sql_escape "$desc")
           teamdb_exec_write "$local_db" \
             "INSERT OR IGNORE INTO concepts(slug, title, body_md, category, updated_at) VALUES(?, ?, ?, 'legacy', datetime('now'))" \
-            "$name_e" "$name_e" "$desc_e" >/dev/null 2>&1 || true
+            "$name_e" "$name_e" "$desc_e" >/dev/null
         done < "$jsonl"
         ;;
       PREFERENCES)
@@ -103,7 +106,7 @@ if [ "$JSONL_FOUND" = "1" ]; then
           body_e=$(sql_escape "$body")
           teamdb_exec_write "$local_db" \
             "INSERT OR IGNORE INTO preferences(slug, scope, body_md, source) VALUES(?, 'legacy', ?, 'migrated')" \
-            "$slug_e" "$body_e" >/dev/null 2>&1 || true
+            "$slug_e" "$body_e" >/dev/null
         done < "$jsonl"
         ;;
       REJECTIONS)
@@ -116,7 +119,7 @@ if [ "$JSONL_FOUND" = "1" ]; then
           reason_e=$(sql_escape "$reason")
           teamdb_exec_write "$local_db" \
             "INSERT OR IGNORE INTO known_problems(slug, title, symptom_md, status, discovered_at) VALUES(?, ?, ?, 'open', datetime('now'))" \
-            "$attempted_e" "$attempted_e" "$reason_e" >/dev/null 2>&1 || true
+            "$attempted_e" "$attempted_e" "$reason_e" >/dev/null
         done < "$jsonl"
         ;;
     esac
@@ -176,7 +179,7 @@ if [ -d "$CTX_DIR/concept" ]; then
     conf_e=$(sql_escape "$confidence_v")
     teamdb_exec_write "$local_db" \
       "INSERT OR IGNORE INTO concepts(slug, title, body_md, category, updated_at) VALUES(?, ?, ?, ?, datetime('now'))" \
-      "$fname_e" "$fname_e" "$body_e" "$type_e" >/dev/null 2>&1 || true
+      "$fname_e" "$fname_e" "$body_e" "$type_e" >/dev/null
     # confidence se ignora por ahora (T-3.x podria mapearlo a columna nueva)
   done
 fi

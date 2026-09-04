@@ -32,13 +32,49 @@ cmd_list() {
   printf '%s\n' "$DISPATCH_TABLE"
 }
 
+persist_classification() {
+  local db="$1" request_id="$2" intent="$3" route="$4" agents="$5" risk="$6"
+  [ -f "$db" ] || { printf 'ERROR: TeamDB no existe: %s\n' "$db" >&2; return 1; }
+  python3 - "$db" "$request_id" "$intent" "$route" "$agents" "$risk" <<'PY'
+import sqlite3
+import sys
+
+db, request_id, intent, route, agents, risk = sys.argv[1:]
+conn = sqlite3.connect(db, timeout=5)
+try:
+    conn.execute("BEGIN IMMEDIATE")
+    conn.execute(
+        """INSERT INTO routing_decisions
+           (ts, user_intent, chosen_route, route_reason, agents_involved)
+           VALUES (datetime('now'), ?, ?, 'clasificación automática', ?)""",
+        (intent, route, agents),
+    )
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='workflow_metrics'").fetchone():
+        conn.execute(
+            """INSERT INTO workflow_metrics
+               (request_id, risk_level, route, agents_count, started_at)
+               VALUES (?, ?, ?, ?, datetime('now'))
+               ON CONFLICT(request_id) DO NOTHING""",
+            (request_id, risk, route, agents.count('→') + 1),
+        )
+    conn.commit()
+finally:
+    conn.close()
+PY
+}
+
 cmd_classify() {
-  local risk="" clarity="clear" kind="code"
+  local risk="" clarity="clear" kind="code" record=false intent="" project request_id=""
+  project="$(pwd)"
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --risk) risk="${2:-}"; shift 2 ;;
       --clarity) clarity="${2:-}"; shift 2 ;;
       --kind) kind="${2:-}"; shift 2 ;;
+      --record) record=true; shift ;;
+      --intent) intent="${2:-}"; shift 2 ;;
+      --project) project="${2:-}"; shift 2 ;;
+      --request-id) request_id="${2:-}"; shift 2 ;;
       *) printf 'Argumento desconocido: %s\n' "$1" >&2; return 2 ;;
     esac
   done
@@ -57,7 +93,14 @@ cmd_classify() {
       fi
       ;;
   esac
-  printf '{"risk":"%s","route":"%s","agents":"%s","verification":"%s"}\n' "$risk" "$route" "$agents" "$verification"
+  if [ "$record" = true ]; then
+    [ -n "$intent" ] || { printf 'ERROR: --record requiere --intent\n' >&2; return 2; }
+    [ -n "$request_id" ] || request_id="req-$(date +%Y%m%d%H%M%S)-$$"
+    persist_classification "$project/.opencode/context/team.db" "$request_id" "$intent" "$route" "$agents" "$risk"
+    printf '{"risk":"%s","route":"%s","agents":"%s","verification":"%s","request_id":"%s"}\n' "$risk" "$route" "$agents" "$verification" "$request_id"
+  else
+    printf '{"risk":"%s","route":"%s","agents":"%s","verification":"%s"}\n' "$risk" "$route" "$agents" "$verification"
+  fi
 }
 
 cmd_record() {
@@ -80,17 +123,9 @@ cmd_record() {
     printf 'audit skipped (tabla routing_decisions no existe en schema)\n'
     return 0
   fi
-  if sqlite3 "$DB_GLOBAL" <<SQL
-INSERT INTO routing_decisions (ts, user_intent, chosen_route, route_reason, agents_involved)
-VALUES (
-  datetime('now'),
-  '$(printf "%s" "$intent" | tr "'" "''")',
-  '$(printf "%s" "$route" | tr "'" "''")',
-  'auto',
-  '$(printf "%s" "$agent" | tr "'" "''")'
-);
-SQL
-  then
+  if python3 "$SCRIPT_DIR/teamdb_exec.py" --db "$DB_GLOBAL" --mode write \
+    --sql "INSERT INTO routing_decisions (ts,user_intent,chosen_route,route_reason,agents_involved) VALUES (datetime('now'),?,?,'manual',?)" \
+    --params "$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1:]))' "$intent" "$route" "$agent")" >/dev/null; then
     printf 'audit ok (%s → %s)\n' "$route" "$agent"
   else
     printf 'audit failed (%s)\n' "$route"
@@ -102,7 +137,7 @@ case "${1:-help}" in
   classify) shift; cmd_classify "$@" ;;
   record)  shift; cmd_record "$@" ;;
   help|-h|--help)
-    printf 'Uso:\n  %s list\n  %s record ROUTE AGENT [INTENT]\n' "$0" "$0"
+    printf 'Uso:\n  %s list\n  %s classify --risk NIVEL [--record --intent TEXTO --project RUTA]\n  %s record ROUTE AGENT [INTENT]\n' "$0" "$0" "$0"
     ;;
   *)
     printf 'Subcomando desconocido: %s\n' "$1" >&2

@@ -53,7 +53,6 @@ done
 
 OPENCODE_DIR="$PROJECT_DIR/.opencode"
 CONTEXT_DIR="$OPENCODE_DIR/context"
-DOCS_DESIGN_DIR="$CONTEXT_DIR/proyecto"
 
 c_green='\033[32m'
 c_yellow='\033[33m'
@@ -61,7 +60,7 @@ c_blue='\033[36m'
 c_red='\033[31m'
 c_reset='\033[0m'
 
-log() { local level="$1"; shift; printf "  ${c_blue}ℹ${c_reset} %s\n" "$*"; }
+log() { shift; printf "  ${c_blue}ℹ${c_reset} %s\n" "$*"; }
 ok() { printf "  ${c_green}✓${c_reset} %s\n" "$*"; }
 warn() { printf "  ${c_yellow}⚠${c_reset} %s\n" "$*" >&2; }
 err() { printf "  ${c_red}✗${c_reset} %s\n" "$*" >&2; }

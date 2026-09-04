@@ -163,8 +163,6 @@ check_global_install() {
         fi
 
         # Validar frontmatter de cada agente
-        local required_modes=("primary:Alex" "subagent:Pol" "subagent:Jes" "subagent:Sol"
-                              "subagent:Teo" "subagent:Jhon" "subagent:Luz" "subagent:Pau")
         for f in "$OPENCODE_DIR/agents"/*.md; do
             local name; name="$(basename "$f" .md)"
             if ! head -1 "$f" | grep -q "^---$"; then
@@ -228,6 +226,7 @@ check_memory_health() {
 
     local context_dir="$PROJECT_DIR/.opencode/context"
     [[ -d "$context_dir" ]] || return 0
+    export SKALLING_MEMORY_EXCLUDES=".backups:legacy:.skalling-backups"
 
     source "$SCRIPT_DIR/scripts/lib/lib-memory-check.sh"
 
@@ -316,7 +315,10 @@ check_project_install() {
 
     # Bundle OKF
     if [[ -d "$PROJECT_DIR/.opencode/context" ]]; then
-        local docs; docs="$(find "$PROJECT_DIR/.opencode/context" -name "*.md" -not -name "index.md" -not -name "log.md" -not -name "README.md" 2>/dev/null | wc -l | tr -d ' ')"
+        local docs; docs="$(find "$PROJECT_DIR/.opencode/context" -maxdepth 2 \
+            \( -type d \( -name '.backups' -o -name '.backup*' -o -name 'legacy' -o -name '.skalling-backups' \) -prune \) -o \
+            -type f -name '*.md' -not -name 'index.md' -not -name 'log.md' -not -name 'README.md' -print 2>/dev/null \
+            | wc -l | tr -d ' ')"
         ok "Bundle OKF presente ($docs concept docs)"
         if [[ -f "$PROJECT_DIR/.opencode/context/index.md" ]]; then
             ok "index.md presente"
@@ -400,14 +402,16 @@ check_inteligencia_codigo() {
 check_receipts() {
   local db="${OPENCODE_DIR:-$HOME/.config/opencode}/team.db"
   if [ -f "$db" ]; then
-    local count=$(sqlite3 "$db" "SELECT COUNT(*) FROM receipts WHERE ts > datetime('now', '-1 day')" 2>/dev/null || echo 0)
+    local count
+    count=$(sqlite3 "$db" "SELECT COUNT(*) FROM receipts WHERE ts > datetime('now', '-1 day')" 2>/dev/null || echo 0)
     if [ "$count" -gt 0 ]; then
       ok "receipts recientes: $count"
     else
       info "sin receipts recientes (opcional, OK si no hay tasks activas)"
     fi
     # v0.8.3: receipts sellados con tree_hash (revisión congelada)
-    local sealed=$(sqlite3 "$db" "SELECT COUNT(*) FROM receipts WHERE tree_hash IS NOT NULL AND tree_hash != ''" 2>/dev/null || echo 0)
+    local sealed
+    sealed=$(sqlite3 "$db" "SELECT COUNT(*) FROM receipts WHERE tree_hash IS NOT NULL AND tree_hash != ''" 2>/dev/null || echo 0)
     if [ "$sealed" -gt 0 ]; then
       ok "receipts con tree_hash: $sealed"
     else
@@ -419,7 +423,8 @@ check_receipts() {
 check_routing() {
   local db="${OPENCODE_DIR:-$HOME/.config/opencode}/team.db"
   if [ -f "$db" ]; then
-    local count=$(sqlite3 "$db" "SELECT COUNT(*) FROM routing_decisions" 2>/dev/null || echo 0)
+    local count
+    count=$(sqlite3 "$db" "SELECT COUNT(*) FROM routing_decisions" 2>/dev/null || echo 0)
     info "routing_decisions totales: $count"
   fi
 }

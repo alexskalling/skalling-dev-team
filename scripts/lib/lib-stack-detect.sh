@@ -20,6 +20,7 @@ skalling_init_detected() {
     for key in $SKALLING_DETECTED_KEYS; do
         eval "skalling_detected_${key}=\"\""
     done
+    # shellcheck disable=SC2034
     skalling_detected_has_ui="false"
 }
 
@@ -188,7 +189,6 @@ skalling_detect_from_yaml() {
         }
     ' "$yaml_file")"
 
-    local matched_id=""
     for det_id in $detector_ids; do
         local block
         block="$(skalling_parse_yaml_block "$yaml_file" "$det_id")"
@@ -215,8 +215,6 @@ skalling_detect_from_yaml() {
         done <<< "$files"
 
         if [[ "$matched" == true ]]; then
-            matched_id="$det_id"
-
             # Extraer valores básicos del bloque
             local language runtime requires_ts
             language="$(echo "$block" | awk '/^language:/ { print $2; exit }')"
@@ -410,4 +408,3 @@ skalling_stack_specific_skills() {
         }
     ' "$yaml_file"
 }
-

@@ -76,6 +76,14 @@ else
   assert_fail "install heals: audit_log.actor_source presente" "col=$HAS_COL"
 fi
 
+for operational_table in routing_decisions workflow_metrics workflow_state; do
+  if sqlite3 "$FAKE_HOME/.config/opencode/team.db" "SELECT name FROM sqlite_master WHERE type='table' AND name='$operational_table'" | grep -q "$operational_table"; then
+    assert_pass "install heals: $operational_table disponible"
+  else
+    assert_fail "install heals: $operational_table disponible"
+  fi
+done
+
 VER=$(sqlite3 "$FAKE_HOME/.config/opencode/team.db" "SELECT value FROM schema_meta WHERE key='version'")
 EXPECTED_VER="$(grep -E '^__version__' "$ROOT/VERSION" | sed -E 's/.*"([^"]+)".*/\1/')"
 if [ "$VER" = "$EXPECTED_VER" ]; then

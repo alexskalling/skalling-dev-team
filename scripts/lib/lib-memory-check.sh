@@ -51,10 +51,12 @@ _skalling_normalize_title() {
 _skalling_list_concept_files() {
     local context_dir="$1"
     [[ -d "$context_dir" ]] || return 0
-    find "$context_dir" -maxdepth 2 -name "*.md" \
+    find "$context_dir" -maxdepth 2 \
+        \( -type d \( -name '.backups' -o -name '.backup*' -o -name 'legacy' -o -name '.skalling-backups' \) -prune \) -o \
+        -type f -name "*.md" \
         -not -name "index.md" \
         -not -name "README.md" \
-        -not -name "log.md" 2>/dev/null || true
+        -not -name "log.md" -print 2>/dev/null || true
 }
 
 # _skalling_is_referenced <context_dir> <basename>
@@ -64,7 +66,9 @@ _skalling_is_referenced() {
     local basename="$2"
 
     local idx_files
-    idx_files="$(find "$context_dir" -name "index.md" 2>/dev/null || true)"
+    idx_files="$(find "$context_dir" \
+        \( -type d \( -name '.backups' -o -name '.backup*' -o -name 'legacy' -o -name '.skalling-backups' \) -prune \) -o \
+        -type f -name "index.md" -print 2>/dev/null || true)"
     [[ -n "$idx_files" ]] || return 1
 
     local found="false"

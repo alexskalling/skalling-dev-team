@@ -18,47 +18,17 @@ jobs:
       - name: Run tests
         run: |
           bash tests/setup.test.sh
-          for t in \
-            tests/teamdb.test.sh \
-            tests/teamdb-safe-query.test.sh \
-            tests/teamdb-search-sqli.test.sh \
-            tests/teamdb-related-sqli.test.sh \
-            tests/teamdb-problems-fts.test.sh \
-            tests/teamdb-python-bindparams.test.sh \
-            tests/teamdb-write-wal.test.sh \
-            tests/teamdb-amend-full.test.sh \
-            tests/teamdb-dag-tables-exist.test.sh \
-            tests/teamdb-deps-dag.test.sh \
-            tests/teamdb-claim-lease.test.sh \
-            tests/teamdb-claim-strict.test.sh \
-            tests/teamdb-claim-history.test.sh \
-            tests/teamdb-export-md.test.sh \
-            tests/teamdb-context-capsule.test.sh \
-            tests/teamdb-context-issue8.test.sh \
-            tests/teamdb-cycle-amended.test.sh \
-            tests/teamdb-migrate-md-preserve.test.sh \
-            tests/teamdb-migration-003-unique.test.sh \
-            tests/teamdb-plan-atomic-idempotent.test.sh \
-            tests/teamdb-execute-plan-no-shell.test.sh \
-            tests/teamdb-export-audit.test.sh \
-            tests/snippets-sync.test.sh \
-            tests/install-resolves-snippets.test.sh \
-            tests/install-platform-contract.test.sh \
-            tests/commands-contract.test.sh \
-            tests/teamdb-resume.test.sh \
-            tests/audit-log-actor-source.test.sh \
-            tests/teamdb-global-heal.test.sh \
-            tests/agents-teamdb-integration.test.sh \
-            tests/review-lenses.test.sh \
-            tests/pre-push.test.sh \
-            tests/attempts.test.sh; do
-            [ -f "$t" ] || { echo "FAIL: $t no existe"; exit 1; }
-            echo "Running $t"
-            bash "$t" || { echo "FAIL: $t"; exit 1; }
-          done
+          python3 tests/dashboard-server.test.py
+          bash tests/dashboard-launcher.test.sh
+          bash tests/quality-priorities.test.sh
+          bash tests/teamdb-hardening-suite.sh
 
-      - name: Run doctor (global check)
-        run: bash setup-team-doctor.sh || true
+      - name: Run doctor strictly against a fresh installation
+        run: |
+          export HOME="$(mktemp -d)"
+          export SKALLING_OPENCODE_DIR="$HOME/.config/opencode"
+          bash install-global.sh
+          bash setup-team-doctor.sh --strict --global-only
 
   lint:
     name: Shell script lint
@@ -71,11 +41,10 @@ jobs:
 
       - name: Lint all bash scripts
         run: |
-          # Los errores bloquean. Los warnings existentes se auditan por separado
-          # para no convertir deuda histórica en un falso fallo de plataforma.
-          shellcheck --severity=error install-global.sh setup.sh setup-team-doctor.sh bootstrap-context.sh
-          shellcheck --severity=error scripts/lib/*.sh
-          shellcheck --severity=error scripts/*.sh
+          shellcheck --severity=warning install-global.sh setup.sh setup-team-doctor.sh bootstrap-context.sh
+          shellcheck --severity=warning scripts/lib/*.sh
+          shellcheck --severity=warning scripts/*.sh
+          shellcheck --severity=warning scripts/hooks/*
 
   validate-yaml:
     name: Validate YAML data files
@@ -125,8 +94,9 @@ jobs:
           echo "# Test" > README.md
           bash $GITHUB_WORKSPACE/bootstrap-context.sh --target "$mock" --force
           bash $GITHUB_WORKSPACE/setup.sh --target "$mock" --force
-          test "$(sqlite3 "$HOME/.config/opencode/team.db" "SELECT value FROM schema_meta WHERE key='version'")" = "0.10.1"
-          test "$(sqlite3 "$mock/.opencode/context/team.db" "SELECT value FROM schema_meta WHERE key='version'")" = "0.10.1"
+          expected="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' "$GITHUB_WORKSPACE/VERSION" | head -1)"
+          test "$(sqlite3 "$HOME/.config/opencode/team.db" "SELECT value FROM schema_meta WHERE key='version'")" = "$expected"
+          test "$(sqlite3 "$mock/.opencode/context/team.db" "SELECT value FROM schema_meta WHERE key='version'")" = "$expected"
 
       - name: Run PowerShell wrapper on Windows
         if: runner.os == 'Windows'

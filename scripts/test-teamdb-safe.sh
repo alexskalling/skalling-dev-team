@@ -83,7 +83,7 @@ echo ""
 
 # 5. Correr migrate
 echo "==> Migrando legacy..."
-SKALLING_ROOT="$SKALLING_ROOT" bash "$SKALLING_ROOT/scripts/teamdb-migrate.sh" "$TEST_DIR"
+bash "$SKALLING_ROOT/scripts/teamdb-migrate.sh" "$TEST_DIR"
 echo ""
 
 # 6. Verificar
@@ -129,7 +129,7 @@ echo ""
 
 # 10. Export
 echo "==> Exportando DB..."
-SKALLING_ROOT="$SKALLING_ROOT" bash "$SKALLING_ROOT/scripts/teamdb-export.sh" "$TEST_DIR"
+bash "$SKALLING_ROOT/scripts/teamdb-export.sh" "$TEST_DIR"
 assert "data_concepts.sql existe" "[ -f '$TEST_DIR/.opencode/context/teamdb/data_concepts.sql' ]"
 assert "data_decisions.sql existe" "[ -f '$TEST_DIR/.opencode/context/teamdb/data_decisions.sql' ]"
 assert "data_preferences.sql existe" "[ -f '$TEST_DIR/.opencode/context/teamdb/data_preferences.sql' ]"

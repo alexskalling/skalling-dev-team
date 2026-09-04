@@ -107,8 +107,6 @@ find_opencode_conflicts() {
 
 suggest_resolution() {
     local file="$1"
-    local basename; basename="$(basename "$file")"
-    local dir; dir="$(dirname "$file")"
 
     case "$file" in
         */.opencode/state/workflow.json)

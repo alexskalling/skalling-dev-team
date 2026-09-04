@@ -6,6 +6,19 @@ Navegación principal del bundle.
 
 - [teamdb](./concept/teamdb.md) — TeamDB v0.7.2: ciclo de planificación en DB (libSQL)
 
+## Decisiones
+
+- [Grafo WIP y decisiones](./decisiones/grafo-wip-y-decisions-v0.7.6.md)
+- [Plan único versionado](./decisiones/plan-unico-versionado-v0.7.7.md)
+
+## Preferencias
+
+- [Slugs en kebab-case](./preferencias/slugs-kebab-case.md)
+
+## Problemas conocidos
+
+- [Falsos positivos por substring](./problemas-conocidos/like-substring-false-positives.md)
+
 ## Follow-ups
 
 - [v0.7.2](./followups/v0.7.2.md) — pendientes menores del release v0.7.2 (teamdb-hardening)

@@ -1,118 +1,117 @@
 #!/usr/bin/env bash
-# teamdb-dashboard.sh — inicia/detiene el dashboard de TeamDB
-# Uso: teamdb-dashboard.sh [proyecto]
-#   Sin args: usa el proyecto actual (pwd)
-#   Si el server ya corre: abre el browser (no reinicia)
-#   Auto-stop después de 5 min de inactividad
-
+# Centro de control TeamDB: instancia persistente y aislada por proyecto.
 set -euo pipefail
 
 usage() {
-  echo "Uso: teamdb-dashboard.sh [proyecto]"
-  echo "Abre el dashboard local de TeamDB y se detiene tras 5 min de inactividad."
+  cat <<'HELP'
+Uso: teamdb-dashboard.sh [start|stop|status] [proyecto]
+
+  start   Inicia (o reutiliza) el dashboard y abre el navegador. Es el predeterminado.
+  stop    Detiene solamente el dashboard de este proyecto.
+  status  Muestra URL y estado, sin abrir el navegador.
+
+El servidor permanece activo hasta ejecutar stop. El dashboard es de solo lectura.
+HELP
 }
 
+ACTION="start"
 case "${1:-}" in
+  start|stop|status) ACTION="$1"; shift ;;
   --help|-h) usage; exit 0 ;;
 esac
+
+PROJECT="${1:-$(pwd)}"
+if [ ! -d "$PROJECT" ]; then
+  echo "ERROR: el proyecto no existe: $PROJECT" >&2
+  exit 1
+fi
+PROJECT="$(cd "$PROJECT" && pwd -P)"
+PROJECT_NAME="$(basename "$PROJECT")"
+DB_PATH="$PROJECT/.opencode/context/team.db"
+PROJECT_KEY="$(printf '%s' "$PROJECT" | cksum | awk '{print $1}')"
+STATE_DIR="${TMPDIR:-/tmp}/skalling-dashboard-$PROJECT_KEY"
+PIDFILE="$STATE_DIR/server.pid"
+PORTFILE="$STATE_DIR/server.port"
+LOGFILE="$STATE_DIR/server.log"
 
 OPENCODE_DIR="${SKALLING_OPENCODE_DIR:-$HOME/.config/opencode}"
 SERVER_SCRIPT="$OPENCODE_DIR/scripts/dashboard-server.py"
 HTML_PATH="$OPENCODE_DIR/web/teamdb-dashboard.html"
-PIDFILE="/tmp/teamdb-dashboard.pid"
-TIMEOUT_FILE="/tmp/teamdb-dashboard.lastaccess"
-TIMEOUT_SECS=300
+mkdir -p "$STATE_DIR"
 
-PROJECT="${1:-$(pwd)}"
-DB_PATH="$(realpath "$PROJECT/.opencode/context/team.db" 2>/dev/null || echo "")"
-PROJECT_NAME="$(basename "$PROJECT")"
-
-if [ -z "$DB_PATH" ] || [ ! -f "$DB_PATH" ]; then
-  echo "ERROR: no hay team.db en $PROJECT/.opencode/context/" >&2
-  echo "   Ejecutá /skalling-init primero" >&2
-  exit 1
-fi
-
-find_port() {
-  local port=3741
-  while nc -z 127.0.0.1 $port 2>/dev/null; do port=$((port+1)); done
-  echo $port
+is_running() {
+  [ -f "$PIDFILE" ] || return 1
+  local pid
+  pid="$(cat "$PIDFILE" 2>/dev/null || true)"
+  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null || return 1
+  ps -p "$pid" -o command= 2>/dev/null | grep -Fq "$SERVER_SCRIPT"
 }
 
-start_server() {
-  local port; port=$(find_port)
-
-  env \
-    TDB_DB="$DB_PATH" \
-    TDB_HTML="$HTML_PATH" \
-    TDB_PROJECT="$PROJECT_NAME" \
-    TDB_PORT="$port" \
-    TDB_TIMEOUT_FILE="$TIMEOUT_FILE" \
-    python3 "$SERVER_SCRIPT" &
-  echo $! > "$PIDFILE"
-  echo "$port" > "/tmp/teamdb-dashboard.port"
-
-  # Monitor de inactividad
-  (
-    while kill -0 "$(cat "$PIDFILE")" 2>/dev/null; do
-      sleep 30
-      if [ -f "$TIMEOUT_FILE" ]; then
-        since=$(($(date +%s) - $(cat "$TIMEOUT_FILE")))
-        if [ $since -gt $TIMEOUT_SECS ]; then
-          kill "$(cat "$PIDFILE")" 2>/dev/null && echo "Server detenido por inactividad (${since}s)"
-          rm -f "$PIDFILE" "$TIMEOUT_FILE" "/tmp/teamdb-dashboard.port"
-          exit 0
-        fi
-      fi
-    done
-  ) &
-}
-
-stop_server() {
-  if [ -f "$PIDFILE" ]; then
-    kill "$(cat "$PIDFILE")" 2>/dev/null && echo "Server detenido"
-    rm -f "$PIDFILE" "$TIMEOUT_FILE" "/tmp/teamdb-dashboard.port"
-  fi
+dashboard_url() {
+  [ -f "$PORTFILE" ] && printf 'http://127.0.0.1:%s/' "$(cat "$PORTFILE")"
 }
 
 open_url() {
   local url="$1"
-  if command -v open >/dev/null 2>&1; then
-    open "$url" >/dev/null 2>&1
-  elif command -v xdg-open >/dev/null 2>&1; then
-    xdg-open "$url" >/dev/null 2>&1
-  elif command -v wslview >/dev/null 2>&1; then
-    wslview "$url" >/dev/null 2>&1
-  elif command -v cmd.exe >/dev/null 2>&1; then
-    cmd.exe /c start "" "$url" >/dev/null 2>&1
-  else
-    echo "Abrí esta URL en tu navegador: $url"
-    return 0
+  if command -v open >/dev/null 2>&1; then open "$url" >/dev/null 2>&1
+  elif command -v xdg-open >/dev/null 2>&1; then xdg-open "$url" >/dev/null 2>&1
+  elif command -v wslview >/dev/null 2>&1; then wslview "$url" >/dev/null 2>&1
+  elif command -v cmd.exe >/dev/null 2>&1; then cmd.exe /c start "" "$url" >/dev/null 2>&1
+  else echo "Abre esta URL: $url"
   fi
 }
 
-# Si el server ya corre, abrir browser y salir
-if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
-  port=$(cat "/tmp/teamdb-dashboard.port" 2>/dev/null || echo "3741")
-  echo "Dashboard ya corriendo en http://localhost:$port/"
-  open_url "http://localhost:$port/"
+stop_server() {
+  if is_running; then
+    local pid
+    pid="$(cat "$PIDFILE")"
+    kill "$pid"
+    for _ in 1 2 3 4 5; do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done
+    echo "Dashboard detenido para $PROJECT_NAME"
+  else
+    echo "El dashboard de $PROJECT_NAME no estaba activo."
+  fi
+  rm -f "$PIDFILE" "$PORTFILE"
+}
+
+if [ "$ACTION" = "stop" ]; then stop_server; exit 0; fi
+
+if [ "$ACTION" = "status" ]; then
+  if is_running; then echo "Activo: $(dashboard_url) ($PROJECT_NAME)"; else echo "Detenido: $PROJECT_NAME"; fi
   exit 0
 fi
 
-# Verificar que el server script existe
-if [ ! -f "$SERVER_SCRIPT" ]; then
-  echo "ERROR: $SERVER_SCRIPT no encontrado. Corr&eacute; install-global.sh" >&2
-  exit 1
+for required in "$DB_PATH" "$SERVER_SCRIPT" "$HTML_PATH"; do
+  if [ ! -f "$required" ]; then
+    echo "ERROR: falta $required" >&2
+    echo "Ejecuta /skalling-init o install-global.sh y vuelve a intentar." >&2
+    exit 1
+  fi
+done
+
+if ! is_running; then
+  rm -f "$PIDFILE" "$PORTFILE"
+  PORT="$(python3 -c "import socket; s=socket.socket(); s.bind(('127.0.0.1',0)); print(s.getsockname()[1]); s.close()")"
+  env TDB_DB="$DB_PATH" TDB_HTML="$HTML_PATH" TDB_PROJECT="$PROJECT_NAME" TDB_PORT="$PORT" \
+    nohup python3 "$SERVER_SCRIPT" >"$LOGFILE" 2>&1 &
+  PID=$!
+  printf '%s\n' "$PID" > "$PIDFILE"
+  printf '%s\n' "$PORT" > "$PORTFILE"
+
+  READY=0
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    if python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:$PORT/api/health', timeout=.3).read()" 2>/dev/null; then READY=1; break; fi
+    kill -0 "$PID" 2>/dev/null || break
+    sleep 0.1
+  done
+  if [ "$READY" -ne 1 ]; then
+    echo "ERROR: el dashboard no pudo iniciar. Registro: $LOGFILE" >&2
+    stop_server >/dev/null 2>&1 || true
+    exit 1
+  fi
 fi
 
-if [ ! -f "$HTML_PATH" ]; then
-  echo "ERROR: $HTML_PATH no encontrado. Corr&eacute; install-global.sh" >&2
-  exit 1
-fi
-
-start_server
-port=$(cat "/tmp/teamdb-dashboard.port")
-sleep 1
-echo "Dashboard: http://localhost:$port/"
-echo "Server corriendo. Se detiene automáticamente después de 5 min de inactividad."
-open_url "http://localhost:$port/"
+URL="$(dashboard_url)"
+echo "Dashboard: $URL"
+echo "Solo lectura · se detiene con: teamdb-dashboard.sh stop \"$PROJECT\""
+open_url "$URL"

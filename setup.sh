@@ -85,7 +85,6 @@ INSTALL_LOG="$BACKUP_DIR/setup.log"
 
 AGENTS_BASE_DIR="$SCRIPT_DIR/agents-base"
 SKILLS_BASE_DIR="$SCRIPT_DIR/skills-base"
-CONSTITUTION_SRC="$SCRIPT_DIR/constitution/constitucion.md"
 GITATTRIBUTES_TEMPLATE="$SCRIPT_DIR/templates/gitattributes.template"
 SCRIPTS_SRC_DIR="$SCRIPT_DIR/scripts"
 HOOKS_SRC_DIR="$SCRIPT_DIR/scripts/hooks"
@@ -381,30 +380,17 @@ step_init_teamdb() {
         return 0
     fi
 
-    local db="$CONTEXT_DIR/team.db"
-    if [[ -f "$db" ]]; then
-        log INFO "teamdb ya existe en $db"
-        return 0
-    fi
-
-    local schema="$SCRIPTS_SRC_DIR/../sql/project-schema.sql"
-    if [[ -f "$schema" ]]; then
-        if sqlite3 "$db" < "$schema" 2>/dev/null; then
-            log OK "teamdb inicializado: $db"
-
-            if [[ -d "$SCRIPTS_SRC_DIR/../sql/migrations" ]]; then
-                for mig in "$SCRIPTS_SRC_DIR/../sql/migrations"/[0-9]*.sql; do
-                    [[ -f "$mig" ]] || continue
-                    if sqlite3 "$db" < "$mig" 2>/dev/null; then
-                        log INFO "  migración $(basename "$mig") aplicada"
-                    fi
-                done
-            fi
+    local init_script="$SCRIPTS_SRC_DIR/teamdb-init.sh"
+    if [[ -x "$init_script" ]]; then
+        if bash "$init_script" "$TARGET_DIR"; then
+            log OK "teamdb inicializado y migrado: $CONTEXT_DIR/team.db"
         else
-            log WARN "No se pudo inicializar teamdb"
+            log ERROR "No se pudo inicializar o migrar TeamDB"
+            return 1
         fi
     else
-        log WARN "Schema no encontrado en $schema, skip"
+        log ERROR "Inicializador TeamDB no encontrado: $init_script"
+        return 1
     fi
 }
 

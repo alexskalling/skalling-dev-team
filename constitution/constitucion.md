@@ -9,25 +9,28 @@
 ## 🏛️ Reglas Base (universales)
 
 ### R1 — Idioma
-Todo el código (variables, funciones, clases, archivos, commits) en **ESPAÑOL**.
+El código sigue el idioma y las convenciones ya establecidas por cada proyecto.
+La comunicación con el usuario y los commits de Skalling se escriben en español.
 
 Excepciones:
 - Nombres de librerías externas y sus APIs.
-- Comentarios en código (no permitidos — ver R2).
+- Identificadores impuestos por frameworks, formatos, protocolos y herramientas.
 - Mensajes de error al usuario final (pueden ser en el idioma del usuario).
 
-### R2 — Cero Comentarios en Código
-El código es autodocumentado. El "por qué" vive en `.opencode/context/` o en `docs/`.
+### R2 — Comentarios con Propósito
+Los comentarios explican decisiones, restricciones, compatibilidad o riesgos que el
+código no puede expresar por sí mismo. No repiten literalmente la implementación.
+Las APIs públicas pueden usar docstrings o JSDoc cuando aporten un contrato útil.
 
-Excepciones:
-- Docstrings públicos en APIs (JSDoc, docstrings Python) solo cuando documentan comportamiento, no implementación.
-- Anotaciones de tipo (no son comentarios, son contratos).
+### R3 — Tipado Proporcional
+En lenguajes tipados se usa el modo estricto disponible y se evita `any` salvo en
+fronteras externas justificadas. En lenguajes dinámicos se validan explícitamente
+las entradas y salidas críticas.
 
-### R3 — Tipado Estricto
-Sin tipos implícitos ni `any` (o equivalentes) en el lenguaje del proyecto.
-
-### R4 — TDD Obligatorio (Iron Law)
-**NO HAY CÓDIGO DE LÓGICA DE NEGOCIO SIN UN TEST QUE FALLE PRIMERO.**
+### R4 — Pruebas Proporcionales al Riesgo
+Los cambios de comportamiento y los bugs usan RED → GREEN → REFACTOR. Los cambios
+de configuración, documentación, código generado o integración sin harness viable
+requieren la comprobación automatizada más cercana y evidencia reproducible.
 
 ```
 RED:    escribí el test → verificá que falla correctamente
@@ -35,22 +38,16 @@ GREEN:  escribí el código mínimo para pasar el test
 REFACTOR: mejorá el código con el test como red de seguridad
 ```
 
-Violaciones:
-- Escribir código antes del test → **borrar y empezar de nuevo**.
-- "Lo dejo como referencia" → no. Borrar.
-- "Lo adapto mientras escribo tests" → no. Borrar.
-
-Excepciones (consultar con el equipo):
-- Prototipos descartables.
-- Código generado automáticamente.
-- Archivos de configuración.
+No se declara corregido un bug sin una prueba que reproduzca el fallo o, cuando
+esto no sea técnicamente viable, una explicación explícita y una verificación equivalente.
 
 ### R5 — Calidad Total
-Ningún código está terminado sin pasar el flujo completo:
-**Teo → Jhon (por tarea + regresión) → Luz (quality gate) → Pau (documentación).**
+Ningún código está terminado sin verificación independiente proporcional al riesgo.
+Las rutas pequeñas pueden usar Teo → Jhon; seguridad, datos y cambios de alto riesgo
+añaden Luz. Pau participa cuando existe conocimiento durable que conservar.
 
 ### R6 — SDD Formal
-Features nuevas siguen Spec-Driven Development:
+Features nuevas de alcance medio, alto o ambiguo siguen Spec-Driven Development:
 1. **Proposal**: qué, por qué, rollback.
 2. **Specs**: Given/When/Then + keywords MUST/SHALL/SHOULD/MAY (RFC 2119).
 3. **Design**: arquitectura, decisiones, diagramas.
@@ -59,7 +56,7 @@ Features nuevas siguen Spec-Driven Development:
 Ubicación: `.opencode/changes/<feature-slug>/`. Archivado en `.opencode/changes/archive/` al terminar.
 
 ### R7 — Clean Architecture
-Las dependencias apuntan hacia el centro:
+Cuando el proyecto usa arquitectura por capas, las dependencias apuntan hacia el centro:
 ```
 ui → infrastructure → application → domain
 ```
@@ -76,7 +73,9 @@ Vertical Slicing es alternativa válida: organizar por feature, no por capa téc
 Sin abreviaciones crípticas. Si un nombre necesita comentario para explicarse, está mal nombrado.
 
 ### R9 — Funciones Pequeñas
-Si una función supera 30 líneas o tiene más de 3 niveles de anidación, refactorizar.
+Si una función supera aproximadamente 30 líneas o tiene más de 3 niveles de
+anidación, revisar si contiene más de una responsabilidad. Se refactoriza cuando
+mejora legibilidad, pruebas o reutilización; no para cumplir una cifra aislada.
 
 ### R10 — Manejo de Errores
 - Prohibido `try/catch` vacío o genérico.

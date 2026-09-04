@@ -16,21 +16,24 @@ read_cache_if_valid() {
     [[ -f "$CACHE_FILE" ]] || return 1
     
     # 1. TTL
-    local cache_age=$(($(date +%s) - $(stat -c %Y "$CACHE_FILE" 2>/dev/null || stat -f %m "$CACHE_FILE")))
+    local cache_age
+    cache_age=$(($(date +%s) - $(stat -c %Y "$CACHE_FILE" 2>/dev/null || stat -f %m "$CACHE_FILE")))
     [[ $cache_age -lt $TTL_SECONDS ]] || return 1
     
     # 2. project.yaml mtime
     [[ -f "$YAML_FILE" ]] || return 1
-    local yaml_mtime=$(stat -c %Y "$YAML_FILE" 2>/dev/null || stat -f %m "$YAML_FILE")
-    local cache_yaml_mtime=$(jq -r '.project_yaml_mtime // 0' "$CACHE_FILE" 2>/dev/null || echo 0)
+    local yaml_mtime cache_yaml_mtime
+    yaml_mtime=$(stat -c %Y "$YAML_FILE" 2>/dev/null || stat -f %m "$YAML_FILE")
+    cache_yaml_mtime=$(jq -r '.project_yaml_mtime // 0' "$CACHE_FILE" 2>/dev/null || echo 0)
     [[ "$yaml_mtime" -eq "$cache_yaml_mtime" ]] || return 1
     
     # 3. DB counts (concepts + decisions)
     [[ -f "$DB" ]] || return 1
-    local db_concepts=$(sqlite3 "$DB" "SELECT COUNT(*) FROM concepts" 2>/dev/null || echo -1)
-    local db_decisions=$(sqlite3 "$DB" "SELECT COUNT(*) FROM decisions" 2>/dev/null || echo -1)
-    local cache_concepts=$(jq -r '.db_counts.concepts // -1' "$CACHE_FILE" 2>/dev/null || echo -1)
-    local cache_decisions=$(jq -r '.db_counts.decisions // -1' "$CACHE_FILE" 2>/dev/null || echo -1)
+    local db_concepts db_decisions cache_concepts cache_decisions
+    db_concepts=$(sqlite3 "$DB" "SELECT COUNT(*) FROM concepts" 2>/dev/null || echo -1)
+    db_decisions=$(sqlite3 "$DB" "SELECT COUNT(*) FROM decisions" 2>/dev/null || echo -1)
+    cache_concepts=$(jq -r '.db_counts.concepts // -1' "$CACHE_FILE" 2>/dev/null || echo -1)
+    cache_decisions=$(jq -r '.db_counts.decisions // -1' "$CACHE_FILE" 2>/dev/null || echo -1)
     [[ "$db_concepts" -eq "$cache_concepts" && "$db_decisions" -eq "$cache_decisions" ]] || return 1
     
     # Cache válido
@@ -45,10 +48,11 @@ build_cache() {
     # project.yaml
     local yaml_content="{}"
     [[ -f "$YAML_FILE" ]] && yaml_content=$(cat "$YAML_FILE")
-    local language=$(echo "$yaml_content" | yq -r '.stack.language // "typescript"' 2>/dev/null || echo "typescript")
-    local framework=$(echo "$yaml_content" | yq -r '.stack.framework // "nextjs"' 2>/dev/null || echo "nextjs")
-    local test_runner=$(echo "$yaml_content" | yq -r '.stack.test_runner // "vitest"' 2>/dev/null || echo "vitest")
-    local has_ui=$(echo "$yaml_content" | yq -r '.has_ui // false' 2>/dev/null || echo "false")
+    local language framework test_runner has_ui
+    language=$(echo "$yaml_content" | yq -r '.stack.language // "typescript"' 2>/dev/null || echo "typescript")
+    framework=$(echo "$yaml_content" | yq -r '.stack.framework // "nextjs"' 2>/dev/null || echo "nextjs")
+    test_runner=$(echo "$yaml_content" | yq -r '.stack.test_runner // "vitest"' 2>/dev/null || echo "vitest")
+    has_ui=$(echo "$yaml_content" | yq -r '.has_ui // false' 2>/dev/null || echo "false")
     
     # DB queries
     local design_system_md=""

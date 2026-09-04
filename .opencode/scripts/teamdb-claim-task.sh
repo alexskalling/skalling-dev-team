@@ -39,34 +39,43 @@ fi
 DB="$(teamdb_project_path "$PROJECT")"
 [ -f "$DB" ] || { echo "DB no existe: $DB" >&2; exit 1; }
 
-# CAS: solo actualiza si status actual = pending.
-# Hacemos UPDATE + SELECT para capturar el resultado, luego INSERT separado
-# en task_lock_history solo si la claim tuvo éxito.
-RESULT=$(sqlite3 "$DB" <<SQL
-UPDATE tasks
-SET status = 'in_progress',
-    owner = '$AGENT',
-    locked_by = '$AGENT',
-    locked_at = datetime('now'),
-    version = version + 1,
-    last_modified_by = '$AGENT',
-    started_at = datetime('now')
-WHERE id = $TASK_ID
-  AND status = 'pending';
+case "$TASK_ID" in
+  ''|*[!0-9]*) echo "ERROR: task_id debe ser un entero positivo" >&2; exit 2 ;;
+esac
 
-SELECT CASE WHEN changes() > 0 THEN 'claimed' ELSE 'failed' END as result;
-SQL
-)
+RESULT="$(python3 - "$DB" "$TASK_ID" "$AGENT" <<'PY'
+import sqlite3
+import sys
 
-# Solo registrar lock history si la claim fue exitosa
-if [ "$RESULT" = "claimed" ]; then
-  sqlite3 "$DB" <<SQL >/dev/null
-INSERT INTO task_lock_history (task_id, agent, action, ts, new_version, details)
-VALUES ($TASK_ID, '$AGENT', 'lock', datetime('now'),
-        (SELECT version FROM tasks WHERE id = $TASK_ID),
-        'CAS claim OK');
-SQL
-fi
+db, task_id, agent = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+conn = sqlite3.connect(db, timeout=10)
+try:
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("BEGIN IMMEDIATE")
+    cursor = conn.execute(
+        """UPDATE tasks
+           SET status='in_progress', owner=?, locked_by=?, locked_at=datetime('now'),
+               version=version+1, last_modified_by=?, started_at=datetime('now')
+           WHERE id=? AND status='pending'""",
+        (agent, agent, agent, task_id),
+    )
+    if cursor.rowcount != 1:
+        conn.rollback()
+        print("failed")
+    else:
+        conn.execute(
+            """INSERT INTO task_lock_history
+               (task_id, agent, action, ts, new_version, details)
+               VALUES (?, ?, 'lock', datetime('now'),
+                       (SELECT version FROM tasks WHERE id=?), 'CAS claim OK')""",
+            (task_id, agent, task_id),
+        )
+        conn.commit()
+        print("claimed")
+finally:
+    conn.close()
+PY
+)"
 
 if [ "$RESULT" = "claimed" ]; then
   # Validación: que el comando realmente corrió
@@ -75,9 +84,13 @@ if [ "$RESULT" = "claimed" ]; then
   EXIT_CODE="${TEAMDB_CLAIM_EXIT_CODE:-}"
 
   if [ -n "$COMMAND" ] && [ -n "$EXIT_CODE" ]; then
-    DB="$(teamdb_project_path "$PROJECT")"
     RECEIPT_ID="rcpt_$(date +%s%N | head -c 16)"
-    sqlite3 "$DB" "INSERT INTO receipts (id, task_id, agent, command, exit_code, ts) VALUES ('$RECEIPT_ID', $TASK_ID, '$AGENT', '$COMMAND', $EXIT_CODE, datetime('now'))"
+    case "$EXIT_CODE" in
+      ''|*[!0-9]*) echo "ERROR: TEAMDB_CLAIM_EXIT_CODE debe ser entero" >&2; exit 2 ;;
+    esac
+    teamdb_exec_write "$DB" \
+      "INSERT INTO receipts (id, task_id, agent, command, exit_code, ts) VALUES (?, ?, ?, ?, ?, datetime('now'))" \
+      "$RECEIPT_ID" "$TASK_ID" "$AGENT" "$COMMAND" "$EXIT_CODE" >/dev/null
   fi
 
   # FASE 1: dump fresco post-escritura

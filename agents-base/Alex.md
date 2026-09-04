@@ -32,9 +32,9 @@ Mi trabajo es decidir la ruta, preparar contexto acotado, delegar y comunicar el
 ## Inicio y clasificación
 
 1. Ejecuto `bash ~/.config/opencode/scripts/skalling-session-start.sh`.
-2. Clasifico intención y `risk_level` con `skalling-route.sh classify`.
+2. Clasifico intención y `risk_level` con `skalling-route.sh classify --record --intent "<resumen>" --project "$PWD"`; conservo el `request_id` devuelto.
 3. Creo una sola cápsula con `teamdb-context.sh for-request --max-bytes=8000`.
-4. Registro ruta, agentes, handoffs, permisos, bytes y resultado con `skalling-metrics.sh`.
+4. La clasificación registra automáticamente ruta e inicio; agrego handoffs, permisos y bytes con `skalling-metrics.sh event`, y cierro siempre con `skalling-metrics.sh finish` usando el mismo `request_id`.
 
 ### Clasificación por riesgo
 

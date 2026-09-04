@@ -2,7 +2,7 @@
 # lib-teamdb.sh — Wrapper bash para libSQL
 
 teamdb_global_path() {
-  echo "${HOME}/.config/opencode/team.db"
+  echo "${SKALLING_DB_GLOBAL:-${SKALLING_OPENCODE_DIR:-${HOME}/.config/opencode}/team.db}"
 }
 
 teamdb_project_path() {
@@ -117,6 +117,40 @@ CREATE TABLE IF NOT EXISTS audit_log (
   actor_source TEXT DEFAULT 'trigger'
 );
 CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(ts DESC);
+CREATE TABLE IF NOT EXISTS routing_decisions (
+  id INTEGER PRIMARY KEY,
+  ts TEXT NOT NULL,
+  user_intent TEXT NOT NULL,
+  chosen_route TEXT NOT NULL CHECK (chosen_route IN ('INLINE','INTERVENTION','FAST-TRACK','SDD','DIRECT','RESEARCH')),
+  route_reason TEXT,
+  agents_involved TEXT,
+  outcome TEXT DEFAULT 'PENDING' CHECK (outcome IN ('PENDING','SUCCESS','FAIL','CANCELLED')),
+  completed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_routing_decisions_ts ON routing_decisions(ts);
+CREATE TABLE IF NOT EXISTS workflow_state (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  active_cycle_slug TEXT,
+  phase TEXT,
+  actor TEXT,
+  started_at TEXT,
+  lock_token TEXT,
+  updated_at TEXT
+);
+CREATE TABLE IF NOT EXISTS workflow_metrics (
+  request_id TEXT PRIMARY KEY,
+  risk_level TEXT NOT NULL CHECK (risk_level IN ('low','medium','high')),
+  route TEXT,
+  agents_count INTEGER DEFAULT 0,
+  handoffs INTEGER DEFAULT 0,
+  permission_prompts INTEGER DEFAULT 0,
+  context_bytes INTEGER DEFAULT 0,
+  started_at TEXT NOT NULL,
+  completed_at TEXT,
+  duration_ms INTEGER,
+  outcome TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_workflow_metrics_started ON workflow_metrics(started_at DESC);
 SQL
   local has_col
   has_col="$(sqlite3 "$db" "SELECT 1 FROM pragma_table_info('audit_log') WHERE name='actor_source'" 2>/dev/null)"
@@ -147,13 +181,16 @@ SQL
   done
   # Validar que las correcciones aditivas quedaron aplicadas antes de bumpear
   # la versión. Sin esto, una DB con schema incompleto reportaba 0.8.3 mintiendo.
-  local has_audit has_actor has_skills has_schema_meta
+  local has_audit has_actor has_skills has_schema_meta has_routing has_metrics has_workflow
   has_audit="$(sqlite3 "$db" "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='audit_log'" 2>/dev/null || true)"
   has_actor="$(sqlite3 "$db" "SELECT count(*) FROM pragma_table_info('audit_log') WHERE name='actor_source'" 2>/dev/null || true)"
   has_skills="$(sqlite3 "$db" "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='skills_active'" 2>/dev/null || true)"
   has_schema_meta="$(sqlite3 "$db" "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='schema_meta'" 2>/dev/null || true)"
-  if [ "${has_audit:-0}" = "0" ] || [ "${has_actor:-0}" = "0" ] || [ "${has_skills:-0}" = "0" ] || [ "${has_schema_meta:-0}" = "0" ]; then
-    echo "[ERROR] teamdb heal: schema incompleto (audit_log=$has_audit actor_source=$has_actor skills_active=$has_skills schema_meta=$has_schema_meta); no se bumpeó version" >&2
+  has_routing="$(sqlite3 "$db" "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='routing_decisions'" 2>/dev/null || true)"
+  has_metrics="$(sqlite3 "$db" "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='workflow_metrics'" 2>/dev/null || true)"
+  has_workflow="$(sqlite3 "$db" "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='workflow_state'" 2>/dev/null || true)"
+  if [ "${has_audit:-0}" = "0" ] || [ "${has_actor:-0}" = "0" ] || [ "${has_skills:-0}" = "0" ] || [ "${has_schema_meta:-0}" = "0" ] || [ "${has_routing:-0}" = "0" ] || [ "${has_metrics:-0}" = "0" ] || [ "${has_workflow:-0}" = "0" ]; then
+    echo "[ERROR] teamdb heal: schema operativo incompleto; no se actualizó la versión" >&2
     return 1
   fi
   local target_version version_file
@@ -164,6 +201,7 @@ SQL
     echo "[ERROR] No se pudo actualizar schema_meta.version en $db" >&2
     return 1
   fi
+  sqlite3 "$db" "INSERT INTO schema_meta(key,value) VALUES('legacy_surface.work_in_progress','read_only_compatibility') ON CONFLICT(key) DO UPDATE SET value=excluded.value" || return 1
   return 0
 }
 

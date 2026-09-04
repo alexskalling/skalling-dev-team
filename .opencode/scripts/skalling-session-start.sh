@@ -10,8 +10,6 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 DB_GLOBAL="${SKALLING_DB_GLOBAL:-$HOME/.config/opencode/team.db}"
 DB_PROJECT="$(pwd)/.opencode/context/team.db"
 DB_ACTIVE="$DB_GLOBAL"
@@ -60,7 +58,7 @@ print_db_section "$DB_ACTIVE" "Conceptos recientes" \
 print_db_section "$DB_ACTIVE" "Decisiones aceptadas" \
   "SELECT slug, substr(title, 1, 60) FROM decisions WHERE status='accepted' LIMIT 5"
 print_db_section "$DB_ACTIVE" "Trabajo en curso" \
-  "SELECT slug, status FROM work_in_progress"
+  "SELECT p.slug || '/' || t.slug, t.status FROM tasks t JOIN plans p ON p.id=t.plan_id WHERE t.status IN ('pending','in_progress','in_review','blocked') ORDER BY p.id,t.order_index LIMIT 12"
 
 if [[ "${1:-}" == "--project" ]] && [[ -f "$DB_PROJECT" ]]; then
   printf 'Project DB (./.opencode/context/team.db):\n'

@@ -29,6 +29,7 @@ skalling_log_os
 # ──────────────────────────────────────────────────────────────────────────────
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export SKALLING_ROOT="$SCRIPT_DIR"
 SKALLING_VERSION="$(grep '__version__' "$SCRIPT_DIR/VERSION" | sed 's/.*"\(.*\)".*/\1/')"
 INSTALL_DATE="$(date +%Y-%m-%dT%H:%M:%S%z)"
 
@@ -516,12 +517,14 @@ install_teamdb() {
 
     # Inicializa teamdb global si no existe
     if command -v sqlite3 >/dev/null 2>&1 && [ -f "$OPENCODE_DIR/sql/global-schema.sql" ]; then
-        if [ ! -f "$HOME/.config/opencode/team.db" ]; then
-            run mkdir -p "$HOME/.config/opencode"
-            if sqlite3 "$HOME/.config/opencode/team.db" < "$OPENCODE_DIR/sql/global-schema.sql"; then
+        DB_GLOBAL_POST="$(teamdb_global_path)"
+        if [ ! -f "$DB_GLOBAL_POST" ]; then
+            run mkdir -p "$(dirname "$DB_GLOBAL_POST")"
+            if sqlite3 "$DB_GLOBAL_POST" < "$OPENCODE_DIR/sql/global-schema.sql"; then
                 log OK "teamdb global creado"
             else
-                log WARN "No se pudo crear teamdb global"
+                log ERROR "No se pudo crear teamdb global"
+                return 1
             fi
         else
             log INFO "teamdb global ya existe"
@@ -530,16 +533,17 @@ install_teamdb() {
             if teamdb_heal_global; then
                 # Validar post-heal: que la DB realmente quedó al día (rechaza
                 # DBs donde heal pasó pero schema sigue roto).
-                DB_GLOBAL_POST="$HOME/.config/opencode/team.db"
                 VER_GLOBAL="$(sqlite3 "$DB_GLOBAL_POST" "SELECT value FROM schema_meta WHERE key='version'" 2>/dev/null || echo "")"
                 HAS_AUDIT_GLOBAL="$(sqlite3 "$DB_GLOBAL_POST" "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='audit_log'" 2>/dev/null || echo 0)"
-                if [ "$VER_GLOBAL" = "0.7.8" ] && [ "${HAS_AUDIT_GLOBAL:-0}" -gt 0 ]; then
+                if [ "$VER_GLOBAL" = "$SKALLING_VERSION" ] && [ "${HAS_AUDIT_GLOBAL:-0}" -gt 0 ]; then
                     log OK "teamdb global: $VER_GLOBAL con audit_log/actor_source"
                 else
-                    log WARN "teamdb global: heal reportó éxito pero schema inconsistente (version=$VER_GLOBAL audit_log=$HAS_AUDIT_GLOBAL); requiere intervención manual"
+                    log ERROR "teamdb global: schema inconsistente (version=$VER_GLOBAL audit_log=$HAS_AUDIT_GLOBAL)"
+                    return 1
                 fi
             else
-                log WARN "teamdb global: upgrade aditivo no aplicado; schema posiblemente desactualizado"
+                log ERROR "teamdb global: upgrade aditivo no aplicado"
+                return 1
             fi
         fi
     else
@@ -547,7 +551,7 @@ install_teamdb() {
     fi
 
     # Poblar skills_active (indice global de skills) si hay DB
-    if [ -f "$OPENCODE_DIR/scripts/teamdb-skills-sync.sh" ] && [ -f "$HOME/.config/opencode/team.db" ]; then
+    if [ -f "$OPENCODE_DIR/scripts/teamdb-skills-sync.sh" ] && [ -f "$(teamdb_global_path)" ]; then
         if bash "$OPENCODE_DIR/scripts/teamdb-skills-sync.sh" >/dev/null 2>&1; then
             log OK "skills registry: global sincronizado"
         else

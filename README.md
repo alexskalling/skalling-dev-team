@@ -2,7 +2,7 @@
 
 Skalling es un equipo de **8 agentes de IA** que trabajan juntos adentro de [OpenCode](https://opencode.ai). Cada agente tiene un rol específico y siguen un ciclo ordenado para construir software bien hecho.
 
-**Versión actual: 0.10.1**
+**Versión actual: 0.10.2**
 
 ---
 
@@ -166,15 +166,15 @@ Antes del primer handoff se crea una cápsula de hasta 8 KB: resumen general, me
 
 | # | Regla |
 |---|---|
-| R1 | Todo el código en español (variables, funciones, commits) |
-| R2 | Cero comentarios — el código se explica solo |
-| R3 | Tipado estricto — nada de `any` |
-| R4 | TDD obligatorio — escribir test antes que código |
-| R5 | No saltarse pasos del ciclo |
-| R6 | Plan escrito antes de construir (Spec-Driven Development) |
-| R7 | Clean Architecture — dependencias hacia adentro |
+| R1 | Código según las convenciones del proyecto; comunicación y commits en español |
+| R2 | Comentarios solo para decisiones, restricciones o riesgos no evidentes |
+| R3 | Tipado y validación proporcionales al lenguaje y al riesgo |
+| R4 | TDD para comportamiento y bugs; verificación equivalente para configuración |
+| R5 | Verificación independiente proporcional al riesgo |
+| R6 | SDD formal para cambios medianos, altos o ambiguos |
+| R7 | Clean Architecture cuando el proyecto adopta arquitectura por capas |
 | R8 | Nombres descriptivos — nada de abreviaciones crípticas |
-| R9 | Funciones de máximo 30 líneas |
+| R9 | Revisar funciones extensas por responsabilidad, no por una cifra aislada |
 | R10 | Manejo de errores explícito — nada de try/catch vacíos |
 | R11 | Sin código muerto — nada de console.log, variables sin usar |
 | R12 | Cada proyecto tiene su propia memoria |
@@ -212,13 +212,13 @@ skalling-dev-team/
 │   └── workflows/                    # CI (GitHub Actions): tests, teamdb-sqli, handoffs, teamdb-dag-claims
 ├── agents-base/                      # Los 8 agentes (archivos .md)
 ├── constitution/
-│   └── constitucion.md               # Las 16 reglas
-├── command/                          # Los 8 comandos /skalling-*
+│   └── constitucion.md               # Las 17 reglas
+├── command/                          # Los 13 comandos /skalling-*
 ├── skills-base/                      # Habilidades de los agentes (7 skalling-* core)
 ├── templates/                        # Plantillas
 ├── data/                             # Detectores de lenguajes
 └── tests/
-    ├── setup.test.sh                 # 268+ pruebas
+    ├── setup.test.sh                 # 200+ comprobaciones
     └── README.md                     # Info de los tests
 ```
 
@@ -378,7 +378,7 @@ bash scripts/teamdb-claim.sh claim auth-jwt /path/to/project
 bash scripts/teamdb-execute-plan.sh auth-jwt /path/to/project
 ```
 
-> **Legacy**: `work_in_progress` y `wip-tree.sh` siguen existiendo para visualización; los scripts nuevos del ciclo usan `proposals`/`plans`/`tasks`.
+> **Legacy de solo lectura**: `work_in_progress` y `wip-tree.sh` se conservan únicamente para consultar instalaciones antiguas. El inicio de sesión, el contexto y el ciclo operativo usan `proposals`/`plans`/`tasks`. Las tablas históricas `code_graph_cache` y `code_imports` no reciben escrituras nuevas; CodeGraph mantiene su propio índice.
 
 ### Hooks git
 

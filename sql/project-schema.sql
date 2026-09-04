@@ -114,8 +114,11 @@ CREATE TABLE schema_meta (
   value TEXT NOT NULL
 );
 
-INSERT INTO schema_meta VALUES ('version', '0.10.1');
+INSERT INTO schema_meta VALUES ('version', '0.10.2');
 INSERT INTO schema_meta VALUES ('type', 'project');
+INSERT INTO schema_meta VALUES ('legacy_surface.work_in_progress', 'read_only_compatibility');
+INSERT INTO schema_meta VALUES ('legacy_surface.code_graph_cache', 'external_codegraph');
+INSERT INTO schema_meta VALUES ('legacy_surface.code_imports', 'external_codegraph');
 
 CREATE VIRTUAL TABLE concepts_fts USING fts5(title, body_md, content='concepts', content_rowid='id');
 CREATE VIRTUAL TABLE decisions_fts USING fts5(title, body_md, content='decisions', content_rowid='id');
@@ -251,16 +254,32 @@ CREATE TABLE plans (
   slug TEXT UNIQUE NOT NULL,
   title TEXT NOT NULL,
   proposal_id INTEGER,                     -- FK a proposals
-  design_md TEXT NOT NULL,                 -- markdown con arquitectura
+  design_md TEXT NOT NULL DEFAULT '',      -- markdown con arquitectura
   acceptance_md TEXT,                      -- cómo se mide éxito
-  status TEXT DEFAULT 'draft' CHECK (status IN ('draft','active','completed','abandoned')),
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','approved','in_progress','completed','abandoned')),
   agent TEXT,                              -- 'sol'
   created_at TEXT,
   updated_at TEXT,
   completed_at TEXT,
+  intent_md TEXT,
+  version INTEGER NOT NULL DEFAULT 1,
+  created_by TEXT,
+  updated_by TEXT,
   FOREIGN KEY (proposal_id) REFERENCES proposals(id)
 );
 CREATE INDEX idx_plans_status ON plans(status);
+
+CREATE TRIGGER plans_audit_ai AFTER INSERT ON plans BEGIN
+  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details, actor_source)
+  VALUES (datetime('now'), COALESCE(new.created_by, 'system'), 'insert', 'plans', new.id,
+          json_object('slug', new.slug, 'title', new.title, 'status', new.status, 'version', new.version), 'trigger');
+END;
+CREATE TRIGGER plans_audit_au AFTER UPDATE ON plans BEGIN
+  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details, actor_source)
+  VALUES (datetime('now'), COALESCE(new.updated_by, 'system'), 'update', 'plans', new.id,
+          json_object('slug', new.slug, 'old_status', old.status, 'new_status', new.status,
+                      'old_version', old.version, 'new_version', new.version), 'trigger');
+END;
 
 -- Specs: detalles técnicos de cada plan
 CREATE TABLE specs (
@@ -314,6 +333,11 @@ CREATE TABLE tasks (
   updated_at TEXT,
   started_at TEXT,
   resolved_at TEXT,
+  version INTEGER DEFAULT 1,
+  locked_by TEXT,
+  locked_at TEXT,
+  last_modified_by TEXT,
+  purpose TEXT NOT NULL DEFAULT '',
   FOREIGN KEY (plan_id) REFERENCES plans(id),
   UNIQUE(plan_id, slug)
 );
@@ -436,17 +460,6 @@ CREATE TABLE receipts (
 CREATE INDEX idx_receipts_task ON receipts(task_id);
 CREATE INDEX idx_receipts_agent ON receipts(agent);
 CREATE INDEX idx_receipts_ts ON receipts(ts);
-
--- ════════════════════════════════════════
--- v0.8.0: CAS (compare-and-swap) para tasks
--- Previene race conditions cuando 2 agentes intentan reclamar la misma task.
--- version se incrementa en cada update; locked_by marca quién la está editando.
--- ════════════════════════════════════════
-
-ALTER TABLE tasks ADD COLUMN version INTEGER DEFAULT 1;
-ALTER TABLE tasks ADD COLUMN locked_by TEXT;
-ALTER TABLE tasks ADD COLUMN locked_at TEXT;
-ALTER TABLE tasks ADD COLUMN last_modified_by TEXT;
 
 CREATE TABLE task_lock_history (
   id INTEGER PRIMARY KEY,

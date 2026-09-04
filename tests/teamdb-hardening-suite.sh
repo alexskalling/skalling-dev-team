@@ -5,7 +5,10 @@ SKALLING_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$SKALLING_ROOT"
 
 PASS=0; FAIL=0
-for t in tests/teamdb-safe-query.test.sh \
+for t in tests/dashboard-server.test.py \
+         tests/dashboard-launcher.test.sh \
+         tests/quality-priorities.test.sh \
+         tests/teamdb-safe-query.test.sh \
          tests/teamdb-search-sqli.test.sh \
          tests/teamdb-related-sqli.test.sh \
          tests/teamdb-problems-fts.test.sh \
@@ -59,7 +62,7 @@ for t in tests/teamdb-safe-query.test.sh \
          tests/pre-push.test.sh \
          tests/attempts.test.sh; do
   if [ -f "$t" ]; then
-    if bash "$t" >/dev/null 2>&1; then
+    if { case "$t" in *.py) python3 "$t" ;; *) bash "$t" ;; esac; } >/dev/null 2>&1; then
       echo "✓ $t"
       PASS=$((PASS+1))
     else

@@ -142,7 +142,7 @@ mkdir -p "$TEST_AUDIT/.opencode/context"
 DB_AUDIT="$TEST_AUDIT/.opencode/context/team.db"
 sqlite3 "$DB_AUDIT" < "$SKALLING_ROOT/sql/project-schema.sql"
 trigger_count=$(sqlite3 "$DB_AUDIT" "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name LIKE '%audit%'")
-assert "audit triggers presentes (12)" "[ \"$trigger_count\" = '12' ]"
+assert "audit triggers presentes (incluye plans)" "[ \"$trigger_count\" -ge 14 ]"
 
 sqlite3 "$DB_AUDIT" "INSERT INTO concepts (slug,title,body_md,updated_at) VALUES ('audit-test','Audit','test',datetime('now'))"
 sqlite3 "$DB_AUDIT" "INSERT INTO decisions (slug,title,body_md,decided_at) VALUES ('audit-dec','Decision','d',datetime('now'))"

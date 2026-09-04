@@ -27,12 +27,6 @@ skalling_detect_os() {
         fi
     fi
 
-    # Detectar Git Bash en Windows
-    local git_bash=false
-    if [[ -n "${MSYSTEM:-}" ]] || uname -s 2>/dev/null | grep -qiE "mingw|msys"; then
-        git_bash=true
-    fi
-
     case "$ostype" in
         darwin*)
             if [[ -n "$wsl_marker" ]]; then
@@ -87,12 +81,6 @@ elif [[ -n "$USERPROFILE" ]]; then
 else
     SKALLING_HOME="$(cd ~ && pwd 2>/dev/null || echo "/tmp")"
 fi
-
-# Path separator según OS
-case "$SKALLING_OS" in
-    windows) SKALLING_PATH_SEP="\\" ;;
-    *) SKALLING_PATH_SEP="/" ;;
-esac
 
 # OpenCode dir (skalling lo respeta en todas las plataformas)
 # Permite override por env (tests/usuarios avanzados); solo default si no está seteado.
@@ -336,8 +324,7 @@ skalling_count_concept_docs() {
     local counts
     counts="$(find "$bundle_dir" -type f -name "*.md" \
         -not -name "README.md" -not -name "index.md" -not -name "log.md" \
-        -exec grep -l "^type:" {} \; 2>/dev/null \
-        | xargs -I {} grep -h "^type:" {} 2>/dev/null \
+        -exec awk '/^type:/ { print; exit }' {} \; 2>/dev/null \
         | awk '{gsub(/^type:[[:space:]]*/, ""); gsub(/[[:space:]]*$/, ""); print}' \
         | sort | uniq -c | awk '{printf "%s:%s ", $2, $1}')"
 

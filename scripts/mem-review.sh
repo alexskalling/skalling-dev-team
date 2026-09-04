@@ -5,7 +5,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/lib-memory-check.sh"
 
 TARGET="$(pwd)"
-DRY_RUN=false
 
 usage() {
     printf 'Uso: %s [--target <project_dir>] [--dry-run]\n' "$(basename "$0")"
@@ -19,7 +18,6 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --dry-run)
-            DRY_RUN=true
             shift
             ;;
         --help|-h)

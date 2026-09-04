@@ -50,32 +50,39 @@ _run_sql() {
     return 0
   fi
 
+  if [ "$DB_WAS_MISSING" = true ]; then
+    teamdb_exec_write "$DB" \
+      "INSERT OR IGNORE INTO applied_migrations(name, applied_at) VALUES(?, datetime('now'))" \
+      "$mig_name" >/dev/null
+    echo "    [baseline] $mig_name (incluida en schema actual)"
+    return 0
+  fi
+
   # Verificar si ya se aplicó (applied_migrations; tabla creada por schema v0.9.1)
   # `|| true`: en DBs pre-v0.9.1 la tabla no existe y el query falla; eso no debe
   # matar el script con set -e (bash 3.2 aborta en command substitution fallida).
   local already_applied
-  already_applied="$(sqlite3 "$DB" "SELECT 1 FROM applied_migrations WHERE name='$mig_name' LIMIT 1" 2>/dev/null)" || true
+  already_applied="$(teamdb_exec_value "$DB" "SELECT 1 FROM applied_migrations WHERE name=? LIMIT 1" "$mig_name" 2>/dev/null || true)"
 
   if [ "$already_applied" = "1" ]; then
     echo "    [skip] $mig_name (ya aplicada)"
     return 0
   fi
 
-  # Aplicar. Toleramos errores de idempotencia (table/index/column ya existe):
-  # project-schema.sql crea casi todo, así que las migrations 002-010 son
-  # esencialmente no-ops en DBs frescas y devuelven parse errors. Lo que
-  # importa es el UPDATE schema_meta version al final.
-  local rc=0
-  sqlite3 "$DB" < "$mig_file" 2>/dev/null || rc=$?
-
-  if [ "$rc" -ne 0 ]; then
-    echo "    [partial] $mig_name (rc=$rc — probablemente ya aplicada)"
-  else
-    echo "    [apply] $mig_name"
+  local migration_error
+  migration_error="$(mktemp)"
+  if ! sqlite3 "$DB" < "$mig_file" 2>"$migration_error"; then
+    echo "ERROR: falló migration $mig_name; no se registrará como aplicada" >&2
+    sed -n '1,12p' "$migration_error" >&2
+    rm -f "$migration_error"
+    return 1
   fi
+  rm -f "$migration_error"
+  echo "    [apply] $mig_name"
 
-  # Registrar como aplicada (evita loop en runs subsecuentes)
-  sqlite3 "$DB" "INSERT INTO applied_migrations (name, applied_at) VALUES ('$mig_name', datetime('now'))" 2>/dev/null || true
+  teamdb_exec_write "$DB" \
+    "INSERT INTO applied_migrations(name, applied_at) VALUES(?, datetime('now'))" \
+    "$mig_name" >/dev/null
 
   return 0
 }
@@ -91,15 +98,7 @@ if [ -f "$DB" ]; then
   BACKUP_FILE="$BACKUP_DIR/team.db.backup-$STAMP"
   if cp "$DB" "$BACKUP_FILE" 2>/dev/null; then
     echo "teamdb backup: $BACKUP_FILE"
-    # Rotación: mantener últimos 5 (portable BSD/GNU; los stamps son ISO, el
-    # orden lexicográfico == orden cronológico, y head negativo es GNU-only)
-    BACKUP_COUNT=$(find "$BACKUP_DIR" -maxdepth 1 -name 'team.db.backup-*' -type f 2>/dev/null | wc -l | tr -d ' ')
-    if [ "$BACKUP_COUNT" -gt 5 ]; then
-      TO_DELETE=$((BACKUP_COUNT - 5))
-      find "$BACKUP_DIR" -maxdepth 1 -name 'team.db.backup-*' -type f 2>/dev/null \
-        | sort | head -n "$TO_DELETE" \
-        | while IFS= read -r f; do rm -f -- "$f"; done
-    fi
+    bash "$SCRIPT_DIR/teamdb-prune-backups.sh" "$PROJECT" --keep 5
   else
     echo "WARN: backup de team.db falló (¿permisos?)" >&2
   fi
@@ -129,7 +128,8 @@ if [ "$DB_WAS_MISSING" = true ] && [ -f "$PROJECT/db/teamdb/team.dump.sql" ]; th
   if [ -n "$RESTORE_SCRIPT" ]; then
     echo "teamdb: dump versionado encontrado, restaurando estado..."
     bash "$RESTORE_SCRIPT" "$PROJECT" --force || {
-      echo "WARN: restore desde dump falló; continúo con DB vacía (revisar db/teamdb/team.dump.sql)" >&2
+      echo "ERROR: restore desde dump falló; TeamDB no quedó inicializada" >&2
+      exit 1
     }
   fi
 fi
@@ -137,7 +137,7 @@ fi
 # Verificar que las migrations dejaron el schema correcto; si no, fallar en vez
 # de seguir con una DB degradada (los errores de migración idempotentes, como el
 # "duplicate column" de 004 sobre DBs nuevas, se toleran arriba).
-EXPECTED_VERSION="0.10.1"
+EXPECTED_VERSION="0.10.2"
 VERSION="$(sqlite3 "$DB" "SELECT value FROM schema_meta WHERE key='version'" 2>/dev/null || true)"
 if [ "$VERSION" != "$EXPECTED_VERSION" ]; then
   echo "ERROR: teamdb schema version=$VERSION, esperado $EXPECTED_VERSION (migrations incompletas)" >&2

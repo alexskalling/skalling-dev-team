@@ -146,8 +146,25 @@ CREATE TABLE workflow_state (
   updated_at TEXT
 );
 
-INSERT INTO schema_meta VALUES ('version', '0.10.1');
+CREATE TABLE workflow_metrics (
+  request_id TEXT PRIMARY KEY,
+  risk_level TEXT NOT NULL CHECK (risk_level IN ('low','medium','high')),
+  route TEXT,
+  agents_count INTEGER DEFAULT 0,
+  handoffs INTEGER DEFAULT 0,
+  permission_prompts INTEGER DEFAULT 0,
+  context_bytes INTEGER DEFAULT 0,
+  started_at TEXT NOT NULL,
+  completed_at TEXT,
+  duration_ms INTEGER,
+  outcome TEXT
+);
+
+INSERT INTO schema_meta VALUES ('version', '0.10.2');
 INSERT INTO schema_meta VALUES ('type', 'global');
+INSERT INTO schema_meta VALUES ('legacy_surface.work_in_progress', 'read_only_compatibility');
+INSERT INTO schema_meta VALUES ('legacy_surface.code_graph_cache', 'external_codegraph');
+INSERT INTO schema_meta VALUES ('legacy_surface.code_imports', 'external_codegraph');
 
 CREATE INDEX idx_user_prefs_scope ON user_preferences(scope, scope_value);
 CREATE INDEX idx_stack_cache_path ON stack_cache(project_path);
@@ -160,3 +177,4 @@ CREATE INDEX idx_wip_priority ON work_in_progress(priority, status);
 CREATE INDEX idx_wip_parent ON work_in_progress(parent_id);
 CREATE INDEX idx_wip_type ON work_in_progress(type);
 CREATE INDEX idx_routing_decisions_ts ON routing_decisions(ts);
+CREATE INDEX idx_workflow_metrics_started ON workflow_metrics(started_at DESC);

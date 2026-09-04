@@ -1,331 +1,265 @@
 #!/usr/bin/env python3
-"""HTTP server for TeamDB dashboard — queries SQLite directly, returns JSON."""
+"""Servidor local y de solo lectura para el centro de control TeamDB."""
+
+import hashlib
 import http.server
-import socketserver
-import os
 import json
-import urllib.parse
+import os
 import sqlite3
-import time
-import re
+import urllib.parse
+from pathlib import Path
 
 PORT = int(os.environ.get("TDB_PORT", "3741"))
 DB_PATH = os.environ.get("TDB_DB", "")
 HTML_PATH = os.environ.get("TDB_HTML", "")
 PROJECT_NAME = os.environ.get("TDB_PROJECT", "proyecto")
-TIMEOUT_FILE = os.environ.get("TDB_TIMEOUT_FILE", "")
+TERMINAL_TASK_STATES = ("approved", "resolved")
+TEAM_ROSTER = ("alex", "jes", "jhon", "luz", "pau", "pol", "sol", "teo")
+TEAM_ROLES = {
+    "alex": "Orquestación",
+    "jes": "Investigación",
+    "jhon": "Verificación",
+    "luz": "Calidad y seguridad",
+    "pau": "Memoria",
+    "pol": "Producto",
+    "sol": "Planificación",
+    "teo": "Ingeniería",
+}
 
 
-def query_db(sql, params=()):
-    if not os.path.exists(DB_PATH):
-        return []
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        cur.execute(sql, params)
-        rows = cur.fetchall()
-        conn.close()
-        return [dict(r) for r in rows]
-    except Exception as e:
-        return [{"_error": str(e)}]
+class DashboardError(RuntimeError):
+    """Error legible para el cliente."""
 
 
-def val(sql):
-    rows = query_db(sql)
-    return rows[0][list(rows[0].keys())[0]] if rows else None
+class DashboardData:
+    def __init__(self, db_path):
+        self.db_path = str(db_path)
+
+    def _connect(self):
+        if not os.path.isfile(self.db_path):
+            raise DashboardError("No se encontró team.db. Ejecuta /skalling-init.")
+        try:
+            uri = Path(self.db_path).resolve().as_uri() + "?mode=ro"
+            conn = sqlite3.connect(uri, uri=True, timeout=2)
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA query_only=ON")
+            return conn
+        except sqlite3.Error as exc:
+            raise DashboardError(f"No se pudo abrir TeamDB: {exc}") from exc
+
+    def query(self, sql, params=()):
+        try:
+            with self._connect() as conn:
+                return [dict(row) for row in conn.execute(sql, params).fetchall()]
+        except DashboardError:
+            raise
+        except sqlite3.Error as exc:
+            raise DashboardError(f"TeamDB no pudo responder la consulta: {exc}") from exc
+
+    def one(self, sql, params=(), default=None):
+        rows = self.query(sql, params)
+        return rows[0] if rows else default
+
+    def table_exists(self, table):
+        return bool(self.one("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name=?", (table,)))
+
+    @staticmethod
+    def _status_counts(tasks):
+        counts = {}
+        for task in tasks:
+            status = task.get("status") or "unknown"
+            counts[status] = counts.get(status, 0) + 1
+        return counts
+
+    def overview(self):
+        workflow = self.one("SELECT * FROM workflow_state WHERE id=1", default={}) if self.table_exists("workflow_state") else {}
+        plan = None
+        if workflow.get("active_cycle_slug"):
+            plan = self.one("SELECT * FROM plans WHERE slug=?", (workflow["active_cycle_slug"],))
+        if not plan:
+            plan = self.one(
+                "SELECT * FROM plans WHERE status IN ('in_progress','approved') "
+                "ORDER BY CASE status WHEN 'in_progress' THEN 0 ELSE 1 END, updated_at DESC LIMIT 1"
+            )
+        tasks = self.query(
+            "SELECT * FROM tasks" + (" WHERE plan_id=?" if plan else "") + " ORDER BY priority, order_index, id",
+            (plan["id"],) if plan else (),
+        )
+        done = sum(task.get("status") in TERMINAL_TASK_STATES for task in tasks)
+        dependencies = self.dependencies()
+        blocked_by_dependency = {
+            edge["task_id"] for edge in dependencies
+            if edge.get("type") == "blocks" and edge.get("dependency_status") not in TERMINAL_TASK_STATES
+        }
+        total = len(tasks)
+        return {
+            "workflow": workflow,
+            "plan": plan,
+            "progress": {"done": done, "total": total, "percent": round(done * 100 / total) if total else 0},
+            "active_tasks": [task for task in tasks if task.get("status") in ("in_progress", "in_review")],
+            "blockers": [task for task in tasks if task.get("status") == "blocked"],
+            "next_tasks": [task for task in tasks if task.get("status") == "pending" and task.get("id") not in blocked_by_dependency][:5],
+            "status_counts": self._status_counts(tasks),
+        }
+
+    def plans(self):
+        return self.query(
+            "SELECT p.*, COUNT(t.id) AS tasks_total, "
+            "SUM(CASE WHEN t.status IN ('approved','resolved') THEN 1 ELSE 0 END) AS tasks_done "
+            "FROM plans p LEFT JOIN tasks t ON t.plan_id=p.id GROUP BY p.id "
+            "ORDER BY CASE p.status WHEN 'in_progress' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END, p.updated_at DESC"
+        )
+
+    def tasks(self):
+        claim_join = "LEFT JOIN task_claims c ON c.task_id=t.id AND c.status='active'" if self.table_exists("task_claims") else "LEFT JOIN (SELECT NULL task_id, NULL actor, NULL lease_until) c ON 0"
+        return self.query(
+            "SELECT t.*, p.slug AS plan_slug, p.title AS plan_title, c.actor AS claimed_by, c.lease_until "
+            f"FROM tasks t LEFT JOIN plans p ON p.id=t.plan_id {claim_join} "
+            "ORDER BY t.priority, t.order_index, t.id"
+        )
+
+    def dependencies(self):
+        if not self.table_exists("task_dependencies"):
+            return []
+        return self.query(
+            "SELECT d.*, t.slug AS task_slug, t.title AS task_title, dep.slug AS dependency_slug, "
+            "dep.title AS dependency_title, dep.status AS dependency_status FROM task_dependencies d "
+            "JOIN tasks t ON t.id=d.task_id JOIN tasks dep ON dep.id=d.depends_on_task_id ORDER BY d.id"
+        )
+
+    def agents(self):
+        tasks = self.tasks()
+        names = set(TEAM_ROSTER)
+        names.update(task.get("owner", "").lower() for task in tasks if task.get("owner") and task.get("owner").lower() != "system")
+        names.update(task.get("claimed_by", "").lower() for task in tasks if task.get("claimed_by") and task.get("claimed_by").lower() != "system")
+        workflow = self.one("SELECT actor FROM workflow_state WHERE id=1", default={}) if self.table_exists("workflow_state") else {}
+        if workflow.get("actor") and workflow["actor"].lower() != "system":
+            names.add(workflow["actor"].lower())
+        result = []
+        for name in sorted(names):
+            assigned = [task for task in tasks if (task.get("owner") or "").lower() == name]
+            current = next((task for task in tasks if (task.get("claimed_by") or "").lower() == name), None)
+            current = current or next((task for task in assigned if task.get("status") in ("in_progress", "in_review")), None)
+            result.append({
+                "name": name,
+                "role": TEAM_ROLES.get(name, "Colaborador"),
+                "state": "working" if current else "waiting",
+                "current_task": current,
+                "assigned": len(assigned),
+                "completed": sum(task.get("status") in TERMINAL_TASK_STATES for task in assigned),
+                "blocked": sum(task.get("status") == "blocked" for task in assigned),
+            })
+        return result
+
+    def timeline(self, limit=100):
+        limit = max(1, min(int(limit), 500))
+        events = []
+        if self.table_exists("audit_log"):
+            for row in self.query("SELECT * FROM audit_log ORDER BY ts DESC LIMIT ?", (limit,)):
+                events.append({"kind": "activity", "ts": row.get("ts"), "agent": row.get("agent") or "sistema", "summary": f"{row.get('action') or 'cambio'} en {row.get('table_name') or 'TeamDB'}", "detail": row.get("details") or ""})
+        if self.table_exists("receipts"):
+            for row in self.query("SELECT * FROM receipts ORDER BY ts DESC LIMIT ?", (limit,)):
+                outcome = "pasó" if row.get("exit_code") == 0 else "falló"
+                events.append({"kind": "verification", "ts": row.get("ts"), "agent": row.get("agent") or "sistema", "summary": f"Verificación {outcome}: {row.get('command') or 'comando'}", "detail": row.get("output_summary") or ""})
+        if self.table_exists("attempts"):
+            for row in self.query("SELECT * FROM attempts ORDER BY updated_at DESC LIMIT ?", (limit,)):
+                events.append({"kind": "attempt", "ts": row.get("updated_at"), "agent": "equipo", "summary": f"Intento {row.get('attempts_used', 0)}/{row.get('max_attempts', 0)}: {row.get('change_name')}", "detail": row.get("evidence") or row.get("outcome") or row.get("state") or ""})
+        return sorted(events, key=lambda event: event.get("ts") or "", reverse=True)[:limit]
+
+    def memory(self, kind, search="", limit=100):
+        definitions = {
+            "concepts": ("concepts", "updated_at", "title"),
+            "decisions": ("decisions", "decided_at", "title"),
+            "preferences": ("preferences", "slug", "body_md"),
+            "problems": ("known_problems", "discovered_at", "title"),
+        }
+        if kind not in definitions:
+            raise DashboardError("Tipo de memoria no válido.")
+        table, order, search_column = definitions[kind]
+        limit = max(1, min(int(limit), 250))
+        if search:
+            pattern = f"%{search}%"
+            return self.query(f"SELECT * FROM {table} WHERE slug LIKE ? OR COALESCE({search_column},'') LIKE ? ORDER BY {order} DESC LIMIT ?", (pattern, pattern, limit))
+        return self.query(f"SELECT * FROM {table} ORDER BY {order} DESC LIMIT ?", (limit,))
+
+    def system(self):
+        version = self.one("SELECT value FROM schema_meta WHERE key='version'", default={})
+        counts = {}
+        for table in ("plans", "tasks", "concepts", "decisions", "known_problems", "audit_log", "receipts"):
+            if self.table_exists(table):
+                counts[table] = self.one(f"SELECT COUNT(*) AS count FROM {table}")["count"]
+        return {"database": self.db_path, "size_bytes": os.path.getsize(self.db_path), "schema_version": version.get("value", "?"), "counts": counts, "read_only": True}
+
+    def change_token(self):
+        parts = []
+        for path in (self.db_path, self.db_path + "-wal"):
+            try:
+                stat = os.stat(path)
+                parts.extend((path, str(stat.st_mtime_ns), str(stat.st_size)))
+            except FileNotFoundError:
+                continue
+        return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
-    def send_json(self, data):
-        body = json.dumps(data, default=str).encode()
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", len(body))
+    data = DashboardData(DB_PATH)
+
+    def _headers(self, status, content_type, length):
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(length))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:")
         self.end_headers()
+
+    def send_json(self, data, status=200):
+        body = json.dumps(data, ensure_ascii=False, default=str).encode("utf-8")
+        self._headers(status, "application/json; charset=utf-8", len(body))
         self.wfile.write(body)
 
-    def touch_timeout(self):
-        if TIMEOUT_FILE:
-            with open(TIMEOUT_FILE, "w") as f:
-                f.write(str(int(time.time())))
-
     def do_GET(self):
-        self.touch_timeout()
-
-        if self.path == "/api/heartbeat":
-            self.send_json({"ok": True})
-            return
-
-        if self.path == "/api/info":
-            self.send_json({
-                "project": PROJECT_NAME,
-                "db": DB_PATH,
-                "exists": os.path.exists(DB_PATH),
-                "size": os.path.getsize(DB_PATH) if os.path.exists(DB_PATH) else 0,
-            })
-            return
-
-        if self.path == "/api/stats":
-            c = val("SELECT COUNT(*) FROM concepts") or 0
-            d = val("SELECT COUNT(*) FROM decisions") or 0
-            p = val("SELECT COUNT(*) FROM plans") or 0
-            tasks = query_db("SELECT status FROM tasks")
-            done = sum(1 for t in tasks if t.get("status") == "done")
-            total = len(tasks)
-            pct = round(done / total * 100) if total else 0
-            pb = val("SELECT COUNT(*) FROM known_problems") or 0
-            lnk = val("SELECT COUNT(*) FROM memory_links") or 0
-            ver = val("SELECT value FROM schema_meta WHERE key='version'") or "?"
-            self.send_json({
-                "concepts": c, "decisions": d, "plans": p,
-                "tasks_done": done, "tasks_total": total, "tasks_pct": pct,
-                "problems": pb, "links": lnk, "version": ver,
-            })
-            return
-
-        if self.path == "/api/plans":
-            plans = query_db("""
-                SELECT p.*, COUNT(t.id) as tt,
-                       SUM(CASE WHEN t.status='done' THEN 1 ELSE 0 END) as td
-                FROM plans p LEFT JOIN tasks t ON t.plan_id=p.id GROUP BY p.id ORDER BY p.created_at DESC
-            """)
-            self.send_json(plans)
-            return
-
-        if self.path == "/api/plans-hierarchy":
-            wip = query_db("SELECT * FROM work_in_progress ORDER BY type, slug")
-            plans_wip = [w for w in wip if w.get("type") == "plan"]
-            features_wip = [w for w in wip if w.get("type") == "feature"]
-            tasks_wip = [w for w in wip if w.get("type") == "task"]
-
-            by_parent = {}
-            for f in features_wip:
-                pid = f.get("parent_id")
-                if pid not in by_parent:
-                    by_parent[pid] = []
-                by_parent[pid].append({**f, "_children": []})
-
-            for t in tasks_wip:
-                pid = t.get("parent_id")
-                if pid not in by_parent:
-                    by_parent[pid] = []
-                by_parent[pid].append({**t, "_children": []})
-
-            for f in features_wip:
-                f["_children"] = by_parent.get(f["id"], [])
-
-            by_plan = {}
-            for f in features_wip:
-                pid = f.get("parent_id")
-                if pid not in by_plan:
-                    by_plan[pid] = []
-                by_plan[pid].append(f)
-
-            result = []
-            for p in plans_wip:
-                pid = p["id"]
-                result.append({
-                    **p,
-                    "_type": "wip",
-                    "_features": by_plan.get(pid, []),
-                    "_flat_tasks": [],
-                })
-
-            self.send_json(result)
-            return
-
-        if self.path == "/api/tasks":
-            tasks = query_db("""
-                SELECT t.*, p.slug as ps, p.title as pt
-                FROM tasks t LEFT JOIN plans p ON p.id=t.plan_id ORDER BY t.order_index ASC
-            """)
-            self.send_json(tasks)
-            return
-
-        if self.path == "/api/concepts":
-            self.send_json(query_db("SELECT * FROM concepts ORDER BY category, slug"))
-            return
-
-        if self.path == "/api/decisions":
-            self.send_json(query_db("SELECT * FROM decisions ORDER BY decided_at DESC"))
-            return
-
-        if self.path == "/api/problems":
-            self.send_json(query_db("SELECT * FROM known_problems ORDER BY discovered_at DESC"))
-            return
-
-        if self.path == "/api/preferences":
-            self.send_json(query_db("SELECT * FROM preferences ORDER BY scope, slug"))
-            return
-
-        if self.path == "/api/graph":
-            nodes = {}
-            for c in query_db("SELECT id, slug, category FROM concepts"):
-                nodes["c" + str(c["id"])] = {"slug": c["slug"], "type": "concept", "category": c.get("category", "")}
-            for d in query_db("SELECT id, slug, status FROM decisions"):
-                nodes["d" + str(d["id"])] = {"slug": d["slug"], "type": "decision", "status": d.get("status", "")}
-            for p in query_db("SELECT id, slug, status FROM plans"):
-                nodes["p" + str(p["id"])] = {"slug": p["slug"], "type": "plan", "status": p.get("status", "")}
-            for t in query_db("SELECT id, slug, status, plan_id FROM tasks"):
-                nodes["t" + str(t["id"])] = {"slug": t["slug"], "type": "task", "status": t.get("status", ""), "plan_id": t.get("plan_id", "")}
-            for w in query_db("SELECT id, slug, type, status FROM work_in_progress WHERE type IN ('feature','task')"):
-                nodes["w" + w["slug"]] = {"slug": w["slug"], "type": w["type"], "category": "wip", "status": w.get("status", "")}
-
-            links = query_db("""
-                SELECT ml.*,
-                       COALESCE(c1.slug,d1.slug,w1.slug,p1.slug,t1.slug) as fs, COALESCE(c2.slug,d2.slug,w2.slug,p2.slug,t2.slug) as ts
-                FROM memory_links ml
-                LEFT JOIN concepts c1 ON ml.from_table='concepts' AND c1.id=ml.from_id
-                LEFT JOIN decisions d1 ON ml.from_table='decisions' AND d1.id=ml.from_id
-                LEFT JOIN work_in_progress w1 ON ml.from_table='work_in_progress' AND w1.id=ml.from_id
-                LEFT JOIN plans p1 ON ml.from_table='plans' AND p1.id=ml.from_id
-                LEFT JOIN tasks t1 ON ml.from_table='tasks' AND t1.id=ml.from_id
-                LEFT JOIN concepts c2 ON ml.to_table='concepts' AND c2.id=ml.to_id
-                LEFT JOIN decisions d2 ON ml.to_table='decisions' AND d2.id=ml.to_id
-                LEFT JOIN work_in_progress w2 ON ml.to_table='work_in_progress' AND w2.id=ml.to_id
-                LEFT JOIN plans p2 ON ml.to_table='plans' AND p2.id=ml.to_id
-                LEFT JOIN tasks t2 ON ml.to_table='tasks' AND t2.id=ml.to_id
-            """)
-            links = [l for l in links if l.get("fs") and l.get("ts")]
-            self.send_json({"nodes": nodes, "links": links})
-            return
-
-        if self.path == "/api/codegraph":
-            cached_nodes = query_db("SELECT node_path as path, node_lang as lang, node_type as type FROM code_graph_cache")
-            cached_edges = query_db("SELECT from_path as 'from', to_path as 'to' FROM code_imports")
-            if not cached_nodes:
-                self.send_json({"nodes": [], "edges": [], "cached": False})
+        parsed = urllib.parse.urlsplit(self.path)
+        path = parsed.path
+        params = urllib.parse.parse_qs(parsed.query)
+        try:
+            routes = {
+                "/api/health": lambda: {"ok": True, "project": PROJECT_NAME},
+                "/api/info": lambda: {"project": PROJECT_NAME, **self.data.system()},
+                "/api/overview": self.data.overview,
+                "/api/plans": self.data.plans,
+                "/api/tasks": self.data.tasks,
+                "/api/dependencies": self.data.dependencies,
+                "/api/agents": self.data.agents,
+                "/api/timeline": lambda: self.data.timeline(params.get("limit", [100])[0]),
+                "/api/system": self.data.system,
+                "/api/changes": lambda: {"token": self.data.change_token()},
+                "/api/memory": lambda: self.data.memory(params.get("kind", ["concepts"])[0], params.get("q", [""])[0], params.get("limit", [100])[0]),
+            }
+            if path in routes:
+                self.send_json(routes[path]())
+            elif path in ("/", "/index.html"):
+                body = Path(HTML_PATH).read_bytes()
+                self._headers(200, "text/html; charset=utf-8", len(body))
+                self.wfile.write(body)
             else:
-                self.send_json({"nodes": cached_nodes, "edges": cached_edges, "cached": True})
-            return
-
-        if self.path in ("/", "/index.html"):
-            serve_path = HTML_PATH
-        else:
-            serve_path = urllib.parse.unquote(self.path[1:])
-
-        if serve_path and os.path.exists(serve_path):
-            ct = "text/html" if serve_path.endswith(".html") else "application/octet-stream"
-            with open(serve_path, "rb") as f:
-                data = f.read()
-            self.send_response(200)
-            self.send_header("Content-Type", ct)
-            self.send_header("Content-Length", len(data))
-            self.end_headers()
-            self.wfile.write(data)
-        else:
-            self.send_response(404)
-            self.end_headers()
-
-    def _refresh_codegraph(self):
-        """Refresca el code graph: escanea archivos del proyecto, parsea imports."""
-        import time
-        PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(DB_PATH)))
-
-        EXCLUDE_DIRS = {
-            "node_modules", ".git", ".next", ".nuxt", ".svelte-kit",
-            "dist", "build", "target", "out", "__pycache__", ".pytest_cache",
-            ".venv", "venv", ".env", ".tox", "vendor", "bin", "obj",
-        }
-        LANG_EXTS = {
-            ".ts": "typescript", ".tsx": "typescript", ".js": "javascript", ".jsx": "javascript",
-            ".py": "python", ".rs": "rust", ".go": "go", ".java": "java",
-        }
-        IMPORT_PATTERNS = {
-            "typescript": [r'''from\s+['"]([^'"]+)['"]''', r'''import\s+.*?\s+from\s+['"]([^'"]+)['"]'''],
-            "javascript": [r'''from\s+['"]([^'"]+)['"]''', r'''import\s+.*?\s+from\s+['"]([^'"]+)['"]'''],
-            "python": [r'''^import\s+(\S+)''', r'''^from\s+(\S+)\s+import'''],
-        }
-
-        exts = set(LANG_EXTS.keys())
-        nodes = {}
-        edges = []
-        now = time.strftime("%Y-%m-%dT%H:%M:%SZ")
-
-        for root, dirs, files in os.walk(PROJECT_ROOT):
-            dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS and not d.startswith(".")]
-            for f in files:
-                if not any(f.endswith(e) for e in exts):
-                    continue
-                full = os.path.join(root, f)
-                rel = os.path.relpath(full, PROJECT_ROOT).replace("\\", "/")
-                lang = LANG_EXTS.get(os.path.splitext(f)[1], "unknown")
-                nodes[rel] = {"path": rel, "type": "source", "lang": lang}
-
-        for rel in nodes:
-            full = os.path.join(PROJECT_ROOT, rel)
-            lang = nodes[rel].get("lang", "unknown")
-            if lang not in IMPORT_PATTERNS:
-                continue
-            try:
-                txt = open(full, "r", encoding="utf-8", errors="ignore").read()
-                for pattern in IMPORT_PATTERNS[lang]:
-                    for m in re.finditer(pattern, txt, re.MULTILINE):
-                        imp = m.group(1)
-                        if lang in ("typescript", "javascript"):
-                            if imp.startswith("."):
-                                resolved = os.path.normpath(os.path.join(os.path.dirname(rel), imp)).replace("\\", "/")
-                                if not any(resolved.endswith(e) for e in exts):
-                                    for ext in [".ts", ".tsx", ".js", ".jsx"]:
-                                        if resolved + ext in nodes:
-                                            resolved += ext
-                                            break
-                                    else:
-                                        resolved += ".ts"
-                                if resolved in nodes and resolved != rel:
-                                    edges.append((rel, resolved))
-                            elif imp.startswith("@/"):
-                                resolved = imp[2:]
-                                if not any(resolved.endswith(e) for e in exts):
-                                    for ext in [".ts", ".tsx", ".js", ".jsx"]:
-                                        if resolved + ext in nodes:
-                                            resolved += ext
-                                            break
-                                        else:
-                                            resolved += ".ts"
-                                if resolved in nodes:
-                                    edges.append((rel, resolved))
-                        elif lang == "python" and "." in imp:
-                            imp_path = imp.replace(".", "/")
-                            if imp_path + ".py" in nodes:
-                                edges.append((rel, imp_path + ".py"))
-            except Exception:
-                pass
-
-        conn = sqlite3.connect(DB_PATH)
-        conn.execute("DELETE FROM code_imports")
-        conn.execute("DELETE FROM code_graph_cache")
-        for path, n in nodes.items():
-            conn.execute(
-                "INSERT OR REPLACE INTO code_graph_cache (node_path, node_lang, node_type, updated_at) VALUES (?, ?, ?, ?)",
-                (path, n["lang"], n["type"], now)
-            )
-        for frm, to in edges:
-            conn.execute(
-                "INSERT OR IGNORE INTO code_imports (from_path, to_path, updated_at) VALUES (?, ?, ?)",
-                (frm, to, now)
-            )
-        conn.commit()
-        conn.close()
-
-        self.send_json({"nodes": len(nodes), "edges": len(edges), "updated_at": now})
+                self.send_json({"error": "Ruta no encontrada."}, 404)
+        except (DashboardError, OSError, ValueError) as exc:
+            self.send_json({"error": str(exc), "action": "Revisa /skalling-doctor y vuelve a intentar."}, 500)
 
     def do_POST(self):
-        self.touch_timeout()
-        if self.path == "/api/codegraph/refresh":
-            self._refresh_codegraph()
-            return
+        self.send_json({"error": "El Dashboard es de solo lectura."}, 405)
 
-        self.send_response(404)
-        self.end_headers()
-
-    def log_message(self, *args):
+    def log_message(self, *_args):
         pass
+
+
+class DashboardServer(http.server.ThreadingHTTPServer):
+    daemon_threads = True
+    allow_reuse_address = True
 
 
 if __name__ == "__main__":
     print(f"PORT={PORT}", flush=True)
-    socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer(("127.0.0.1", PORT), Handler) as httpd:
-        httpd.serve_forever()
+    with DashboardServer(("127.0.0.1", PORT), Handler) as server:
+        server.serve_forever()

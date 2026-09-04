@@ -4,6 +4,27 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.10.2] — 2026-09-04
+
+### Added
+- Dashboard operativo de solo lectura con estado, flujo, agentes, próximos pasos, historial y actualización automática.
+- Política reutilizable de retención para respaldos administrados de TeamDB.
+- Persistencia opcional en una sola operación de clasificación, routing y métricas iniciales.
+- Licencia MIT explícita en la raíz del proyecto.
+
+### Changed
+- CI ejecuta la suite completa, las pruebas del dashboard y el doctor en modo estricto sobre una instalación limpia.
+- El doctor excluye respaldos y directorios legacy al revisar documentos de memoria.
+- `work_in_progress` queda declarado como superficie legacy de compatibilidad; el ciclo canónico continúa en `plans` y `tasks`.
+- Documentación de comandos, reglas y pruebas sincronizada con el estado real del repositorio.
+
+### Security
+- `teamdb-claim-task.sh`, el hook precommit y el registro de routing usan parámetros enlazados en vez de interpolar entradas en SQL.
+- Las migraciones legacy dejan de ocultar errores de SQLite.
+
+### Migration
+- `023_version_0_10_2.sql` identifica la superficie legacy y eleva bases existentes a schema `0.10.2` sin eliminar datos.
+
 ## [0.10.1] — 2026-09-04
 
 ### Added
@@ -394,13 +415,20 @@ Sesiones que pedían "plan X" generaban `.md` huérfanos en `.opencode/changes/<
 - Templates OKF (6 tipos: Concept, Decision, Preference, Workaround, WorkInProgress, Context)
 - `setup.sh` inicial (legacy, sin idempotencia)
 
-[Unreleased]: https://github.com/alexskalling/skalling-dev-team/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/alexskalling/skalling-dev-team/compare/v0.10.2...HEAD
+[0.10.2]: https://github.com/alexskalling/skalling-dev-team/compare/v0.8.3...v0.10.2
+[0.10.1]: https://github.com/alexskalling/skalling-dev-team/compare/v0.10.0...v0.10.1
+[0.10.0]: https://github.com/alexskalling/skalling-dev-team/compare/v0.9.2...v0.10.0
+[0.9.2]: https://github.com/alexskalling/skalling-dev-team/compare/v0.9.1...v0.9.2
+[0.9.1]: https://github.com/alexskalling/skalling-dev-team/compare/v0.9.0...v0.9.1
+[0.9.0]: https://github.com/alexskalling/skalling-dev-team/compare/v0.8.3...v0.9.0
+[0.8.3]: https://github.com/alexskalling/skalling-dev-team/compare/v0.6.2...v0.8.3
 [0.6.2]: https://github.com/alexskalling/skalling-dev-team/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/alexskalling/skalling-dev-team/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/alexskalling/skalling-dev-team/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/alexskalling/skalling-dev-team/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/alexskalling/skalling-dev-team/compare/v0.3.0...v0.4.0
-[0.3.0]: https://github.com/tu-usuario/skalling-dev-team/releases/tag/v0.3.0
-[0.2.2]: https://github.com/tu-usuario/skalling-dev-team/releases/tag/v0.2.2
-[0.2.1]: https://github.com/tu-usuario/skalling-dev-team/releases/tag/v0.2.1
-[0.1.0]: https://github.com/tu-usuario/skalling-dev-team/releases/tag/v0.1.0
+[0.3.0]: https://github.com/alexskalling/skalling-dev-team/releases/tag/v0.3.0
+[0.2.2]: https://github.com/alexskalling/skalling-dev-team/releases/tag/v0.2.2
+[0.2.1]: https://github.com/alexskalling/skalling-dev-team/releases/tag/v0.2.1
+[0.1.0]: https://github.com/alexskalling/skalling-dev-team/releases/tag/v0.1.0

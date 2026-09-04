@@ -52,7 +52,7 @@ assert "todos los wrappers distinguen WSL" sh -c "grep -q 'wsl.exe' '$ROOT/setup
 # CI debe ejecutar PowerShell de verdad y no fingir distintas versiones de Bash.
 assert "CI ejecuta install-global.ps1 en Windows" grep -q 'install-global.ps1.*-DryRun' "$ROOT/.github/workflows/tests.yml"
 assert "CI no declara una matriz Bash que no instala" sh -c "! grep -q 'bash-version:' '$ROOT/.github/workflows/tests.yml'"
-assert "CI explicita severidad de ShellCheck" grep -q 'shellcheck --severity=error' "$ROOT/.github/workflows/tests.yml"
+assert "CI bloquea warnings de ShellCheck" grep -q 'shellcheck --severity=warning' "$ROOT/.github/workflows/tests.yml"
 assert "README documenta dependencias esenciales" grep -q 'SQLite 3.*Python 3' "$ROOT/README.md"
 assert "README diferencia Windows nativo de WSL" grep -q 'OpenCode dentro de WSL' "$ROOT/README.md"
 

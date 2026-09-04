@@ -3,8 +3,15 @@
 # Verifica receipts + tasks in_progress + tree_hash del candidato antes de commitear
 set -euo pipefail
 PROJECT="$(git rev-parse --show-toplevel)"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DB="$PROJECT/.opencode/context/team.db"
+TEAMDB_LIB="$PROJECT/.opencode/scripts/lib-teamdb.sh"
+if [ ! -f "$TEAMDB_LIB" ]; then
+  TEAMDB_LIB="${SKALLING_ROOT:-$PROJECT}/scripts/lib/lib-teamdb.sh"
+fi
+[ -f "$TEAMDB_LIB" ] || { echo "ERROR: lib-teamdb.sh no encontrado" >&2; exit 1; }
+# shellcheck disable=SC1090,SC1091
+source "$TEAMDB_LIB"
 
 # BEGIN-TO-EPOCH
 # to_epoch <"YYYY-MM-DD HH:MM:SS"> → epoch. El timestamp del receipt sale de
@@ -50,7 +57,7 @@ if [ -n "$CHANGED_MD_SOURCE" ]; then
     case "$f" in
       *.opencode/changes/*/*.md)
         SLUG="$(echo "$f" | sed 's|.*.opencode/changes/||' | sed 's|/.*||')"
-        SLUG_IN_DB="$(sqlite3 "$DB" "SELECT 1 FROM plans WHERE slug='$SLUG' LIMIT 1" 2>/dev/null || echo "")"
+        SLUG_IN_DB="$(teamdb_exec_value "$DB" "SELECT 1 FROM plans WHERE slug=? LIMIT 1" "$SLUG" 2>/dev/null || echo "")"
         if [ -z "$SLUG_IN_DB" ]; then
           VIOLATIONS="${VIOLATIONS}  - $f (slug='$SLUG' not in DB plans table)
 "
@@ -58,7 +65,7 @@ if [ -n "$CHANGED_MD_SOURCE" ]; then
         ;;
       *.opencode/context/decisiones/*.md)
         SLUG="$(basename "$f" .md)"
-        SLUG_IN_DB="$(sqlite3 "$DB" "SELECT 1 FROM decisions WHERE slug='$SLUG' LIMIT 1" 2>/dev/null || echo "")"
+        SLUG_IN_DB="$(teamdb_exec_value "$DB" "SELECT 1 FROM decisions WHERE slug=? LIMIT 1" "$SLUG" 2>/dev/null || echo "")"
         if [ -z "$SLUG_IN_DB" ]; then
           VIOLATIONS="${VIOLATIONS}  - $f (slug='$SLUG' not in DB decisions table)
 "
@@ -66,7 +73,7 @@ if [ -n "$CHANGED_MD_SOURCE" ]; then
         ;;
       *.opencode/context/problemas-conocidos/*.md)
         SLUG="$(basename "$f" .md)"
-        SLUG_IN_DB="$(sqlite3 "$DB" "SELECT 1 FROM known_problems WHERE slug='$SLUG' LIMIT 1" 2>/dev/null || echo "")"
+        SLUG_IN_DB="$(teamdb_exec_value "$DB" "SELECT 1 FROM known_problems WHERE slug=? LIMIT 1" "$SLUG" 2>/dev/null || echo "")"
         if [ -z "$SLUG_IN_DB" ]; then
           VIOLATIONS="${VIOLATIONS}  - $f (slug='$SLUG' not in DB known_problems table)
 "
@@ -74,7 +81,7 @@ if [ -n "$CHANGED_MD_SOURCE" ]; then
         ;;
       *.opencode/context/followups/*.md)
         SLUG="$(basename "$f" .md)"
-        SLUG_IN_DB="$(sqlite3 "$DB" "SELECT 1 FROM work_in_progress WHERE slug='$SLUG' OR slug='followup-'||'$SLUG' LIMIT 1" 2>/dev/null || echo "")"
+        SLUG_IN_DB="$(teamdb_exec_value "$DB" "SELECT 1 FROM work_in_progress WHERE slug=? OR slug='followup-'||? LIMIT 1" "$SLUG" "$SLUG" 2>/dev/null || echo "")"
         if [ -z "$SLUG_IN_DB" ]; then
           VIOLATIONS="${VIOLATIONS}  - $f (slug='$SLUG' not in DB work_in_progress table)
 "
@@ -167,7 +174,7 @@ fi
 DUMP_SCRIPT=""
 for candidate in \
   "${SKALLING_ROOT:-}/scripts/teamdb-dump.sh" \
-  "$SCRIPT_DIR/teamdb-dump.sh" \
+  "$HOOK_DIR/teamdb-dump.sh" \
   "$PROJECT/scripts/teamdb-dump.sh"; do
   if [ -f "$candidate" ]; then
     DUMP_SCRIPT="$candidate"

@@ -130,7 +130,8 @@ imprimir_linea_resultado() {
     local estado="$1"
     local spec="$2"
     local claim="$3"
-    local mensaje="$claim (spec: $(basename "$spec"))"
+    local mensaje
+    mensaje="$claim (spec: $(basename "$spec"))"
     if [[ "$estado" == "ok" ]]; then
         imprimir_ok "$mensaje"
     else

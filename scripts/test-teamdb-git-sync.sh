@@ -20,7 +20,7 @@ assert() {
 
 cd "$TEST_DIR"
 mkdir -p .opencode/context
-SKALLING_ROOT="$SKALLING_ROOT" bash "$SKALLING_ROOT/scripts/teamdb-init.sh" "$TEST_DIR" >/dev/null
+bash "$SKALLING_ROOT/scripts/teamdb-init.sh" "$TEST_DIR" >/dev/null
 DB="$TEST_DIR/.opencode/context/team.db"
 
 echo "==> Test 1: DB init"
@@ -48,7 +48,7 @@ out=$(bash "$SKALLING_ROOT/scripts/wip-tree.sh" "$TEST_DIR" 2>/dev/null | grep -
 assert "wip-tree muestra plan" "[ \"$out\" -gt 0 ]"
 
 echo "==> Test 5: Export funciona"
-SKALLING_ROOT="$SKALLING_ROOT" bash "$SKALLING_ROOT/scripts/teamdb-export.sh" "$TEST_DIR" >/dev/null
+bash "$SKALLING_ROOT/scripts/teamdb-export.sh" "$TEST_DIR" >/dev/null
 assert "data_concepts.sql" "[ -f '$TEST_DIR/.opencode/context/teamdb/data_concepts.sql' ]"
 
 echo "================================="

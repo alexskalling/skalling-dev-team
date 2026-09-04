@@ -23,6 +23,7 @@ Load when:
 2. **Routing decision is final for this request.** Don't re-evaluate mid-implementation.
 3. **Scope never grows silently.** If scope increases, re-evaluate routing.
 4. **Every route produces a receipt.** No exceptions.
+5. **Persist every classification.** Run `skalling-route.sh classify --record --intent "<resumen>" --project "$PWD"` and reuse its `request_id` until `skalling-metrics.sh finish`.
 
 ## Decision Gates
 
