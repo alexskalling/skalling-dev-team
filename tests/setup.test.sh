@@ -384,7 +384,8 @@ test_windows_support() {
     assert_file_contains "$REPO_ROOT/scripts/lib/lib-os.sh" "skalling_realpath" "helper realpath portable"
 
     # PowerShell wrappers usan bash delegation
-    assert_file_contains "$REPO_ROOT/install-global.ps1" "Find-Bash" "PS1 delega a bash"
+    assert_file_contains "$REPO_ROOT/install-global.ps1" "Find-GitBash" "PS1 detecta Git Bash explícitamente"
+    assert_file_contains "$REPO_ROOT/install-global.ps1" "Find-Wsl" "PS1 detecta WSL explícitamente"
     assert_file_contains "$REPO_ROOT/install-global.ps1" "install-global.sh" "PS1 llama install-global.sh"
 
     # 4 scripts bash principales sourcean lib-os.sh
@@ -845,13 +846,14 @@ test_jes_db_first_protocol() {
 test_jes_db_first_protocol
 
 test_plan_protocol_no_parallel_files() {
-  # Pol/Sol/Teo NO deben decir "leer .md para implementar"
-  for agent in Pol Sol Teo; do
-    if ! grep -q "INSERT INTO proposals\|UPDATE plans" "agents-base/${agent}.md"; then
-      echo "FAIL: ${agent} no referencia INSERT/UPDATE de proposals o plans"
-      return 1
-    fi
-  done
+  # El ciclo usa interfaces tipadas; ningún agente recibe SQL DML directo.
+  grep -q "teamdb-read.sh" agents-base/Pol.md || { echo "FAIL: Pol no usa teamdb-read.sh"; return 1; }
+  grep -q "teamdb-plan.sh" agents-base/Sol.md || { echo "FAIL: Sol no usa teamdb-plan.sh"; return 1; }
+  grep -q "teamdb-claim.sh" agents-base/Teo.md || { echo "FAIL: Teo no usa teamdb-claim.sh"; return 1; }
+  if grep -R -qE 'sqlite3 .*"(INSERT|UPDATE|DELETE|DROP)|teamdb_query_project "INSERT' agents-base; then
+    echo "FAIL: un agente enseña mutaciones SQL directas"
+    return 1
+  fi
 
   # Todos los agentes del ciclo SDD deben mencionar slug o plan_id
   for agent in Alex Pol Sol Teo; do
@@ -891,14 +893,16 @@ test_migration_009_plan_contract() {
   local DB="$REPO_ROOT/.opencode/context/team.db"
   [ -f "$DB" ] || { echo "FAIL: DB no existe: $DB"; return 1; }
 
-  # 1. Version bumped (sigue el valor de schema_meta, hoy 0.9.0)
+  # 1. Versión alineada con VERSION
   local version
+  local expected_version
   version=$(sqlite3 "$DB" "SELECT value FROM schema_meta WHERE key='version'" 2>/dev/null)
-  if [ "$version" != "0.9.0" ]; then
-    echo "FAIL: version esperada 0.9.0, obtenida: $version"
+  expected_version=$(grep '__version__' "$REPO_ROOT/VERSION" | sed 's/.*"\([^"]*\)".*/\1/')
+  if [ "$version" != "$expected_version" ]; then
+    echo "FAIL: version esperada $expected_version, obtenida: $version"
     return 1
   fi
-  echo "  ✓ version = 0.9.0"
+  echo "  ✓ version = $expected_version"
 
   # 2. plans tiene columnas nuevas: intent_md, version, created_by, updated_by
   local cols

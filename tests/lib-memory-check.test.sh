@@ -197,13 +197,16 @@ confidence: 1.0
 - [x] Regresión completa
 EOF
 
-    # trabajo-en-curso/recent.md (NO zombie: reciente)
-    cat > "$FIXTURE_DIR/.opencode/context/trabajo-en-curso/recent.md" <<'EOF'
+    # trabajo-en-curso/recent.md (NO zombie: fecha de ejecución, no una fecha
+    # fija que termina envejeciendo y vuelve flaky el test).
+    local recent_timestamp
+    recent_timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    cat > "$FIXTURE_DIR/.opencode/context/trabajo-en-curso/recent.md" <<EOF
 ---
 type: WorkInProgress
 title: Feature Reciente
 description: Tarea reciente
-timestamp: 2026-07-30T00:00:00Z
+timestamp: ${recent_timestamp}
 agent: teo
 confidence: 1.0
 ---

@@ -234,10 +234,9 @@ generate_project_yaml() {
         local key val
         for key in language runtime framework package_manager test_runner linter formatter; do
             val="$(get_detected "$key")"
-            if [[ -n "$val" ]]; then
-                # Replace pattern "[key: ...]" with actual value
-                skalling_sed_inplace "$yaml_path" "s|${key}: \[.*\]|${key}: ${val}|g"
-            fi
+            # Reemplazar también cuando no hay detección. Dejar el catálogo del
+            # template hace que consumidores lo confundan con valores reales.
+            skalling_sed_inplace "$yaml_path" "s|${key}: \[.*\]|${key}: ${val}|g"
         done
 
         # Frontend
@@ -336,6 +335,7 @@ main() {
         exit 0
     fi
 
+    skalling_require_dependencies
     generate_bundle
     generate_project_yaml
     init_teamdb "$PROJECT_DIR"

@@ -111,6 +111,18 @@ check_ambiente() {
     else
         warn_env "git no está en PATH"
     fi
+
+    if command -v sqlite3 >/dev/null 2>&1; then
+        ok "sqlite3 $(sqlite3 --version | awk '{print $1}')"
+    else
+        err "sqlite3 no está en PATH — TeamDB no puede operar"
+    fi
+
+    if command -v python3 >/dev/null 2>&1; then
+        ok "python3 $(python3 --version 2>&1 | awk '{print $2}')"
+    else
+        err "python3 no está en PATH — los accesos seguros a TeamDB no pueden operar"
+    fi
 }
 
 check_global_install() {
@@ -336,10 +348,10 @@ check_project_install() {
     fi
 
     # REGLA #13: design-system.md si frontend
-    if [[ -f "$PROJECT_DIR/.opencode/project.yaml" ]] && grep -q "language:" "$PROJECT_DIR/.opencode/project.yaml" 2>/dev/null; then
-        local is_frontend
-        is_frontend="$(grep -E "(react|vue|svelte|nextjs|astro|nuxt|flutter|react-native|swift)" "$PROJECT_DIR/.opencode/project.yaml" 2>/dev/null || true)"
-        if [[ -n "$is_frontend" ]]; then
+    if [[ -f "$PROJECT_DIR/.opencode/project.yaml" ]]; then
+        local has_ui
+        has_ui="$(grep -E '^[[:space:]]*has_ui:[[:space:]]*true[[:space:]]*$' "$PROJECT_DIR/.opencode/project.yaml" 2>/dev/null || true)"
+        if [[ -n "$has_ui" ]]; then
             if [[ -f "$PROJECT_DIR/.opencode/context/proyecto/design-system.md" ]]; then
                 ok "design-system.md presente (REGLA #13 OK)"
             else

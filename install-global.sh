@@ -150,7 +150,7 @@ create_backup() {
     local sha_file="${backup}.sha256"
 
     if [[ -f "${BACKUP_DIR}/last-sha256" ]]; then
-        local current_sha; current_sha="$(find "$OPENCODE_DIR" -type f -not -path "*/.skalling-backups/*" -exec sha256sum {} \; 2>/dev/null | sha256sum | cut -d' ' -f1)"
+        local current_sha; current_sha="$(skalling_sha256_tree "$OPENCODE_DIR")"
         local last_sha; last_sha="$(cat "${BACKUP_DIR}/last-sha256")"
         if [[ "$current_sha" == "$last_sha" ]]; then
             log INFO "Backup omitido: estado idéntico al último backup (sha256 match)"
@@ -165,8 +165,8 @@ create_backup() {
         tar --exclude='.skalling-backups' -czf "$backup" -C "$(dirname "$OPENCODE_DIR")" "$(basename "$OPENCODE_DIR")" 2>/dev/null || {
             log WARN "Backup parcial (puede haber archivos en uso). Continuando."
         }
-        find "$OPENCODE_DIR" -type f -not -path "*/.skalling-backups/*" -exec sha256sum {} \; 2>/dev/null | sha256sum > "${BACKUP_DIR}/last-sha256"
-        sha256sum "$backup" | cut -d' ' -f1 > "$sha_file"
+        skalling_sha256_tree "$OPENCODE_DIR" > "${BACKUP_DIR}/last-sha256"
+        skalling_sha256_file "$backup" > "$sha_file"
     fi
 
     prune_old_backups
@@ -181,7 +181,7 @@ prune_old_backups() {
   
   # Dedupe: si hay backup idéntico al último, no crear nuevo
   if [ -f "${backup_dir}/last-sha256" ]; then
-    local current_sha; current_sha="$(find "$OPENCODE_DIR" -type f -not -path "*/.skalling-backups/*" -exec sha256sum {} \; 2>/dev/null | sha256sum | cut -d' ' -f1)"
+    local current_sha; current_sha="$(skalling_sha256_tree "$OPENCODE_DIR")"
     local last_sha; last_sha="$(cat "${backup_dir}/last-sha256")"
     if [ "$current_sha" = "$last_sha" ]; then
       log INFO "Backup omitido: estado idéntico (sha256 match, dedupe)"
@@ -204,26 +204,7 @@ prune_old_backups() {
 # iteraciones aborta si un snippet se incluye a sí mismo o hay ciclos.
 resolve_snippets() {
     local agent_file="$1"
-    local resolved_content
-    resolved_content="$(cat "$agent_file")"
-    local depth=0
-    while [[ "$resolved_content" =~ @include-snippet[[:space:]]+([a-z-]+) ]]; do
-        local snippet_name="${BASH_REMATCH[1]}"
-        local snippet_path="$SCRIPT_DIR/templates/agents/snippets/${snippet_name}.md"
-        if [[ -f "$snippet_path" ]]; then
-            local snippet_body; snippet_body="$(cat "$snippet_path")"
-            resolved_content="${resolved_content//<!-- @include-snippet $snippet_name -->/$snippet_body}"
-        else
-            log WARN "Snippet no encontrado: $snippet_name (en $(basename "$agent_file")); marker eliminado"
-            resolved_content="${resolved_content//<!-- @include-snippet $snippet_name -->/}"
-        fi
-        depth=$((depth + 1))
-        if [[ "$depth" -gt 64 ]]; then
-            log ERROR "resolve_snippets: límite de iteraciones alcanzado en $(basename "$agent_file") (posible ciclo de inclusión)"
-            return 1
-        fi
-    done
-    printf '%s\n' "$resolved_content"
+    bash "$SCRIPT_DIR/scripts/render-agent.sh" "$agent_file"
 }
 
 install_agents() {
@@ -338,6 +319,15 @@ install_merge_helper() {
 install_memory_helpers() {
     log INFO "Instalando helpers de memoria en $OPENCODE_DIR/scripts"
     run mkdir -p "$OPENCODE_DIR/scripts/lib"
+
+    if [[ -f "$SCRIPT_DIR/scripts/lib/lib-os.sh" ]]; then
+        run cp "$SCRIPT_DIR/scripts/lib/lib-os.sh" "$OPENCODE_DIR/scripts/lib/lib-os.sh"
+        run chmod +x "$OPENCODE_DIR/scripts/lib/lib-os.sh"
+        log OK "lib-os.sh instalado"
+    else
+        log ERROR "lib-os.sh no encontrado"
+        return 1
+    fi
 
     if [[ -f "$SCRIPT_DIR/scripts/lib/lib-memory-check.sh" ]]; then
         run cp "$SCRIPT_DIR/scripts/lib/lib-memory-check.sh" "$OPENCODE_DIR/scripts/lib/lib-memory-check.sh"
@@ -578,11 +568,11 @@ EOF
 }
 
 do_install() {
+    skalling_require_dependencies
+    create_backup
     log INFO "Iniciando instalación de Skalling v${SKALLING_VERSION}"
     check_bash_version
     check_opencode || true
-
-    create_backup
     install_agents
     install_skills_core
     install_commands
@@ -607,11 +597,12 @@ do_install() {
 }
 
 do_uninstall() {
-    log INFO "Desinstalando Skalling de $OPENCODE_DIR"
     if [[ ! -d "$OPENCODE_DIR" ]]; then
-        log WARN "No hay instalación en $OPENCODE_DIR"
+        printf 'No hay instalación en %s\n' "$OPENCODE_DIR"
         exit 0
     fi
+
+    log INFO "Desinstalando Skalling de $OPENCODE_DIR"
 
     # Backup antes de borrar
     create_backup

@@ -96,6 +96,8 @@ La ruta de ruteo concreta (rol → agente) se usa en `skalling-review.sh --deep`
 
 ## 3. Ciclo de trabajo (end-to-end)
 
+El ciclo es adaptativo. El recorrido completo se reserva para riesgo alto o intención ambigua; riesgo bajo usa Teo y Jhon, y riesgo medio incorpora a Sol. Alex construye una cápsula compartida con `teamdb-context.sh for-request`, usa Code Intelligence para localizar código y registra métricas operativas con `skalling-metrics.sh`.
+
 ```
 Usuario → Alex (frontend) → Pol (spec/scope) → Sol (negocio)
        → Teo ↔ Jhon (implementación + verificación)

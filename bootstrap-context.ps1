@@ -4,7 +4,10 @@
 
 [CmdletBinding()]
 param(
+    [string]$SkallingDir = "",
     [string]$Target = "",
+    [ValidateSet("Auto", "GitBash", "WSL")]
+    [string]$Runtime = "Auto",
     [switch]$DryRun,
     [switch]$Force,
     [switch]$OnlyDetection,
@@ -29,18 +32,26 @@ Uso:
 
 if ($Help) { Show-Help }
 
-function Find-Bash {
-    $paths = @("bash", "C:\Program Files\Git\bin\bash.exe", "C:\Windows\System32\bash.exe")
+function Find-GitBash {
+    $paths = @("C:\Program Files\Git\bin\bash.exe", "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe")
     foreach ($p in $paths) {
         try {
-            if ($p -eq "bash") { return (Get-Command bash -ErrorAction Stop).Source }
             if (Test-Path $p -ErrorAction SilentlyContinue) { return $p }
         } catch {}
     }
     return $null
 }
 
-function Find-SkallingDir {
+function Find-Wsl {
+    try { return (Get-Command wsl.exe -ErrorAction Stop).Source } catch { return $null }
+}
+
+function Resolve-SkallingDir {
+    if ($SkallingDir) {
+        $resolved = Resolve-Path $SkallingDir -ErrorAction Stop
+        if (-not (Test-Path "$resolved\bootstrap-context.sh")) { throw "No se encontró bootstrap-context.sh en $resolved" }
+        return $resolved.Path
+    }
     $candidates = @("$PSScriptRoot", "$env:USERPROFILE\skalling-dev-team")
     foreach ($d in $candidates) {
         if (Test-Path "$d\bootstrap-context.sh") { return $d }
@@ -50,37 +61,44 @@ function Find-SkallingDir {
 
 function Convert-WinToBashPath {
     param([string]$Path)
-    $drive = $Path.Substring(0, 1).ToLower()
-    $rest = $Path.Substring(2) -replace "\\", "/"
-    if ($script:BashPath -match "System32\\bash.exe|Program Files\\WSL") {
-        return "/mnt/$drive/$rest"
+    if ($script:RuntimeKind -eq "WSL") {
+        $converted = & $script:RuntimeCommand wslpath -a $Path
+    } else {
+        $converted = & $script:RuntimeCommand -c 'cygpath -u -- "$1"' _ $Path
     }
-    return "/$drive/$rest"
+    if ($LASTEXITCODE -ne 0 -or -not $converted) { throw "No se pudo convertir la ruta: $Path" }
+    return ($converted | Select-Object -First 1).Trim()
 }
 
 Write-Host ""
 Write-Host "  Skalling — Bootstrap (Windows)" -ForegroundColor Cyan
 Write-Host ""
 
-$script:BashPath = Find-Bash
-$skallingDir = Find-SkallingDir
+$gitBash = Find-GitBash
+$wsl = Find-Wsl
+if ($Runtime -eq "GitBash" -or ($Runtime -eq "Auto" -and $gitBash)) {
+    $script:RuntimeKind = "GitBash"; $script:RuntimeCommand = $gitBash
+} elseif ($Runtime -eq "WSL" -or ($Runtime -eq "Auto" -and $wsl)) {
+    $script:RuntimeKind = "WSL"; $script:RuntimeCommand = $wsl
+}
+$resolvedSkallingDir = Resolve-SkallingDir
 
-if (-not $script:BashPath) {
-    Write-Host "  bash no encontrado. Instalá Git Bash o WSL2." -ForegroundColor Red
+if (-not $script:RuntimeCommand) {
+    Write-Host "  Git Bash o WSL2 no encontrado." -ForegroundColor Red
     exit 1
 }
 
-if (-not $skallingDir) {
+if (-not $resolvedSkallingDir) {
     Write-Host "  skalling-dev-team no encontrado." -ForegroundColor Red
     exit 1
 }
 
-Write-Host "  bash: $script:BashPath" -ForegroundColor Green
-Write-Host "  skalling-dev-team: $skallingDir" -ForegroundColor Green
+Write-Host "  Runtime: $script:RuntimeKind ($script:RuntimeCommand)" -ForegroundColor Green
+Write-Host "  skalling-dev-team: $resolvedSkallingDir" -ForegroundColor Green
 
-$bashSkallingDir = Convert-WinToBashPath $skallingDir
+$bashSkallingDir = Convert-WinToBashPath $resolvedSkallingDir
 $bashArgs = @("$bashSkallingDir/bootstrap-context.sh")
-if ($Target) { $bashArgs += "--target"; $bashArgs += (Convert-WinToBashPath $Target) }
+if ($Target) { $bashArgs += "--target"; $bashArgs += (Convert-WinToBashPath (Resolve-Path $Target).Path) }
 if ($DryRun) { $bashArgs += "--dry-run" }
 if ($Force) { $bashArgs += "--force" }
 if ($OnlyDetection) { $bashArgs += "--only-detection" }
@@ -90,7 +108,11 @@ Write-Host "  Ejecutando: bash $($bashArgs -join ' ')" -ForegroundColor Cyan
 Write-Host ""
 
 try {
-    & $script:BashPath @bashArgs
+    if ($script:RuntimeKind -eq "WSL") {
+        & $script:RuntimeCommand bash @bashArgs
+    } else {
+        & $script:RuntimeCommand @bashArgs
+    }
     exit $LASTEXITCODE
 } catch {
     Write-Host "  Error: $_" -ForegroundColor Red

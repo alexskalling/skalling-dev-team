@@ -69,7 +69,9 @@ done
 # Se extrae la función real de install-global.sh y se prueba en aislamiento.
 # ─────────────────────────────────────────────────────────────────────────────
 UNIT="$(mktemp -d)"
-mkdir -p "$UNIT/templates/agents/snippets"
+mkdir -p "$UNIT/templates/agents/snippets" "$UNIT/scripts"
+cp "$ROOT/scripts/render-agent.sh" "$UNIT/scripts/render-agent.sh"
+chmod +x "$UNIT/scripts/render-agent.sh"
 echo "body ok" > "$UNIT/templates/agents/snippets/ci.md"
 echo "<!-- @include-snippet self -->" > "$UNIT/templates/agents/snippets/self.md"
 

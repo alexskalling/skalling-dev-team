@@ -68,12 +68,13 @@ _skalling_is_referenced() {
     [[ -n "$idx_files" ]] || return 1
 
     local found="false"
-    for idx_file in $idx_files; do
+    while IFS= read -r idx_file; do
+        [[ -n "$idx_file" ]] || continue
         if grep -qF "$basename" "$idx_file" 2>/dev/null; then
             found="true"
             break
         fi
-    done
+    done <<< "$idx_files"
 
     [[ "$found" == "true" ]]
 }
@@ -136,12 +137,13 @@ skalling_find_orphans() {
     local md_files
     md_files="$(_skalling_list_concept_files "$context_dir")"
 
-    for md_file in $md_files; do
+    while IFS= read -r md_file; do
+        [[ -n "$md_file" ]] || continue
         local basename; basename="$(basename "$md_file" .md)"
         if ! _skalling_is_referenced "$context_dir" "$basename"; then
             orphans+=("$md_file")
         fi
-    done
+    done <<< "$md_files"
 
     if [[ ${#orphans[@]} -gt 0 ]]; then
         printf "%s\n" "${orphans[@]}"
@@ -163,7 +165,8 @@ skalling_find_zombie_wip() {
     local wip_files
     wip_files="$(find "$wip_dir" -maxdepth 1 -name "*.md" 2>/dev/null || true)"
 
-    for md_file in $wip_files; do
+    while IFS= read -r md_file; do
+        [[ -n "$md_file" ]] || continue
         local ts; ts="$(skalling_parse_yaml_field "$md_file" timestamp)"
         [[ -n "$ts" ]] || continue
 
@@ -179,7 +182,7 @@ skalling_find_zombie_wip() {
         fi
 
         zombies+=("$md_file")
-    done
+    done <<< "$wip_files"
 
     if [[ ${#zombies[@]} -gt 0 ]]; then
         printf "%s\n" "${zombies[@]}"
@@ -200,7 +203,8 @@ skalling_find_duplicates() {
     md_files="$(_skalling_list_concept_files "$context_dir")"
 
     local pairs=""
-    for md_file in $md_files; do
+    while IFS= read -r md_file; do
+        [[ -n "$md_file" ]] || continue
         local title; title="$(skalling_parse_yaml_field "$md_file" title)"
         [[ -n "$title" ]] || continue
 
@@ -213,7 +217,7 @@ skalling_find_duplicates() {
         else
             pairs+=$'\n'"${normalized}"$'\t'"${md_file}"
         fi
-    done
+    done <<< "$md_files"
 
     [[ -z "$pairs" ]] && return 0
 
@@ -255,7 +259,8 @@ skalling_find_stale() {
     local md_files
     md_files="$(_skalling_list_concept_files "$context_dir")"
 
-    for md_file in $md_files; do
+    while IFS= read -r md_file; do
+        [[ -n "$md_file" ]] || continue
         local basename; basename="$(basename "$md_file" .md)"
         if _skalling_is_referenced "$context_dir" "$basename"; then
             continue
@@ -269,7 +274,7 @@ skalling_find_stale() {
         [[ "$age_days" -gt "$threshold_days" ]] || continue
 
         stale+=("$md_file")
-    done
+    done <<< "$md_files"
 
     if [[ ${#stale[@]} -gt 0 ]]; then
         printf "%s\n" "${stale[@]}"
@@ -287,11 +292,12 @@ skalling_find_superseded() {
     md_files="$(_skalling_list_concept_files "$context_dir")"
 
     local superseded=()
-    for md_file in $md_files; do
+    while IFS= read -r md_file; do
+        [[ -n "$md_file" ]] || continue
         if grep -qE "^(superseded|status):[[:space:]]*(true|superseded)" "$md_file" 2>/dev/null; then
             superseded+=("$md_file")
         fi
-    done
+    done <<< "$md_files"
 
     if [[ ${#superseded[@]} -gt 0 ]]; then
         printf "%s\n" "${superseded[@]}"

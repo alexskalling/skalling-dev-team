@@ -29,6 +29,9 @@ VERSION="$(extract_version "$ROOT/VERSION")"
 echo "VERSION declarada: $VERSION"
 
 assert "VERSION formato semver" "grep -qE '^[0-9]+\\.[0-9]+\\.[0-9]+$' <<< '$VERSION'"
+assert "release adaptativo identificado como 0.10.0" "[ '$VERSION' = '0.10.0' ]"
+assert "CHANGELOG documenta release actual" \
+  "grep -q '^## \\[0.10.0\\]' '$ROOT/CHANGELOG.md'"
 
 PROJ_SCHEMA="$ROOT/sql/project-schema.sql"
 GLOB_SCHEMA="$ROOT/sql/global-schema.sql"
@@ -53,13 +56,16 @@ assert "README menciona VERSION" \
 
 # Coherencia con declaradores de versión en scripts (setup.sh stale dio 0.1.0
 # en la auditoría; cada declaración debe apuntar al MISMO VERSION file).
-SETUP_VERSION="$(extract_version "$ROOT/setup.sh")"
-assert "setup.sh: SKALLING_VERSION coincide con VERSION file" \
-  "[ \"$SETUP_VERSION\" = \"$VERSION\" ]"
+assert "setup.sh: SKALLING_VERSION se obtiene de VERSION file" \
+  "grep -q 'SKALLING_VERSION=.*VERSION' '$ROOT/setup.sh'"
 
-INIT_VERSION="$(extract_version "$ROOT/scripts/teamdb-init.sh")"
+INIT_VERSION="$(grep 'EXPECTED_VERSION=' "$ROOT/scripts/teamdb-init.sh" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
 assert "teamdb-init.sh: EXPECTED_VERSION coincide con VERSION file" \
   "[ \"$INIT_VERSION\" = \"$VERSION\" ]"
+
+LATEST_MIGRATION_VERSION="$(grep -hE "^UPDATE schema_meta SET value = '[0-9.]+'.*key = 'version'" "$ROOT"/sql/migrations/*.sql | tail -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)"
+assert "última migración lleva DB existente a VERSION" \
+  "[ \"$LATEST_MIGRATION_VERSION\" = \"$VERSION\" ]"
 
 # Coherencia con DB real (round-trip)
 TMP_DB="$(mktemp -d)/coherence.db"

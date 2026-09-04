@@ -150,25 +150,23 @@ test_two_formats() {
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
-# TEST 5: Áreas del bundle OKF referenciadas
+# TEST 5: Tablas DB-first referenciadas
 # ──────────────────────────────────────────────────────────────────────────────
 
 test_bundle_areas_referenced() {
     echo ""
-    echo "── Test 5: Áreas del bundle referenciadas ──"
+    echo "── Test 5: Tablas de memoria referenciadas ──"
 
-    # concept/ es obligatorio (per usuario)
-    if [[ -f "$POL" ]] && grep -qE "\\.opencode/context/concept" "$POL"; then
-        pass "Área .opencode/context/concept/ referenciada"
+    if [[ -f "$POL" ]] && grep -qE "concepts" "$POL"; then
+        pass "Tabla concepts referenciada"
     else
-        fail "Área .opencode/context/concept/ NO referenciada"
+        fail "Tabla concepts NO referenciada"
     fi
 
-    # trabajo-en-curso/ es obligatorio (per usuario)
-    if [[ -f "$POL" ]] && grep -qE "trabajo-en-curso" "$POL"; then
-        pass "Área trabajo-en-curso/ referenciada"
+    if [[ -f "$POL" ]] && grep -qE "work_in_progress" "$POL"; then
+        pass "Tabla work_in_progress referenciada"
     else
-        fail "Área trabajo-en-curso/ NO referenciada"
+        fail "Tabla work_in_progress NO referenciada"
     fi
 }
 

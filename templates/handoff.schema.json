@@ -46,6 +46,25 @@
       "minLength": 5,
       "description": "What the receiving agent should do next"
     },
+    "risk_level": {
+      "type": "string",
+      "enum": ["low", "medium", "high"],
+      "description": "Risk classification selected by Alex"
+    },
+    "route": {
+      "type": "string",
+      "description": "Adaptive route selected for this request"
+    },
+    "context_capsule": {
+      "type": "object",
+      "description": "Small shared context selected from TeamDB and Code Intelligence",
+      "properties": {
+        "bytes": { "type": "integer", "minimum": 0, "maximum": 12000 },
+        "memory_slugs": { "type": "array", "maxItems": 24, "items": { "type": "string" } },
+        "files": { "type": "array", "maxItems": 24, "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
     "ladder_rung_used": {
       "type": "integer",
       "minimum": 1,

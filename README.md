@@ -2,7 +2,7 @@
 
 Skalling es un equipo de **8 agentes de IA** que trabajan juntos adentro de [OpenCode](https://opencode.ai). Cada agente tiene un rol específico y siguen un ciclo ordenado para construir software bien hecho.
 
-**Versión actual: 0.9.3**
+**Versión actual: 0.10.0**
 
 ---
 
@@ -40,6 +40,8 @@ Carga memorias relevantes al inicio de sesión (`skalling-memory`).
 
 ## Instalación
 
+Requisitos esenciales: **SQLite 3** y **Python 3**. El instalador los valida antes de escribir archivos y muestra el comando adecuado si falta alguno. OpenCode y Git también son recomendados para usar el equipo completo.
+
 ### Mac / Linux
 
 ```bash
@@ -55,6 +57,16 @@ git clone https://github.com/alexskalling/skalling-dev-team.git $HOME\skalling-d
 ```
 
 Requiere Windows 10+ y Git Bash o WSL2.
+
+- `-Runtime GitBash` instala para herramientas ejecutadas desde Windows/Git Bash.
+- `-Runtime WSL` instala dentro del `HOME` de Linux; en ese caso ejecutá también **OpenCode dentro de WSL**.
+- Sin `-Runtime`, se elige Git Bash si está disponible y, en caso contrario, WSL2. El instalador siempre informa el entorno elegido antes de modificar archivos.
+
+Podés indicar una ubicación no estándar del repositorio:
+
+```powershell
+.\install-global.ps1 -SkallingDir "C:\ruta con espacios\skalling-dev-team"
+```
 
 ### Code Intelligence (opt-in, v0.4.0+)
 
@@ -124,6 +136,18 @@ FASE 6: Pau documenta los cambios
 ```
 
 Para cosas chicas (un typo, un color, un texto) Alex puede mandarte directo a Teo sin todo el ciclo. Para auditorías puede mandar a Luz directo.
+
+### Flujo adaptativo y contexto económico
+
+Alex clasifica cada pedido por riesgo, no solo por cantidad de archivos:
+
+- Bajo: Alex → Teo → Jhon, con prueba focalizada.
+- Medio: Alex → Sol → Teo → Jhon, con pruebas del módulo.
+- Alto o ambiguo: ciclo completo con Pol, Luz y Pau.
+
+Antes del primer handoff se crea una cápsula de hasta 8 KB: resumen general, memoria relacionada y ubicaciones obtenidas con Code Intelligence. Esa cápsula se reutiliza; los agentes amplían contexto solo bajo demanda. Pau revisa todos los cierres, pero escribe memoria únicamente cuando hay conocimiento duradero. Markdown sigue siendo documentación o export explícito, nunca transporte entre agentes.
+
+`skalling-metrics.sh` registra ruta, agentes, handoffs, solicitudes de permiso, bytes de contexto, duración y resultado. No inventa consumo de tokens: si el runtime no expone tokens reales, reporta bytes de contexto como métrica verificable.
 
 ---
 
@@ -219,9 +243,9 @@ tu-proyecto/.opencode/
 |---|---|
 | macOS | ✅ Completo |
 | Linux | ✅ Completo |
-| WSL2 | ✅ Completo |
-| Git Bash | ✅ Completo |
-| PowerShell | ✅ Vía wrapper |
+| WSL2 | ✅ Soportado; OpenCode debe ejecutarse dentro del mismo WSL |
+| Git Bash | ✅ Soportado con SQLite 3 y Python 3 disponibles |
+| PowerShell | ✅ Wrapper con selección explícita Git Bash/WSL |
 | cmd.exe | ❌ |
 
 ---

@@ -231,10 +231,22 @@ step_create_directories() {
 step_install_agents() {
     log INFO "Sincronizando agentes per-project (para team-sharing)"
     local count=0
+    local renderer="$SCRIPT_DIR/scripts/render-agent.sh"
+    if [[ ! -x "$renderer" ]]; then
+        log ERROR "Renderer de agentes no disponible: $renderer"
+        return 1
+    fi
     for src in "$AGENTS_BASE_DIR"/*.md; do
         [[ -e "$src" ]] || continue
         local name; name="$(basename "$src")"
-        copy_with_diff_check "$src" "$AGENTS_DEST_DIR/$name" "agents/$name" >/dev/null && count=$((count+1)) || true
+        local rendered; rendered="$(mktemp)"
+        if ! bash "$renderer" "$src" > "$rendered"; then
+            rm -f "$rendered"
+            log ERROR "No se pudo renderizar agents/$name"
+            return 1
+        fi
+        copy_with_diff_check "$rendered" "$AGENTS_DEST_DIR/$name" "agents/$name" >/dev/null && count=$((count+1)) || true
+        rm -f "$rendered"
     done
     log OK "Agentes sincronizados"
 }
@@ -573,6 +585,8 @@ main() {
     log INFO "Iniciando setup per-project de Skalling v${SKALLING_VERSION}"
     log INFO "Target: $TARGET_DIR"
     echo ""
+
+    skalling_require_dependencies
 
     if [[ "$DRY_RUN" == true ]]; then
         log WARN "Modo dry-run activo — no se modifica nada"

@@ -36,17 +36,18 @@ new_plan() {
   bash "$ROOT/scripts/teamdb-plan.sh" "$repo" "$slug" "$slug plan" "$repo/tasks.md" --by=teo --purpose="test" >/dev/null 2>&1
 }
 
-# ── 1. Migración 016 idempotente: dos inits → 0.9.1 ──
+# ── 1. Init idempotente y alineado con VERSION ──
 REPO1="$TMP/repo1"
 new_db "$REPO1"
 VER1=$(sqlite3 "$REPO1/.opencode/context/team.db" "SELECT value FROM schema_meta WHERE key='version'")
 bash "$ROOT/scripts/teamdb-init.sh" "$REPO1" >/dev/null 2>&1
 RC2=$?
 VER2=$(sqlite3 "$REPO1/.opencode/context/team.db" "SELECT value FROM schema_meta WHERE key='version'")
-if [ "$VER1" = "0.9.1" ] && [ "$VER2" = "0.9.1" ] && [ "$RC2" = "0" ]; then
-  assert_pass "init idempotente: versión 0.9.1 tras dos corridas"
+EXPECTED_VERSION=$(grep '__version__' "$ROOT/VERSION" | sed 's/.*"\([^"]*\)".*/\1/')
+if [ "$VER1" = "$EXPECTED_VERSION" ] && [ "$VER2" = "$EXPECTED_VERSION" ] && [ "$RC2" = "0" ]; then
+  assert_pass "init idempotente: versión $EXPECTED_VERSION tras dos corridas"
 else
-  assert_fail "init idempotente: versión 0.9.1 tras dos corridas" "v1=$VER1 v2=$VER2 rc2=$RC2"
+  assert_fail "init idempotente: versión $EXPECTED_VERSION tras dos corridas" "v1=$VER1 v2=$VER2 rc2=$RC2"
 fi
 # schema_meta.tasks tiene due_date
 DD=$(sqlite3 "$REPO1/.opencode/context/team.db" "SELECT count(*) FROM pragma_table_info('tasks') WHERE name='due_date'")

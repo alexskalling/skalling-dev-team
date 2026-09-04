@@ -4,6 +4,32 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-09-03
+
+### Added
+- **Flujo adaptativo por riesgo**: Alex clasifica cada solicitud como `low`, `medium` o `high` y selecciona una ruta proporcional, evitando activar ocho agentes para cambios pequeños.
+- **Cápsulas económicas de contexto**: `teamdb-context.sh for-request` recupera memoria relevante con límite de tamaño e incluye siempre el resumen general del proyecto.
+- **Telemetría operativa**: `skalling-metrics.sh` registra ruta, agentes, handoffs, permisos, bytes de contexto, duración y resultado sin afirmar ahorro de tokens que el runtime no mida.
+- **Métricas persistentes**: nueva tabla `workflow_metrics` y migraciones `020_workflow_metrics.sql` y `021_version_0_10_0.sql`.
+- **Acceso seguro a TeamDB**: nuevos helpers tipados `teamdb-read.sh` y `teamdb-memory.sh`, sin SQL mutante arbitrario desde prompts.
+
+### Changed
+- Verificación de Jhon proporcional al riesgo; cierre de Pau solo persiste memoria y documentación cuando hay conocimiento durable.
+- Inicio de sesión prioriza automáticamente la base del proyecto y los handoffs admiten riesgo, ruta y cápsula compartida.
+- Prompts de agentes y permisos alineados con el modelo DB-first para reducir solicitudes repetidas de autorización.
+- **Contratos compactos de los 8 agentes**: prompts operativos reducidos de 97.612 a 42.924 bytes; responsabilidades, entradas, salidas y criterios de escalación quedan explícitos sin reglas duplicadas.
+- **Render único de agentes**: instalación global y por proyecto usan `scripts/render-agent.sh`, evitando drift entre `agents-base/` y `.opencode/agents/`.
+- **Instalación multiplataforma endurecida**: preflight obligatorio de SQLite/Python, SHA-256 portable y wrappers PowerShell con selección explícita entre Git Bash y WSL, rutas configurables y paridad de desinstalación.
+
+### Fixed
+- YAML inválido en agentes, SQL directo en prompts, temporales sin limpiar en `teamdb-plan.sh` y conservación incorrecta de una versión antigua durante el saneamiento global.
+- Contradicciones de permisos/acciones en los ocho agentes, recuperación destructiva de TeamDB, ownership ambiguo Pol→Sol y quality gates absolutos que producían bloqueos falsos.
+- La CI ahora ejecuta instalaciones completas en macOS, Linux y Windows y prueba el wrapper PowerShell; se eliminó la matriz que rotulaba Bash 3/4/5 sin instalar esas versiones.
+
+### Migration
+- `020_workflow_metrics.sql` crea la telemetría operativa.
+- `021_version_0_10_0.sql` eleva bases existentes a schema `0.10.0`, incluso si la migración 020 ya había sido aplicada.
+
 ## [0.9.2] — 2026-08-18
 
 ### Fixed

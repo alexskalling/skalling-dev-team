@@ -21,6 +21,7 @@ for t in tests/teamdb-safe-query.test.sh \
          tests/portability-bash32.test.sh \
          tests/snippets-sync.test.sh \
          tests/install-resolves-snippets.test.sh \
+         tests/install-platform-contract.test.sh \
          tests/handoff-schema-validation.test.sh \
          tests/agents-teamdb-integration.test.sh \
          tests/audit-log-actor-source.test.sh \
@@ -41,6 +42,9 @@ for t in tests/teamdb-safe-query.test.sh \
          tests/teamdb-plan-atomic-idempotent.test.sh \
          tests/teamdb-python-bindparams.test.sh \
          tests/teamdb-write-wal.test.sh \
+         tests/teamdb-operating-model.test.sh \
+         tests/agents-quality-contract.test.sh \
+         tests/workflow-routing.test.sh \
          tests/teamdb.test.sh \
          tests/test-teamdb-dump-sync.test.sh \
          tests/code-intelligence.test.sh \

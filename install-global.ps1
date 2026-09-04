@@ -16,6 +16,9 @@
 
 [CmdletBinding()]
 param(
+    [string]$SkallingDir = "",
+    [ValidateSet("Auto", "GitBash", "WSL")]
+    [string]$Runtime = "Auto",
     [switch]$DryRun,
     [switch]$Force,
     [switch]$Uninstall,
@@ -37,6 +40,8 @@ Uso:
     .\install-global.ps1 -DryRun          # ver qué haría
     .\install-global.ps1 -Force           # sobrescribir sin preguntar
     .\install-global.ps1 -Uninstall       # desinstalar
+    .\install-global.ps1 -SkallingDir C:\ruta\skalling-dev-team
+    .\install-global.ps1 -Runtime WSL     # instala dentro del entorno WSL
 
 Requisitos:
     - Windows 10+ (64-bit)
@@ -59,24 +64,16 @@ if ($Help) { Show-Help }
 # DETECCIÓN DE BASH
 # ──────────────────────────────────────────────────────────────────────────────
 
-function Find-Bash {
-    # Buscar bash en orden de preferencia
+function Find-GitBash {
     $bashPaths = @(
-        "bash",
         "C:\Program Files\Git\bin\bash.exe",
         "C:\Program Files\Git\usr\bin\bash.exe",
-        "C:\Windows\System32\bash.exe",        # WSL
-        "C:\Program Files\WSL\bash.exe",
         "$env:ProgramFiles\Git\bin\bash.exe",
         "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe"
     )
 
     foreach ($path in $bashPaths) {
         try {
-            if ($path -eq "bash") {
-                $bashCmd = Get-Command bash -ErrorAction Stop
-                return $bashCmd.Source
-            }
             if (Test-Path $path -ErrorAction SilentlyContinue) {
                 return $path
             }
@@ -87,14 +84,21 @@ function Find-Bash {
 
 function Find-Wsl {
     try {
-        $wsl = Get-Command wsl -ErrorAction Stop
+        $wsl = Get-Command wsl.exe -ErrorAction Stop
         return $wsl.Source
     } catch {
         return $null
     }
 }
 
-function Find-SkallingDir {
+function Resolve-SkallingDir {
+    if ($SkallingDir) {
+        $resolved = Resolve-Path $SkallingDir -ErrorAction Stop
+        if (-not (Test-Path "$resolved\install-global.sh")) {
+            throw "No se encontró install-global.sh en $resolved"
+        }
+        return $resolved.Path
+    }
     # Buscar skalling-dev-team en ubicaciones comunes
     $candidates = @(
         "$PSScriptRoot",
@@ -111,21 +115,17 @@ function Find-SkallingDir {
     return $null
 }
 
-function Convert-WindowsPathToBash {
+function Convert-WindowsPathToRuntime {
     param([string]$WindowsPath)
-    # C:\Users\foo\bar -> /c/Users/foo/bar (Git Bash) o /mnt/c/Users/foo/bar (WSL)
-    # Detectar qué tipo de bash tenemos
-    if ($script:BashPath -match "System32\\bash.exe|Program Files\\WSL") {
-        # WSL: /mnt/c/Users/...
-        $drive = $WindowsPath.Substring(0, 1).ToLower()
-        $rest = $WindowsPath.Substring(2) -replace "\\", "/"
-        return "/mnt/$drive/$rest"
+    if ($script:RuntimeKind -eq "WSL") {
+        $converted = & $script:RuntimeCommand wslpath -a $WindowsPath
     } else {
-        # Git Bash: /c/Users/...
-        $drive = $WindowsPath.Substring(0, 1).ToLower()
-        $rest = $WindowsPath.Substring(2) -replace "\\", "/"
-        return "/$drive/$rest"
+        $converted = & $script:RuntimeCommand -c 'cygpath -u -- "$1"' _ $WindowsPath
     }
+    if ($LASTEXITCODE -ne 0 -or -not $converted) {
+        throw "No se pudo convertir la ruta para $($script:RuntimeKind): $WindowsPath"
+    }
+    return ($converted | Select-Object -First 1).Trim()
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -136,12 +136,19 @@ Write-Host ""
 Write-Host "  Skalling — Installer para Windows" -ForegroundColor Cyan
 Write-Host ""
 
-# Encontrar bash
-$script:BashPath = Find-Bash
-$skallingDir = Find-SkallingDir
+# Elegir un runtime sin mezclar HOME de Windows y WSL silenciosamente.
+$gitBash = Find-GitBash
+$wsl = Find-Wsl
+if ($Runtime -eq "GitBash" -or ($Runtime -eq "Auto" -and $gitBash)) {
+    $script:RuntimeKind = "GitBash"
+    $script:RuntimeCommand = $gitBash
+} elseif ($Runtime -eq "WSL" -or ($Runtime -eq "Auto" -and $wsl)) {
+    $script:RuntimeKind = "WSL"
+    $script:RuntimeCommand = $wsl
+}
 
-if (-not $script:BashPath) {
-    Write-Host "  bash no encontrado." -ForegroundColor Red
+if (-not $script:RuntimeCommand) {
+    Write-Host "  No se encontró Git Bash ni wsl.exe." -ForegroundColor Red
     Write-Host ""
     Write-Host "  Opciones:" -ForegroundColor Yellow
     Write-Host "    1. Instalar WSL2 (recomendado):" -ForegroundColor White
@@ -157,10 +164,14 @@ if (-not $script:BashPath) {
     exit 1
 }
 
-Write-Host "  bash: $script:BashPath" -ForegroundColor Green
+Write-Host "  Runtime: $script:RuntimeKind ($script:RuntimeCommand)" -ForegroundColor Green
+if ($script:RuntimeKind -eq "WSL") {
+    Write-Host "  La configuración se instalará dentro de WSL; ejecutá OpenCode dentro de WSL." -ForegroundColor Yellow
+}
 
 # Encontrar skalling-dev-team
-if (-not $skallingDir) {
+$resolvedSkallingDir = Resolve-SkallingDir
+if (-not $resolvedSkallingDir) {
     Write-Host "  skalling-dev-team no encontrado en ubicaciones comunes." -ForegroundColor Red
     Write-Host ""
     Write-Host "  Cloná el repo primero:" -ForegroundColor Yellow
@@ -171,10 +182,10 @@ if (-not $skallingDir) {
     exit 1
 }
 
-Write-Host "  skalling-dev-team: $skallingDir" -ForegroundColor Green
+Write-Host "  skalling-dev-team: $resolvedSkallingDir" -ForegroundColor Green
 
 # Convertir path a formato bash
-$bashSkallingDir = Convert-WindowsPathToBash $skallingDir
+$bashSkallingDir = Convert-WindowsPathToRuntime $resolvedSkallingDir
 
 # Construir argumentos
 $bashArgs = @("$bashSkallingDir/install-global.sh")
@@ -188,7 +199,11 @@ Write-Host ""
 
 # Delegar a bash
 try {
-    & $script:BashPath @bashArgs
+    if ($script:RuntimeKind -eq "WSL") {
+        & $script:RuntimeCommand bash @bashArgs
+    } else {
+        & $script:RuntimeCommand @bashArgs
+    }
     $exitCode = $LASTEXITCODE
     Write-Host ""
     if ($exitCode -eq 0) {

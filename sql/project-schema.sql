@@ -114,7 +114,7 @@ CREATE TABLE schema_meta (
   value TEXT NOT NULL
 );
 
-INSERT INTO schema_meta VALUES ('version', '0.9.3');
+INSERT INTO schema_meta VALUES ('version', '0.10.0');
 INSERT INTO schema_meta VALUES ('type', 'project');
 
 CREATE VIRTUAL TABLE concepts_fts USING fts5(title, body_md, content='concepts', content_rowid='id');
@@ -495,3 +495,18 @@ CREATE TABLE IF NOT EXISTS attempts (
 );
 CREATE INDEX IF NOT EXISTS idx_attempts_change ON attempts(change_name);
 CREATE INDEX IF NOT EXISTS idx_attempts_state ON attempts(state);
+
+CREATE TABLE IF NOT EXISTS workflow_metrics (
+  request_id TEXT PRIMARY KEY,
+  risk_level TEXT NOT NULL CHECK (risk_level IN ('low','medium','high')),
+  route TEXT,
+  agents_count INTEGER DEFAULT 0,
+  handoffs INTEGER DEFAULT 0,
+  permission_prompts INTEGER DEFAULT 0,
+  context_bytes INTEGER DEFAULT 0,
+  started_at TEXT NOT NULL,
+  completed_at TEXT,
+  duration_ms INTEGER,
+  outcome TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_workflow_metrics_started ON workflow_metrics(started_at DESC);
