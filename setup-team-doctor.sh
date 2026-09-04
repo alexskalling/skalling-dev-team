@@ -245,7 +245,7 @@ check_memory_health() {
     findings="$(skalling_find_zombie_wip "$context_dir" "$zombie_days")"
     if [[ -n "$findings" ]]; then
         while IFS= read -r file; do
-            warn "Trabajo-en-curso zombie (>${zombie_days} días): $file — corré /skalling-forget"
+            warn "Trabajo-en-curso zombie (>${zombie_days} días): $file — corré /skalling-memory review"
         done <<< "$findings"
     else
         ok "Sin trabajo-en-curso zombie"
@@ -385,15 +385,15 @@ check_project_install() {
 
 check_inteligencia_codigo() {
     section "Code Intelligence (opt-in)"
-    if command -v codebase-memory-mcp >/dev/null 2>&1; then
-        info "codebase-memory-mcp instalado ($(codebase-memory-mcp --version 2>/dev/null || echo 'versión desconocida'))"
-        if grep -q "codebase-memory-mcp" ~/.config/opencode/opencode.jsonc 2>/dev/null; then
-            info "MCP server configurado en opencode.jsonc"
+    if command -v codegraph >/dev/null 2>&1; then
+        info "CodeGraph instalado"
+        if [[ -d "$PROJECT_DIR/.codegraph" ]]; then
+            info "Índice .codegraph presente en el proyecto"
         else
-            info "MCP server NO configurado — instalá y configurá manualmente"
+            info "Índice .codegraph ausente — se inicializa bajo demanda"
         fi
     else
-        info "codebase-memory-mcp NO instalado (opt-in — instalá manualmente si querés)"
+        info "CodeGraph NO instalado (opt-in)"
     fi
 }
 

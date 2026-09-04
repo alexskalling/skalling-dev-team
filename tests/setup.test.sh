@@ -207,9 +207,9 @@ test_constitution() {
 
 test_commands() {
     echo ""
-    echo "── Test 5: 6 comandos /skalling-* ──"
+    echo "── Test 5: comandos /skalling-* ──"
 
-    local expected=(skalling-init skalling-status skalling-refresh skalling-doctor skalling-forget skalling-update)
+    local expected=(skalling-help skalling-init skalling-status skalling-resume skalling-memory skalling-metrics skalling-codegraph skalling-dashboard skalling-refresh skalling-doctor skalling-recover skalling-merge skalling-update)
     for cmd in "${expected[@]}"; do
         assert_file_exists "$REPO_ROOT/command/${cmd}.md" "command/${cmd}.md existe"
     done

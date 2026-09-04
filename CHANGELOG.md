@@ -4,6 +4,21 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.10.1] — 2026-09-04
+
+### Added
+- `/skalling-help`, `/skalling-memory`, `/skalling-metrics`, `/skalling-resume` y `/skalling-recover` cubren descubrimiento, memoria unificada, medición, continuidad y recuperación segura.
+- `teamdb-resume.sh` entrega una cápsula de trabajo activa, acotada y de solo lectura.
+
+### Changed
+- Los comandos son contratos pequeños que delegan en scripts canónicos instalados, sin SQL directo ni rutas dependientes del checkout.
+- Memoria, grafo y revisión se consolidan en `/skalling-memory`; la asignación automática de modelos queda desactivada hasta disponer de configuración independiente por agente.
+- El instalador publica bootstrap, doctor, actualizador y dependencias de detección en rutas globales estables.
+- Dashboard abre el navegador en macOS, Linux, WSL y Git Bash; update conserva backups y rechaza repos con cambios locales.
+
+### Migration
+- `022_version_0_10_1.sql` eleva bases existentes a schema `0.10.1`; no modifica tablas ni datos.
+
 ## [0.10.0] — 2026-09-03
 
 ### Added

@@ -95,19 +95,24 @@ Si apruebo un plan alto, entrego a Pau la evidencia y los candidatos de memoria;
 3. Paso 3: debo CITAR evidencia verificable; nunca muto TeamDB.
 
 <!--
-SINCRONIZADO CON: este archivo es single source para los 8 agentes.
+SINCRONIZADO CON: este archivo es single source; install renderiza el contenido.
 -->
 # 🔍 Code Intelligence
 
-Usá el grafo solo para preguntas estructurales; para un archivo conocido, leelo directamente. Herramientas: `mcp__codebase-memory-mcp__trace_path` (impacto), `mcp__codebase-memory-mcp__get_architecture` (mapa), `mcp__codebase-memory-mcp__search_graph` (símbolos), `mcp__codebase-memory-mcp__find_dead_code` (código sin referencias) y `mcp__codebase-memory-mcp__detect_changes` (diff/PR).
+Usá CodeGraph para preguntas estructurales; para una ruta conocida, leé el archivo
+directamente. Preferí `codegraph_explore` porque combina código relevante, rutas de
+llamadas e impacto. Para precisar, usá `query`, `callers`, `callees`, `impact` o
+`affected`.
 
-## Si codebase-memory-mcp NO está instalado
+## Si CodeGraph NO está disponible
 
-Usá la inteligencia de código disponible y después `rg`/lectura focalizada. No bloquees la tarea ni instales herramientas sin autorización.
+Informá la limitación y usá `rg`/lecturas focalizadas. No inventes un grafo, no uses
+el dashboard como reemplazo y no guardes imports del código en TeamDB.
 
 ## NO abuses
 
-No consultes el grafo para cambios triviales ni releas archivos que la cápsula ya identificó. Citá solamente rutas y relaciones que influyan en la decisión.
+No consultes el grafo para cambios triviales ni releas archivos que la cápsula ya
+identificó. Citá solamente rutas y relaciones que influyan en la decisión.
 <!-- SINCRONIZADO CON: single source para los 8 agentes. -->
 # 🧠 Memory Protocol
 

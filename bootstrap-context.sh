@@ -28,6 +28,7 @@ skalling_log_os
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEMPLATES_DIR="$SCRIPT_DIR/templates"
 DATA_DIR="$SCRIPT_DIR/data"
+[ -d "$DATA_DIR" ] || DATA_DIR="$SCRIPT_DIR/skalling-data"
 STACK_DETECTORS_YAML="$DATA_DIR/stack-detectors.yaml"
 
 PROJECT_DIR="$(pwd)"
@@ -280,14 +281,21 @@ init_teamdb() {
             # para que audit_log refleje el actor real (INV-AUDIT-1).
             if TEAMDB_ACTOR=alex bash "$SCRIPT_DIR/scripts/teamdb-init.sh" "$project" 2>/dev/null; then
                 ok "teamdb inicializado"
+                if [[ -f "$SCRIPT_DIR/scripts/teamdb-link.sh" ]]; then
+                    TEAMDB_ACTOR=alex bash "$SCRIPT_DIR/scripts/teamdb-link.sh" "$project" --quiet >/dev/null
+                    ok "grafo de memoria actualizado"
+                fi
             else
-                warn "teamdb no se pudo inicializar"
+                err "teamdb no se pudo inicializar"
+                return 1
             fi
         else
-            warn "scripts/teamdb-init.sh no encontrado, skip teamdb"
+            err "scripts/teamdb-init.sh no encontrado"
+            return 1
         fi
     else
-        warn "sqlite3 no disponible, teamdb no se inicializó"
+        err "sqlite3 no disponible"
+        return 1
     fi
 }
 
@@ -297,6 +305,7 @@ activate_teamdb_hooks() {
         return 0
     fi
     local hooks_src="$SCRIPT_DIR/scripts/hooks"
+    [[ -d "$hooks_src" ]] || hooks_src="$SCRIPT_DIR/hooks"
     local hooks_dst="$project/.git/hooks"
     if [[ ! -d "$hooks_src" ]]; then
         return 0

@@ -25,7 +25,9 @@ Ver `.opencode/context/constitucion.md` (o `~/.config/opencode/constitucion.md`)
 - `/skalling-status` — ver estado de memoria
 - `/skalling-refresh` — re-detectar stack
 - `/skalling-doctor` — health check
-- `/skalling-forget` — purgar memoria obsoleta
+- `/skalling-memory` — buscar, relacionar y revisar memoria
+- `/skalling-resume` — retomar trabajo con contexto mínimo
+- `/skalling-recover` — recuperar TeamDB con backup
 
 ## Memoria
 

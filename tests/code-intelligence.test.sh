@@ -129,16 +129,16 @@ prueba_fragmento() {
 prueba_fragmento_herramientas() {
     echo ""
     echo "── Prueba 2: 5 herramientas principales ──"
-    local herramientas=(trace_path get_architecture search_graph find_dead_code detect_changes)
+    local herramientas=(explore query callers callees impact affected)
     for herramienta in "${herramientas[@]}"; do
-        afirmar_archivo_contiene "$FRAGMENTO" "mcp__codebase-memory-mcp__${herramienta}" "Fragmento contiene herramienta ${herramienta}"
+        afirmar_archivo_contiene "$FRAGMENTO" "${herramienta}" "Fragmento contiene operación ${herramienta}"
     done
 }
 
 prueba_fragmento_notas() {
     echo ""
     echo "── Prueba 3: Fallback, anti-abuso y sincronización ──"
-    afirmar_archivo_contiene_sensible_caso "$FRAGMENTO" "si codebase-memory-mcp NO está instalado" "Fragmento incluye fallback si el MCP no está instalado"
+    afirmar_archivo_contiene_sensible_caso "$FRAGMENTO" "Si CodeGraph NO está disponible" "Fragmento incluye fallback si CodeGraph no está disponible"
     afirmar_archivo_contiene_sensible_caso "$FRAGMENTO" "NO abuses" "Fragmento incluye nota anti-abuso"
     afirmar_archivo_contiene "$FRAGMENTO" "SINCRONIZADO CON:" "Fragmento incluye comment block de sincronización"
 }
@@ -157,7 +157,7 @@ prueba_agentes() {
 }
 
 echo "═══════════════════════════════════════════════════"
-echo "  Pruebas de Code Intelligence (v0.4.0 — codebase-memory-mcp)"
+echo "  Pruebas de Code Intelligence — CodeGraph"
 echo "═══════════════════════════════════════════════════"
 
 prueba_fragmento

@@ -135,11 +135,14 @@ confidence: 1.0
 
 ---
 
-## R14 — Ahorro de tokens vía grafos del proyecto
+## R14 — Recuperación proporcional de contexto
 
-**Motivación**: el grafo de memoria y el code graph existen para que los agentes NO lean archivos innecesarios. Un agente que `grep` + `read` 10 archivos cuando el grafo le dice la respuesta en 1 línea, está quemando tokens del usuario.
+**Motivación**: TeamDB recupera conocimiento durable y CodeGraph responde preguntas
+estructurales. Son fuentes distintas; ninguna debe fingir ser la otra.
 
-**Regla universal**: los 8 agentes (Alex, Pol, Jes, Sol, Teo, Jhon, Luz, Pau) deben consultar el estado de los grafos del proyecto ANTES de:
+**Regla universal**: los 8 agentes consultan TeamDB antes de releer documentación y
+CodeGraph antes de una exploración estructural amplia. Para una ruta conocida o un
+cambio trivial, leen directamente el archivo necesario.
 
 - **Alex**: delegar a cualquier agente o responder "¿ya existe X?"
 - **Pol**: validar intent del usuario y escribir `proposal.md`
@@ -150,29 +153,20 @@ confidence: 1.0
 - **Luz**: auditar calidad/seguridad
 - **Pau**: consolidar memoria definitiva
 
-### Comando unificado
+### Comandos
 
-```bash
-bash "$SKALLING_ROOT/scripts/teamdb-graph-refresh.sh" "$(pwd)"
-```
-
-Refresca AMBOS grafos (memoria + código). Ver `command/skalling-graph-refresh.md`.
+- `/skalling-memory search|related|graph|review|refresh` opera sobre memoria.
+- `/skalling-codegraph` usa CodeGraph real para arquitectura, llamadas e impacto.
 
 ### Por qué
 
-Sin el grafo actualizado, los agentes proponen cambios basándose en memoria vieja y cometen errores que ya fueron resueltos.
+Esto limita la lectura irrelevante sin sacrificar evidencia. No se declara un ahorro
+cuantitativo de tokens o tiempo a menos que `/skalling-metrics` tenga mediciones reales.
 
 ### Pau al cerrar feature
 
-Pau corre el refresh automáticamente después de consolidar memoria (ver `agents-base/Pau.md`). Esto garantiza que el siguiente ciclo arranca con grafos frescos.
-
-### Ejemplo: ticket pelotudo prevenido
-
-**Sin grafo**: Teo recibe "agregá un botón de logout en el navbar". Teo abre 8 archivos buscando dónde está el navbar, dónde están los componentes auth, dónde está el session provider. Lee 800 líneas. Tarda 5 min y consume 12k tokens.
-
-**Con grafo**: Teo corre `teamdb-search.sh "navbar" concept` → encuentra `concept: ui-navbar`. Corre `teamdb-related.sh ui-navbar concept` → ve que está linkeado a `concept: ui-button` y `concept: auth-session`. Lee solo esos 3 archivos. Tarda 1 min y consume 3k tokens.
-
-**Ahorro**: ~75% de tokens, ~80% de tiempo.
+Pau actualiza únicamente los enlaces de memoria con `teamdb-link.sh` después de
+consolidar conocimiento durable. CodeGraph mantiene su propio índice.
 
 ### Regla nemotécnica
 
@@ -538,10 +532,10 @@ Los comandos se adaptan al stack detectado en `project.yaml`.
 - Constitución de proyecto: `~/.config/opencode/constitucion.md` (este archivo).
 - Constitution de Skalling: `skalling-dev-team/constitucion/constitucion.md` (source).
 - Bundle de memoria del proyecto: `.opencode/context/`.
-- **Grafo de código**: `code_graph_cache` + `code_imports` en la DB del proyecto. Consultar con `/api/codegraph` del dashboard. Refrescar con `POST /api/codegraph/refresh`. Los agentes DEBEN usarlo para entender la estructura del proyecto antes de proponer cambios.
+- **Grafo de código**: índice `.codegraph/`, consultado mediante CodeGraph. No se almacena ni se emula dentro de TeamDB.
 - Cambios SDD: `.opencode/changes/`.
 - Skills disponibles: `~/.config/opencode/skills/`.
-- Comandos: `/skalling-init`, `/skalling-status`, `/skalling-refresh`, `/skalling-doctor`, `/skalling-forget`, `/skalling-update`, `/skalling-codegraph`.
+- Comandos: `/skalling-help`, `/skalling-init`, `/skalling-status`, `/skalling-resume`, `/skalling-memory`, `/skalling-metrics`, `/skalling-codegraph`, `/skalling-dashboard`, `/skalling-refresh`, `/skalling-doctor`, `/skalling-recover`, `/skalling-merge`, `/skalling-update`.
 - R17: commits requieren permiso del usuario y mensajes descriptivos en español.
 
 ---

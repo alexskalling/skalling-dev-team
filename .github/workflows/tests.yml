@@ -44,6 +44,8 @@ jobs:
             tests/snippets-sync.test.sh \
             tests/install-resolves-snippets.test.sh \
             tests/install-platform-contract.test.sh \
+            tests/commands-contract.test.sh \
+            tests/teamdb-resume.test.sh \
             tests/audit-log-actor-source.test.sh \
             tests/teamdb-global-heal.test.sh \
             tests/agents-teamdb-integration.test.sh \
@@ -123,8 +125,8 @@ jobs:
           echo "# Test" > README.md
           bash $GITHUB_WORKSPACE/bootstrap-context.sh --target "$mock" --force
           bash $GITHUB_WORKSPACE/setup.sh --target "$mock" --force
-          test "$(sqlite3 "$HOME/.config/opencode/team.db" "SELECT value FROM schema_meta WHERE key='version'")" = "0.10.0"
-          test "$(sqlite3 "$mock/.opencode/context/team.db" "SELECT value FROM schema_meta WHERE key='version'")" = "0.10.0"
+          test "$(sqlite3 "$HOME/.config/opencode/team.db" "SELECT value FROM schema_meta WHERE key='version'")" = "0.10.1"
+          test "$(sqlite3 "$mock/.opencode/context/team.db" "SELECT value FROM schema_meta WHERE key='version'")" = "0.10.1"
 
       - name: Run PowerShell wrapper on Windows
         if: runner.os == 'Windows'

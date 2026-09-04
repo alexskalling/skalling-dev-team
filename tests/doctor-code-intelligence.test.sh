@@ -81,13 +81,13 @@ afirmar_coincidencias '^[[:space:]]*check_inteligencia_codigo[[:space:]]*$' "$DO
 echo ""
 echo "── Test: 3 ramas cubiertas ──"
 
-afirmar_coincidencias 'command -v codebase-memory-mcp' "$DOCTOR" 1 \
-    "Rama 1: detecta binario con 'command -v codebase-memory-mcp'"
+afirmar_coincidencias 'command -v codegraph' "$DOCTOR" 1 \
+    "Rama 1: detecta binario con 'command -v codegraph'"
 
-afirmar_coincidencias 'codebase-memory-mcp.*opencode\.jsonc|opencode\.jsonc.*codebase-memory-mcp' "$DOCTOR" 1 \
-    "Rama 2: chequea registro en opencode.jsonc"
+afirmar_coincidencias '\.codegraph' "$DOCTOR" 3 \
+    "Rama 2: comprueba el índice local .codegraph"
 
-if grep -qE 'codebase-memory-mcp.*(NO instalado|no instalado)' "$DOCTOR"; then
+if grep -qE 'CodeGraph.*(NO instalado|no instalado)' "$DOCTOR"; then
     aprobar "Rama 3: mensaje de no instalado presente"
 else
     rechazar "Rama 3: mensaje de no instalado ausente"

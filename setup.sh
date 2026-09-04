@@ -291,6 +291,9 @@ step_install_scripts() {
     log INFO "Instalando scripts teamdb en $SCRIPTS_DEST_DIR"
 
     run mkdir -p "$SCRIPTS_DEST_DIR"
+    if [[ -e "$SCRIPTS_DEST_DIR/skalling-models.sh" ]]; then
+        run rm -f "$SCRIPTS_DEST_DIR/skalling-models.sh"
+    fi
 
     local count=0
 
@@ -474,7 +477,9 @@ Ver `.opencode/context/constitucion.md` (o `~/.config/opencode/constitucion.md`)
 - `/skalling-status` — ver estado de memoria
 - `/skalling-refresh` — re-detectar stack
 - `/skalling-doctor` — health check
-- `/skalling-forget` — purgar memoria obsoleta
+- `/skalling-memory` — buscar, relacionar y revisar memoria
+- `/skalling-resume` — retomar trabajo con contexto mínimo
+- `/skalling-recover` — recuperar TeamDB con backup
 
 ## Memoria
 

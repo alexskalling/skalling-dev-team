@@ -2,7 +2,7 @@
 
 Skalling es un equipo de **8 agentes de IA** que trabajan juntos adentro de [OpenCode](https://opencode.ai). Cada agente tiene un rol específico y siguen un ciclo ordenado para construir software bien hecho.
 
-**Versión actual: 0.10.0**
+**Versión actual: 0.10.1**
 
 ---
 
@@ -70,7 +70,7 @@ Podés indicar una ubicación no estándar del repositorio:
 
 ### Code Intelligence (opt-in, v0.4.0+)
 
-**Code Intelligence (opt-in, v0.4.0+)**: Skalling ofrece integración opcional con [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp), un servidor MCP que indexa el código del proyecto en un grafo estructural. Esto permite a los agentes hacer queries como "¿quién llama a X?" o "¿qué afecta Y?" en lugar de leer archivos uno por uno. NO es dependencia dura — no se instala desde `/skalling-init`; si querés usarlo instalalo manualmente. Si está instalado, los 8 agentes saben cuándo usar las 5 tools mediante el snippet de Code Intelligence.
+**Code Intelligence (opt-in)**: Skalling usa CodeGraph para responder preguntas estructurales como “¿quién llama a X?” o “¿qué afecta Y?” antes de recorrer muchos archivos. Su índice `.codegraph/` es independiente de TeamDB: TeamDB conserva conocimiento del proyecto; CodeGraph representa el código. Si CodeGraph no está disponible, los agentes informan la limitación y usan búsquedas normales.
 
 ### Drift detection
 
@@ -110,13 +110,24 @@ Alex clasifica tu pedido y deriva al agente que corresponde.
 
 | Comando | Qué hace |
 |---|---|
+| `/skalling-help` | Indica rápidamente qué comando usar |
 | `/skalling-init` | Prepara el proyecto por primera vez (detecta lenguaje, crea memoria) |
 | `/skalling-status` | Muestra el estado del proyecto y el trabajo en curso |
+| `/skalling-resume` | Recupera una cápsula mínima para continuar el trabajo |
+| `/skalling-memory` | Busca, relaciona, grafica y revisa la memoria desde un solo lugar |
+| `/skalling-metrics` | Reporta mediciones reales del flujo, sin estimar ahorros |
+| `/skalling-codegraph` | Analiza estructura, dependencias e impacto del código |
+| `/skalling-dashboard` | Abre la vista local de TeamDB |
 | `/skalling-refresh` | Vuelve a detectar el lenguaje y herramientas |
 | `/skalling-doctor` | Revisa que la instalación esté sana |
-| `/skalling-forget` | Limpia documentos viejos de la memoria |
+| `/skalling-recover` | Recupera TeamDB desde el dump con backup y confirmación |
 | `/skalling-merge` | Ayuda a resolver conflictos cuando trabajan varios |
 | `/skalling-update` | Busca versiones nuevas de Skalling y las instala si confirmás |
+
+Los antiguos `/skalling-forget`, `/skalling-graph` y
+`/skalling-graph-refresh` fueron consolidados en `/skalling-memory`. La
+configuración automática `/skalling-models` permanece desactivada porque OpenCode
+no ofrece una asignación independiente y segura para los ocho agentes.
 
 ---
 

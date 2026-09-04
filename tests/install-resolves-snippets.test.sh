@@ -45,10 +45,10 @@ fi
 
 for agent in "$AGENTS_DIR"/*.md; do
   base="$(basename "$agent" .md)"
-  if grep -q "codebase-memory-mcp" "$agent"; then
+  if grep -q "codegraph_explore" "$agent"; then
     assert_pass "$base tiene snippet code-intelligence resuelto"
   else
-    assert_fail "$base tiene snippet code-intelligence resuelto" "no aparece codebase-memory-mcp"
+    assert_fail "$base tiene snippet code-intelligence resuelto" "no aparece codegraph_explore"
   fi
 
   if grep -q "Memory Protocol" "$agent"; then

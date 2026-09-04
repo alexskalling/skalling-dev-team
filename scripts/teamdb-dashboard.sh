@@ -7,6 +7,15 @@
 
 set -euo pipefail
 
+usage() {
+  echo "Uso: teamdb-dashboard.sh [proyecto]"
+  echo "Abre el dashboard local de TeamDB y se detiene tras 5 min de inactividad."
+}
+
+case "${1:-}" in
+  --help|-h) usage; exit 0 ;;
+esac
+
 OPENCODE_DIR="${SKALLING_OPENCODE_DIR:-$HOME/.config/opencode}"
 SERVER_SCRIPT="$OPENCODE_DIR/scripts/dashboard-server.py"
 HTML_PATH="$OPENCODE_DIR/web/teamdb-dashboard.html"
@@ -66,11 +75,27 @@ stop_server() {
   fi
 }
 
+open_url() {
+  local url="$1"
+  if command -v open >/dev/null 2>&1; then
+    open "$url" >/dev/null 2>&1
+  elif command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$url" >/dev/null 2>&1
+  elif command -v wslview >/dev/null 2>&1; then
+    wslview "$url" >/dev/null 2>&1
+  elif command -v cmd.exe >/dev/null 2>&1; then
+    cmd.exe /c start "" "$url" >/dev/null 2>&1
+  else
+    echo "Abrí esta URL en tu navegador: $url"
+    return 0
+  fi
+}
+
 # Si el server ya corre, abrir browser y salir
 if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
   port=$(cat "/tmp/teamdb-dashboard.port" 2>/dev/null || echo "3741")
   echo "Dashboard ya corriendo en http://localhost:$port/"
-  open "http://localhost:$port/"
+  open_url "http://localhost:$port/"
   exit 0
 fi
 
@@ -90,4 +115,4 @@ port=$(cat "/tmp/teamdb-dashboard.port")
 sleep 1
 echo "Dashboard: http://localhost:$port/"
 echo "Server corriendo. Se detiene automáticamente después de 5 min de inactividad."
-open "http://localhost:$port/"
+open_url "http://localhost:$port/"

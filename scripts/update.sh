@@ -13,7 +13,7 @@
 #   3. Compara HEAD con origin/main.
 #   4. Si hay cambios, muestra el changelog.
 #   5. Espera confirmación del usuario (stdin) para instalar.
-#   6. Hace pull + re-ejecuta install-global.sh --force.
+#   6. Hace pull + re-ejecuta install-global.sh con backup.
 
 set -euo pipefail
 
@@ -131,12 +131,17 @@ check_updates() {
 do_update() {
     if [[ "$DRY_RUN" == true ]]; then
         info "[dry-run] git pull origin main"
-        info "[dry-run] bash install-global.sh --force"
+        info "[dry-run] bash install-global.sh"
         ok "Dry-run completo. No se modificó nada."
         return 0
     fi
 
     cd "$REPO_DIR"
+
+    if [[ -n "$(git status --porcelain)" ]]; then
+        err "El repo tiene cambios locales. Guardalos o commitealos antes de actualizar."
+        return 1
+    fi
 
     info "Descargando cambios..."
     if ! git pull origin main; then
@@ -145,7 +150,7 @@ do_update() {
     fi
 
     info "Reinstalando Skalling en ~/.config/opencode/..."
-    if ! bash install-global.sh --force; then
+    if ! bash install-global.sh; then
         err "Error al instalar. Revisá el output."
         return 1
     fi

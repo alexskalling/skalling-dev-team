@@ -45,6 +45,7 @@ for t in tests/teamdb-safe-query.test.sh \
          tests/teamdb-operating-model.test.sh \
          tests/agents-quality-contract.test.sh \
          tests/workflow-routing.test.sh \
+         tests/commands-contract.test.sh \
          tests/teamdb.test.sh \
          tests/test-teamdb-dump-sync.test.sh \
          tests/code-intelligence.test.sh \

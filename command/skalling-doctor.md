@@ -1,65 +1,20 @@
 ---
-description: Run health check on Skalling installation. Validates bash, opencode, agents, skills, constitution, project structure and OKF memory.
+description: Diagnostica la instalación global y el proyecto sin modificar nada.
 ---
 
 # Skalling Doctor
 
-Wrapper de `setup-team-doctor.sh` para validar la instalación global, el proyecto y la salud del bundle OKF.
-
-## Uso
+Este comando responde “qué está roto o desactualizado”. Ejecuta el diagnóstico
+canónico en modo de solo lectura:
 
 ```bash
-bash <path-to>/setup-team-doctor.sh --global-only
-bash <path-to>/setup-team-doctor.sh --project "$(pwd)"
-bash <path-to>/setup-team-doctor.sh --strict --project "$(pwd)"
+SK_ROOT="${SKALLING_ROOT:-${SKALLING_OPENCODE_DIR:-$HOME/.config/opencode}}"
+bash "$SK_ROOT/setup-team-doctor.sh" --project "$(pwd)"
 ```
 
-## Interpretación
+Usa `--strict` solo si el usuario pide que los avisos también fallen. Explica cada
+hallazgo en lenguaje sencillo y separa errores bloqueantes de recomendaciones.
 
-- Exit `0` sin warnings: instalación saludable.
-- Exit `0` con warnings: findings no bloqueantes cuando no se usa `--strict`.
-- Exit `1`: errores, o warnings bajo `--strict`.
-
-## Salida
-
-| Categoría | Estado |
-|---|---|
-| Ambiente | ✓ OK / ⚠ warning / ✗ error |
-| Instalación global | ... |
-| Instalación per-project | ... |
-| Frontmatter | ... |
-| Skills | ... |
-| Constitución | ... |
-| Templates | ... |
-| REGLA #13 (design-system.md) | ... |
-| Memoria (bundle OKF) | huérfanos / WIP zombie / stale / superseded / duplicados |
-| Drift detection | ℹ info (manual vía `bash scripts/skalling-drift.sh`) |
-| Spec ↔ Memory link | ℹ info (manual vía `bash scripts/spec-memory-link.sh`) |
-
-## Acciones sugeridas para memoria
-
-- **Concept docs huérfanos:** agregar la referencia correcta a un `index.md` o revisar el documento con `/skalling-forget`.
-- **Trabajo-en-curso zombie:** archivar o consolidar el WIP de más de 30 días con `/skalling-forget`.
-- **Concept docs stale:** revisar vigencia de documentos no referenciados durante más de 6 meses.
-- **Concept docs superseded:** quitar del `index.md` vigente y archivar cuando corresponda.
-- **Duplicados por título:** consolidar los documentos; se reportan como error.
-
-## Otros findings frecuentes
-
-Drift detection solo informa si la herramienta está disponible. La ejecución manual se realiza con `bash scripts/skalling-drift.sh <plan-archivado>`; el doctor no analiza planes archivados automáticamente ni modifica su exit code.
-
-Spec ↔ Memory link también es solo informativo y de ejecución manual: `bash scripts/spec-memory-link.sh <origen> <destino>` lo invoca Pau como parte de su PASO 5 de archivado. El doctor no ejecuta el script ni modifica su exit code.
-
-- Falta constitución: ejecutar `install-global.sh`.
-- Frontmatter inválido: corregir delimitadores YAML del agente.
-- REGLA #13 violada: crear `.opencode/context/proyecto/design-system.md`.
-- Instalación parcial: reinstalar agentes, skills, comandos o templates faltantes.
-
-## TeamDB
-
-El doctor chequea:
-
-- `~/.config/opencode/team.db` existe y schema $(sqlite3 ~/.config/opencode/team.db "SELECT value FROM schema_meta WHERE key='version'" 2>/dev/null || echo "desconocida")
-- `scripts/teamdb-*.sh` ejecutables
-- `skills_active` poblado (skills registry: se re-indexa con `teamdb-skills-sync.sh`)
-- Hooks git activos (si hay `.git`)
+Drift detection de ejecución manual: `bash "$SK_ROOT/scripts/skalling-drift.sh"
+<plan-archivado>` revisa deriva contra una especificación. También puedes ejecutar `bash
+"$SK_ROOT/scripts/spec-memory-link.sh" <origen> <destino>` para enlazar exports históricos.

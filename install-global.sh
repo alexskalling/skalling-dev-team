@@ -233,6 +233,10 @@ install_skills_core() {
 
     remove_broken_symlink "$SKILLS_DIR"
     run mkdir -p "$SKILLS_DIR"
+    if [[ -d "$SKILLS_DIR/skalling-models" ]]; then
+        run rm -rf "$SKILLS_DIR/skalling-models"
+        log INFO "Skill skalling-models retirada (configuración insegura desactivada)"
+    fi
 
     # Las skills core son las listadas en data/skills-by-stack.yaml bajo "core:".
     # Stack-specific NO se instalan acá — se instalan on-demand.
@@ -259,6 +263,15 @@ install_commands() {
 
     remove_broken_symlink "$COMMAND_DIR"
     run mkdir -p "$COMMAND_DIR"
+
+    # Retirar nombres públicos consolidados en v0.10.1. Sin esta limpieza una
+    # actualización conservaría comandos viejos aunque ya no existan en source.
+    local retired
+    for retired in skalling-forget skalling-graph skalling-graph-refresh skalling-models; do
+        if [[ -e "$COMMAND_DIR/$retired.md" || -L "$COMMAND_DIR/$retired.md" ]]; then
+            run rm -f "$COMMAND_DIR/$retired.md"
+        fi
+    done
 
     local cmd_count=0
     for cmd_file in "$SCRIPT_DIR"/command/*.md; do
@@ -306,6 +319,26 @@ install_version_file() {
     fi
 }
 
+install_entrypoints() {
+    log INFO "Instalando entrypoints canónicos en $OPENCODE_DIR"
+    run mkdir -p "$OPENCODE_DIR/scripts"
+    local entrypoint
+    for entrypoint in bootstrap-context.sh setup-team-doctor.sh; do
+        if [[ -f "$SCRIPT_DIR/$entrypoint" ]]; then
+            run cp "$SCRIPT_DIR/$entrypoint" "$OPENCODE_DIR/$entrypoint"
+            run chmod +x "$OPENCODE_DIR/$entrypoint"
+        else
+            log ERROR "$entrypoint no encontrado"
+            return 1
+        fi
+    done
+    if [[ -f "$SCRIPT_DIR/scripts/update.sh" ]]; then
+        run cp "$SCRIPT_DIR/scripts/update.sh" "$OPENCODE_DIR/scripts/update.sh"
+        run chmod +x "$OPENCODE_DIR/scripts/update.sh"
+    fi
+    log OK "bootstrap, doctor y actualizador instalados"
+}
+
 install_merge_helper() {
     log INFO "Instalando merge-helper script en $OPENCODE_DIR"
     if [[ -f "$SCRIPT_DIR/scripts/merge-helper.sh" ]]; then
@@ -326,6 +359,15 @@ install_memory_helpers() {
         log OK "lib-os.sh instalado"
     else
         log ERROR "lib-os.sh no encontrado"
+        return 1
+    fi
+
+    if [[ -f "$SCRIPT_DIR/scripts/lib/lib-stack-detect.sh" ]]; then
+        run cp "$SCRIPT_DIR/scripts/lib/lib-stack-detect.sh" "$OPENCODE_DIR/scripts/lib/lib-stack-detect.sh"
+        run chmod +x "$OPENCODE_DIR/scripts/lib/lib-stack-detect.sh"
+        log OK "lib-stack-detect.sh instalado"
+    else
+        log ERROR "lib-stack-detect.sh no encontrado"
         return 1
     fi
 
@@ -405,6 +447,9 @@ install_skalling_scripts() {
   # Cualquier skalling-*.sh en scripts/ se copia a ~/.config/opencode/scripts/.
   log INFO "Instalando scripts de orquestación skalling-* en $OPENCODE_DIR/scripts"
   run mkdir -p "$OPENCODE_DIR/scripts"
+  if [[ -e "$OPENCODE_DIR/scripts/skalling-models.sh" ]]; then
+    run rm -f "$OPENCODE_DIR/scripts/skalling-models.sh"
+  fi
   local script_count=0
   local script
   for script in "$SCRIPT_DIR"/scripts/skalling-*.sh; do
@@ -579,6 +624,7 @@ do_install() {
     install_constitution
     install_templates
     install_version_file
+    install_entrypoints
     install_merge_helper
     install_memory_helpers
     install_gitattributes_template

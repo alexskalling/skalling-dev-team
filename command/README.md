@@ -1,30 +1,12 @@
 # Comandos de Skalling
 
-## /skalling-dashboard
+La interfaz pública está organizada por intención:
 
-Abre el dashboard web de TeamDB en el browser. No necesita servidor — es un HTML estático que conecta directo a SQLite via WebAssembly.
+- Empezar: `/skalling-init`, `/skalling-help`.
+- Entender: `/skalling-status`, `/skalling-resume`, `/skalling-codegraph`, `/skalling-dashboard`.
+- Memoria: `/skalling-memory`, `/skalling-metrics`.
+- Mantener: `/skalling-refresh`, `/skalling-doctor`, `/skalling-update`.
+- Recuperar: `/skalling-recover`, `/skalling-merge`.
 
-Muestra: stats generales, grafo de memoria (Mermaid), planes con % de avance, tareas, concepts, decisiones, problemas y preferences.
-
-## Uso
-
-```
-/skalling-dashboard
-```
-
-## /skalling-graph
-
-Visualiza la memoria del proyecto como grafo y busca en ella:
-
-1. Auto-enlaza la memoria (`teamdb-link.sh`): `related` por categoría/tag, `uses` módulo→stack. Idempotente.
-2. Dibuja el grafo (`teamdb-graph.sh`) en `text`, `mermaid` o `dot`.
-3. Profundiza en un nodo (`teamdb-related.sh <slug>`): tags + relaciones entrantes y salientes.
-4. Busca memoria (`teamdb-search.sh "<query>"`).
-
-## Uso
-
-```
-/skalling-graph
-```
-
-Para más detalle, ver `command/skalling-graph.md` o `command/skalling-dashboard.md` después de instalar.
+Cada comando es un contrato corto. La lógica ejecutable vive en scripts probados;
+así no se duplica SQL, detección de plataforma ni rutas dentro de los prompts.

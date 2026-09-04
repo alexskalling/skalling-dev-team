@@ -15,7 +15,6 @@ permission:
     "bash *teamdb-link*": allow
     "bash *teamdb-status*": allow
     "bash *teamdb-claim*": allow
-    "bash *teamdb-graph-refresh*": allow
     "bash *teamdb-export*": allow
     "bash *teamdb-import*": ask
     "git status": allow

@@ -170,11 +170,19 @@ else
   assert_fail "teamdb-link.sh instalado enlaza proyecto" "rc=$RC_LINK links=$LINKS"
 fi
 
-# Comando /skalling-graph instalado
-if [ -f "$FAKE_HOME/.config/opencode/command/skalling-graph.md" ]; then
-  assert_pass "comando /skalling-graph instalado"
+# Comando unificado /skalling-memory instalado
+if [ -f "$FAKE_HOME/.config/opencode/command/skalling-memory.md" ]; then
+  assert_pass "comando /skalling-memory instalado"
 else
-  assert_fail "comando /skalling-graph instalado"
+  assert_fail "comando /skalling-memory instalado"
+fi
+
+if [ -x "$FAKE_HOME/.config/opencode/bootstrap-context.sh" ] \
+   && [ -x "$FAKE_HOME/.config/opencode/setup-team-doctor.sh" ] \
+   && [ -x "$FAKE_HOME/.config/opencode/scripts/update.sh" ]; then
+  assert_pass "entrypoints canónicos instalados y ejecutables"
+else
+  assert_fail "entrypoints canónicos instalados y ejecutables"
 fi
 
 # Skills registry: el installer corre teamdb-skills-sync.sh y puebla skills_active
@@ -186,21 +194,23 @@ else
   assert_fail "install: team.db global $EXPECTED_VERSION + skills_active poblado" "ver=$G_VER skills=$G_SKILLS"
 fi
 
-# skalling-init.md debe resolver $SK_ROOT (no $(dirname "$SKALLING_ROOT")) y buscar hooks en $SK_ROOT/hooks
+# El comando delega en el bootstrap canónico; el bootstrap instalado resuelve
+# scripts y hooks sin duplicar esa lógica en el prompt.
 if grep -q '\$(dirname "\$SKALLING_ROOT")' "$ROOT/command/skalling-init.md"; then
   assert_fail "skalling-init.md sin referencias \$(dirname \$SKALLING_ROOT)"
 else
   assert_pass "skalling-init.md sin referencias \$(dirname \$SKALLING_ROOT)"
 fi
-if grep -q 'HOOKS_SRC="\$SK_ROOT/hooks"' "$ROOT/command/skalling-init.md"; then
-  assert_pass "skalling-init.md busca hooks en \$SK_ROOT/hooks (ruta del installer)"
+if grep -q 'hooks_src="\$SCRIPT_DIR/hooks"' "$ROOT/bootstrap-context.sh"; then
+  assert_pass "bootstrap busca hooks en la raíz instalada"
 else
-  assert_fail "skalling-init.md busca hooks en \$SK_ROOT/hooks (ruta del installer)"
+  assert_fail "bootstrap busca hooks en la raíz instalada"
 fi
-if grep -q '\$SK_ROOT/scripts/teamdb-init.sh' "$ROOT/command/skalling-init.md"; then
-  assert_pass "skalling-init.md usa \$SK_ROOT/scripts/teamdb-init.sh"
+if grep -q '\$SK_ROOT/bootstrap-context.sh' "$ROOT/command/skalling-init.md" \
+   && grep -q '\$SCRIPT_DIR/scripts/teamdb-init.sh' "$ROOT/bootstrap-context.sh"; then
+  assert_pass "skalling-init.md delega TeamDB al bootstrap canónico"
 else
-  assert_fail "skalling-init.md usa \$SK_ROOT/scripts/teamdb-init.sh"
+  assert_fail "skalling-init.md delega TeamDB al bootstrap canónico"
 fi
 
 # Code Intelligence (codebase-memory-mcp) ya no se pregunta en el init: el grafo
@@ -210,10 +220,10 @@ if grep -q "¿Querés instalar codebase-memory-mcp\|Code Intelligence (opt-in)" 
 else
   assert_pass "skalling-init.md sin pregunta de codebase-memory-mcp"
 fi
-if grep -q 'teamdb-link.sh' "$ROOT/command/skalling-init.md"; then
-  assert_pass "skalling-init.md enlaza el grafo (teamdb-link.sh)"
+if grep -q 'teamdb-link.sh' "$ROOT/bootstrap-context.sh"; then
+  assert_pass "bootstrap enlaza el grafo (teamdb-link.sh)"
 else
-  assert_fail "skalling-init.md enlaza el grafo (teamdb-link.sh)"
+  assert_fail "bootstrap enlaza el grafo (teamdb-link.sh)"
 fi
 
 # Verificar que NO hay `|| true` silenciador cerca de hooks
