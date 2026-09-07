@@ -74,6 +74,9 @@ good = {
     "task": "Implement login JWT",
     "summary": "Build the login module with TDD.",
     "next_action": "Run task 1 of the plan with TDD.",
+    "readiness": "ready",
+    "implementation_allowed": True,
+    "route": "INLINE",
     "project_context": {
         "stack": {"language": "ts", "test_runner": "vitest"},
         "has_ui": True,

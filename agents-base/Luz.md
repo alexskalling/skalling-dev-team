@@ -95,4 +95,5 @@ Si apruebo un plan alto, entrego a Pau la evidencia y los candidatos de memoria;
 3. Paso 3: debo CITAR evidencia verificable; nunca muto TeamDB.
 
 <!-- @include-snippet code-intelligence -->
+<!-- @include-snippet session-consent -->
 <!-- @include-snippet memory-protocol -->

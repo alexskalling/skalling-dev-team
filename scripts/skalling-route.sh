@@ -9,6 +9,7 @@
 # La tabla es read-only desde bash. El LLM la lee una vez al clasificar intención.
 
 set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 DISPATCH_TABLE="$(cat <<'EOF'
 INTENT / RISK                   | ROUTE        | AGENTS
@@ -65,12 +66,17 @@ PY
 
 cmd_classify() {
   local risk="" clarity="clear" kind="code" record=false intent="" project request_id=""
+  local scope="unknown" decision="none" sensitive=false visual=false needs_user_decision=false implementation_allowed=false readiness="missing"
   project="$(pwd)"
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --risk) risk="${2:-}"; shift 2 ;;
       --clarity) clarity="${2:-}"; shift 2 ;;
       --kind) kind="${2:-}"; shift 2 ;;
+      --scope) scope="${2:-}"; shift 2 ;;
+      --decision) decision="${2:-}"; shift 2 ;;
+      --sensitive) sensitive=true; shift ;;
+      --visual) visual=true; shift ;;
       --record) record=true; shift ;;
       --intent) intent="${2:-}"; shift 2 ;;
       --project) project="${2:-}"; shift 2 ;;
@@ -79,12 +85,26 @@ cmd_classify() {
     esac
   done
   case "$risk" in low|medium|high) ;; *) printf 'risk debe ser low, medium o high\n' >&2; return 2 ;; esac
+  case "$clarity" in clear|ambiguous) ;; *) printf 'clarity inválida\n' >&2; return 2 ;; esac
+  case "$kind" in code|research|audit) ;; *) printf 'kind inválido\n' >&2; return 2 ;; esac
+  case "$scope" in local|module|cross-cutting|unknown) ;; *) printf 'scope inválido\n' >&2; return 2 ;; esac
+  case "$decision" in none|pending|resolved) ;; *) printf 'decision inválida\n' >&2; return 2 ;; esac
+  if [ "$sensitive" = true ] || [ "$scope" = cross-cutting ] || [ "$clarity" = ambiguous ] || [ "$decision" = pending ]; then
+    risk=high
+  elif [ "$scope" = module ] && [ "$risk" = low ]; then
+    risk=medium
+  fi
+  if [ "$visual" = true ] && [ "$risk" = low ]; then
+    risk=medium
+  fi
+  if [ "$decision" = pending ] || [ "$clarity" = ambiguous ]; then needs_user_decision=true; fi
+  if [ "$kind" = code ] && [ "$scope" != unknown ] && [ "$needs_user_decision" = false ]; then implementation_allowed=true; fi
   local route agents verification
   case "$kind" in
     research) route="RESEARCH"; agents="Alex → Jes"; verification="sources" ;;
     audit) route="DIRECT"; agents="Alex → Luz"; verification="audit" ;;
     *)
-      if [ "$risk" = "high" ] || [ "$clarity" = "ambiguous" ]; then
+      if [ "$risk" = "high" ] || [ "$scope" = unknown ]; then
         route="SDD"; agents="Alex → Pol → Sol → Teo → Jhon → Luz → Pau"; verification="full"
       elif [ "$risk" = "medium" ]; then
         route="INLINE"; agents="Alex → Sol → Teo → Jhon"; verification="module"
@@ -93,14 +113,32 @@ cmd_classify() {
       fi
       ;;
   esac
+  local project_db="$project/.opencode/context/team.db"
+  if [ -f "$project_db" ] && command -v sqlite3 >/dev/null 2>&1; then
+    readiness="$(sqlite3 "$project_db" "SELECT value FROM schema_meta WHERE key='project_readiness' LIMIT 1" 2>/dev/null || true)"
+    [ -n "$readiness" ] || readiness="missing"
+  fi
+  if [ "$kind" = code ] && [ "$readiness" != ready ]; then
+    implementation_allowed=false
+    route="DISCOVERY"
+    agents="Alex → Jes → Pol"
+    verification="readiness"
+  fi
   if [ "$record" = true ]; then
     [ -n "$intent" ] || { printf 'ERROR: --record requiere --intent\n' >&2; return 2; }
     [ -n "$request_id" ] || request_id="req-$(date +%Y%m%d%H%M%S)-$$"
     persist_classification "$project/.opencode/context/team.db" "$request_id" "$intent" "$route" "$agents" "$risk"
-    printf '{"risk":"%s","route":"%s","agents":"%s","verification":"%s","request_id":"%s"}\n' "$risk" "$route" "$agents" "$verification" "$request_id"
-  else
-    printf '{"risk":"%s","route":"%s","agents":"%s","verification":"%s"}\n' "$risk" "$route" "$agents" "$verification"
   fi
+  python3 - "$risk" "$route" "$agents" "$verification" "$request_id" "$needs_user_decision" "$implementation_allowed" "$readiness" <<'PY'
+import json, sys
+risk, route, agents, verification, request_id, decision, allowed, readiness = sys.argv[1:]
+result = dict(risk=risk, route=route, agents=agents, verification=verification,
+              needs_user_decision=decision == 'true', implementation_allowed=allowed == 'true',
+              readiness=readiness)
+if request_id:
+    result['request_id'] = request_id
+print(json.dumps(result, ensure_ascii=False, separators=(',', ':')))
+PY
 }
 
 cmd_record() {
@@ -137,7 +175,7 @@ case "${1:-help}" in
   classify) shift; cmd_classify "$@" ;;
   record)  shift; cmd_record "$@" ;;
   help|-h|--help)
-    printf 'Uso:\n  %s list\n  %s classify --risk NIVEL [--record --intent TEXTO --project RUTA]\n  %s record ROUTE AGENT [INTENT]\n' "$0" "$0" "$0"
+    printf 'Uso:\n  %s list\n  %s classify --risk low|medium|high --scope local|module|cross-cutting|unknown [--clarity clear|ambiguous] [--decision none|pending|resolved] [--sensitive] [--visual] [--record --intent TEXTO --project RUTA]\n  %s record ROUTE AGENT [INTENT]\n' "$0" "$0" "$0"
     ;;
   *)
     printf 'Subcomando desconocido: %s\n' "$1" >&2

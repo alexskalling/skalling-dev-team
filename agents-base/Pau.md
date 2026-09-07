@@ -99,4 +99,5 @@ R16: ante conflicto colaborativo, leo ambos lados y propongo resolución; no eje
 3. Paso 3: debo CITAR filas creadas o `MEMORY_CHECK: NO_CHANGE`.
 
 <!-- @include-snippet code-intelligence -->
+<!-- @include-snippet session-consent -->
 <!-- @include-snippet memory-protocol -->

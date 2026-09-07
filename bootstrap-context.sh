@@ -268,12 +268,59 @@ check_design_md() {
     log "  Sugerencia: correr /impeccable document o crear manualmente."
 }
 
+CODEGRAPH_STATUS="unavailable"
+init_codegraph() {
+    if [[ -d "$PROJECT_DIR/.codegraph" ]]; then
+        ok "CodeGraph presente"
+        CODEGRAPH_STATUS="ready"
+        return 0
+    fi
+    if command -v gentle-ai >/dev/null 2>&1 && gentle-ai codegraph init --cwd "$PROJECT_DIR" >/dev/null 2>&1; then
+        ok "CodeGraph inicializado"
+        CODEGRAPH_STATUS="ready"
+        return 0
+    fi
+    if command -v codegraph >/dev/null 2>&1 && codegraph init "$PROJECT_DIR" >/dev/null 2>&1; then
+        ok "CodeGraph inicializado con CLI"
+        CODEGRAPH_STATUS="ready"
+        return 0
+    fi
+    if ! command -v gentle-ai >/dev/null 2>&1 && ! command -v codegraph >/dev/null 2>&1; then
+        warn "CodeGraph no disponible; los agentes deberán usar lectura directa"
+        CODEGRAPH_STATUS="unavailable"
+        return 0
+    fi
+    warn "CodeGraph no pudo inicializarse; el proyecto queda sin inteligencia estructural"
+    CODEGRAPH_STATUS="failed"
+}
+
+hydrate_project_context() {
+    local codegraph_status="$1"
+    local hydrator="$SCRIPT_DIR/scripts/skalling-bootstrap-context.py"
+    if [[ ! -f "$hydrator" ]]; then
+        err "Falta skalling-bootstrap-context.py; no se puede validar preparación"
+        return 1
+    fi
+    local result
+    if ! result="$(python3 "$hydrator" --project "$PROJECT_DIR" --codegraph "$codegraph_status")"; then
+        err "Proyecto degradado: falta contexto real o evidencia visual"
+        [[ -n "$result" ]] && printf '  %s\n' "$result" >&2
+        return 1
+    fi
+    ok "Contexto real guardado en TeamDB"
+    printf '  %s\n' "$result"
+}
+
 # ──────────────────────────────────────────────────────────────────────────────
 # R10 — TEAMDB (libSQL)
 # ──────────────────────────────────────────────────────────────────────────────
 
 init_teamdb() {
     local project="$1"
+    if [[ "$DRY_RUN" == true ]]; then
+        log "[dry-run] teamdb se inicializaría y validaría"
+        return 0
+    fi
     if command -v sqlite3 >/dev/null 2>&1; then
         if [[ -f "$SCRIPT_DIR/scripts/teamdb-init.sh" ]]; then
             # bootstrap es ejecutado por Alex → seteamos TEAMDB_ACTOR=alex
@@ -337,6 +384,11 @@ main() {
     fi
     echo ""
 
+    if [[ -f "$CONTEXT_DIR/team.db" && "$FORCE" == false && "$DRY_RUN" == false ]]; then
+        err "El proyecto ya está inicializado. Usá --force solo para una reparación consciente."
+        return 4
+    fi
+
     detect_stack
 
     if [[ "$ONLY_DETECTION" == true ]]; then
@@ -347,11 +399,18 @@ main() {
     generate_bundle
     generate_project_yaml
     init_teamdb "$PROJECT_DIR"
+    if [[ "$DRY_RUN" == false ]]; then
+        init_codegraph
+        if ! hydrate_project_context "$CODEGRAPH_STATUS"; then
+            err "Bootstrap incompleto: Skalling no habilitará implementación"
+            return 3
+        fi
+    fi
     activate_teamdb_hooks "$PROJECT_DIR"
     check_design_md
 
     echo ""
-    ok "Bootstrap completo"
+    ok "Bootstrap completo — proyecto READY"
     echo ""
     cat <<EOF
   Bundle OKF: $CONTEXT_DIR

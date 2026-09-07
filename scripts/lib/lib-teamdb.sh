@@ -121,7 +121,7 @@ CREATE TABLE IF NOT EXISTS routing_decisions (
   id INTEGER PRIMARY KEY,
   ts TEXT NOT NULL,
   user_intent TEXT NOT NULL,
-  chosen_route TEXT NOT NULL CHECK (chosen_route IN ('INLINE','INTERVENTION','FAST-TRACK','SDD','DIRECT','RESEARCH')),
+  chosen_route TEXT NOT NULL CHECK (chosen_route IN ('DISCOVERY','INLINE','INTERVENTION','FAST-TRACK','SDD','DIRECT','RESEARCH')),
   route_reason TEXT,
   agents_involved TEXT,
   outcome TEXT DEFAULT 'PENDING' CHECK (outcome IN ('PENDING','SUCCESS','FAIL','CANCELLED')),

@@ -1,227 +1,70 @@
 ---
 name: skalling-routing
-description: "Trigger: routing, fast-track, direct, sdd, plan, scope, complexity. Determinates the implementation route based on scope and complexity."
+description: "Clasificar intención, impacto, riesgo y decisiones humanas antes de delegar cambios."
 license: MIT
 metadata:
   author: skalling-team
-  version: "1.0"
+  version: "2.0"
 ---
 
-# Skalling Routing — Organic Implementation Routing
+# Routing por evidencia
 
-## Activation Triggers
+Alex clasifica antes de delegar. El script aplica parámetros: NO interpreta el
+texto de --intent ni descubre por sí mismo el riesgo.
 
-Load when:
-- User requests a change
-- Unclear which route applies
-- Scope ambiguity exists
-- "cómo hago esto", "rápido", "simple", "complejo", "plan"
+1. Distinguir explicación, auditoría e implementación. Explicar y auditar no autorizan cambios.
+2. Consultar contexto mínimo e impacto. Si se desconoce, investigar con Jes/CodeGraph antes de implementar.
+3. Detectar áreas sensibles (auth, permisos, pagos, datos persistidos, secretos, infraestructura, CI/CD), contratos, arquitectura, costes, UI y alcance transversal. Todo cambio de estilos usa `--visual`.
+4. Ante una decisión crítica pendiente, Alex presenta 2–3 opciones, consecuencias y recomendación al usuario y espera su respuesta. No responde por el usuario a preguntas de Pol/Sol.
+5. Clasificar y comunicar ruta, motivo y fases omitidas.
 
-## Hard Rules
-
-1. **Never skip phases without justification.** Fast-track requires explicit scope justification.
-2. **Routing decision is final for this request.** Don't re-evaluate mid-implementation.
-3. **Scope never grows silently.** If scope increases, re-evaluate routing.
-4. **Every route produces a receipt.** No exceptions.
-5. **Persist every classification.** Run `skalling-route.sh classify --record --intent "<resumen>" --project "$PWD"` and reuse its `request_id` until `skalling-metrics.sh finish`.
-
-## Decision Gates
-
-| Condition | Route |
-| --- | --- |
-| 1-3 files, clear scope, understood | **INLINE** — Alex → Teo directly |
-| 4+ files, multiple concepts, ambiguous | **SDD** — Full cycle: Pol → Sol → Teo |
-| Bug fix, isolated, reproducible | **INTERVENTION** — Alex → Teo (surgical) |
-| UI trivial (color, text, spacing) | **FAST-TRACK** — Alex → Teo (no plan) |
-| Security/audit request | **DIRECT** — Alex → Luz (skip all) |
-| Understanding/research | **RESEARCH** — Alex → Jes |
-
-## Route Definitions
-
-### INLINE Route
-
-**When:** 1-3 files, clear scope, understood.
-
-```
-Usuario → Alex → Teo (direct)
-Teo: TDD mínimo, 1-2 tests, implementación
-Teo → Alex: "Hecho. Receipt: [resumen]"
-```
-
-**Receipt format:**
-```json
-{
-  "route": "INLINE",
-  "files": ["src/auth/login.ts"],
-  "tests": "2 passing",
-  "verification": "bun test src/auth/login.test.ts ✓"
-}
-```
-
-### INTERVENTION Route (Bug Fix)
-
-**When:** Bug aislado, reproducible, scope conocido.
-
-```
-Usuario → Alex → Teo (direct, surgical mode)
-Teo: RED (test que reproduce) → GREEN (fix) → REFACTOR
-Teo → Alex: "Bug corregido. Receipt: [bug + fix + test]"
-```
-
-**Receipt format:**
-```json
-{
-  "route": "INTERVENTION",
-  "bug": "descripción del bug",
-  "fix": "cómo se arregló",
-  "test": "test de regresión agregado",
-  "verification": "bun test ✓"
-}
-```
-
-### FAST-TRACK Route
-
-**When:** UI trivial, typo, config, single line.
-
-```
-Usuario → Alex → Teo (no plan, no SDD)
-Teo: implementación directa, minimal test
-```
-
-**Restrictions:**
-- No SDD artifacts
-- No Pol/Sol
-- Max 1 archivo modificado
-- Test opcional (si hay regression risk)
-
-### SDD Route (Full Cycle)
-
-**When:** 4+ files, ambiguous scope, new feature, architectural decision.
-
-```
-Usuario → Alex → Pol → Sol → Teo ↔ Jhon → Luz → Pau
-```
-
-**Stages:**
-1. **Pol:** Questions → DB (plans table)
-2. **Sol:** design → DB (plans.body_md) + tasks → DB (tasks table) via `bash scripts/teamdb-plan.sh`
-3. **Teo:** RED → GREEN → REFACTOR per task
-4. **Jhon:** Per-task verification + regression
-5. **Luz:** Quality gate
-6. **Pau:** Documentation
-
-**Receipt format:**
-```json
-{
-  "route": "SDD",
-  "slug": "auth-jwt",
-  "tasks": ["task 1.1", "task 1.2", "task 2.1"],
-  "coverage": 87,
-  "verdict": "PASSED",
-  "artifacts": [".opencode/changes/auth-jwt/"]
-}
-```
-
-### RESEARCH Route
-
-**When:** Learning, investigation, concept clarification.
-
-```
-Usuario → Alex → Jes
-Jes: Investigate → Explain at requested level
-```
-
----
-
-## Scope Decision Tree
-
-```
-START: User request received
-  │
-  ├─► "¿Es aprendizaje/investigación?"
-  │     └─► YES → RESEARCH Route (Jes)
-  │
-  ├─► "¿Es auditoría/seguridad?"
-  │     └─► YES → DIRECT Route (Luz)
-  │
-  ├─► "¿Bug aislado, reproducible?"
-  │     └─► YES → INTERVENTION Route (Teo surgical)
-  │
-  ├─► "¿Cambio trivial? (UI, typo, config)"
-  │     └─► YES → FAST-TRACK Route (Teo, no plan)
-  │
-  ├─► "¿1-3 archivos, scope claro?"
-  │     └─► YES → INLINE Route (Teo direct)
-  │
-  └─► "¿4+ archivos, scope ambiguo?"
-          └─► YES → SDD Route (Pol → Sol → Teo)
-```
-
----
-
-## Routing Anti-Patterns
-
-| Anti-pattern | Detection | Correct Route |
+| Evidencia | Ruta | Equipo |
 |---|---|---|
-| Calling SDD for 1 file | Scope creep | INLINE |
-| INLINE for 10 files | Under-scoping | SDD |
-| Fast-track for new feature | No validation | SDD |
-| Research for bug fix | Wrong route | INTERVENTION |
+| Local, claro, reversible, sin área sensible ni decisión pendiente | FAST-TRACK | Alex → Teo → Jhon |
+| Cambio acotado de módulo/contrato conocido, riesgo medio | INLINE | Alex → Sol → Teo → Jhon |
+| Feature grande/nueva de alcance medio-alto, flujo transversal, arquitectura, seguridad, datos, CI/CD o ambigüedad material | SDD | Alex → Pol → Sol → Teo → Jhon → Luz → Pau |
+| Solo investigación/explicación | RESEARCH | Alex → Jes |
+| Solo auditoría | DIRECT | Alex → Luz |
 
----
+Pol aclara alcance y aceptación; Sol persiste plan/tasks en TeamDB; Teo implementa;
+Jhon verifica; Luz revisa riesgos; Pau conserva conocimiento durable cuando exista.
+No convocar a todos para una corrección pequeña, pero preservar los controles del riesgo.
 
-## Output Contract
+## Clasificación ejecutable
 
-When routing is complete, return:
-
-```json
-{
-  "route": "INLINE|INTERVENTION|FAST-TRACK|SDD|DIRECT|RESEARCH",
-  "scope": "1-3 files" | "bug fix" | "trivial" | "complex",
-  "agents": ["Alex", "Teo"],
-  "skip_phases": ["Pol", "Sol"] | [],
-  "receipt_required": true
-}
+```bash
+skalling-route.sh classify --risk low --scope local --clarity clear --decision none --kind code --record --intent "Corregir texto de botón" --project "$PWD"
+skalling-route.sh classify --risk high --scope cross-cutting --sensitive --decision pending --record --intent "Cambiar autenticación" --project "$PWD"
 ```
 
----
+--scope: local, module, cross-cutting o unknown (default).
+--decision: none, pending o resolved; resolved exige respuesta real del usuario.
+--clarity: clear o ambiguous. --kind: code, research o audit.
+--sensitive: marcar cualquiera de las áreas sensibles anteriores.
+--visual: obliga al menos ruta INLINE con Sol y consulta del concepto `design-system`.
 
-## Triggers para re-evaluación
+Sin `readiness=ready` el resultado es DISCOVERY y no se delega código. Sin alcance comprobado no hay FAST-TRACK. implementation_allowed=false impide
+implementar pero permite investigar, preparar plan y opciones. Un true no sustituye
+plan/aceptación ni autoriza publicación. Registrar con --record, conservar request_id
+y cerrar métricas con skalling-metrics.sh finish. Cada resultado requiere evidencia
+real: fuentes, hallazgos o pruebas según intención; nunca inventar receipts.
 
-Re-evaluate routing if:
-- Scope increases by 50%+
-- New files discovered mid-implementation
-- User changes requirements
-- 3+ rejections in a row
+## Reevaluación
 
----
+Reevaluar al descubrir impacto, riesgo o ambigüedad nuevos, sin esperar porcentajes
+ni varios rechazos. Teo devuelve ROUTE_REASSESSMENT_REQUIRED si el atajo no se sostiene.
+No rebajar riesgo por coste de tokens, urgencia, cantidad de archivos o la palabra fix.
 
-## Examples
+Ejemplos: texto de botón → FAST-TRACK; ordenamiento de módulo conocido → INLINE;
+validación de sesión/login → SDD por seguridad; rehacer pedidos → SDD aunque sean
+dos archivos; explicar login → RESEARCH sin cambios.
 
-**Example 1: "Arreglá el bug del login"**
-```
-→ INTERVENTION Route
-→ Teo surgical mode
-→ Receipt: {bug: "login returns 500", fix: "middleware order"}
-```
+## Publicación y autoridad
 
-**Example 2: "Cambiá el color del botón a rojo"**
-```
-→ FAST-TRACK Route
-→ Teo direct
-→ Receipt: {file: "components/Button.css", change: "background: red"}
-```
-
-**Example 3: "Implementá auth con JWT"**
-```
-→ SDD Route
-→ Pol → Sol → Teo → Jhon → Luz → Pau
-→ Receipt: {slug: "auth-jwt", coverage: 87, verdict: "PASSED"}
-```
-
-**Example 4: "Explicame cómo funciona el auth"**
-```
-→ RESEARCH Route
-→ Jes
-→ No receipt required
-```
+Push y deploy desautorizados por defecto. Requieren permiso explícito del usuario
+en esta sesión para el alcance y destino. Un permiso puntual anterior no se reutiliza;
+uno para toda la sesión vale dentro de su alcance hasta revocación. Implementar,
+terminar, aprobar plan, tests o commit no autoriza publicación. Si pidió revisar
+antes, esperar su aprobación del resultado. La delegación transporta cita y alcance
+del permiso; los agentes no lo crean. Trabajo independiente puede continuar mientras
+una decisión humana sigue pendiente.

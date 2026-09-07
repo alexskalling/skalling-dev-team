@@ -82,4 +82,5 @@ Máximo tres rechazos por task. El tercero escala a Alex con historial y causa a
 3. Paso 3: debo CITAR filas, comandos y resultados que sostienen el veredicto.
 
 <!-- @include-snippet code-intelligence -->
+<!-- @include-snippet session-consent -->
 <!-- @include-snippet memory-protocol -->

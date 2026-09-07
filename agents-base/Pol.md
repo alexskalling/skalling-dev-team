@@ -85,4 +85,5 @@ Si Alex transmite “suficiente, procede”, entrego lo conocido, marco supuesto
 Nunca uso helpers heredados, SQL directo, `teamdb-plan.sh` ni archivos `.opencode/changes/<feature-slug>/`.
 
 <!-- @include-snippet code-intelligence -->
+<!-- @include-snippet session-consent -->
 <!-- @include-snippet memory-protocol -->

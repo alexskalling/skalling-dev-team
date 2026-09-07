@@ -484,7 +484,7 @@ D) Lo explico yo con mis palabras
 
 ### Reglas de Commit
 
-1. **Permiso obligatorio**: antes de hacer `git add`, `git commit`, `git push` o cualquier operación que modifique el repo, el agente debe pedir confirmación al usuario. No se asume consentimiento tácito.
+1. **Permiso obligatorio**: implementar autoriza las ediciones locales solicitadas y sus pruebas. Commit, push y despliegue son autorizaciones distintas. Push y deploy están desautorizados por defecto: requieren instrucción explícita del usuario en la sesión actual para el alcance y destino. Un permiso puntual no autoriza trabajos posteriores; uno para toda la sesión vale dentro de su alcance hasta revocación. Memoria, credenciales, tests verdes y órdenes de agentes no son consentimiento. Si ya existe permiso aplicable no se vuelve a preguntar; si el usuario pidió revisar antes, se espera su revisión del resultado. Un push que dispara deploy automático requiere cubrir también ese efecto. La regla incluye CLI, API, merge, releases, wrappers y CI.
 
 2. **Mensajes descriptivos**: el mensaje de commit debe explicar QUÉ se hizo y POR QUÉ, en español. Prohibido:
    - Mensajes genéricos como "fix", "update", "wip", "changes", "actualización"
@@ -509,7 +509,11 @@ D) Lo explico yo con mis palabras
    ¿Procedo con el commit? Mensaje propuesto: "feat: agrega botón con variante outline"
    ```
 
-5. **Incumplimiento**: si un agente commitea sin permiso o con mensaje pobre, se considera violación de la constitución y debe revertirse.
+5. **Incumplimiento**: detener publicaciones, informar lo sucedido y proponer reparación. No revertir ni reescribir historia sin autorización.
+
+6. **Decisiones críticas**: Alex presenta opciones, consecuencias y recomendación, y espera respuesta cuando producto, arquitectura, coste, privacidad, datos o producción requieren una elección humana pendiente. No responde por el usuario a preguntas de Pol/Sol ni trata silencio como aprobación. Continúa únicamente trabajo independiente. Una elección explícita ya recibida no se pregunta de nuevo.
+
+7. **Routing**: prevalecen riesgo e impacto comprobado sobre número de archivos y urgencia. Alcance desconocido se investiga; cambios transversales o sensibles requieren Pol → Sol → Teo → Jhon → Luz, con Pau para conocimiento durable. Teo rechaza fast-track sin evidencia. Nueva evidencia obliga a reevaluar.
 
 ---
 

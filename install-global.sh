@@ -250,7 +250,8 @@ install_skills_core() {
     for name in $core_skills; do
         local skill_dir="$SCRIPT_DIR/skills-base/$name"
         if [[ -d "$skill_dir" ]]; then
-            run cp -r "$skill_dir" "$SKILLS_DIR/$name"
+            run mkdir -p "$SKILLS_DIR/$name"
+            run cp -R "$skill_dir/." "$SKILLS_DIR/$name/"
             skill_count=$((skill_count + 1))
         else
             log WARN "Core skill declarada en YAML pero no existe: $name"
@@ -459,6 +460,11 @@ install_skalling_scripts() {
     run chmod +x "$OPENCODE_DIR/scripts/$(basename "$script")"
     script_count=$((script_count + 1))
   done
+  if [ -f "$SCRIPT_DIR/scripts/skalling-bootstrap-context.py" ]; then
+    run cp "$SCRIPT_DIR/scripts/skalling-bootstrap-context.py" "$OPENCODE_DIR/scripts/skalling-bootstrap-context.py"
+    run chmod +x "$OPENCODE_DIR/scripts/skalling-bootstrap-context.py"
+    script_count=$((script_count + 1))
+  fi
   if [ "$script_count" -gt 0 ]; then
     log OK "$script_count scripts skalling-* instalados"
   else

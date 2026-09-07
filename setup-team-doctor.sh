@@ -461,6 +461,13 @@ check_teamdb() {
         else
             warn "team.db proyecto schema v${pver:-?} vs VERSION=$SKALLING_VERSION"
         fi
+        local readiness
+        readiness="$(sqlite3 -separator $'\t' "$project_db" "SELECT value FROM schema_meta WHERE key='project_readiness'" 2>/dev/null || echo "")"
+        if [[ "$readiness" == "ready" ]]; then
+            ok "contexto del proyecto READY"
+        else
+            warn "contexto del proyecto ${readiness:-missing} — ejecutar /skalling-init --force antes de implementar"
+        fi
         # Verificar audit log triggers
         local trigger_count
         trigger_count="$(sqlite3 -separator $'\t' "$project_db" "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name LIKE '%audit%'" 2>/dev/null || echo "0")"

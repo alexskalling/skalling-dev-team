@@ -1120,6 +1120,8 @@ test_bootstrap_e2e() {
   }
 }
 EOF
+    mkdir -p "$mock_dir/src"
+    printf '%s\n' ':root { --brand: #123456; }' > "$mock_dir/src/globals.css"
     cat > "$mock_dir/README.md" <<'EOF'
 # Test Project
 This is a test project for Skalling bootstrap.

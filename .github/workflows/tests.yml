@@ -21,6 +21,8 @@ jobs:
           python3 tests/dashboard-server.test.py
           bash tests/dashboard-launcher.test.sh
           bash tests/quality-priorities.test.sh
+          python3 tests/routing-safety.test.py
+          bash tests/bootstrap-readiness.test.sh
           bash tests/teamdb-hardening-suite.sh
 
       - name: Run doctor strictly against a fresh installation

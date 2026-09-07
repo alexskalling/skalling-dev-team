@@ -55,6 +55,15 @@
       "type": "string",
       "description": "Adaptive route selected for this request"
     },
+    "readiness": {
+      "type": "string",
+      "enum": ["ready", "degraded", "missing"],
+      "description": "Estado de preparación del proyecto calculado por skalling-init"
+    },
+    "implementation_allowed": {
+      "type": "boolean",
+      "description": "Resultado ejecutable del gate de routing; nunca implica permiso de publicación"
+    },
     "context_capsule": {
       "type": "object",
       "description": "Small shared context selected from TeamDB and Code Intelligence",
@@ -154,9 +163,15 @@
   "additionalProperties": false,
   "allOf": [
     {
-      "description": "Si destino es Teo o Luz → requiere project_context",
-      "if": { "properties": { "to": { "enum": ["TEO", "LUZ"] } } },
-      "then": { "required": ["project_context"] }
+      "description": "Si destino es Teo → requiere contexto listo y autorización de implementación",
+      "if": { "properties": { "to": { "const": "TEO" } } },
+      "then": {
+        "required": ["project_context", "readiness", "implementation_allowed", "route"],
+        "properties": {
+          "readiness": { "const": "ready" },
+          "implementation_allowed": { "const": true }
+        }
+      }
     },
     {
       "description": "Si destino es Jhon o Luz → requiere verification (recibir evidencia)",

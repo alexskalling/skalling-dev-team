@@ -4,6 +4,17 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.10.3] — 2026-09-07
+
+### Fixed
+- `/skalling-init` ahora hidrata contexto real, indexa CodeGraph, siembra TeamDB y solo declara `READY` cuando las comprobaciones semánticas pasan.
+- El routing bloquea implementación y deriva a descubrimiento cuando la memoria del proyecto falta o está degradada.
+- Los cambios visuales suben como mínimo a flujo `INLINE`; Alex y Teo deben respetar el sistema de diseño y el alcance aprobado.
+- Routing unificado por riesgo e impacto; alcance desconocido, áreas sensibles y decisiones pendientes impiden atajos a Teo. Reclasificación obligatoria ante nueva evidencia.
+- Los ocho agentes exigen consentimiento explícito de sesión para push/deploy y escalan decisiones críticas al usuario.
+- Instalación global actualiza el contenido de skills existentes sin anidar otra copia y dejar activa la versión anterior.
+- Pruebas de regresión para alcance, seguridad, decisiones humanas e intención de solo lectura.
+
 ## [0.10.2] — 2026-09-04
 
 ### Added
@@ -415,7 +426,8 @@ Sesiones que pedían "plan X" generaban `.md` huérfanos en `.opencode/changes/<
 - Templates OKF (6 tipos: Concept, Decision, Preference, Workaround, WorkInProgress, Context)
 - `setup.sh` inicial (legacy, sin idempotencia)
 
-[Unreleased]: https://github.com/alexskalling/skalling-dev-team/compare/v0.10.2...HEAD
+[Unreleased]: https://github.com/alexskalling/skalling-dev-team/compare/v0.10.3...HEAD
+[0.10.3]: https://github.com/alexskalling/skalling-dev-team/compare/v0.10.2...v0.10.3
 [0.10.2]: https://github.com/alexskalling/skalling-dev-team/compare/v0.8.3...v0.10.2
 [0.10.1]: https://github.com/alexskalling/skalling-dev-team/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/alexskalling/skalling-dev-team/compare/v0.9.2...v0.10.0

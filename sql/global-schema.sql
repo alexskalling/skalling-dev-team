@@ -129,7 +129,7 @@ CREATE TABLE routing_decisions (
   id INTEGER PRIMARY KEY,
   ts TEXT NOT NULL,
   user_intent TEXT NOT NULL,
-  chosen_route TEXT NOT NULL CHECK (chosen_route IN ('INLINE','INTERVENTION','FAST-TRACK','SDD','DIRECT','RESEARCH')),
+  chosen_route TEXT NOT NULL CHECK (chosen_route IN ('DISCOVERY','INLINE','INTERVENTION','FAST-TRACK','SDD','DIRECT','RESEARCH')),
   route_reason TEXT,
   agents_involved TEXT,
   outcome TEXT DEFAULT 'PENDING' CHECK (outcome IN ('PENDING','SUCCESS','FAIL','CANCELLED')),
@@ -160,7 +160,7 @@ CREATE TABLE workflow_metrics (
   outcome TEXT
 );
 
-INSERT INTO schema_meta VALUES ('version', '0.10.2');
+INSERT INTO schema_meta VALUES ('version', '0.10.3');
 INSERT INTO schema_meta VALUES ('type', 'global');
 INSERT INTO schema_meta VALUES ('legacy_surface.work_in_progress', 'read_only_compatibility');
 INSERT INTO schema_meta VALUES ('legacy_surface.code_graph_cache', 'external_codegraph');

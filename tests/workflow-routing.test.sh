@@ -13,6 +13,7 @@ INSERT INTO concepts(slug,title,body_md,category,updated_at) VALUES('auth','Aute
 INSERT INTO concepts(slug,title,body_md,category,updated_at) VALUES('project-summary','Resumen del proyecto','Sistema de agentes Skalling','project-summary',datetime('now'));
 INSERT INTO decisions(slug,title,body_md,status) VALUES('jwt','Usar JWT','Refresh rotativo','accepted');
 INSERT INTO known_problems(slug,title,symptom_md,status) VALUES('clock','Desfase de reloj','Expiración anticipada','open');
+INSERT INTO schema_meta(key,value) VALUES('project_readiness','ready');
 SQL
 
 assert_contains() {
@@ -20,9 +21,9 @@ assert_contains() {
   case "$output" in *"$expected"*) echo "✓ $description" ;; *) echo "✗ $description: $output" >&2; exit 1 ;; esac
 }
 
-LOW="$(bash "$ROOT/scripts/skalling-route.sh" classify --risk low --clarity clear --kind code)"
-MEDIUM="$(bash "$ROOT/scripts/skalling-route.sh" classify --risk medium --clarity clear --kind code)"
-HIGH="$(bash "$ROOT/scripts/skalling-route.sh" classify --risk high --clarity ambiguous --kind code)"
+LOW="$(bash "$ROOT/scripts/skalling-route.sh" classify --project "$PROJECT" --risk low --scope local --clarity clear --kind code)"
+MEDIUM="$(bash "$ROOT/scripts/skalling-route.sh" classify --project "$PROJECT" --risk medium --scope module --clarity clear --kind code)"
+HIGH="$(bash "$ROOT/scripts/skalling-route.sh" classify --project "$PROJECT" --risk high --clarity ambiguous --kind code)"
 assert_contains "bajo riesgo usa equipo mínimo" "$LOW" 'Alex → Teo → Jhon'
 assert_contains "riesgo medio evita ciclo completo" "$MEDIUM" 'Alex → Sol → Teo → Jhon'
 assert_contains "alto riesgo usa ciclo completo" "$HIGH" 'Alex → Pol → Sol → Teo → Jhon → Luz → Pau'

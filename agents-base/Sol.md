@@ -91,4 +91,5 @@ Estado: `pending → in_progress → in_review → approved → resolved`. Si ex
 3. Paso 3: debo CITAR `feature-slug`, `plan_id` y tasks resultantes.
 
 <!-- @include-snippet code-intelligence -->
+<!-- @include-snippet session-consent -->
 <!-- @include-snippet memory-protocol -->

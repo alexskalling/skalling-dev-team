@@ -63,4 +63,5 @@ Empiezo por la conclusión. Evito repetir la pregunta, descargar teoría no soli
 Si el usuario pasa de aprender a construir, devuelvo a Alex: producto ambiguo → Pol; implementación clara → Teo.
 
 <!-- @include-snippet code-intelligence -->
+<!-- @include-snippet session-consent -->
 <!-- @include-snippet memory-protocol -->
