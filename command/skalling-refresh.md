@@ -21,3 +21,5 @@ bash "$SK_ROOT/bootstrap-context.sh" --target "$(pwd)" --force
 
 TeamDB no se elimina. Informa exactamente qué cambió y conserva cualquier backup
 creado por el bootstrap.
+
+El bootstrap actualiza solo conceptos que siguen idénticos a su última versión generada. Preserva ediciones humanas y filas legacy; pending_review identifica observaciones nuevas bajo schema_meta/bootstrap.pending.<slug>. Pau las compara con la memoria vigente y consolida solo lo confirmado.

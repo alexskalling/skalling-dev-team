@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import datetime as dt
 import json
 import os
 import re
 import sqlite3
+import tempfile
 from pathlib import Path
 
 
@@ -19,8 +21,9 @@ STYLE_SUFFIXES = {".css", ".scss", ".sass", ".less"}
 
 def atomic_write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(content, encoding="utf-8")
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent, delete=False) as handle:
+        handle.write(content)
+        temporary = handle.name
     os.replace(temporary, path)
 
 
@@ -62,15 +65,18 @@ def source_description(project: Path, package: dict, framework: str) -> tuple[st
 
 def find_style_files(project: Path) -> list[Path]:
     files: list[Path] = []
-    for path in project.rglob("*"):
-        if any(part in IGNORED for part in path.parts) or not path.is_file():
-            continue
-        if path.suffix.lower() in STYLE_SUFFIXES or path.name in {
-            "tailwind.config.js", "tailwind.config.ts", "tailwind.config.mjs", "theme.ts", "theme.js"
-        }:
-            files.append(path)
-        if len(files) >= 60:
-            break
+    for directory, dirs, names in os.walk(project):
+        dirs[:] = sorted(d for d in dirs if d not in IGNORED and not d.startswith("."))
+        for name in sorted(names):
+            path = Path(directory) / name
+            if path.is_symlink():
+                continue
+            if path.suffix.lower() in STYLE_SUFFIXES or name in {
+                "tailwind.config.js", "tailwind.config.ts", "tailwind.config.mjs", "theme.ts", "theme.js"
+            }:
+                files.append(path)
+            if len(files) >= 60:
+                return sorted(files)
     return sorted(files)
 
 
@@ -111,6 +117,22 @@ def write_context(project: Path, context: Path, yaml_path: Path) -> dict:
     if not modules:
         modules = sorted(path.name for path in project.iterdir() if path.is_dir() and path.name not in IGNORED)[:12]
     update_project_yaml(yaml_path, modules, has_ui)
+    # Derive test commands from actual package scripts, never from a template claim.
+    yaml_text = yaml_path.read_text(encoding="utf-8")
+    scripts = package.get("scripts", {})
+    manager = yaml_value(yaml_text, "package_manager") or "npm"
+    test_command = f"{manager} run test" if scripts.get("test") else ""
+    coverage_name = next((key for key in ("test:coverage", "coverage") if scripts.get(key)), "")
+    coverage_command = f"{manager} run {coverage_name}" if coverage_name else ""
+    testing = ("testing:\n  unit:\n    available: " + str(bool(test_command)).lower()
+               + "\n    command: " + json.dumps(test_command)
+               + "\n    note: " + json.dumps("Detectado en package.json" if test_command else "No detectado")
+               + "\n  integration:\n    available: false\n    command: \"\""
+               + "\n  e2e:\n    available: false\n    command: \"\""
+               + "\n  coverage:\n    available: " + str(bool(coverage_command)).lower()
+               + "\n    command: " + json.dumps(coverage_command) + "\n")
+    yaml_text = re.sub(r"testing:\n.*?(?=\n#|\n[a-zA-Z_]+:|\Z)", testing, yaml_text, count=1, flags=re.S)
+    atomic_write(yaml_path, yaml_text)
     now = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     about = f"""---
 type: Context
@@ -138,43 +160,7 @@ confidence: 0.9
 El público, las prioridades y las decisiones de producto no se inventan. Alex debe
 consultarlas al usuario cuando afecten el trabajo solicitado.
 """
-    atomic_write(context / "proyecto/que-es.md", about)
-
-    stack_resource = "package.json" if (project / "package.json").exists() else "detección del repositorio"
-    if language:
-        atomic_write(context / "stack/backend.md", f"""---
-type: Concept
-title: Stack {language}
-description: Lenguaje principal detectado: {language}
-resource: {stack_resource}
-tags: [stack, language]
-timestamp: {now}
-agent: alex
-confidence: 0.9
----
-
-# Stack {language}
-
-Lenguaje principal detectado: `{language}`. Módulos observados: {', '.join(modules)}.
-Las convenciones se toman del código y la configuración existentes; no se inventan defaults.
-""")
-    if has_ui:
-        atomic_write(context / "stack/frontend.md", f"""---
-type: Concept
-title: Frontend {framework}
-description: Framework visual detectado: {framework}
-resource: {stack_resource}
-tags: [stack, frontend, framework]
-timestamp: {now}
-agent: alex
-confidence: 0.9
----
-
-# Frontend {framework}
-
-El proyecto usa `{framework}` y contiene interfaz gráfica. Todo cambio visual debe
-consultar el concepto `design-system` y preservar la evidencia existente.
-""")
+    # The authoritative content is committed to TeamDB below; no implicit exports.
 
     style_files = find_style_files(project) if has_ui else []
     tokens, fonts = style_evidence(project, style_files)
@@ -219,7 +205,7 @@ canónica, comparar antes/después y pedir decisión al usuario si hay dos ident
 - No mezclar estilos globales, utilidades y valores literales sin justificar la frontera.
 - Un cambio de tipografía, paleta o layout general es transversal y requiere plan y revisión visual.
 """
-        atomic_write(context / "proyecto/design-system.md", design)
+
 
     return {
         "name": name,
@@ -241,7 +227,7 @@ def seed_database(db: Path, facts: dict, codegraph: str) -> str:
         ready = False
     if codegraph == "failed":
         ready = False
-    status = "ready" if ready else "degraded"
+    status = "initialized" if ready else "degraded"
     stack_body = f"language={facts['language']}; framework={facts['framework']}; modules={','.join(facts['modules'])}"
     conn = sqlite3.connect(db, timeout=5)
     try:
@@ -253,13 +239,26 @@ def seed_database(db: Path, facts: dict, codegraph: str) -> str:
         if facts["design"]:
             concepts.append(("design-system", "Sistema de diseño detectado", facts["design"], "design-system"))
         for row in concepts:
-            conn.execute(
-                """INSERT INTO concepts(slug,title,body_md,category,updated_at)
-                   VALUES(?,?,?,?,datetime('now'))
-                   ON CONFLICT(slug) DO UPDATE SET title=excluded.title,
-                   body_md=excluded.body_md,category=excluded.category,updated_at=excluded.updated_at""",
-                row,
-            )
+            slug, title, body, category = row
+            key = "bootstrap.generated." + slug
+            existing = conn.execute("SELECT body_md FROM concepts WHERE slug=?", (slug,)).fetchone()
+            previous = conn.execute("SELECT value FROM schema_meta WHERE key=?", (key,)).fetchone()
+            current_hash = hashlib.sha256((existing[0] or "").encode()).hexdigest() if existing else None
+            generated_hash = hashlib.sha256(body.encode()).hexdigest()
+            managed = not existing or (previous and previous[0] == current_hash)
+            if managed:
+                conn.execute(
+                    "INSERT INTO concepts(slug,title,body_md,category,updated_at) VALUES(?,?,?,?,datetime('now')) "
+                    "ON CONFLICT(slug) DO UPDATE SET title=excluded.title,body_md=excluded.body_md,"
+                    "category=excluded.category,updated_at=excluded.updated_at", row)
+                conn.execute("INSERT INTO schema_meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                             (key, generated_hash))
+                conn.execute("DELETE FROM schema_meta WHERE key=?", ("bootstrap.pending." + slug,))
+            else:
+                # A human edit (or legacy row with unknown origin) wins. Keep a
+                # separate observation for review rather than overwriting it.
+                conn.execute("INSERT INTO schema_meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                             ("bootstrap.pending." + slug, json.dumps({"title": title, "body": body, "reason": "existing-memory-preserved"}, ensure_ascii=False)))
         for key, value in (("project_readiness", status), ("codegraph_status", codegraph)):
             conn.execute(
                 "INSERT INTO schema_meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
@@ -274,6 +273,15 @@ def seed_database(db: Path, facts: dict, codegraph: str) -> str:
     return status
 
 
+def pending_reviews(db: Path) -> list[str]:
+    conn = sqlite3.connect(db)
+    try:
+        return [row[0].removeprefix("bootstrap.pending.") for row in
+                conn.execute("SELECT key FROM schema_meta WHERE key LIKE 'bootstrap.pending.%' ORDER BY key")]
+    finally:
+        conn.close()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--project", required=True)
@@ -284,8 +292,10 @@ def main() -> int:
     facts = write_context(project, context, project / ".opencode/project.yaml")
     status = seed_database(context / "team.db", facts, args.codegraph)
     print(json.dumps({"readiness": status, "concepts": 3 if facts["design"] else 2,
-                      "style_files": facts["style_files"], "codegraph": args.codegraph}))
-    return 0 if status == "ready" else 3
+                      "style_files": facts["style_files"], "codegraph": args.codegraph,
+                      "refresh_policy": "generated content refreshed; human/legacy content preserved",
+                      "pending_review": pending_reviews(context / "team.db")}))
+    return 0 if status == "initialized" else 3
 
 
 if __name__ == "__main__":

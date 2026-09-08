@@ -39,9 +39,12 @@ shift
 case "$OP" in
   for-request)
     QUERY="${1:?Falta query}"; shift
-    PROJECT=""; TOP_K=8; MAX_BYTES=8000
+    case "$QUERY" in -*) echo "ERROR: falta el texto del pedido antes de las opciones" >&2; exit 2 ;; esac
+    [ -n "$QUERY" ] || { echo "ERROR: pedido vacío" >&2; exit 2; }
+    PROJECT=""; TOP_K=8; MAX_BYTES=8000; VISUAL=false
     while [ "$#" -gt 0 ]; do
       case "$1" in
+        --visual) VISUAL=true ;;
         --top-k=*) TOP_K="${1#--top-k=}" ;;
         --max-bytes=*) MAX_BYTES="${1#--max-bytes=}" ;;
         -*) echo "[ERROR] argumento desconocido: $1" >&2; exit 2 ;;
@@ -52,44 +55,67 @@ case "$OP" in
     [ -d "$PROJECT" ] || PROJECT="$(pwd)"
     DB="$(teamdb_project_path "$PROJECT")"
     [ -f "$DB" ] || { echo '{"concepts":[],"decisions":[],"known_problems":[],"preferences":[]}' ; exit 0; }
-    python3 - "$DB" "$QUERY" "$TOP_K" "$MAX_BYTES" <<'PYEOF'
+    python3 - "$DB" "$QUERY" "$TOP_K" "$MAX_BYTES" "$VISUAL" <<'PYEOF'
 import json, re, sqlite3, sys
-db, query, top_k, max_bytes = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4])
-terms = list(dict.fromkeys(re.findall(r"[a-z0-9áéíóúñü]{3,}", query.lower())))[:8]
-conn = sqlite3.connect(db)
+db, query = sys.argv[1:3]
+top_k, max_bytes = int(sys.argv[3]), int(sys.argv[4])
+if not 1 <= top_k <= 50 or not 512 <= max_bytes <= 100000:
+    raise SystemExit("ERROR: top-k debe ser 1..50 y max-bytes 512..100000")
+terms = list(dict.fromkeys(re.findall(r"[a-z0-9áéíóúñü]{3,}", query.lower())))
+stop = {"para", "con", "que", "los", "las", "del", "una", "por", "the", "and"}
+terms = [term for term in terms if term not in stop][:24]
+visual = sys.argv[5] == 'true' or any(t in terms for t in
+    ("estilos", "estilo", "diseño", "css", "tipografía", "paleta", "layout"))
+conn = sqlite3.connect("file:" + db + "?mode=ro", uri=True)
 tables = {
-  "concepts": ("title", "body_md", ""),
-  "decisions": ("title", "body_md", "status='accepted'"),
-  "known_problems": ("title", "symptom_md", "status!='wontfix'"),
-  "preferences": ("slug", "body_md", ""),
+    "concepts": ("title", "body_md", ""),
+    "decisions": ("title", "body_md", "status='accepted'"),
+    "known_problems": ("title", "coalesce(symptom_md,'') || char(10) || coalesce(workaround_md,'')", "status='open'"),
+    "preferences": ("slug", "body_md", ""),
 }
 result = {key: [] for key in tables}
-remaining = max_bytes
-summary = conn.execute("SELECT slug,title,coalesce(body_md,'') FROM concepts WHERE slug='project-summary' OR category='project-summary' ORDER BY updated_at DESC LIMIT 1").fetchone()
-if summary:
-    item = {"slug": summary[0], "title": summary[1], "body": summary[2][:1000]}
-    size = len(json.dumps(item, ensure_ascii=False).encode())
-    if size <= remaining:
-        result["concepts"].append(item); remaining -= size
+result.update(omitted=[], needs_expansion=False, more_matches=False)
+def encode():
+    return json.dumps(result, ensure_ascii=False, separators=(",", ":"))
+candidates = []
 for table, (title, body, guard) in tables.items():
-    if not terms: break
     clauses, params = [], []
     for term in terms:
-        clauses.append("(lower(%s) LIKE ? OR lower(coalesce(%s,'')) LIKE ?)" % (title, body))
-        params += ["%" + term + "%", "%" + term + "%"]
-    where = "(" + " OR ".join(clauses) + ")" + ((" AND " + guard) if guard else "")
-    rows = conn.execute("SELECT slug,%s,coalesce(%s,'') FROM %s WHERE %s LIMIT ?" % (title, body, table, where), params + [top_k]).fetchall()
-    for slug, heading, text in rows:
-        if any(existing["slug"] == slug for existing in result[table]):
-            continue
-        item = {"slug": slug, "title": heading, "body": text[:500]}
-        size = len(json.dumps(item, ensure_ascii=False).encode())
-        if size <= remaining:
-            result[table].append(item); remaining -= size
-output = json.dumps(result, ensure_ascii=False, separators=(",", ":"))
-if len(output.encode()) > max_bytes:
-    output = json.dumps({"truncated": True}, separators=(",", ":"))
-print(output)
+        clauses.append("(lower(slug) LIKE ? OR lower(" + title + ") LIKE ? OR lower(coalesce(" + body + ",'')) LIKE ?)")
+        params.extend(["%" + term + "%"] * 3)
+    if table == "concepts":
+        clauses.append("slug IN ('project-summary','project-stack'" + (",'design-system'" if visual else "") + ")")
+    if not clauses:
+        continue
+    where = "(" + " OR ".join(clauses) + ")" + (" AND " + guard if guard else "")
+    # Rank matches in SQL before limiting; short titles alone never replace a rule's full body.
+    score_parts, score_params = [], []
+    for term in terms:
+        score_parts.append("(CASE WHEN lower(" + title + ") LIKE ? THEN 4 ELSE 0 END + CASE WHEN lower(coalesce(" + body + ",'')) LIKE ? THEN 1 ELSE 0 END)")
+        score_params.extend(["%" + term + "%"] * 2)
+    score = " + ".join(score_parts) or "0"
+    priority = ("CASE slug WHEN 'project-summary' THEN 10000 WHEN 'design-system' THEN "
+                + ("9000" if visual else "0") + " WHEN 'project-stack' THEN 8000 ELSE 0 END") if table == "concepts" else "0"
+    rows = conn.execute("SELECT slug," + title + ",coalesce(" + body + ",''),(" + priority +
+                        " + " + score + ") AS rank FROM " + table + " WHERE " + where +
+                        " ORDER BY rank DESC,slug LIMIT ?", score_params + params + [top_k + 1]).fetchall()
+    if len(rows) > top_k:
+        result["more_matches"] = True
+    for slug, heading, body_text, rank in rows[:top_k]:
+        candidates.append((rank, table, {"slug": slug, "title": heading, "body": body_text}))
+for _, table, item in sorted(candidates, key=lambda row: (-row[0], row[1], row[2]["slug"])):
+    result[table].append(item)
+    # Reserve space to identify omitted rows; never silently slice a decision.
+    if len(encode().encode()) > max_bytes - 192:
+        result[table].pop()
+        result["needs_expansion"] = True
+        ref = {"table": table, "slug": item["slug"]}
+        result["omitted"].append(ref)
+        if len(encode().encode()) > max_bytes:
+            result["omitted"].pop()
+            result["more_matches"] = True
+conn.close()
+print(encode())
 PYEOF
     ;;
   link)

@@ -18,23 +18,26 @@ PATH="$BIN:$PATH" bash "$ROOT/bootstrap-context.sh" --target "$PROJECT" --force 
 
 DB="$PROJECT/.opencode/context/team.db"
 YAML="$PROJECT/.opencode/project.yaml"
-DESIGN="$PROJECT/.opencode/context/proyecto/design-system.md"
-ABOUT="$PROJECT/.opencode/context/proyecto/que-es.md"
+DESIGN="$TMP/design.txt"
+ABOUT="$TMP/about.txt"
+sqlite3 "$DB" "SELECT body_md FROM concepts WHERE slug='design-system'" > "$DESIGN"
+sqlite3 "$DB" "SELECT body_md FROM concepts WHERE slug='project-summary'" > "$ABOUT"
 
 grep -q '^  design_system_required: true$' "$YAML"
 grep -q '^  - app/$' "$YAML"
 grep -q 'Portal de operaciones' "$ABOUT"
 ! grep -q '\[Resumen del proyecto\|\[Nombre del Proyecto\|YYYY-MM-DD' "$ABOUT"
-! grep -R -q '\[Componente\|\[Framework\|YYYY-MM-DD' "$PROJECT/.opencode/context/stack"
+test ! -d "$PROJECT/.opencode/context/stack"
+test ! -d "$PROJECT/.opencode/context/proyecto"
 grep -q -- '--brand: #123456' "$DESIGN"
 grep -q 'Inter' "$DESIGN"
 ! grep -q 'compiled-only\|.open-next' "$DESIGN"
 test -d "$PROJECT/.codegraph"
-test "$(sqlite3 "$DB" "SELECT value FROM schema_meta WHERE key='project_readiness'")" = ready
+test "$(sqlite3 "$DB" "SELECT value FROM schema_meta WHERE key='project_readiness'")" = initialized
 test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM concepts")" -ge 3
 test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM concepts WHERE slug='design-system'")" = 1
 
-ROUTE="$(bash "$ROOT/scripts/skalling-route.sh" classify --project "$PROJECT" --risk low --scope local --clarity clear --decision none --kind code)"
+ROUTE="$(bash "$ROOT/scripts/skalling-route.sh" classify --project "$PROJECT" --risk low --scope local --clarity clear --decision none --kind code --file package.json --acceptance 'Nombre del paquete correcto' --reuse 'Manifest existente')"
 printf '%s' "$ROUTE" | grep -q '"implementation_allowed":true'
 
 UNREADY="$TMP/unready"

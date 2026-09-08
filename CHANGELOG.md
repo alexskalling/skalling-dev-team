@@ -4,6 +4,20 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.10.4] — 2026-09-08
+
+### Fixed
+- Cápsulas con pedido obligatorio, selección por relevancia, reglas completas y omisiones explícitas.
+- Bootstrap DB-first sin carpetas Markdown automáticas; preserva conocimiento existente y detecta comandos reales de pruebas.
+- Estado initialized separado de comprensión de tarea; routing exige contexto y plan aprobado cuando corresponde.
+- Contratos y ejemplos de Alex/Sol/Teo, ciclo y guía visual alineados; lectura de fuentes y reutilización obligatorias.
+- Archivo recuperable de memoria Markdown legacy y exportación explícita desde TeamDB.
+- Pruebas de regresión de contexto, contratos y preservación de memoria.
+- Clasificación con intención obligatoria; investigar y auditar no autoriza implementar.
+- Refresh actualiza datos autogenerados intactos y conserva ediciones humanas con observaciones pendientes en DB.
+- Guía de planificación con comandos ejecutables verificados e instalación aislada con backups en su destino configurado.
+- Prueba del paquete instalado: bootstrap, refresh, contexto visual, planificación, aprobación y selección de tarea.
+
 ## [0.10.3] — 2026-09-07
 
 ### Fixed
@@ -426,7 +440,8 @@ Sesiones que pedían "plan X" generaban `.md` huérfanos en `.opencode/changes/<
 - Templates OKF (6 tipos: Concept, Decision, Preference, Workaround, WorkInProgress, Context)
 - `setup.sh` inicial (legacy, sin idempotencia)
 
-[Unreleased]: https://github.com/alexskalling/skalling-dev-team/compare/v0.10.3...HEAD
+[Unreleased]: https://github.com/alexskalling/skalling-dev-team/compare/v0.10.4...HEAD
+[0.10.4]: https://github.com/alexskalling/skalling-dev-team/compare/v0.10.3...v0.10.4
 [0.10.3]: https://github.com/alexskalling/skalling-dev-team/compare/v0.10.2...v0.10.3
 [0.10.2]: https://github.com/alexskalling/skalling-dev-team/compare/v0.8.3...v0.10.2
 [0.10.1]: https://github.com/alexskalling/skalling-dev-team/compare/v0.10.0...v0.10.1

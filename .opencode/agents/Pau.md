@@ -59,7 +59,7 @@ Uso únicamente helpers tipados:
 
 ```bash
 bash ~/.config/opencode/scripts/teamdb-memory.sh decision <slug> <title> <body>
-bash ~/.config/opencode/scripts/teamdb-memory.sh preference <slug> <title> <value>
+bash ~/.config/opencode/scripts/teamdb-memory.sh preference <slug> <body> <scope>
 bash ~/.config/opencode/scripts/teamdb-memory.sh problem <slug> <title> <symptom> <workaround>
 bash ~/.config/opencode/scripts/teamdb-memory.sh concept <slug> <title> <body> <category>
 bash ~/.config/opencode/scripts/teamdb-link.sh .
@@ -69,7 +69,7 @@ Marco contradicciones con `contradicts`/`supersedes`; no sobrescribo historia si
 
 ### PASO 3 — Documentar si corresponde
 
-Escribo únicamente documentos públicos necesarios en `docs/`. Para un concept export, valido `What, Why, Where, Learned`; si falta una sección, lo rechazo como incompleto. Los `.md` internos nunca son fuente.
+Escribo únicamente documentos públicos necesarios en `docs/`. Los exports se crean solo si el usuario los solicita, bajo .opencode/exports/. Para un concept export, valido `What, Why, Where, Learned`; si falta una sección, lo rechazo como incompleto. Los `.md` internos nunca son fuente.
 
 ### PASO 4 — Cerrar ciclo
 
@@ -115,8 +115,8 @@ el dashboard como reemplazo y no guardes imports del código en TeamDB.
 
 ## NO abuses
 
-No consultes el grafo para cambios triviales ni releas archivos que la cápsula ya
-identificó. Citá solamente rutas y relaciones que influyan en la decisión.
+No consultes el grafo para cambios triviales ni repitas lecturas cuyo contenido completo y vigente ya recibiste.
+Una ruta identificada no equivale a contenido leído: abre los archivos relevantes. Citá solamente rutas y relaciones que influyan en la decisión.
 ## Consentimiento de sesión y decisiones críticas
 
 Push y despliegue están desautorizados por defecto. Solo una instrucción explícita

@@ -1141,11 +1141,12 @@ EOF
 
     # Validar bundle OKF generado
     assert_dir_exists "$mock_dir/.opencode/context" "Bundle OKF generado"
-    assert_dir_exists "$mock_dir/.opencode/context/stack" "stack/ generado"
-    assert_dir_exists "$mock_dir/.opencode/context/proyecto" "proyecto/ generado"
-    assert_file_exists "$mock_dir/.opencode/context/README.md" "README.md del bundle"
-    assert_file_exists "$mock_dir/.opencode/context/index.md" "index.md"
-    assert_file_exists "$mock_dir/.opencode/context/log.md" "log.md"
+    assert_file_exists "$mock_dir/.opencode/context/team.db" "Memoria guardada en TeamDB"
+    if [[ ! -d "$mock_dir/.opencode/context/stack" && ! -f "$mock_dir/.opencode/context/index.md" ]]; then
+        pass "Bootstrap no genera navegación Markdown redundante"
+    else
+        fail "Bootstrap generó memoria Markdown redundante"
+    fi
 
     # Validar project.yaml
     assert_file_exists "$mock_dir/.opencode/project.yaml" "project.yaml"

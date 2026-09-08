@@ -22,3 +22,16 @@ Interpreta el argumento solicitado y delega:
 
 Sin argumentos, muestra estas opciones. Nunca borres recuerdos automáticamente:
 presenta candidatos y exige una decisión individual del usuario.
+
+Para exportar un concepto por solicitud explícita:
+```bash
+python3 ~/.config/opencode/scripts/skalling-memory-layout.py --project "$PWD" --export-concept design-system
+```
+
+Para retirar la navegación Markdown antigua de forma recuperable, cuando el usuario
+solicite limpiar esa estructura:
+```bash
+python3 ~/.config/opencode/scripts/skalling-memory-layout.py --project "$PWD" --archive-legacy
+```
+Conserva bytes en legacy_documents y mueve carpetas a .backups/legacy-memory-*.
+No modifica código de aplicación ni planes en .opencode/changes.

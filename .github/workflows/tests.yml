@@ -15,6 +15,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install contract test dependency
+        run: python3 -m pip install jsonschema
+
       - name: Run tests
         run: |
           bash tests/setup.test.sh
@@ -22,6 +25,8 @@ jobs:
           bash tests/dashboard-launcher.test.sh
           bash tests/quality-priorities.test.sh
           python3 tests/routing-safety.test.py
+          python3 tests/context-regressions.test.py
+          python3 tests/installed-workflow.test.py
           bash tests/bootstrap-readiness.test.sh
           bash tests/teamdb-hardening-suite.sh
 

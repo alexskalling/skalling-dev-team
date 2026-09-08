@@ -228,6 +228,13 @@ check_memory_health() {
     [[ -d "$context_dir" ]] || return 0
     export SKALLING_MEMORY_EXCLUDES=".backups:legacy:.skalling-backups"
 
+    if [[ -f "$context_dir/team.db" ]]; then
+        local integrity
+        integrity="$(sqlite3 "$context_dir/team.db" "PRAGMA quick_check" 2>/dev/null || true)"
+        [[ "$integrity" == ok ]] && ok "TeamDB íntegra; exports Markdown opcionales" || warn "TeamDB no pasó quick_check"
+        return 0
+    fi
+
     source "$SCRIPT_DIR/scripts/lib/lib-memory-check.sh"
 
     local findings
@@ -314,7 +321,9 @@ check_project_install() {
     fi
 
     # Bundle OKF
-    if [[ -d "$PROJECT_DIR/.opencode/context" ]]; then
+    if [[ -f "$PROJECT_DIR/.opencode/context/team.db" ]]; then
+        ok "Memoria TeamDB presente; no se requieren índices Markdown"
+    elif [[ -d "$PROJECT_DIR/.opencode/context" ]]; then
         local docs; docs="$(find "$PROJECT_DIR/.opencode/context" -maxdepth 2 \
             \( -type d \( -name '.backups' -o -name '.backup*' -o -name 'legacy' -o -name '.skalling-backups' \) -prune \) -o \
             -type f -name '*.md' -not -name 'index.md' -not -name 'log.md' -not -name 'README.md' -print 2>/dev/null \
@@ -354,10 +363,10 @@ check_project_install() {
         local has_ui
         has_ui="$(grep -E '^[[:space:]]*has_ui:[[:space:]]*true[[:space:]]*$' "$PROJECT_DIR/.opencode/project.yaml" 2>/dev/null || true)"
         if [[ -n "$has_ui" ]]; then
-            if [[ -f "$PROJECT_DIR/.opencode/context/proyecto/design-system.md" ]]; then
-                ok "design-system.md presente (REGLA #13 OK)"
+            if [[ "$(sqlite3 "$PROJECT_DIR/.opencode/context/team.db" "SELECT count(*) FROM concepts WHERE slug='design-system' AND length(body_md)>0" 2>/dev/null || true)" == 1 ]]; then
+                ok "design-system presente en TeamDB (REGLA #13 OK)"
             else
-                err "Frontend detectado pero falta design-system.md en bundle OKF (REGLA #13)"
+                err "Frontend detectado pero falta concepto design-system en TeamDB (REGLA #13)"
             fi
         fi
     fi
@@ -463,8 +472,8 @@ check_teamdb() {
         fi
         local readiness
         readiness="$(sqlite3 -separator $'\t' "$project_db" "SELECT value FROM schema_meta WHERE key='project_readiness'" 2>/dev/null || echo "")"
-        if [[ "$readiness" == "ready" ]]; then
-            ok "contexto del proyecto READY"
+        if [[ "$readiness" == "initialized" || "$readiness" == "ready" ]]; then
+            ok "Memoria inicializada; la comprensión se verifica por pedido"
         else
             warn "contexto del proyecto ${readiness:-missing} — ejecutar /skalling-init --force antes de implementar"
         fi

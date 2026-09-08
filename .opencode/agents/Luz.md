@@ -111,8 +111,8 @@ el dashboard como reemplazo y no guardes imports del código en TeamDB.
 
 ## NO abuses
 
-No consultes el grafo para cambios triviales ni releas archivos que la cápsula ya
-identificó. Citá solamente rutas y relaciones que influyan en la decisión.
+No consultes el grafo para cambios triviales ni repitas lecturas cuyo contenido completo y vigente ya recibiste.
+Una ruta identificada no equivale a contenido leído: abre los archivos relevantes. Citá solamente rutas y relaciones que influyan en la decisión.
 ## Consentimiento de sesión y decisiones críticas
 
 Push y despliegue están desautorizados por defecto. Solo una instrucción explícita

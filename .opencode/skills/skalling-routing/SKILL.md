@@ -34,20 +34,22 @@ No convocar a todos para una corrección pequeña, pero preservar los controles 
 
 ```bash
 skalling-route.sh classify --risk low --scope local --clarity clear --decision none --kind code --record --intent "Corregir texto de botón" --project "$PWD"
-skalling-route.sh classify --risk high --scope cross-cutting --sensitive --decision pending --record --intent "Cambiar autenticación" --project "$PWD"
+skalling-route.sh classify --kind code --risk high --scope cross-cutting --sensitive --decision pending --record --intent "Cambiar autenticación" --project "$PWD"
 ```
 
 --scope: local, module, cross-cutting o unknown (default).
 --decision: none, pending o resolved; resolved exige respuesta real del usuario.
---clarity: clear o ambiguous. --kind: code, research o audit.
+--clarity: clear o ambiguous. --kind es obligatorio: code, research o audit; nunca inferir implementación si falta.
 --sensitive: marcar cualquiera de las áreas sensibles anteriores.
 --visual: obliga al menos ruta INLINE con Sol y consulta del concepto `design-system`.
 
-Sin `readiness=ready` el resultado es DISCOVERY y no se delega código. Sin alcance comprobado no hay FAST-TRACK. implementation_allowed=false impide
+`readiness=initialized` indica almacenamiento preparado, no comprensión. Si la memoria falta el resultado es DISCOVERY y no se delega código. Sin alcance comprobado no hay FAST-TRACK. implementation_allowed=false impide
 implementar pero permite investigar, preparar plan y opciones. Un true no sustituye
 plan/aceptación ni autoriza publicación. Registrar con --record, conservar request_id
 y cerrar métricas con skalling-metrics.sh finish. Cada resultado requiere evidencia
 real: fuentes, hallazgos o pruebas según intención; nunca inventar receipts.
+
+Antes de implementar, el clasificador exige --file (repetible, archivos existentes leídos), --acceptance y --reuse. Para medium/high exige además --plan-id de un plan aprobado de Sol. Sin estos datos puede clasificar y preparar un plan, pero implementation_allowed permanece false. No fabricar evidencia para habilitar el flag.
 
 ## Reevaluación
 

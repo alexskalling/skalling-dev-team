@@ -65,8 +65,10 @@ PY
 }
 
 cmd_classify() {
-  local risk="" clarity="clear" kind="code" record=false intent="" project request_id=""
+  local risk="" clarity="clear" kind="" record=false intent="" project request_id=""
   local scope="unknown" decision="none" sensitive=false visual=false needs_user_decision=false implementation_allowed=false readiness="missing"
+  local acceptance="" reuse="" plan_id=""
+  local files=()
   project="$(pwd)"
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -77,6 +79,10 @@ cmd_classify() {
       --decision) decision="${2:-}"; shift 2 ;;
       --sensitive) sensitive=true; shift ;;
       --visual) visual=true; shift ;;
+      --file) files+=("${2:?Falta ruta}"); shift 2 ;;
+      --acceptance) acceptance="${2:?Falta aceptación}"; shift 2 ;;
+      --reuse) reuse="${2:?Falta estrategia}"; shift 2 ;;
+      --plan-id) plan_id="${2:?Falta plan}"; shift 2 ;;
       --record) record=true; shift ;;
       --intent) intent="${2:-}"; shift 2 ;;
       --project) project="${2:-}"; shift 2 ;;
@@ -86,7 +92,7 @@ cmd_classify() {
   done
   case "$risk" in low|medium|high) ;; *) printf 'risk debe ser low, medium o high\n' >&2; return 2 ;; esac
   case "$clarity" in clear|ambiguous) ;; *) printf 'clarity inválida\n' >&2; return 2 ;; esac
-  case "$kind" in code|research|audit) ;; *) printf 'kind inválido\n' >&2; return 2 ;; esac
+  case "$kind" in code|research|audit) ;; *) printf 'kind requerido: code, research o audit\n' >&2; return 2 ;; esac
   case "$scope" in local|module|cross-cutting|unknown) ;; *) printf 'scope inválido\n' >&2; return 2 ;; esac
   case "$decision" in none|pending|resolved) ;; *) printf 'decision inválida\n' >&2; return 2 ;; esac
   if [ "$sensitive" = true ] || [ "$scope" = cross-cutting ] || [ "$clarity" = ambiguous ] || [ "$decision" = pending ]; then
@@ -118,7 +124,7 @@ cmd_classify() {
     readiness="$(sqlite3 "$project_db" "SELECT value FROM schema_meta WHERE key='project_readiness' LIMIT 1" 2>/dev/null || true)"
     [ -n "$readiness" ] || readiness="missing"
   fi
-  if [ "$kind" = code ] && [ "$readiness" != ready ]; then
+  if [ "$kind" = code ] && [ "$readiness" != initialized ] && [ "$readiness" != ready ]; then
     implementation_allowed=false
     route="DISCOVERY"
     agents="Alex → Jes → Pol"
@@ -129,12 +135,40 @@ cmd_classify() {
     [ -n "$request_id" ] || request_id="req-$(date +%Y%m%d%H%M%S)-$$"
     persist_classification "$project/.opencode/context/team.db" "$request_id" "$intent" "$route" "$agents" "$risk"
   fi
-  python3 - "$risk" "$route" "$agents" "$verification" "$request_id" "$needs_user_decision" "$implementation_allowed" "$readiness" <<'PY'
-import json, sys
-risk, route, agents, verification, request_id, decision, allowed, readiness = sys.argv[1:]
+  python3 - "$risk" "$route" "$agents" "$verification" "$request_id" "$needs_user_decision" "$implementation_allowed" "$readiness" "$project" "$kind" "$acceptance" "$reuse" "$plan_id" "$visual" ${files[@]+"${files[@]}"} <<'PY'
+import json, sys, sqlite3
+from pathlib import Path
+risk, route, agents, verification, request_id, decision, allowed, readiness = sys.argv[1:9]
+project, kind, acceptance, reuse, plan_id, visual = sys.argv[9:15]
+files = sys.argv[15:]
+blockers = []
+if kind == "code" and allowed == "true":
+    root = Path(project).resolve()
+    if not files:
+        blockers.append("Falta evidencia: indicar --file por cada archivo existente consultado")
+    for file in files:
+        candidate = (root / file).resolve()
+        if not candidate.is_relative_to(root) or not candidate.is_file():
+            blockers.append("Archivo de contexto inválido: " + file)
+    if not acceptance.strip():
+        blockers.append("Falta --acceptance: resultado observable del pedido")
+    if not reuse.strip():
+        blockers.append("Falta --reuse: qué componente/patrón existente se reutiliza")
+    with sqlite3.connect("file:" + str(root / ".opencode/context/team.db") + "?mode=ro", uri=True) as db:
+        if not db.execute("SELECT 1 FROM concepts WHERE slug='project-summary' AND length(body_md)>0").fetchone():
+            blockers.append("Falta resumen de proyecto en TeamDB")
+        if visual == "true" and not db.execute("SELECT 1 FROM concepts WHERE slug='design-system' AND length(body_md)>0").fetchone():
+            blockers.append("Falta sistema de diseño en TeamDB")
+        if risk in ("medium", "high"):
+            plan = db.execute("SELECT 1 FROM plans WHERE id=? AND status IN ('approved','in_progress') AND length(design_md)>0", (plan_id,)).fetchone()
+            if not plan:
+                blockers.append("Sol debe preparar un plan aprobado: --plan-id")
+    if blockers:
+        allowed = "false"
 result = dict(risk=risk, route=route, agents=agents, verification=verification,
               needs_user_decision=decision == 'true', implementation_allowed=allowed == 'true',
-              readiness=readiness)
+              readiness=readiness, blockers=blockers,
+              request_context=dict(files=files, acceptance=acceptance, reuse=reuse))
 if request_id:
     result['request_id'] = request_id
 print(json.dumps(result, ensure_ascii=False, separators=(',', ':')))
@@ -175,7 +209,7 @@ case "${1:-help}" in
   classify) shift; cmd_classify "$@" ;;
   record)  shift; cmd_record "$@" ;;
   help|-h|--help)
-    printf 'Uso:\n  %s list\n  %s classify --risk low|medium|high --scope local|module|cross-cutting|unknown [--clarity clear|ambiguous] [--decision none|pending|resolved] [--sensitive] [--visual] [--record --intent TEXTO --project RUTA]\n  %s record ROUTE AGENT [INTENT]\n' "$0" "$0" "$0"
+    printf 'Uso:\n  %s list\n  %s classify --kind code|research|audit --risk low|medium|high --scope local|module|cross-cutting|unknown [--clarity clear|ambiguous] [--decision none|pending|resolved] [--sensitive] [--visual] [--file RUTA --acceptance TEXTO --reuse TEXTO --plan-id ID] [--record --intent TEXTO --project RUTA]\n  %s record ROUTE AGENT [INTENT]\n' "$0" "$0" "$0"
     ;;
   *)
     printf 'Subcomando desconocido: %s\n' "$1" >&2

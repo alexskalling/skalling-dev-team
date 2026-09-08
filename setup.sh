@@ -309,11 +309,12 @@ step_install_scripts() {
         run chmod +x "$SCRIPTS_DEST_DIR/$(basename "$script")"
         count=$((count+1))
     done
-    if [[ -f "$SCRIPTS_SRC_DIR/skalling-bootstrap-context.py" ]]; then
-        run cp "$SCRIPTS_SRC_DIR/skalling-bootstrap-context.py" "$SCRIPTS_DEST_DIR/"
-        run chmod +x "$SCRIPTS_DEST_DIR/skalling-bootstrap-context.py"
+    for script in "$SCRIPTS_SRC_DIR"/skalling-*.py; do
+        [[ -f "$script" ]] || continue
+        run cp "$script" "$SCRIPTS_DEST_DIR/"
+        run chmod +x "$SCRIPTS_DEST_DIR/$(basename "$script")"
         count=$((count+1))
-    fi
+    done
 
     if [[ -f "$SCRIPTS_SRC_DIR"/lib/lib-teamdb.sh ]]; then
         run cp "$SCRIPTS_SRC_DIR"/lib/lib-teamdb.sh "$SCRIPTS_DEST_DIR/lib-teamdb.sh"

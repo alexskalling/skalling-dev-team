@@ -33,9 +33,9 @@ modules:
 strict_tdd: true
 testing:
   unit:
-    available: true
-    command: "npm test"
-    note: "Vitest configurado en package.json"
+    available: false
+    command: ""
+    note: "No detectado"
   integration:
     available: false
     command: ""
@@ -45,8 +45,8 @@ testing:
     command: ""
     note: ""
   coverage:
-    available: true
-    command: "npm test -- --coverage"
+    available: false
+    command: ""
     threshold: 80
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -56,7 +56,7 @@ frontend:
   has_ui: false
   ui_framework: ""
   design_system_required: false
-  design_md_path: ".opencode/context/proyecto/design-system.md"
+  design_concept: "design-system"
 
 # ────────────────────────────────────────────────────────────────────────────
 # MEMORIA OKF

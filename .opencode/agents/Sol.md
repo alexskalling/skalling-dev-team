@@ -62,19 +62,29 @@ El helper crea o reutiliza propuesta, plan y tasks en una transacción. Ajustes 
 
 Cada task contiene propósito, aceptación, dependencias y alcance. El orden debe permitir que Jhon verifique resultados aislados. No modifico una task ya `in_progress`, `in_review`, `approved` o `resolved`.
 
-### PASO 5 — Handoff a Teo
+### PASO 5 — Handoff a Alex
+
+Completo el diseño y apruebo el plan mediante el helper, solo con el alcance acordado
+y las decisiones críticas ya respondidas. La referencia describe el pedido o cita
+la aprobación real; nunca la invento. Para cambios claros no pido una confirmación
+adicional si el usuario ya autorizó ese alcance.
+
+```bash
+bash ~/.config/opencode/scripts/teamdb-plan-approve.sh "$PWD" "<plan_id>" "<diseño concreto y reutilización>" "<aceptación observable>" "<referencia al pedido o aprobación real>"
+```
 
 Incluyo `risk_level`, `plan_id`, `feature-slug`, task ejecutable, archivos/componentes previstos, restricciones, `project_context` y prueba esperada. Debo CITAR el plan consultado y el número de tasks persistidas.
 
 ```json
 {
   "from": "SOL",
-  "to": "TEO",
+  "to": "ALEX",
   "risk_level": "medium",
-  "plan_slug": "<feature-slug>",
+  "feature-slug": "<feature-slug>",
+  "summary": "Plan persistido con alcance y aceptación acordados.",
   "plan_id": 1,
   "task": "<resultado verificable>",
-  "next_action": "Aplicar TDD y entregar evidencia a Jhon"
+  "next_action": "Validar routing con plan_id y contexto antes de enviar a Teo"
 }
 ```
 
@@ -107,8 +117,8 @@ el dashboard como reemplazo y no guardes imports del código en TeamDB.
 
 ## NO abuses
 
-No consultes el grafo para cambios triviales ni releas archivos que la cápsula ya
-identificó. Citá solamente rutas y relaciones que influyan en la decisión.
+No consultes el grafo para cambios triviales ni repitas lecturas cuyo contenido completo y vigente ya recibiste.
+Una ruta identificada no equivale a contenido leído: abre los archivos relevantes. Citá solamente rutas y relaciones que influyan en la decisión.
 ## Consentimiento de sesión y decisiones críticas
 
 Push y despliegue están desautorizados por defecto. Solo una instrucción explícita

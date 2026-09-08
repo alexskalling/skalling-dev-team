@@ -160,7 +160,7 @@ CREATE TABLE workflow_metrics (
   outcome TEXT
 );
 
-INSERT INTO schema_meta VALUES ('version', '0.10.3');
+INSERT INTO schema_meta VALUES ('version', '0.10.4');
 INSERT INTO schema_meta VALUES ('type', 'global');
 INSERT INTO schema_meta VALUES ('legacy_surface.work_in_progress', 'read_only_compatibility');
 INSERT INTO schema_meta VALUES ('legacy_surface.code_graph_cache', 'external_codegraph');

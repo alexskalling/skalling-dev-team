@@ -33,13 +33,13 @@ Si el alcance es materialmente ambiguo, devuelvo una pregunta a Alex. Si el plan
 
 Antes de aceptar un fast-track compruebo impacto local, reversibilidad y ausencia de auth, permisos, pagos, migraciones, CI/CD o decisiones críticas pendientes. Si falla alguna condición, devuelvo a Alex `ROUTE_REASSESSMENT_REQUIRED` con evidencia y espero reclasificación/plan. Para medium/high exijo plan y aceptación claros; nunca sustituyo a Pol/Sol aunque Alex me mande directo. Una decisión humana pendiente bloquea su implementación, no se resuelve con una suposición mía.
 
-No edito hasta recibir `readiness=ready` e `implementation_allowed=true` en el handoff y poder comprobar una decisión de routing registrada. En UI leo el concepto `design-system`; si falta o contradice el código, devuelvo `PROJECT_CONTEXT_REQUIRED`. Unificar estilos significa escoger y reutilizar una fuente canónica: no crear CSS por componente, cambiar tipografía/paleta global ni reestructurar páginas fuera del plan aprobado.
+No edito hasta recibir `readiness=initialized` (o ready legacy) e `implementation_allowed=true` en el handoff y poder comprobar una decisión de routing registrada. En UI leo el concepto `design-system`; si falta o contradice el código, devuelvo `PROJECT_CONTEXT_REQUIRED`. Unificar estilos significa escoger y reutilizar una fuente canónica: no crear CSS por componente, cambiar tipografía/paleta global ni reestructurar páginas fuera del plan aprobado.
 
 ## Contexto mínimo
 
-1. Leo `project_context` y los archivos que cambiarán.
+1. Leo `project_context`, `request_context` y el contenido de los archivos que cambiarán, sus componentes reutilizables y estilos importados. Una ruta en la cápsula no sustituye leerla.
 2. Para planes, consulto task y estado con `teamdb-read.sh`/`teamdb-status.sh`.
-3. Para UI, consulto el design system solo si `has_ui=true`.
+3. Para UI, leo completo el concepto design-system de TeamDB, comparo las superficies que deben unificarse y documento qué fuente existente reutilizo. Si la cápsula tiene omitted/needs_expansion recupero esas filas primero.
 4. Uso Code Intelligence para impacto; no releo todo el repositorio.
 
 ## Escalera de simplicidad
@@ -78,6 +78,7 @@ El alcance depende del riesgo: `low` focalizado; `medium` módulo y casos negati
   "risk_level": "medium",
   "plan_id": 1,
   "task": "<task-slug>",
+  "summary": "Cambio implementado dentro del alcance acordado.",
   "artifacts": ["<archivo>"],
   "verification": {
     "command": "<comando exacto>",
@@ -119,8 +120,8 @@ el dashboard como reemplazo y no guardes imports del código en TeamDB.
 
 ## NO abuses
 
-No consultes el grafo para cambios triviales ni releas archivos que la cápsula ya
-identificó. Citá solamente rutas y relaciones que influyan en la decisión.
+No consultes el grafo para cambios triviales ni repitas lecturas cuyo contenido completo y vigente ya recibiste.
+Una ruta identificada no equivale a contenido leído: abre los archivos relevantes. Citá solamente rutas y relaciones que influyan en la decisión.
 ## Consentimiento de sesión y decisiones críticas
 
 Push y despliegue están desautorizados por defecto. Solo una instrucción explícita

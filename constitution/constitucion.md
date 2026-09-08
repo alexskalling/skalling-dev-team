@@ -53,7 +53,7 @@ Features nuevas de alcance medio, alto o ambiguo siguen Spec-Driven Development:
 3. **Design**: arquitectura, decisiones, diagramas.
 4. **Tasks**: desglose 1.1, 1.2 por fase.
 
-Ubicación: `.opencode/changes/<feature-slug>/`. Archivado en `.opencode/changes/archive/` al terminar.
+Persistencia: proposals, specs, plans y tasks en TeamDB. Markdown solo como exportación explícita.
 
 ### R7 — Clean Architecture
 Cuando el proyecto usa arquitectura por capas, las dependencias apuntan hacia el centro:
@@ -90,47 +90,18 @@ Prohibido:
 - `console.log` / `print` de debug.
 
 ### R12 — Memoria por Proyecto
-Cada proyecto tiene su propio bundle OKF en `.opencode/context/`. **Nunca** se comparte entre proyectos.
+Cada proyecto tiene su propia TeamDB en `.opencode/context/team.db`. **Nunca** se comparte entre proyectos.
 
 ---
 
-## 🎨 R13 — DESIGN.md Obligatorio para Interfaz Gráfica
+## 🎨 R13 — Sistema de diseño para interfaz gráfica
 
-> **Todo proyecto con interfaz gráfica debe tener un `design-system.md` en el bundle OKF.**
-
-### Aplicación
-Se activa cuando el proyecto tiene:
-- Componentes UI (React, Vue, Svelte, etc.).
-- Páginas web renderizadas (Next.js, Astro, etc.).
-- Apps móviles (React Native, Flutter, Swift, etc.).
-- Cualquier interfaz de usuario visible.
-
-### Enforcement
-- **Bootstrap** (`/skalling-init`): si detecta frontend y no existe `design-system.md`, lo crea (con Impeccable: `npx impeccable install` → `/impeccable init` → `/impeccable document`, o con template manual).
-- **Luz** (quality gate): rechaza cualquier feature visual si el código no es coherente con el `design-system.md`.
-- **Pau** (documentalista): mantiene `.opencode/context/proyecto/design-system.md` como fuente de verdad.
-
-### Ubicación
-- **Fuente de verdad**: `.opencode/context/proyecto/design-system.md` (commiteado al repo, forma parte del bundle OKF).
-- **Output Impeccable**: `DESIGN.md` en formato Google Stitch (portable, se convierte a `design-system.md`).
-
-### Estructura mínima
-```yaml
----
-type: Concept
-title: Design System del proyecto
-description: Sistema visual y reglas de diseño UI
-resource: .opencode/context/proyecto/design-system.md
-tags: [design, ui, design-system]
-timestamp: YYYY-MM-DDTHH:MM:SSZ
-agent: pau
-confidence: 1.0
----
-
-# Design System
-
-[Tokens, colores, tipografía, componentes, anti-references]
-```
+Todo proyecto con UI conserva el concepto `design-system` en TeamDB.
+El bootstrap registra evidencia detectada, no una identidad validada por el usuario.
+Teo debe leer las reglas completas, los componentes existentes y sus estilos antes
+de implementar. Si hay identidades incompatibles, Alex solicita la elección necesaria.
+Pau conserva decisiones confirmadas en TeamDB. `design-system.md` es una exportación
+opcional para revisión humana; ningún flujo exige crear carpetas o Markdown interno.
 
 ---
 
@@ -191,7 +162,7 @@ consolidar conocimiento durable. CodeGraph mantiene su propio índice.
 | `WorkInProgress` | Feature o tarea activa |
 | `Context` | Información general que no encaja en las anteriores |
 
-### Schema de frontmatter (OKF v0.1 + extensiones)
+### Formato opcional de exportación Markdown (no memoria activa)
 ```yaml
 ---
 type: [uno de los 6 tipos]
@@ -214,6 +185,8 @@ supersedes: [path a versión anterior]   # opcional, OKF v0.2
 ---
 
 ## 🔧 Reglas por Stack (se activan condicionalmente según `project.yaml`)
+
+Primero respetar herramientas, router, estilos y convenciones existentes. Las preferencias siguientes solo orientan proyectos nuevos o elecciones explícitas; no autorizan migraciones, instalar herramientas ni reemplazar componentes. Solo ejecutar comandos de pruebas realmente detectados.
 
 ### Si `stack.language == "typescript"` o `"javascript"`
 - TypeScript strict mode, sin `any`.
@@ -262,7 +235,7 @@ supersedes: [path a versión anterior]   # opcional, OKF v0.2
 - Vite.
 
 ### Si el stack tiene UI (cualquier framework frontend)
-- **REGLA #13 activa**: `design-system.md` obligatorio en bundle OKF.
+- **REGLA #13 activa**: concepto `design-system` obligatorio en TeamDB.
 - Impeccable se recomienda (Fase 12).
 - `npx impeccable detect <src>` corre como quality gate.
 
@@ -296,10 +269,18 @@ Los frontmatter de los agentes **no incluyen `model:`**. Heredan del provider gl
   "to": "JHON",
   "task": "Verificar tests del módulo auth",
   "summary": "Implementado login con JWT, 5 tests creados",
-  "artifacts": ["/src/auth/login.ts", "/tests/auth/login.test.ts"],
+  "artifacts": [
+    "/src/auth/login.ts",
+    "/tests/auth/login.test.ts"
+  ],
   "tests_passed": true,
   "coverage": 85,
-  "next_action": "Ejecutar suite de regresión"
+  "next_action": "Ejecutar suite de regresión",
+  "verification": {
+    "command": "<comando ejecutado>",
+    "exit_code": 0,
+    "output_summary": "<resultado observado>"
+  }
 }
 ```
 
@@ -323,11 +304,21 @@ Los frontmatter de los agentes **no incluyen `model:`**. Heredan del provider gl
     "has_ui": true,
     "design_system_exists": true,
     "okf_bundle_valid": true
+  },
+  "readiness": "initialized",
+  "implementation_allowed": true,
+  "route": "INLINE",
+  "request_context": {
+    "files": [
+      "src/auth/login.ts"
+    ],
+    "acceptance": "Cumplir el contrato acordado",
+    "reuse": "Servicio de autenticación existente"
   }
 }
 ```
 
-**Sin `project_context`, el agente receptor no tiene contexto del proyecto → responde vacío.**
+Sin contexto suficiente, el receptor explica qué evidencia falta y continúa las lecturas permitidas; nunca responde vacío.
 
 ### Reglas
 1. El agente receptor debe confirmar recepción.

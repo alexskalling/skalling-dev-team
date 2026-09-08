@@ -4,16 +4,40 @@
   "title": "Skalling Handoff",
   "description": "Schema for handoffs between agents in the Skalling cycle",
   "type": "object",
-  "required": ["from", "to", "task", "summary", "next_action"],
+  "required": [
+    "from",
+    "to",
+    "task",
+    "summary",
+    "next_action"
+  ],
   "properties": {
     "from": {
       "type": "string",
-      "enum": ["ALEX", "POL", "JES", "SOL", "TEO", "JHON", "LUZ", "PAU"],
+      "enum": [
+        "ALEX",
+        "POL",
+        "JES",
+        "SOL",
+        "TEO",
+        "JHON",
+        "LUZ",
+        "PAU"
+      ],
       "description": "Agent handing off"
     },
     "to": {
       "type": "string",
-      "enum": ["ALEX", "POL", "JES", "SOL", "TEO", "JHON", "LUZ", "PAU"],
+      "enum": [
+        "ALEX",
+        "POL",
+        "JES",
+        "SOL",
+        "TEO",
+        "JHON",
+        "LUZ",
+        "PAU"
+      ],
       "description": "Agent receiving"
     },
     "task": {
@@ -28,7 +52,9 @@
     },
     "artifacts": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "Files created or modified"
     },
     "tests_passed": {
@@ -48,7 +74,11 @@
     },
     "risk_level": {
       "type": "string",
-      "enum": ["low", "medium", "high"],
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ],
       "description": "Risk classification selected by Alex"
     },
     "route": {
@@ -57,8 +87,13 @@
     },
     "readiness": {
       "type": "string",
-      "enum": ["ready", "degraded", "missing"],
-      "description": "Estado de preparación del proyecto calculado por skalling-init"
+      "enum": [
+        "initialized",
+        "ready",
+        "degraded",
+        "missing"
+      ],
+      "description": "Preparación de almacenamiento; no certifica comprensión de la tarea"
     },
     "implementation_allowed": {
       "type": "boolean",
@@ -68,9 +103,25 @@
       "type": "object",
       "description": "Small shared context selected from TeamDB and Code Intelligence",
       "properties": {
-        "bytes": { "type": "integer", "minimum": 0, "maximum": 12000 },
-        "memory_slugs": { "type": "array", "maxItems": 24, "items": { "type": "string" } },
-        "files": { "type": "array", "maxItems": 24, "items": { "type": "string" } }
+        "bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 12000
+        },
+        "memory_slugs": {
+          "type": "array",
+          "maxItems": 24,
+          "items": {
+            "type": "string"
+          }
+        },
+        "files": {
+          "type": "array",
+          "maxItems": 24,
+          "items": {
+            "type": "string"
+          }
+        }
       },
       "additionalProperties": false
     },
@@ -86,7 +137,9 @@
     },
     "blockers": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "Issues that block progress"
     },
     "iteracion": {
@@ -101,12 +154,17 @@
     },
     "verdict": {
       "type": "string",
-      "enum": ["APPROVED", "REJECTED"],
+      "enum": [
+        "APPROVED",
+        "REJECTED"
+      ],
       "description": "For approval gates (Jhon, Luz)"
     },
     "rejection_reasons": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "If REJECTED, list of specific reasons"
     },
     "project_context": {
@@ -117,16 +175,32 @@
           "type": "object",
           "description": "Tech stack detected from project.yaml",
           "properties": {
-            "language": { "type": "string" },
-            "framework": { "type": "string" },
-            "runtime": { "type": "string" },
-            "package_manager": { "type": "string" },
-            "test_runner": { "type": "string" }
+            "language": {
+              "type": "string"
+            },
+            "framework": {
+              "type": "string"
+            },
+            "runtime": {
+              "type": "string"
+            },
+            "package_manager": {
+              "type": "string"
+            },
+            "test_runner": {
+              "type": "string"
+            }
           }
         },
-        "has_ui": { "type": "boolean" },
-        "design_system_exists": { "type": "boolean" },
-        "okf_bundle_valid": { "type": "boolean" }
+        "has_ui": {
+          "type": "boolean"
+        },
+        "design_system_exists": {
+          "type": "boolean"
+        },
+        "okf_bundle_valid": {
+          "type": "boolean"
+        }
       }
     },
     "verification": {
@@ -135,7 +209,13 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["test", "build", "lint", "security", "manual"]
+          "enum": [
+            "test",
+            "build",
+            "lint",
+            "security",
+            "manual"
+          ]
         },
         "command": {
           "type": "string",
@@ -149,39 +229,131 @@
           "type": "integer",
           "description": "Exit code of the command (0 = pass)"
         },
-        "tests_total": { "type": "integer" },
-        "tests_passed": { "type": "integer" },
-        "tests_failed": { "type": "integer" }
+        "tests_total": {
+          "type": "integer"
+        },
+        "tests_passed": {
+          "type": "integer"
+        },
+        "tests_failed": {
+          "type": "integer"
+        }
       }
     },
     "contradicciones_detectadas": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "Contradicciones con concept docs detectadas al trabajar (INC-3)"
+    },
+    "plan_id": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "feature-slug": {
+      "type": "string",
+      "minLength": 1
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "request_context": {
+      "type": "object",
+      "required": [
+        "files",
+        "acceptance",
+        "reuse"
+      ],
+      "properties": {
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "acceptance": {
+          "type": "string",
+          "minLength": 5
+        },
+        "reuse": {
+          "type": "string",
+          "minLength": 5
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false,
   "allOf": [
     {
       "description": "Si destino es Teo → requiere contexto listo y autorización de implementación",
-      "if": { "properties": { "to": { "const": "TEO" } } },
-      "then": {
-        "required": ["project_context", "readiness", "implementation_allowed", "route"],
+      "if": {
         "properties": {
-          "readiness": { "const": "ready" },
-          "implementation_allowed": { "const": true }
+          "to": {
+            "const": "TEO"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "project_context",
+          "readiness",
+          "implementation_allowed",
+          "route",
+          "request_context"
+        ],
+        "properties": {
+          "readiness": {
+            "enum": [
+              "initialized",
+              "ready"
+            ]
+          },
+          "implementation_allowed": {
+            "const": true
+          }
         }
       }
     },
     {
       "description": "Si destino es Jhon o Luz → requiere verification (recibir evidencia)",
-      "if": { "properties": { "to": { "enum": ["JHON", "LUZ"] } } },
-      "then": { "required": ["verification"] }
+      "if": {
+        "properties": {
+          "to": {
+            "enum": [
+              "JHON",
+              "LUZ"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "verification"
+        ]
+      }
     },
     {
       "description": "Si emisor es ingeniería (TEO/JHON/LUZ) → debe llevar verification como evidencia",
-      "if": { "properties": { "from": { "enum": ["TEO", "JHON", "LUZ"] } } },
-      "then": { "required": ["verification"] }
+      "if": {
+        "properties": {
+          "from": {
+            "enum": [
+              "TEO",
+              "JHON",
+              "LUZ"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "verification"
+        ]
+      }
     }
   ],
   "examples": [
@@ -190,12 +362,20 @@
       "to": "JHON",
       "task": "Verificar tests módulo auth/login",
       "summary": "Implementado LoginUseCase con TDD. 8 tests pasan.",
-      "artifacts": ["/src/auth/application/login.ts", "/tests/auth/application/login.test.ts"],
+      "artifacts": [
+        "/src/auth/application/login.ts",
+        "/tests/auth/application/login.test.ts"
+      ],
       "tests_passed": true,
       "coverage": 92,
       "ladder_rung_used": 4,
       "ladder_reason": "Usé bcrypt porque stdlib no tiene hashing de passwords",
-      "next_action": "Ejecutar suite completa del módulo auth"
+      "next_action": "Ejecutar suite completa del módulo auth",
+      "verification": {
+        "command": "npm test",
+        "exit_code": 0,
+        "output_summary": "8 tests pasan"
+      }
     },
     {
       "from": "JHON",
@@ -206,7 +386,17 @@
       "coverage": 87,
       "next_action": "Auditar clean code, seguridad, e impeccable (frontend)",
       "verdict": "APPROVED",
-      "timestamp": "2026-07-28T16:00:00Z"
+      "timestamp": "2026-07-28T16:00:00Z",
+      "project_context": {
+        "stack": {
+          "language": "typescript"
+        }
+      },
+      "verification": {
+        "command": "npm test",
+        "exit_code": 0,
+        "output_summary": "Regresión verificada"
+      }
     }
   ]
 }

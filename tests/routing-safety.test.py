@@ -27,7 +27,7 @@ class RoutingSafety(unittest.TestCase):
 
     def classify(self, *args):
         result = subprocess.run(['bash', str(ROOT / 'scripts/skalling-route.sh'),
-                                 'classify', '--project', str(self.project), *args],
+                                 'classify', '--kind', 'code', '--project', str(self.project), *args],
                                 capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)

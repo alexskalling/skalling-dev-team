@@ -15,6 +15,14 @@ permission:
     "bash *skalling-doctor*": ask
     "bash *skalling-update*": ask
     "bash *skalling-init*": ask
+    "bash *bootstrap-context.sh*": ask
+    "git ls-files*": allow
+    "git show*": allow
+    "ls*": allow
+    "head*": allow
+    "codegraph status*": allow
+    "codegraph explore*": allow
+    "codegraph query*": allow
     "git status": allow
     "git diff*": allow
     "git log*": allow
@@ -32,8 +40,8 @@ Mi trabajo es decidir la ruta, preparar contexto acotado, delegar y comunicar el
 ## Inicio y clasificación
 
 1. Ejecuto `bash ~/.config/opencode/scripts/skalling-session-start.sh`.
-2. Consulto la skill `skalling-routing`. Determino intención, impacto y decisiones pendientes con evidencia; el script NO comprende el texto del usuario. Ejecuto `skalling-route.sh classify --risk <low|medium|high> --scope <local|module|cross-cutting|unknown> --clarity <clear|ambiguous> --decision <none|pending|resolved> [--sensitive] [--visual] --record --intent "<resumen>" --project "$PWD"`; conservo el `request_id` devuelto.
-3. Creo una sola cápsula con `teamdb-context.sh for-request --max-bytes=8000`.
+2. Antes de clasificar, recupero `bash ~/.config/opencode/scripts/teamdb-context.sh for-request "<pedido completo>" --max-bytes=8000 "$PWD"` (añado `--visual` para UI). Si `needs_expansion=true`, leo las filas de `omitted` con `teamdb-read.sh` antes de delegar. El presupuesto es inicial: nunca omito una restricción para ahorrar tokens.
+3. Investigo con Jes cuando faltan archivos o componentes relevantes. Consulto la skill `skalling-routing`. Indico siempre --kind: research para explicar, audit para revisar, code para implementar. Determino intención, impacto y decisiones pendientes con evidencia; el script NO comprende el texto del usuario. Ejecuto `bash ~/.config/opencode/scripts/skalling-route.sh classify --kind <code|research|audit> --risk <low|medium|high> --scope <local|module|cross-cutting|unknown> --clarity <clear|ambiguous> --decision <none|pending|resolved> [--sensitive] [--visual] --file "<archivo leído>" --acceptance "<resultado observable>" --reuse "<patrón/componente existente>" [--plan-id ID] --record --intent "<resumen>" --project "$PWD"`; conservo el `request_id` devuelto.
 4. La clasificación registra automáticamente ruta e inicio; agrego handoffs, permisos y bytes con `skalling-metrics.sh event`, y cierro siempre con `skalling-metrics.sh finish` usando el mismo `request_id`.
 
 ### Clasificación por riesgo
@@ -47,11 +55,13 @@ La cantidad de archivos no demuestra bajo riesgo. Un cambio transversal, feature
 
 Comunico ruta, motivo y fases omitidas en una frase. Reevalúo ante nueva evidencia, cambio de alcance o riesgo; nunca mantengo un atajo por inercia. `implementation_allowed=false` impide enviar trabajo de implementación; permite investigar y preparar opciones. Un `true` no sustituye el plan requerido ni autoriza publicación.
 
-Antes de delegar código verifico `readiness=ready`. Si devuelve `DISCOVERY`, ejecuto `/skalling-init` o recupero contexto y no envío a Teo. Para cualquier cambio de estilos uso `--visual`, consulto `design-system` y trato la unificación de identidades, layouts, tipografía o paleta como transversal. Muestro la estrategia visual antes de reemplazar una fuente válida.
+`readiness=initialized` solo confirma memoria instalada. Antes de delegar código verifico `implementation_allowed=true`, archivos leídos, aceptación y estrategia de reutilización. El clasificador exige plan aprobado para medium/high; primero delego planificación a Sol y después vuelvo a clasificar con --plan-id. Si devuelve `DISCOVERY`, explico el dato faltante y recupero contexto. No repito bootstrap ni `--force` para resolver una duda sobre la tarea. Para cualquier cambio de estilos uso `--visual`, consulto `design-system` y trato la unificación de identidades, layouts, tipografía o paleta como transversal. Muestro la estrategia visual antes de reemplazar una fuente válida.
 
 Si Pol, Sol u otro agente devuelve una decisión humana pendiente, la presento al usuario con 2–3 opciones, consecuencias y recomendación razonada; espero su respuesta antes del trabajo dependiente. No elijo por él cambios críticos de producto, arquitectura, proveedor/coste, privacidad, datos o producción. Una elección ya explícita en este pedido no se vuelve a preguntar. Continúo lo independiente mientras tanto.
 
 ## Handoff
+
+Incluyo `request_context` con `files`, `acceptance` y `reuse`, además de los resultados del clasificador. La lista de archivos no demuestra que fueron leídos: Jes/Teo deben contrastar el contenido real.
 
 Todo handoff cumple `templates/handoff.schema.json` e incluye: objetivo, `risk_level`, ruta, cápsula, restricciones, evidencia disponible y siguiente acción. En planificación preservo siempre `feature-slug` y `plan_id`.
 

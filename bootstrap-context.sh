@@ -60,7 +60,7 @@ c_blue='\033[36m'
 c_red='\033[31m'
 c_reset='\033[0m'
 
-log() { shift; printf "  ${c_blue}ℹ${c_reset} %s\n" "$*"; }
+log() { printf "  ${c_blue}ℹ${c_reset} %s\n" "$*"; }
 ok() { printf "  ${c_green}✓${c_reset} %s\n" "$*"; }
 warn() { printf "  ${c_yellow}⚠${c_reset} %s\n" "$*" >&2; }
 err() { printf "  ${c_red}✗${c_reset} %s\n" "$*" >&2; }
@@ -119,97 +119,8 @@ detect_stack() {
 # ──────────────────────────────────────────────────────────────────────────────
 
 generate_bundle() {
-    log "Generando bundle OKF en $CONTEXT_DIR"
-
-    # Directorios
     run mkdir -p "$CONTEXT_DIR"
-    for dir in stack proyecto decisiones trabajo-en-curso preferencias problemas-conocidos; do
-        run mkdir -p "$CONTEXT_DIR/$dir"
-    done
-    # design-system.md se crea en CONTEXT_DIR/proyecto/ (R13, solo OKF bundle)
-
-    local project_name="${PROJECT_DIR##*/}"
-
-    # README.md del bundle
-    run cp "$TEMPLATES_DIR/okf/README.template.md" "$CONTEXT_DIR/README.md"
-    if [[ "$DRY_RUN" == false ]]; then
-        skalling_sed_inplace "$CONTEXT_DIR/README.md" "s|\[Bundle name\]|${project_name}|g"
-    fi
-
-    # index.md
-    run cp "$TEMPLATES_DIR/okf/index.template.md" "$CONTEXT_DIR/index.md"
-
-    # log.md
-    run cp "$TEMPLATES_DIR/okf/log.template.md" "$CONTEXT_DIR/log.md"
-    if [[ "$DRY_RUN" == false ]]; then
-        # Append atómico para evitar corrupción si crashea
-        local log_entry
-        log_entry="$(printf '\n## %s — Bootstrap inicial\n**Por:** alex\n**Acción:** Bundle OKF creado con detección automática.\n**Path:** `.opencode/context/` completo\n**Razón:** Primer arranque de Skalling en este proyecto.' "$(date +%Y-%m-%d\ %H:%M)")"
-        skalling_atomic_append "$CONTEXT_DIR/log.md" "$log_entry"
-    fi
-
-    # Index por carpeta
-    run cp "$TEMPLATES_DIR/okf/stack-index.template.md" "$CONTEXT_DIR/stack/index.md"
-    run cp "$TEMPLATES_DIR/okf/proyecto-index.template.md" "$CONTEXT_DIR/proyecto/index.md"
-    run cp "$TEMPLATES_DIR/okf/decisiones-index.template.md" "$CONTEXT_DIR/decisiones/index.md"
-    run cp "$TEMPLATES_DIR/okf/trabajo-en-curso-index.template.md" "$CONTEXT_DIR/trabajo-en-curso/index.md"
-    run cp "$TEMPLATES_DIR/okf/preferencias-index.template.md" "$CONTEXT_DIR/preferencias/index.md"
-    run cp "$TEMPLATES_DIR/okf/problemas-conocidos-index.template.md" "$CONTEXT_DIR/problemas-conocidos/index.md"
-
-    # Concept docs detectados
-    local language; language="$(get_detected language)"
-    if [[ -n "$language" ]]; then
-        run cp "$TEMPLATES_DIR/okf/stack-concept.template.md" "$CONTEXT_DIR/stack/backend.md"
-        if [[ "$DRY_RUN" == false ]]; then
-            skalling_sed_inplace "$CONTEXT_DIR/stack/backend.md" "s|\[Componente del stack\]|Backend stack (${language})|g"
-            skalling_sed_inplace "$CONTEXT_DIR/stack/backend.md" "s|\[Framework / librería / runtime detectado\]|${language} runtime|g"
-        fi
-
-        local has_ui; has_ui="$(get_detected has_ui)"
-        local framework; framework="$(get_detected framework)"
-        if [[ "$has_ui" == "true" ]]; then
-            run cp "$TEMPLATES_DIR/okf/stack-concept.template.md" "$CONTEXT_DIR/stack/frontend.md"
-            if [[ "$DRY_RUN" == false ]]; then
-                skalling_sed_inplace "$CONTEXT_DIR/stack/frontend.md" "s|\[Componente del stack\]|Frontend stack (${framework})|g"
-                skalling_sed_inplace "$CONTEXT_DIR/stack/frontend.md" "s|\[Framework / librería / runtime detectado\]|${framework} UI framework|g"
-            fi
-        fi
-
-        local test_runner; test_runner="$(get_detected test_runner)"
-        if [[ -n "$test_runner" ]]; then
-            run cp "$TEMPLATES_DIR/okf/stack-concept.template.md" "$CONTEXT_DIR/stack/testing.md"
-            if [[ "$DRY_RUN" == false ]]; then
-                skalling_sed_inplace "$CONTEXT_DIR/stack/testing.md" "s|\[Componente del stack\]|Testing (${test_runner})|g"
-                skalling_sed_inplace "$CONTEXT_DIR/stack/testing.md" "s|\[Framework / librería / runtime detectado\]|${test_runner} test runner|g"
-            fi
-        fi
-    fi
-
-    # Proyecto / que-es.md
-    run cp "$TEMPLATES_DIR/okf/proyecto-que-es.template.md" "$CONTEXT_DIR/proyecto/que-es.md"
-    if [[ "$DRY_RUN" == false ]]; then
-        local desc; desc="$(get_detected description)"
-        [[ -z "$desc" ]] && desc="Sin descripción detectada."
-        skalling_sed_inplace "$CONTEXT_DIR/proyecto/que-es.md" "s|\[Nombre del proyecto\]|${project_name}|g"
-        skalling_sed_inplace "$CONTEXT_DIR/proyecto/que-es.md" "s|\[Una línea del README\]|${desc}|g"
-    fi
-
-    # .gitattributes para estrategias de merge (R16)
-    if [[ -f "$TEMPLATES_DIR/gitattributes.template" ]]; then
-        run cp "$TEMPLATES_DIR/gitattributes.template" "$OPENCODE_DIR/.gitattributes"
-        if [[ "$DRY_RUN" == false ]]; then
-            log "  ✓ .gitattributes instalado (estrategias de merge R16)"
-        fi
-    fi
-
-    # Verificar size del bundle (R-MEMORY-SIZE-LIMIT)
-    if [[ "$DRY_RUN" == false ]]; then
-        local size_status
-        size_status="$(skalling_check_bundle_size "$CONTEXT_DIR")"
-        log "Bundle size: $size_status"
-    fi
-
-    ok "Bundle OKF generado"
+    ok "Directorio de TeamDB preparado (sin plantillas Markdown)"
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -254,18 +165,13 @@ generate_project_yaml() {
 # ──────────────────────────────────────────────────────────────────────────────
 
 check_design_md() {
-    local has_ui; has_ui="$(get_detected has_ui)"
-    if [[ "$has_ui" != "true" ]]; then
-        return 0
+    [[ "$DRY_RUN" == true ]] && return 0
+    if [[ "$(get_detected has_ui)" == "true" ]]; then
+        local found
+        found="$(sqlite3 "$CONTEXT_DIR/team.db" "SELECT count(*) FROM concepts WHERE slug='design-system' AND length(body_md)>0")"
+        [[ "$found" -gt 0 ]] || { err "Falta concepto design-system en TeamDB"; return 1; }
+        ok "Evidencia de diseño disponible en TeamDB; validar contra el código para cada pedido"
     fi
-
-    if [[ -f "$CONTEXT_DIR/proyecto/design-system.md" ]]; then
-        ok "design-system.md presente (REGLA #13 OK)"
-        return 0
-    fi
-
-    warn "REGLA #13: Frontend detectado pero falta design-system.md en bundle OKF"
-    log "  Sugerencia: correr /impeccable document o crear manualmente."
 }
 
 CODEGRAPH_STATUS="unavailable"
@@ -384,7 +290,7 @@ main() {
     fi
     echo ""
 
-    if [[ -f "$CONTEXT_DIR/team.db" && "$FORCE" == false && "$DRY_RUN" == false ]]; then
+    if [[ -f "$CONTEXT_DIR/team.db" && "$FORCE" == false && "$DRY_RUN" == false && "$ONLY_DETECTION" == false ]]; then
         err "El proyecto ya está inicializado. Usá --force solo para una reparación consciente."
         return 4
     fi
@@ -410,12 +316,12 @@ main() {
     check_design_md
 
     echo ""
-    ok "Bootstrap completo — proyecto READY"
+    ok "Bootstrap completo — memoria inicializada; comprensión del pedido pendiente"
     echo ""
     cat <<EOF
   Bundle OKF: $CONTEXT_DIR
   Project YAML: $OPENCODE_DIR/project.yaml
-  design-system.md: $([[ -f "$CONTEXT_DIR/proyecto/design-system.md" ]] && echo "✓ presente" || echo "⚠ frontend requiere uno")
+  Diseño: concepto design-system en TeamDB (cuando hay UI)
 
   Próximo paso: abrí opencode y empezá a trabajar.
 EOF

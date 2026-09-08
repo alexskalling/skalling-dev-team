@@ -40,7 +40,7 @@ COMMAND_DIR="${OPENCODE_DIR}/command"
 CONSTITUTION_FILE="${OPENCODE_DIR}/constitucion.md"
 TEMPLATES_DIR="${OPENCODE_DIR}/templates"
 DATA_DIR="${OPENCODE_DIR}/skalling-data"
-BACKUP_DIR="${HOME}/.config/opencode/.skalling-backups"
+BACKUP_DIR="${OPENCODE_DIR}/.skalling-backups"
 INSTALL_LOG="${BACKUP_DIR}/install.log"
 
 DRY_RUN=false
@@ -460,11 +460,12 @@ install_skalling_scripts() {
     run chmod +x "$OPENCODE_DIR/scripts/$(basename "$script")"
     script_count=$((script_count + 1))
   done
-  if [ -f "$SCRIPT_DIR/scripts/skalling-bootstrap-context.py" ]; then
-    run cp "$SCRIPT_DIR/scripts/skalling-bootstrap-context.py" "$OPENCODE_DIR/scripts/skalling-bootstrap-context.py"
-    run chmod +x "$OPENCODE_DIR/scripts/skalling-bootstrap-context.py"
+  for script in "$SCRIPT_DIR"/scripts/skalling-*.py; do
+    [ -f "$script" ] || continue
+    run cp "$script" "$OPENCODE_DIR/scripts/"
+    run chmod +x "$OPENCODE_DIR/scripts/$(basename "$script")"
     script_count=$((script_count + 1))
-  fi
+  done
   if [ "$script_count" -gt 0 ]; then
     log OK "$script_count scripts skalling-* instalados"
   else
