@@ -36,6 +36,9 @@ class InstalledWorkflow(unittest.TestCase):
                                           'dependencies': {'next': '15.0.0', 'react': '19.0.0'}}))
             (project / 'app/globals.css').write_text(':root { --brand: red; }')
             run(ROOT / 'install-global.sh', '--force')
+            installed_config = json.loads((config / 'opencode.jsonc').read_text())
+            self.assertEqual(installed_config['permission']['todowrite'], 'allow')
+            self.assertEqual(installed_config, json.loads((ROOT / 'templates/opencode.json').read_text()))
             self.assertTrue((config / '.skalling-backups/install.log').exists())
             self.assertEqual((config / 'skills/writing-plans/SKILL.md').read_text(),
                              (ROOT / 'skills-base/writing-plans/SKILL.md').read_text())

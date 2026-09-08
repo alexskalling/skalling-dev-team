@@ -579,7 +579,7 @@ install_web_dashboard() {
 
 install_global_config() {
     local cfg="$OPENCODE_DIR/opencode.jsonc"
-    local proj_cfg="$SCRIPT_DIR/.opencode/opencode.json"
+    local proj_cfg="$SCRIPT_DIR/templates/opencode.json"
     if [ -f "$proj_cfg" ]; then
         if [[ "$FORCE" == true ]] || [ ! -f "$cfg" ]; then
             run cp "$proj_cfg" "$cfg"
