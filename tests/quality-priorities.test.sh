@@ -16,7 +16,7 @@ check() {
 }
 
 check "claim legacy no interpola SQL con sqlite3" sh -c "! grep -q 'sqlite3 \"\$DB\"' '$ROOT/scripts/teamdb-claim-task.sh'"
-check "pre-commit usa consultas parametrizadas" grep -q 'teamdb_exec_value' "$ROOT/scripts/hooks/pre-commit"
+check "pre-commit usa consultas parametrizadas" grep -q 'WHERE tree_hash=?' "$ROOT/scripts/hooks/git-gate.py"
 check "migración legacy falla si sqlite falla" sh -c "! grep -q 'sqlite3 \"\$local_db\" < \"\$1\".*|| true' '$ROOT/scripts/teamdb-migrate.sh'"
 check "CI ejecuta pruebas del dashboard" grep -q 'dashboard-server.test.py' "$ROOT/.github/workflows/tests.yml"
 check "CI ejecuta doctor estricto" grep -q 'setup-team-doctor.sh --strict' "$ROOT/.github/workflows/tests.yml"
@@ -25,8 +25,8 @@ check "routing clasificado puede persistirse" grep -q -- '--record' "$ROOT/scrip
 check "schema marca work_in_progress como legacy" grep -q 'legacy_surface.*work_in_progress' "$ROOT/sql/project-schema.sql"
 check "política de retención es reutilizable" test -x "$ROOT/scripts/teamdb-prune-backups.sh"
 check "licencia del proyecto existe" test -f "$ROOT/LICENSE"
-check "versión fuente es 0.10.4" grep -q '0.10.4' "$ROOT/VERSION"
-check "migración 0.10.4 existe" test -f "$ROOT/sql/migrations/025_version_0_10_4.sql"
+check "versión fuente es 0.11.0" grep -q '0.11.0' "$ROOT/VERSION"
+check "migración 0.11.0 existe" test -f "$ROOT/sql/migrations/026_version_0_11_0.sql"
 check "instalador global falla si TeamDB no puede actualizarse" grep -q 'teamdb global: upgrade aditivo no aplicado' "$ROOT/install-global.sh"
 
 FIXTURE="$(mktemp -d)"

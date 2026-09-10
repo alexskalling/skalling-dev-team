@@ -17,13 +17,15 @@ check() {
   fi
 }
 
-for agent in Alex Jes Jhon Luz Pau Pol Sol Teo; do
+for agent in Alex Jes Jhon Luz Pol Sol Teo; do
   check "$agent autoriza lectura normal de TeamDB" \
-    grep -q '"bash \*teamdb-read\*": allow' "$ROOT/agents-base/$agent.md"
+    grep -Fq '"bash */.config/opencode/scripts/teamdb-read.sh *": allow' "$ROOT/agents-base/$agent.md"
 done
 
 check "Pau autoriza escritura tipada de memoria" \
-  grep -q '"bash \*teamdb-memory\*": allow' "$ROOT/agents-base/Pau.md"
+  grep -Fq '"bash */.config/opencode/scripts/teamdb-memory.sh *": allow' "$ROOT/agents-base/Pau.md"
+check "Pau autoriza lectura por ruta canónica" \
+  grep -Fq '"bash */.config/opencode/scripts/teamdb-read.sh *": allow' "$ROOT/agents-base/Pau.md"
 
 check "los prompts no enseñan INSERT mediante teamdb_query_project" \
   sh -c "! grep -R -n 'teamdb_query_project \"INSERT' '$ROOT/agents-base'"

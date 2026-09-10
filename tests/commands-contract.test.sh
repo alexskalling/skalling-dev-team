@@ -22,7 +22,7 @@ expected=(
   skalling-codegraph skalling-dashboard skalling-doctor skalling-help
   skalling-init skalling-memory skalling-merge skalling-metrics
   skalling-recover skalling-refresh skalling-resume skalling-status
-  skalling-update
+  skalling-update skalling-goal
 )
 
 for command in "${expected[@]}"; do

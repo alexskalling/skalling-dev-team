@@ -6,6 +6,7 @@ set -euo pipefail
 
 PROJECT="${PROJECT:-$(pwd)}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}"
 # Lock file para evitar race conditions entre agentes
 # shellcheck disable=SC1091
 if [ -f "$SCRIPT_DIR/lib-teamdb.sh" ]; then
@@ -168,8 +169,9 @@ except Exception as e:
   # Exporta title + body_md (title viene de la columna title del schema, no del body).
   python3 - "$DB" "$PLAN_ID" "$PLAN_DIR/specs" "$HEADER" <<'PYEOF'
 import sqlite3, sys, os
+from teamdb_guard import connect as protected_connect
 db, plan_id, specs_dir, header = sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4]
-conn = sqlite3.connect(db, timeout=5)
+conn = protected_connect(db, timeout=5)
 rows = conn.execute(
     "SELECT slug, COALESCE(title, ''), COALESCE(body_md, '') FROM specs WHERE plan_id = ? ORDER BY order_index", (plan_id,)).fetchall()
 conn.close()

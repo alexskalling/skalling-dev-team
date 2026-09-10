@@ -445,6 +445,11 @@ install_teamdb_hooks() {
 }
 
 install_skalling_scripts() {
+    run mkdir -p "$OPENCODE_DIR/plugins"
+    run cp "$SCRIPT_DIR/plugins/skalling-goal.js" "$OPENCODE_DIR/plugins/skalling-goal.js"
+    run mkdir -p "$OPENCODE_DIR/plugins/lib"
+    run cp "$SCRIPT_DIR/plugins/skalling-data-safety.js" "$OPENCODE_DIR/plugins/skalling-data-safety.js"
+    run cp "$SCRIPT_DIR/plugins/lib/data-safety.mjs" "$OPENCODE_DIR/plugins/lib/data-safety.mjs"
   # Scripts core de orquestación (skalling-route, skalling-session-start, skalling-receipt).
   # Cualquier skalling-*.sh en scripts/ se copia a ~/.config/opencode/scripts/.
   log INFO "Instalando scripts de orquestación skalling-* en $OPENCODE_DIR/scripts"
@@ -499,6 +504,8 @@ install_teamdb() {
     # lo resuelven en $OPENCODE_DIR/scripts/. Sin él, el bundle instalado no escribe.
     if [ -f "$SCRIPT_DIR/scripts/teamdb_exec.py" ]; then
         run cp "$SCRIPT_DIR/scripts/teamdb_exec.py" "$OPENCODE_DIR/scripts/teamdb_exec.py"
+        run cp "$SCRIPT_DIR/scripts/teamdb_guard.py" "$OPENCODE_DIR/scripts/teamdb_guard.py"
+        run cp "$SCRIPT_DIR/scripts/teamdb-destructive.py" "$OPENCODE_DIR/scripts/teamdb-destructive.py"
         run chmod +x "$OPENCODE_DIR/scripts/teamdb_exec.py"
     fi
 
@@ -676,6 +683,10 @@ do_uninstall() {
         fi
     done
     log OK "$removed agentes removidos"
+
+    if [ -f "$OPENCODE_DIR/plugins/skalling-goal.js" ]; then run rm -f "$OPENCODE_DIR/plugins/skalling-goal.js"; fi
+    if [ -f "$OPENCODE_DIR/plugins/skalling-data-safety.js" ]; then run rm -f "$OPENCODE_DIR/plugins/skalling-data-safety.js"; fi
+    if [ -f "$OPENCODE_DIR/plugins/lib/data-safety.mjs" ]; then run rm -f "$OPENCODE_DIR/plugins/lib/data-safety.mjs"; fi
 
     for d in "$SKILLS_DIR"/*/; do
         [[ -d "$d" ]] || continue

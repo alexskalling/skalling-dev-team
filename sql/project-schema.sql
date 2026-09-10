@@ -114,7 +114,15 @@ CREATE TABLE schema_meta (
   value TEXT NOT NULL
 );
 
-INSERT INTO schema_meta VALUES ('version', '0.10.4');
+INSERT INTO schema_meta VALUES ('version', '0.11.0');
+
+CREATE TABLE IF NOT EXISTS data_revisions (
+  id INTEGER PRIMARY KEY,
+  table_name TEXT NOT NULL,
+  row_key TEXT,
+  previous_json TEXT NOT NULL,
+  changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 INSERT INTO schema_meta VALUES ('type', 'project');
 INSERT INTO schema_meta VALUES ('legacy_surface.work_in_progress', 'read_only_compatibility');
 INSERT INTO schema_meta VALUES ('legacy_surface.code_graph_cache', 'external_codegraph');

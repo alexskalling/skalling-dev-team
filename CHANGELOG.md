@@ -4,6 +4,26 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.11.0] — pendiente de publicación
+
+### Protección de datos
+- Helpers SQLite protegidos contra DELETE, REPLACE, DROP, DDL destructivo y vaciado de contenido durable; consultas realmente read-only.
+- Versiones anteriores del conocimiento conservadas en `data_revisions` dentro de TeamDB; no se exportan automáticamente a Git.
+- Herramienta `teamdb_destructive`: aprobación nativa por operación exacta, respaldo previo y rechazo de aprobaciones sobre una base que cambió. No se concede este permiso mediante Goal.
+- `cp` y `rm` genéricos mantienen aprobación; no se concede permiso ilimitado para sobrescribir o eliminar archivos.
+- Pruebas antiguas de contratos y migración de planes aisladas en bases temporales; no operan sobre la TeamDB del checkout.
+- Los controles cubren los helpers distribuidos; no sustituyen permisos del sistema operativo ni protegen otras bases frente a programas externos ejecutados fuera de ellos.
+
+### Added
+- `/skalling-goal`: consentimiento explícito para un commit local, estado por sesión en TeamDB y continuación mediante plugin de OpenCode. Sin push ni despliegue; pausa, reanudación, cancelación y límites de progreso.
+- Cierre del objetivo con protección de archivos previos, rama/HEAD, lista explícita y evidencia del candidato staged.
+
+### Fixed
+- Permisos de lectura, pruebas y helpers de TeamDB de los ocho agentes con precedencia correcta y rutas canónicas. Shell/SQL arbitrarios y publicación siguen sujetos a aprobación.
+- Cierre Git de solo lectura: revisa únicamente el candidato staged, sin caducidad temporal ni regeneración automática del dump en hooks.
+- Push comprueba cada commit pendiente contra su evidencia aprobada, no contra el último comprobante de toda la base.
+- Detección de secretos sobre los cambios que se publican y errores explícitos, sin limpieza automática de memoria ni comprobantes retroactivos.
+
 ## [0.10.4] — 2026-09-08
 
 ### Fixed

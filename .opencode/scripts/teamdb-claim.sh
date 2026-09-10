@@ -7,6 +7,7 @@ set -euo pipefail
 
 PROJECT="${PROJECT:-$(pwd)}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}"
 # Lock file para evitar race conditions entre agentes
 # shellcheck disable=SC1091
 if [ -f "$SCRIPT_DIR/lib-teamdb.sh" ]; then
@@ -69,8 +70,9 @@ if [ "${1:-}" = "--resume" ]; then
   # Resume: claims activos del actor con lease vigente (epoch comparison)
   python3 - "$DB" "$ACTOR" <<'PYEOF'
 import sqlite3, sys, json
+from teamdb_guard import connect as protected_connect
 db, actor = sys.argv[1], sys.argv[2]
-conn = sqlite3.connect(db)
+conn = protected_connect(db)
 conn.row_factory = sqlite3.Row
 now = int(__import__('time').time())
 rows = conn.execute("""
@@ -126,11 +128,12 @@ if [ "${1:-}" = "--release" ]; then
   [ -f "$DB" ] || { echo "[ERROR] no DB" >&2; exit 1; }
   python3 - "$DB" "$CLAIM_ID" "$NEW_STATUS" "$RELEASE_BY" <<'PYEOF'
 import sqlite3, sys, json
+from teamdb_guard import connect as protected_connect
 db, claim_id, new_status, release_by = sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4]
 if new_status not in ('done', 'failed'):
     json.dump({'error': 'invalid status: %s (usa done|failed)' % new_status}, sys.stdout)
     sys.exit(1)
-conn = sqlite3.connect(db, timeout=5)
+conn = protected_connect(db, timeout=5)
 conn.execute("PRAGMA foreign_keys=ON")
 conn.row_factory = sqlite3.Row
 try:
@@ -209,6 +212,7 @@ if [ "${1:-}" = "--advance" ]; then
   [ -f "$DB" ] || { echo "[ERROR] no DB" >&2; exit 1; }
   python3 - "$DB" "$PLAN_SLUG" "$TASK_SLUG" "$TARGET_STATUS" "$ADVANCE_BY" <<'PYEOF'
 import sqlite3, sys, json, time
+from teamdb_guard import connect as protected_connect
 db, plan_slug, task_slug, target, actor = sys.argv[1:6]
 if target == 'approved' and actor != 'jhon':
     json.dump({'error': 'in_review->approved requiere actor=jhon (verificador)'}, sys.stdout)
@@ -217,7 +221,7 @@ if target == 'resolved' and actor != 'pau':
     json.dump({'error': 'approved->resolved requiere actor=pau (documentalist)'}, sys.stdout)
     sys.exit(2)
 now = int(time.time())
-conn = sqlite3.connect(db, timeout=5)
+conn = protected_connect(db, timeout=5)
 conn.execute("PRAGMA foreign_keys=ON")
 conn.row_factory = sqlite3.Row
 try:
@@ -290,12 +294,13 @@ PLAN_ID="$(teamdb_exec_value "$DB" "SELECT id FROM plans WHERE slug = ?" "$PLAN_
 
 python3 - "$DB" "$PLAN_ID" "$PLAN_SLUG" "$TASK_SLUG" "$ACTOR" "$TTL" "$INPUT_HASH" <<'PYEOF'
 import sqlite3, sys, json, hashlib, time
+from teamdb_guard import connect as protected_connect
 db, plan_id, plan_slug, task_slug, actor, ttl, input_hash_in = sys.argv[1:8]
 ttl = int(ttl)
 now = int(time.time())
 lease_end = now + ttl
 
-conn = sqlite3.connect(db, timeout=5)
+conn = protected_connect(db, timeout=5)
 conn.execute("PRAGMA foreign_keys=ON")
 conn.row_factory = sqlite3.Row
 conn.execute("BEGIN IMMEDIATE")

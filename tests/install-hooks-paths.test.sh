@@ -31,7 +31,7 @@ else
 fi
 
 # 2. Hooks usan git rev-parse --show-toplevel
-if grep -q 'git rev-parse --show-toplevel' "$ROOT/scripts/hooks/pre-commit"; then
+if grep -q "'rev-parse', '--show-toplevel'" "$ROOT/scripts/hooks/git-gate.py"; then
   assert_pass "pre-commit usa git rev-parse --show-toplevel"
 else
   assert_fail "pre-commit usa git rev-parse --show-toplevel" "no aparece"
@@ -82,10 +82,10 @@ HOME="$(mktemp -d)" SKALLING_ROOT="$ROOT" bash -c '
   git add . 2>/dev/null
   HOME="$HOME" SKALLING_ROOT="$2" bash .git/hooks/pre-commit 2>/dev/null
 ' _ "$TMP" "$ROOT" 2>&1
-if [ -f "$TMP/db/teamdb/team.dump.sql" ]; then
-  assert_pass "pre-commit genera el dump versionado (db/teamdb/team.dump.sql)"
+if [ ! -f "$TMP/db/teamdb/team.dump.sql" ]; then
+  assert_pass "pre-commit no genera memoria"
 else
-  assert_fail "pre-commit genera el dump versionado (db/teamdb/team.dump.sql)" "no se creo"
+  assert_fail "pre-commit no genera memoria" "se creó inesperadamente"
 fi
 
 # 6. Hooks son portables: funcionan con SKALLING_ROOT y sin el

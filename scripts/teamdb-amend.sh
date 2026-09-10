@@ -6,6 +6,7 @@ set -euo pipefail
 
 PROJECT="${PROJECT:-$(pwd)}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}"
 
 # shellcheck disable=SC1091
 # Source lib-teamdb.sh ANTES del lock (teamdb_lock vive en lib-teamdb.sh). v0.8.3
@@ -98,8 +99,9 @@ DB="$(teamdb_project_path "$PROJECT")"
 if [ "$SHOW" = "1" ]; then
   python3 - "$DB" "$SLUG" <<'PYEOF'
 import sqlite3, sys, json
+from teamdb_guard import connect as protected_connect
 db, slug = sys.argv[1], sys.argv[2]
-conn = sqlite3.connect(db)
+conn = protected_connect(db)
 conn.row_factory = sqlite3.Row
 plan = conn.execute("SELECT id FROM plans WHERE slug=?", (slug,)).fetchone()
 if not plan:
@@ -214,12 +216,13 @@ PLANS_PARAMS_JSON="$(python3 -c "import json,sys; print(json.dumps(list(sys.argv
 
 python3 - "$DB" "$TASK_SQL" "$TASK_PARAMS_JSON" "$HIST_SQL" "$HIST_PARAMS_JSON" "$PLANS_SQL" "$PLANS_PARAMS_JSON" "$ACTOR" <<'PYEOF'
 import sqlite3, sys, json
+from teamdb_guard import connect as protected_connect
 db = sys.argv[1]
 task_sql, task_params = sys.argv[2], json.loads(sys.argv[3])
 hist_sql, hist_params = sys.argv[4], json.loads(sys.argv[5])
 plans_sql, plans_params = sys.argv[6], json.loads(sys.argv[7])
 actor = sys.argv[8]
-conn = sqlite3.connect(db, timeout=5)
+conn = protected_connect(db, timeout=5)
 conn.execute("PRAGMA foreign_keys=ON")
 try:
     conn.execute("BEGIN IMMEDIATE")

@@ -238,7 +238,7 @@ set +e
 HOOK_OUT="$(cd "$GATE_REPO" && SKALLING_ROOT="$ROOT" bash "$ROOT/scripts/hooks/pre-commit" 2>&1)"
 HOOK_RC=$?
 set -e
-if [ "$HOOK_RC" = "1" ] && printf '%s' "$HOOK_OUT" | grep -q "cambió desde el receipt"; then
+if [ "$HOOK_RC" = "1" ] && printf '%s' "$HOOK_OUT" | grep -q "falta revisión aprobada"; then
   assert_pass "gate: pre-commit bloquea cambio post-seal"
 else
   assert_fail "gate: pre-commit bloquea cambio post-seal" "rc=$HOOK_RC out=$HOOK_OUT"
@@ -255,10 +255,10 @@ if [ "$HOOK_RC2" = "0" ]; then
 else
   assert_fail "gate: pre-commit pasa tras re-seal" "rc=$HOOK_RC2 out=$HOOK_OUT2"
 fi
-if [ -f "$GATE_REPO/db/teamdb/team.dump.sql" ]; then
-  assert_pass "gate: pre-commit genera el dump versionado (db/teamdb/team.dump.sql)"
+if [ ! -f "$GATE_REPO/db/teamdb/team.dump.sql" ]; then
+  assert_pass "gate: pre-commit no genera ni stagea memoria"
 else
-  assert_fail "gate: pre-commit genera el dump versionado (db/teamdb/team.dump.sql)" "no se creo"
+  assert_fail "gate: pre-commit no genera ni stagea memoria" "se creó inesperadamente"
 fi
 
 # ── 7. --deep: congela bundle con candidate.diff + files.txt + 4 prompts ──

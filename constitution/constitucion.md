@@ -491,7 +491,7 @@ D) Lo explico yo con mis palabras
 
    Tipos válidos: `feat`, `fix`, `refactor`, `docs`, `style`, `chore`, `perf`, `test`
 
-4. **Scope antes del commit**: el agente debe mostrar al usuario un resumen de los archivos que van a commiteares y esperar confirmación:
+4. **Scope antes del commit**: si falta autorización aplicable, el agente debe mostrar al usuario un resumen de los archivos que van a commitearse y esperar confirmación. La invocación explícita `/skalling-goal <objetivo>` ya autoriza UN commit local de ese objetivo, no push ni despliegue: no se pide una segunda confirmación; se comprueban alcance, archivos previos y evidencia mediante `skalling-goal.sh commit`. Fuera de ese alcance se pregunta:
    ```
    Archivos a commite:
    - src/componentes/boton.tsx (modificado)

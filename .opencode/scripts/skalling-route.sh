@@ -10,6 +10,7 @@
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}"
 
 DISPATCH_TABLE="$(cat <<'EOF'
 INTENT / RISK                   | ROUTE        | AGENTS
@@ -38,10 +39,11 @@ persist_classification() {
   [ -f "$db" ] || { printf 'ERROR: TeamDB no existe: %s\n' "$db" >&2; return 1; }
   python3 - "$db" "$request_id" "$intent" "$route" "$agents" "$risk" <<'PY'
 import sqlite3
+from teamdb_guard import connect as protected_connect
 import sys
 
 db, request_id, intent, route, agents, risk = sys.argv[1:]
-conn = sqlite3.connect(db, timeout=5)
+conn = protected_connect(db, timeout=5)
 try:
     conn.execute("BEGIN IMMEDIATE")
     conn.execute(
@@ -137,6 +139,7 @@ cmd_classify() {
   fi
   python3 - "$risk" "$route" "$agents" "$verification" "$request_id" "$needs_user_decision" "$implementation_allowed" "$readiness" "$project" "$kind" "$acceptance" "$reuse" "$plan_id" "$visual" ${files[@]+"${files[@]}"} <<'PY'
 import json, sys, sqlite3
+from teamdb_guard import connect as protected_connect
 from pathlib import Path
 risk, route, agents, verification, request_id, decision, allowed, readiness = sys.argv[1:9]
 project, kind, acceptance, reuse, plan_id, visual = sys.argv[9:15]
@@ -154,7 +157,7 @@ if kind == "code" and allowed == "true":
         blockers.append("Falta --acceptance: resultado observable del pedido")
     if not reuse.strip():
         blockers.append("Falta --reuse: qué componente/patrón existente se reutiliza")
-    with sqlite3.connect("file:" + str(root / ".opencode/context/team.db") + "?mode=ro", uri=True) as db:
+    with protected_connect("file:" + str(root / ".opencode/context/team.db") + "?mode=ro", uri=True) as db:
         if not db.execute("SELECT 1 FROM concepts WHERE slug='project-summary' AND length(body_md)>0").fetchone():
             blockers.append("Falta resumen de proyecto en TeamDB")
         if visual == "true" and not db.execute("SELECT 1 FROM concepts WHERE slug='design-system' AND length(body_md)>0").fetchone():

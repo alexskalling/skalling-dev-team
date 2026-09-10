@@ -2,31 +2,256 @@
 description: Orquestador de Skalling. Clasifica intención y riesgo, entrega contexto mínimo y delega; no implementa.
 mode: primary
 permission:
-  edit:
-    "*": deny
+  teamdb_destructive: ask
+  read:
+    "*": allow
+    "*.env": deny
+    "*.env.*": deny
+    "*.env.example": allow
+    "*.pem": deny
+    "*id_rsa*": deny
+  glob: allow
+  grep: allow
+  list: allow
+  edit: deny
   bash:
-    "bash *teamdb-read*": allow
-    "bash *teamdb-context*": allow
-    "bash *skalling-route*": allow
-    "bash *skalling-metrics*": allow
-    "bash *skalling-session-start*": allow
-    "bash *skalling-receipt*": allow
-    "bash *skalling-status*": allow
-    "bash *skalling-doctor*": ask
-    "bash *skalling-update*": ask
-    "bash *skalling-init*": ask
-    "bash *bootstrap-context.sh*": ask
-    "git ls-files*": allow
-    "git show*": allow
-    "ls*": allow
-    "head*": allow
-    "codegraph status*": allow
-    "codegraph explore*": allow
-    "codegraph query*": allow
+    "*": ask
+    "cat": allow
+    "cat *": allow
+    "head": allow
+    "head *": allow
+    "tail": allow
+    "tail *": allow
+    "ls": allow
+    "ls *": allow
+    "rg": allow
+    "rg *": allow
+    "grep": allow
+    "grep *": allow
+    "wc": allow
+    "wc *": allow
+    "sort": allow
+    "sort *": allow
+    "uniq": allow
+    "uniq *": allow
+    "echo": allow
+    "echo *": allow
+    "pwd": allow
+    "pwd *": allow
+    "find": allow
+    "find *": allow
     "git status": allow
-    "git diff*": allow
-    "git log*": allow
-    "*": deny
+    "git status *": allow
+    "git diff": allow
+    "git diff *": allow
+    "git log": allow
+    "git log *": allow
+    "git show": allow
+    "git show *": allow
+    "git ls-files": allow
+    "git ls-files *": allow
+    "git rev-parse": allow
+    "git rev-parse *": allow
+    "codegraph status": allow
+    "codegraph status *": allow
+    "codegraph query": allow
+    "codegraph query *": allow
+    "codegraph explore": allow
+    "codegraph explore *": allow
+    "codegraph node": allow
+    "codegraph node *": allow
+    "codegraph files": allow
+    "codegraph files *": allow
+    "codegraph callers": allow
+    "codegraph callers *": allow
+    "codegraph callees": allow
+    "codegraph callees *": allow
+    "codegraph impact": allow
+    "codegraph impact *": allow
+    "codegraph affected": allow
+    "codegraph affected *": allow
+    "*/.config/opencode/scripts/teamdb-read.sh": allow
+    "*/.config/opencode/scripts/teamdb-read.sh *": allow
+    "bash */.config/opencode/scripts/teamdb-read.sh": allow
+    "bash */.config/opencode/scripts/teamdb-read.sh *": allow
+    ".opencode/scripts/teamdb-read.sh": allow
+    ".opencode/scripts/teamdb-read.sh *": allow
+    "bash .opencode/scripts/teamdb-read.sh": allow
+    "bash .opencode/scripts/teamdb-read.sh *": allow
+    "*/.opencode/scripts/teamdb-read.sh": allow
+    "*/.opencode/scripts/teamdb-read.sh *": allow
+    "bash */.opencode/scripts/teamdb-read.sh": allow
+    "bash */.opencode/scripts/teamdb-read.sh *": allow
+    "*/.config/opencode/scripts/teamdb-context.sh": allow
+    "*/.config/opencode/scripts/teamdb-context.sh *": allow
+    "bash */.config/opencode/scripts/teamdb-context.sh": allow
+    "bash */.config/opencode/scripts/teamdb-context.sh *": allow
+    ".opencode/scripts/teamdb-context.sh": allow
+    ".opencode/scripts/teamdb-context.sh *": allow
+    "bash .opencode/scripts/teamdb-context.sh": allow
+    "bash .opencode/scripts/teamdb-context.sh *": allow
+    "*/.opencode/scripts/teamdb-context.sh": allow
+    "*/.opencode/scripts/teamdb-context.sh *": allow
+    "bash */.opencode/scripts/teamdb-context.sh": allow
+    "bash */.opencode/scripts/teamdb-context.sh *": allow
+    "*/.config/opencode/scripts/teamdb-search.sh": allow
+    "*/.config/opencode/scripts/teamdb-search.sh *": allow
+    "bash */.config/opencode/scripts/teamdb-search.sh": allow
+    "bash */.config/opencode/scripts/teamdb-search.sh *": allow
+    ".opencode/scripts/teamdb-search.sh": allow
+    ".opencode/scripts/teamdb-search.sh *": allow
+    "bash .opencode/scripts/teamdb-search.sh": allow
+    "bash .opencode/scripts/teamdb-search.sh *": allow
+    "*/.opencode/scripts/teamdb-search.sh": allow
+    "*/.opencode/scripts/teamdb-search.sh *": allow
+    "bash */.opencode/scripts/teamdb-search.sh": allow
+    "bash */.opencode/scripts/teamdb-search.sh *": allow
+    "*/.config/opencode/scripts/teamdb-related.sh": allow
+    "*/.config/opencode/scripts/teamdb-related.sh *": allow
+    "bash */.config/opencode/scripts/teamdb-related.sh": allow
+    "bash */.config/opencode/scripts/teamdb-related.sh *": allow
+    ".opencode/scripts/teamdb-related.sh": allow
+    ".opencode/scripts/teamdb-related.sh *": allow
+    "bash .opencode/scripts/teamdb-related.sh": allow
+    "bash .opencode/scripts/teamdb-related.sh *": allow
+    "*/.opencode/scripts/teamdb-related.sh": allow
+    "*/.opencode/scripts/teamdb-related.sh *": allow
+    "bash */.opencode/scripts/teamdb-related.sh": allow
+    "bash */.opencode/scripts/teamdb-related.sh *": allow
+    "*/.config/opencode/scripts/teamdb-status.sh": allow
+    "*/.config/opencode/scripts/teamdb-status.sh *": allow
+    "bash */.config/opencode/scripts/teamdb-status.sh": allow
+    "bash */.config/opencode/scripts/teamdb-status.sh *": allow
+    ".opencode/scripts/teamdb-status.sh": allow
+    ".opencode/scripts/teamdb-status.sh *": allow
+    "bash .opencode/scripts/teamdb-status.sh": allow
+    "bash .opencode/scripts/teamdb-status.sh *": allow
+    "*/.opencode/scripts/teamdb-status.sh": allow
+    "*/.opencode/scripts/teamdb-status.sh *": allow
+    "bash */.opencode/scripts/teamdb-status.sh": allow
+    "bash */.opencode/scripts/teamdb-status.sh *": allow
+    "*/.config/opencode/scripts/teamdb-resume.sh": allow
+    "*/.config/opencode/scripts/teamdb-resume.sh *": allow
+    "bash */.config/opencode/scripts/teamdb-resume.sh": allow
+    "bash */.config/opencode/scripts/teamdb-resume.sh *": allow
+    ".opencode/scripts/teamdb-resume.sh": allow
+    ".opencode/scripts/teamdb-resume.sh *": allow
+    "bash .opencode/scripts/teamdb-resume.sh": allow
+    "bash .opencode/scripts/teamdb-resume.sh *": allow
+    "*/.opencode/scripts/teamdb-resume.sh": allow
+    "*/.opencode/scripts/teamdb-resume.sh *": allow
+    "bash */.opencode/scripts/teamdb-resume.sh": allow
+    "bash */.opencode/scripts/teamdb-resume.sh *": allow
+    "*/.config/opencode/scripts/skalling-route.sh": allow
+    "*/.config/opencode/scripts/skalling-route.sh *": allow
+    "bash */.config/opencode/scripts/skalling-route.sh": allow
+    "bash */.config/opencode/scripts/skalling-route.sh *": allow
+    ".opencode/scripts/skalling-route.sh": allow
+    ".opencode/scripts/skalling-route.sh *": allow
+    "bash .opencode/scripts/skalling-route.sh": allow
+    "bash .opencode/scripts/skalling-route.sh *": allow
+    "*/.opencode/scripts/skalling-route.sh": allow
+    "*/.opencode/scripts/skalling-route.sh *": allow
+    "bash */.opencode/scripts/skalling-route.sh": allow
+    "bash */.opencode/scripts/skalling-route.sh *": allow
+    "*/.config/opencode/scripts/skalling-metrics.sh": allow
+    "*/.config/opencode/scripts/skalling-metrics.sh *": allow
+    "bash */.config/opencode/scripts/skalling-metrics.sh": allow
+    "bash */.config/opencode/scripts/skalling-metrics.sh *": allow
+    ".opencode/scripts/skalling-metrics.sh": allow
+    ".opencode/scripts/skalling-metrics.sh *": allow
+    "bash .opencode/scripts/skalling-metrics.sh": allow
+    "bash .opencode/scripts/skalling-metrics.sh *": allow
+    "*/.opencode/scripts/skalling-metrics.sh": allow
+    "*/.opencode/scripts/skalling-metrics.sh *": allow
+    "bash */.opencode/scripts/skalling-metrics.sh": allow
+    "bash */.opencode/scripts/skalling-metrics.sh *": allow
+    "*/.config/opencode/scripts/skalling-session-start.sh": allow
+    "*/.config/opencode/scripts/skalling-session-start.sh *": allow
+    "bash */.config/opencode/scripts/skalling-session-start.sh": allow
+    "bash */.config/opencode/scripts/skalling-session-start.sh *": allow
+    ".opencode/scripts/skalling-session-start.sh": allow
+    ".opencode/scripts/skalling-session-start.sh *": allow
+    "bash .opencode/scripts/skalling-session-start.sh": allow
+    "bash .opencode/scripts/skalling-session-start.sh *": allow
+    "*/.opencode/scripts/skalling-session-start.sh": allow
+    "*/.opencode/scripts/skalling-session-start.sh *": allow
+    "bash */.opencode/scripts/skalling-session-start.sh": allow
+    "bash */.opencode/scripts/skalling-session-start.sh *": allow
+    "*/.config/opencode/scripts/skalling-receipt.sh": allow
+    "*/.config/opencode/scripts/skalling-receipt.sh *": allow
+    "bash */.config/opencode/scripts/skalling-receipt.sh": allow
+    "bash */.config/opencode/scripts/skalling-receipt.sh *": allow
+    ".opencode/scripts/skalling-receipt.sh": allow
+    ".opencode/scripts/skalling-receipt.sh *": allow
+    "bash .opencode/scripts/skalling-receipt.sh": allow
+    "bash .opencode/scripts/skalling-receipt.sh *": allow
+    "*/.opencode/scripts/skalling-receipt.sh": allow
+    "*/.opencode/scripts/skalling-receipt.sh *": allow
+    "bash */.opencode/scripts/skalling-receipt.sh": allow
+    "bash */.opencode/scripts/skalling-receipt.sh *": allow
+    "*/.config/opencode/scripts/skalling-review.sh": allow
+    "*/.config/opencode/scripts/skalling-review.sh *": allow
+    "bash */.config/opencode/scripts/skalling-review.sh": allow
+    "bash */.config/opencode/scripts/skalling-review.sh *": allow
+    ".opencode/scripts/skalling-review.sh": allow
+    ".opencode/scripts/skalling-review.sh *": allow
+    "bash .opencode/scripts/skalling-review.sh": allow
+    "bash .opencode/scripts/skalling-review.sh *": allow
+    "*/.opencode/scripts/skalling-review.sh": allow
+    "*/.opencode/scripts/skalling-review.sh *": allow
+    "bash */.opencode/scripts/skalling-review.sh": allow
+    "bash */.opencode/scripts/skalling-review.sh *": allow
+    "*/.config/opencode/scripts/skalling-goal.sh": allow
+    "*/.config/opencode/scripts/skalling-goal.sh *": allow
+    "bash */.config/opencode/scripts/skalling-goal.sh": allow
+    "bash */.config/opencode/scripts/skalling-goal.sh *": allow
+    ".opencode/scripts/skalling-goal.sh": allow
+    ".opencode/scripts/skalling-goal.sh *": allow
+    "bash .opencode/scripts/skalling-goal.sh": allow
+    "bash .opencode/scripts/skalling-goal.sh *": allow
+    "*/.opencode/scripts/skalling-goal.sh": allow
+    "*/.opencode/scripts/skalling-goal.sh *": allow
+    "bash */.opencode/scripts/skalling-goal.sh": allow
+    "bash */.opencode/scripts/skalling-goal.sh *": allow
+    "git add": ask
+    "git add *": ask
+    "git commit": ask
+    "git commit *": ask
+    "git push": ask
+    "git push *": ask
+    "git reset": ask
+    "git reset *": ask
+    "git clean": ask
+    "git clean *": ask
+    "git checkout": ask
+    "git checkout *": ask
+    "git restore": ask
+    "git restore *": ask
+    "sqlite3": deny
+    "sqlite3 *": deny
+    "rm *team.db*": deny
+    "find *-delete*": ask
+    "find *-exec*": ask
+    "find *-ok*": ask
+    "find *-fprint*": ask
+    "git diff *--output*": ask
+    "git show *--output*": ask
+    "sort *-o*": ask
+    "cat *.env*": ask
+    "cat *.pem*": ask
+    "cat *id_rsa*": ask
+    "head *.env*": ask
+    "head *.pem*": ask
+    "head *id_rsa*": ask
+    "tail *.env*": ask
+    "tail *.pem*": ask
+    "tail *id_rsa*": ask
+  external_directory:
+    "*": ask
+    "*/.config/opencode/scripts/**": allow
+  websearch: allow
+  webfetch: ask
   task:
     "*": allow
 ---

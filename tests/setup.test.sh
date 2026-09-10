@@ -209,7 +209,7 @@ test_commands() {
     echo ""
     echo "── Test 5: comandos /skalling-* ──"
 
-    local expected=(skalling-help skalling-init skalling-status skalling-resume skalling-memory skalling-metrics skalling-codegraph skalling-dashboard skalling-refresh skalling-doctor skalling-recover skalling-merge skalling-update)
+    local expected=(skalling-help skalling-init skalling-goal skalling-status skalling-resume skalling-memory skalling-metrics skalling-codegraph skalling-dashboard skalling-refresh skalling-doctor skalling-recover skalling-merge skalling-update)
     for cmd in "${expected[@]}"; do
         assert_file_exists "$REPO_ROOT/command/${cmd}.md" "command/${cmd}.md existe"
     done
@@ -886,12 +886,15 @@ test_plan_protocol_no_parallel_files
 # tasks tiene purpose, audit triggers sobre plans existen.
 # ──────────────────────────────────────────────────────────────────────────────
 
-test_migration_009_plan_contract() {
+test_migration_009_plan_contract() (
   echo ""
   echo "── Test FIX 1.5: migration 009 plan_contract (v0.9.0) ──"
 
-  local DB="$REPO_ROOT/.opencode/context/team.db"
-  [ -f "$DB" ] || { echo "FAIL: DB no existe: $DB"; return 1; }
+  local fixture_dir
+  fixture_dir="$(mktemp -d)"
+  trap '[ -n "$fixture_dir" ] && [ -d "$fixture_dir" ] && rm -rf -- "$fixture_dir"' EXIT
+  local DB="$fixture_dir/team.db"
+  sqlite3 "$DB" < "$REPO_ROOT/sql/project-schema.sql"
 
   # 1. Versión alineada con VERSION
   local version
@@ -1010,7 +1013,7 @@ test_migration_009_plan_contract() {
   echo "  ✓ teamdb-plan.sh tiene --strict-contract/--purpose"
 
   echo "OK: FIX 1.5 — migration 009 plan_contract aplicada con contract enforcement"
-}
+)
 
 test_migration_009_plan_contract
 
@@ -1241,6 +1244,10 @@ test_migration_script_exists() {
         fail "FIX 1.6: migrate-plans-md-to-db.sh no existe"
         return
     fi
+    local fixture_dir
+    fixture_dir="$(mktemp -d)"
+    mkdir -p "$fixture_dir/.opencode/context"
+    sqlite3 "$fixture_dir/.opencode/context/team.db" < "$REPO_ROOT/sql/project-schema.sql"
     pass "FIX 1.6: script existe"
 
     if [[ ! -x "$script" ]]; then
@@ -1265,11 +1272,11 @@ test_migration_script_exists() {
 
     # Dry-run funciona (no debe fallar ni escribir en DB)
     local before_count
-    before_count=$(sqlite3 "$REPO_ROOT/.opencode/context/team.db" \
+    before_count=$(sqlite3 "$fixture_dir/.opencode/context/team.db" \
         "SELECT COUNT(*) FROM proposals WHERE decided_by='legacy-import'" 2>/dev/null || echo "0")
-    if bash "$script" --dry-run "$REPO_ROOT" >/dev/null 2>&1; then
+    if bash "$script" --dry-run "$fixture_dir" >/dev/null 2>&1; then
         local after_count
-        after_count=$(sqlite3 "$REPO_ROOT/.opencode/context/team.db" \
+        after_count=$(sqlite3 "$fixture_dir/.opencode/context/team.db" \
             "SELECT COUNT(*) FROM proposals WHERE decided_by='legacy-import'" 2>/dev/null || echo "0")
         if [[ "$after_count" == "$before_count" ]]; then
             pass "FIX 1.6: --dry-run no muta la DB (count $before_count == $after_count)"
@@ -1295,17 +1302,18 @@ test_migration_script_exists() {
 
     # Idempotencia: segunda corrida debe skip-ear
     local before_idem
-    before_idem=$(sqlite3 "$REPO_ROOT/.opencode/context/team.db" \
+    before_idem=$(sqlite3 "$fixture_dir/.opencode/context/team.db" \
         "SELECT COUNT(*) FROM proposals WHERE decided_by='legacy-import'" 2>/dev/null || echo "0")
-    bash "$script" "$REPO_ROOT" >/dev/null 2>&1 || true
+    bash "$script" "$fixture_dir" >/dev/null 2>&1 || true
     local after_idem
-    after_idem=$(sqlite3 "$REPO_ROOT/.opencode/context/team.db" \
+    after_idem=$(sqlite3 "$fixture_dir/.opencode/context/team.db" \
         "SELECT COUNT(*) FROM proposals WHERE decided_by='legacy-import'" 2>/dev/null || echo "0")
     if [[ "$before_idem" == "$after_idem" ]]; then
         pass "FIX 1.6: idempotente (count estable en re-run: $before_idem)"
     else
         fail "FIX 1.6: NO idempotente (count $before_idem -> $after_idem)"
     fi
+    [ -n "$fixture_dir" ] && [ -d "$fixture_dir" ] && rm -rf -- "$fixture_dir"
 }
 
 # ──────────────────────────────────────────────────────────────────────────────

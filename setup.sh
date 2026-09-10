@@ -333,6 +333,8 @@ step_install_scripts() {
     fi
     if [[ -f "$SCRIPTS_SRC_DIR"/teamdb_exec.py ]]; then
         run cp "$SCRIPTS_SRC_DIR"/teamdb_exec.py "$SCRIPTS_DEST_DIR/"
+        run cp "$SCRIPTS_SRC_DIR"/teamdb_guard.py "$SCRIPTS_DEST_DIR/"
+        run cp "$SCRIPTS_SRC_DIR"/teamdb-destructive.py "$SCRIPTS_DEST_DIR/"
         run chmod +x "$SCRIPTS_DEST_DIR/teamdb_exec.py"
         count=$((count+1))
     fi
@@ -345,6 +347,12 @@ step_install_scripts() {
 }
 
 step_install_hooks() {
+    run mkdir -p "$TARGET_DIR/.opencode/plugins" "$TARGET_DIR/.opencode/command"
+    run cp "$SCRIPT_DIR/plugins/skalling-goal.js" "$TARGET_DIR/.opencode/plugins/skalling-goal.js"
+    run mkdir -p "$TARGET_DIR/.opencode/plugins/lib"
+    run cp "$SCRIPT_DIR/plugins/skalling-data-safety.js" "$TARGET_DIR/.opencode/plugins/skalling-data-safety.js"
+    run cp "$SCRIPT_DIR/plugins/lib/data-safety.mjs" "$TARGET_DIR/.opencode/plugins/lib/data-safety.mjs"
+    run cp "$SCRIPT_DIR/command/skalling-goal.md" "$TARGET_DIR/.opencode/command/skalling-goal.md"
     log INFO "Instalando git hooks en .git/hooks/"
 
     if [[ ! -d "$TARGET_DIR/.git" ]]; then
@@ -361,6 +369,7 @@ step_install_hooks() {
     run cp "$HOOKS_SRC_DIR"/pre-commit "$HOOKS_DEST_DIR/"
     run cp "$HOOKS_SRC_DIR"/pre-push "$HOOKS_DEST_DIR/"
     run cp "$HOOKS_SRC_DIR"/post-merge "$HOOKS_DEST_DIR/"
+    run cp "$HOOKS_SRC_DIR"/git-gate.py "$HOOKS_DEST_DIR/"
     run chmod +x "$HOOKS_DEST_DIR"/pre-commit "$HOOKS_DEST_DIR"/pre-push "$HOOKS_DEST_DIR"/post-merge
 
     local hook

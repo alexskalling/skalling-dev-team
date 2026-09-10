@@ -226,11 +226,12 @@ if [ -n "$DIFF_RANGE" ]; then
   DIFF_TEXT="$(git -C "$PROJECT" diff "$DIFF_RANGE" $DUMP_EXCLUDE 2>/dev/null || true)"
   TREE_HASH="$(printf '%s' "$DIFF_TEXT" | shasum -a 256 | cut -c1-16)"
 else
-  DIFF_TEXT="$(git -C "$PROJECT" diff HEAD $DUMP_EXCLUDE 2>/dev/null || true)"
+  DIFF_TEXT="$(git -C "$PROJECT" diff --cached $DUMP_EXCLUDE 2>/dev/null || true)"
   if [ -n "$DIFF_TEXT" ]; then
     TREE_HASH="$(printf '%s' "$DIFF_TEXT" | shasum -a 256 | cut -c1-16)"
   else
-    TREE_HASH="$(git -C "$PROJECT" rev-parse HEAD 2>/dev/null | cut -c1-16)"
+    echo "ERROR: nada preparado para revisar. Preparar únicamente los archivos autorizados." >&2
+    exit 1
   fi
 fi
 
@@ -299,7 +300,7 @@ deep_generate() {
       # shellcheck disable=SC2086
       git -C "$PROJECT" diff $DIFF_RANGE --name-status > "$review_dir/files.txt" 2>/dev/null || true
     else
-      git -C "$PROJECT" diff HEAD --name-status > "$review_dir/files.txt" 2>/dev/null || true
+      git -C "$PROJECT" diff --cached --name-status > "$review_dir/files.txt" 2>/dev/null || true
     fi
 
     for lens in risk resilience readability reliability; do
@@ -417,7 +418,7 @@ diff_files() {
     # shellcheck disable=SC2086
     git -C "$PROJECT" diff $DIFF_RANGE --name-only 2>/dev/null || true
   else
-    git -C "$PROJECT" diff HEAD --name-only 2>/dev/null || true
+    git -C "$PROJECT" diff --cached --name-only 2>/dev/null || true
   fi
 }
 

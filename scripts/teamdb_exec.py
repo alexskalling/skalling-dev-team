@@ -21,6 +21,7 @@ import sys
 import json
 import argparse
 import re
+from teamdb_guard import connect
 
 # Modo raw: solo lectura / DDL benigno. "with" se bloquea porque permite CTE-DML
 # (WITH ... DELETE/UPDATE) que empieza con prefijo "benigno".
@@ -66,7 +67,7 @@ def main():
         json.dump({'error': 'bad params JSON: {}'.format(e)}, sys.stdout)
         sys.exit(1)
 
-    conn = sqlite3.connect(args.db, timeout=args.timeout / 1000)
+    conn = connect(args.db, timeout=args.timeout / 1000, readonly=args.mode == 'query')
     conn.row_factory = sqlite3.Row
 
     try:

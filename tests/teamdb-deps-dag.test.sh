@@ -138,17 +138,17 @@ else
   assert_fail "show lista dependencias" "edges=$EDGES"
 fi
 
-# 11. remove elimina arista
+# 11. El helper normal no tiene autorización para eliminar datos.
 run_capture "bash '$ROOT/scripts/teamdb-deps.sh' remove 'dag-test' 'task-2' 'task-1' '$TEST_DIR'"
-if [ "$CAPTURE_RC" = "0" ]; then
+if [ "$CAPTURE_RC" != "0" ]; then
   N=$(teamdb_exec_value "$DB" "SELECT COUNT(*) FROM task_dependencies")
-  if [ "$N" = "2" ]; then
-    assert_pass "remove elimina arista (2 edges restantes)"
+  if [ "$N" = "3" ]; then
+    assert_pass "remove exige aprobación y conserva las tres aristas"
   else
-    assert_fail "remove elimina arista" "n=$N"
+    assert_fail "remove debe conservar aristas sin autorización" "n=$N"
   fi
 else
-  assert_fail "remove retorna exit 0" "rc=$CAPTURE_RC out=$CAPTURE_OUT"
+  assert_fail "remove debe bloquearse sin autorización" "rc=$CAPTURE_RC out=$CAPTURE_OUT"
 fi
 
 # 12. Plan inexistente

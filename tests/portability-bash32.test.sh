@@ -27,7 +27,7 @@ fi
 
 # 2. Sin declare -A (asociative arrays son bash 4+)
 for f in scripts/teamdb-*.sh scripts/hooks/*; do
-  if [ -f "$f" ] && [[ "$f" != *.md ]]; then
+  if [ -f "$f" ] && [[ "$f" != *.md && "$f" != *.py ]]; then
     if grep -E '^[[:space:]]*declare -A' "$f" >/dev/null 2>&1; then
       assert_fail "sin declare -A en $(basename "$f")"
     fi
@@ -37,7 +37,7 @@ assert_pass "sin declare -A (asociative arrays bash 4+)"
 
 # 3. Sin readarray/mapfile (bash 4+)
 for f in scripts/teamdb-*.sh scripts/hooks/*; do
-  if [ -f "$f" ] && [[ "$f" != *.md ]]; then
+  if [ -f "$f" ] && [[ "$f" != *.md && "$f" != *.py ]]; then
     if grep -E 'readarray|mapfile' "$f" >/dev/null 2>&1; then
       assert_fail "sin readarray/mapfile en $(basename "$f")"
     fi
@@ -47,7 +47,7 @@ assert_pass "sin readarray/mapfile (bash 4+)"
 
 # 4. Sin ${var,,} ${var^^} (case modification bash 4+)
 for f in scripts/teamdb-*.sh scripts/hooks/* scripts/lib/*.sh; do
-  if [ -f "$f" ] && [[ "$f" != *.md ]]; then
+  if [ -f "$f" ] && [[ "$f" != *.md && "$f" != *.py ]]; then
     if grep -E '\$\{[a-zA-Z_]+,,?\}|\$\{[a-zA-Z_]+\^\^?\}' "$f" >/dev/null 2>&1; then
       assert_fail "sin \${var,,} \${var^^} en $(basename "$f")"
     fi
@@ -57,7 +57,7 @@ assert_pass 'sin ${var,,} ${var^^} (bash 4+)'
 
 # 5. Sin [[ -v ]] (bash 4+)
 for f in scripts/teamdb-*.sh scripts/hooks/* scripts/lib/*.sh; do
-  if [ -f "$f" ] && [[ "$f" != *.md ]]; then
+  if [ -f "$f" ] && [[ "$f" != *.md && "$f" != *.py ]]; then
     if grep -E '\[\[ -v [a-zA-Z_]' "$f" >/dev/null 2>&1; then
       assert_fail "sin [[ -v ]] en $(basename "$f")"
     fi
@@ -67,7 +67,7 @@ assert_pass "sin [[ -v ]] (bash 4+)"
 
 # 6. Sin local -n (namerefs bash 4+)
 for f in scripts/teamdb-*.sh scripts/hooks/* scripts/lib/*.sh; do
-  if [ -f "$f" ] && [[ "$f" != *.md ]]; then
+  if [ -f "$f" ] && [[ "$f" != *.md && "$f" != *.py ]]; then
     if grep -E 'local -n' "$f" >/dev/null 2>&1; then
       assert_fail "sin local -n en $(basename "$f")"
     fi
@@ -79,7 +79,7 @@ assert_pass "sin local -n (namerefs bash 4+)"
 FILES_OK=0
 FILES_FAIL=0
 for f in scripts/lib/lib-teamdb.sh scripts/teamdb-*.sh scripts/hooks/*; do
-  if [ -f "$f" ] && [[ "$f" != *.md ]]; then
+  if [ -f "$f" ] && [[ "$f" != *.md && "$f" != *.py ]]; then
     if shellcheck "$f" >/dev/null 2>&1; then
       FILES_OK=$((FILES_OK + 1))
     else
@@ -94,7 +94,7 @@ fi
 
 # 8. bash -n todos
 for f in scripts/lib/lib-teamdb.sh scripts/teamdb-*.sh scripts/hooks/*; do
-  if [ -f "$f" ] && [[ "$f" != *.md ]]; then
+  if [ -f "$f" ] && [[ "$f" != *.md && "$f" != *.py ]]; then
     if ! bash -n "$f" >/dev/null 2>&1; then
       assert_fail "bash -n: $f"
     fi
@@ -112,7 +112,7 @@ fi
 # 10. Patrones comunes incompatibles con bash 3.2
 BASH32_PATTERNS='(BASH_XTRACEFD|\\$\\([^)]*\\<\\>\\))'
 for f in scripts/teamdb-*.sh scripts/lib/*.sh; do
-  if [ -f "$f" ] && [[ "$f" != *.md ]]; then
+  if [ -f "$f" ] && [[ "$f" != *.md && "$f" != *.py ]]; then
     if grep -E "$BASH32_PATTERNS" "$f" >/dev/null 2>&1; then
       assert_fail "sin patrones bash 4+ en $(basename "$f")"
     fi

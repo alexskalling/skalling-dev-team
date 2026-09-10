@@ -6,6 +6,7 @@ set -euo pipefail
 
 PROJECT="${PROJECT:-$(pwd)}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}"
 TMP_DIRS=""
 # shellcheck disable=SC2329 # invocada indirectamente por trap EXIT
 cleanup() {
@@ -167,9 +168,10 @@ done < "$TASKS_MD"
 # Pre-checks (título poético, purpose+AC) corren en bash ANTES de tocar la DB.
 python3 - "$DB" "$SLUG" "$TITLE" "$ACTOR" "$NOW" "$TMP_TSV" "$DEFAULT_PURPOSE" "$DEFAULT_ACCEPTANCE" "$STRICT_CONTRACT" <<'PYEOF'
 import sqlite3, sys
+from teamdb_guard import connect as protected_connect
 db, slug, title, actor, now, tsv_path, default_purpose, default_acceptance, strict_contract = sys.argv[1:10]
 strict = (strict_contract == "1")
-conn = sqlite3.connect(db, timeout=5)
+conn = protected_connect(db, timeout=5)
 conn.execute("PRAGMA foreign_keys=ON")
 try:
     conn.execute("BEGIN IMMEDIATE")

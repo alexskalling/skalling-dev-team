@@ -35,7 +35,7 @@ check "Jhon protege description con dos puntos" \
 check "ningún agente enseña helper antiguo" \
   sh -c "! grep -R -n 'teamdb_query_project' '$ROOT/agents-base'"
 check "ningún agente enseña sqlite3 directo" \
-  sh -c "! grep -R -n 'sqlite3' '$ROOT/agents-base' | grep -v '\"sqlite3 \\*\": deny'"
+  sh -c "! grep -R -n 'sqlite3' '$ROOT/agents-base' | grep -vE '\"(sqlite3( \\*)?|\\*\\.sqlite3)\": deny'"
 check "ningún agente enseña borrar TeamDB" \
   sh -c "! grep -R -nE 'rm .*team\.db|git checkout --union' '$ROOT/agents-base' | grep -v '\"rm \\*team.db\\*\": deny'"
 
@@ -60,7 +60,8 @@ if [ -x "$ROOT/scripts/render-agent.sh" ]; then
     bash "$ROOT/scripts/render-agent.sh" "$ROOT/agents-base/$agent.md" > "$rendered_dir/$agent.md"
     check "$agent renderizado no conserva markers" sh -c "! grep -q '@include-snippet' '$rendered_dir/$agent.md'"
     check "$agent renderizado no conserva bloque legacy" sh -c "! grep -q 'LEGACY-SNIPPET-COPY' '$rendered_dir/$agent.md'"
-    bytes="$(wc -c < "$rendered_dir/$agent.md" | tr -d ' ')"
+    # OpenCode excludes YAML metadata (including permission rules) from the model prompt.
+    bytes="$(awk '/^---$/ && boundaries < 2 { boundaries++; next } boundaries >= 2 { print }' "$rendered_dir/$agent.md" | wc -c | tr -d ' ')"
     total=$((total + bytes))
     check "$agent renderizado no supera 14 KB" test "$bytes" -le 14336
   done

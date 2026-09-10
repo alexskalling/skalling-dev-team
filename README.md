@@ -2,7 +2,7 @@
 
 Skalling es un equipo de **8 agentes de IA** que trabajan juntos adentro de [OpenCode](https://opencode.ai). Cada agente tiene un rol específico y siguen un ciclo ordenado para construir software bien hecho.
 
-**Versión actual: 0.10.4**
+**Versión actual: 0.11.0**
 
 ---
 
@@ -39,6 +39,46 @@ Carga memorias relevantes al inicio de sesión (`skalling-memory`).
 ---
 
 ## Instalación
+
+### Objetivos autónomos, sin publicación
+
+`/skalling-goal <objetivo y criterios de aceptación>` autoriza al equipo a implementar,
+verificar y crear **un commit local** del objetivo. Nunca autoriza push ni despliegue.
+El plugin continúa los turnos incompletos; conserva el estado en TeamDB, no en archivos
+de memoria adicionales. No sustituye la revisión ni decide por el usuario asuntos críticos.
+
+Controles: `/skalling-goal status`, `pause`, `resume`, `cancel`. El límite es de 20
+continuaciones automáticas y 3 sin avance de archivos/checkpoints. Cancelar no borra trabajo.
+Se protegen cambios anteriores y se bloquea el cierre si falta evidencia del candidato staged.
+Después de instalar o actualizar, reiniciar OpenCode para cargar el plugin. No funciona con
+OpenCode cerrado ni garantiza completar tareas con bloqueos externos o decisiones pendientes.
+
+Integración verificada con OpenCode 1.18.29. Si hay varias instalaciones, comprobar
+`command -v opencode` y `opencode --version` en la terminal del proyecto que se va a usar.
+
+Los ocho agentes tienen lecturas y helpers de TeamDB permitidos según su rol, también fuera
+de Goal. Usar rutas canónicas de los helpers; no envolverlos en `python -c`, `bash -c` o SQL libre.
+Operaciones desconocidas, destructivas o de publicación mantienen aprobación. Configuraciones
+locales de proyectos pueden reemplazar los agentes globales: deben actualizarse por separado.
+
+### Protección de datos
+
+Los helpers normales permiten consultas, altas y cambios aditivos, pero rechazan borrados,
+reemplazos destructivos y vaciados de contenido durable. Las actualizaciones de conocimiento
+guardan la versión anterior en `data_revisions` en la misma TeamDB; ese historial local no
+se publica automáticamente en el dump de Git. Añadir tablas o columnas sigue permitido.
+
+Cuando sea necesario eliminar datos, el agente usa `teamdb_destructive`. OpenCode muestra
+la base, SQL y parámetros y pide aprobación para esa operación concreta. Antes de ejecutarla,
+se crea un respaldo SQLite en `.opencode/context/.backups/approved-data-changes/`; si la base
+cambió durante la aprobación, se rechaza y debe presentarse nuevamente. Rechazar o cancelar
+no ejecuta la operación. El respaldo no autoriza borrarla: la aprobación sigue siendo obligatoria.
+
+No hay permiso general para `cp`, `rm`, SQL libre o restauraciones. Los programas de terceros
+y otras bases requieren sus propios controles: esto no es un sandbox del sistema operativo.
+Las pruebas del proyecto deben usar bases aisladas, nunca datos reales. Reiniciar OpenCode
+después de instalar para cargar ambos plugins. La herramienta requiere el SDK de plugins
+que OpenCode instala en su configuración; si falta, no usar el backend Python para eludirlo.
 
 Requisitos esenciales: **SQLite 3** y **Python 3**. El instalador los valida antes de escribir archivos y muestra el comando adecuado si falta alguno. OpenCode y Git también son recomendados para usar el equipo completo.
 

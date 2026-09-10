@@ -40,6 +40,14 @@ class InstalledWorkflow(unittest.TestCase):
             self.assertEqual(installed_config['permission']['todowrite'], 'allow')
             self.assertEqual(installed_config, json.loads((ROOT / 'templates/opencode.json').read_text()))
             self.assertTrue((config / '.skalling-backups/install.log').exists())
+            self.assertTrue((config / 'hooks/git-gate.py').is_file())
+            for artifact in ('plugins/skalling-goal.js', 'scripts/skalling-goal.sh', 'scripts/skalling-goal.py', 'command/skalling-goal.md'):
+                self.assertTrue((config / artifact).is_file(), artifact)
+            for artifact in ('plugins/skalling-data-safety.js', 'plugins/lib/data-safety.mjs', 'scripts/teamdb_guard.py', 'scripts/teamdb-destructive.py'):
+                self.assertTrue((config / artifact).is_file(), artifact)
+            hook_result = run(config / 'hooks/pre-commit', check=False)
+            # A non-Git fixture must fail explicitly, not silently bypass the gate.
+            self.assertNotEqual(hook_result.returncode, 0)
             self.assertEqual((config / 'skills/writing-plans/SKILL.md').read_text(),
                              (ROOT / 'skills-base/writing-plans/SKILL.md').read_text())
             run(config / 'bootstrap-context.sh', '--target', project, '--force')
@@ -64,6 +72,11 @@ class InstalledWorkflow(unittest.TestCase):
                 self.assertIn('Portal actualizado', pending[0])
 
             scripts = config / 'scripts'
+            blocked = subprocess.run(['python3', str(scripts / 'teamdb_exec.py'), '--db', str(context / 'team.db'),
+                                      '--mode', 'write', '--sql', 'DELETE FROM concepts'],
+                                     env=env, capture_output=True, text=True)
+            self.assertNotEqual(blocked.returncode, 0)
+            self.assertIn('DATA_APPROVAL_REQUIRED', blocked.stdout)
             route = scripts / 'skalling-route.sh'
             common = ['classify', '--project', project, '--risk', 'low', '--scope', 'local']
             self.assertNotEqual(run(route, *common, check=False).returncode, 0)

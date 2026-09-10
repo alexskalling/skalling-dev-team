@@ -68,43 +68,15 @@ COMMAND="${TEAMDB_CLAIM_COMMAND:-review-seal}"
 EXIT_CODE="${TEAMDB_CLAIM_EXIT_CODE:-0}"
 SUMMARY="${TEAMDB_CLAIM_OUTPUT_SUMMARY:-}"
 
-# TREE_HASH: hash del contenido que se va a commitear.
-# - Con cambios staged/unstaged: git diff HEAD (NO write-tree, incluye archivos no staged).
-# - Sin cambios respecto a HEAD (árbol limpio): NO se sella — fail-closed (bug D).
-# - Repo sin commits: hash de lo staged (diff --cached); sin staged, tampoco.
-# FASE 0: el dump versionado (db/teamdb/team.dump.sql) se EXCLUYE del hash —
-# es un artefacto derivado de la DB, no código revisado. El pre-commit usa el
-# mismo pathspec, así el seal y el gate siempre coinciden aunque la DB cambie.
+# Evidence refers to the staged candidate, not unstaged work or elapsed time.
 TREE_HASH="${TEAMDB_CLAIM_TREE_HASH:-}"
-DUMP_EXCLUDE=':(exclude)db/teamdb/team.dump.sql'
 if [ -z "$TREE_HASH" ]; then
-  HEAD_SHA="$(git -C "$PROJECT" rev-parse --verify HEAD 2>/dev/null || echo "")"
-  if [ -n "$HEAD_SHA" ]; then
-    DIFF_TEXT="$(git -C "$PROJECT" diff HEAD -- . "$DUMP_EXCLUDE" 2>/dev/null || true)"
-    if [ -n "$DIFF_TEXT" ]; then
-      TREE_HASH="$(printf '%s' "$DIFF_TEXT" | shasum -a 256 | cut -c1-16)"
-    else
-      # v0.8.3 (bug D): NO sellar un árbol limpio con el hash de HEAD. El
-      # pre-push compara el hash del DIFF del rango (base..local), que jamás
-      # matchea un sha de HEAD → push bloqueado con error confuso. Fail-closed:
-      # sin diff no hay nada que sellar → error claro. Orden correcto:
-      # 1) cambios staged (git add), 2) sellar, 3) commitear, 4) pushear.
-      echo "ERROR: nada que sellar — el árbol de trabajo está limpio (sin diff respecto a HEAD)." >&2
-      echo "       Sellar y commitear siguen el orden: staged (git add) → sellar → commitear." >&2
-      echo "       Si ya commiteaste, revertí o hacé amend y re-sellá antes de commitear de nuevo." >&2
-      exit 1
-    fi
-  else
-    DIFF_TEXT="$(git -C "$PROJECT" diff --cached -- . "$DUMP_EXCLUDE" 2>/dev/null || true)"
-    if [ -n "$DIFF_TEXT" ]; then
-      TREE_HASH="$(printf '%s' "$DIFF_TEXT" | shasum -a 256 | cut -c1-16)"
-    else
-      # Repo sin commits y sin nada staged: nada que sellar tampoco.
-      echo "ERROR: nada que sellar — no hay cambios staged ni commits." >&2
-      echo "       Modificá el código y stagealo antes de sellar." >&2
-      exit 1
-    fi
+  DIFF_TEXT="$(git -C "$PROJECT" diff --cached -- . ':(exclude)db/teamdb/team.dump.sql')"
+  if [ -z "$DIFF_TEXT" ]; then
+    echo "ERROR: nada que sellar — no hay cambios staged. No modificar historia para fabricar evidencia." >&2
+    exit 1
   fi
+  TREE_HASH="$(printf '%s' "$DIFF_TEXT" | shasum -a 256 | cut -c1-16)"
 fi
 
 RECEIPT_ID="rcpt_$(date +%s)_$$"
@@ -129,7 +101,6 @@ else
   echo "OK: receipt $RECEIPT_ID (sin tree_hash)"
 fi
 
-# FASE 1: dump fresco post-escritura (el receipt es data sincronizable)
-teamdb_refresh_dump "$PROJECT" >/dev/null 2>&1 || true
+# El receipt es evidencia local. Exportar memoria es una operación independiente.
 
 exit 0
