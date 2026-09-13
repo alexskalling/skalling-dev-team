@@ -4,6 +4,40 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.11.2] — en preparación
+
+### Fixed
+- `teamdb-link.sh` y `wip-tree.sh` consolidan el escaping SQL en el helper
+  compartido `_sql_quote` en vez de reimplementarlo cada uno por su cuenta.
+- Fuga de `TMP_DIR` en `teamdb-plan.sh` y `teamdb-ingest-change.sh`: un
+  segundo `trap ... EXIT` pisaba en silencio al primero (bash no acumula
+  traps), dejando temporales sin limpiar en varios caminos de salida.
+- `build-local-snapshot.sh` detecta huérfanos en `.opencode/scripts/`
+  (antes solo lo hacía el test, no el script real que usan el doctor y CI).
+- `tests/setup.test.sh` deja de crear su DB de fixture con
+  `sqlite3 ... < project-schema.sql` directo (bypasseaba `teamdb-init.sh`,
+  sin migrations aplicadas ni versión validada); usa el init real.
+
+### Security
+- Gate de CI `lint-sqli.yml`: primera corrida real dio 44 blockers sobre
+  código ya existente en el repo → 0. El heurístico de "secreto
+  hardcodeado" marcaba `token=?` (el placeholder seguro de bind params) y
+  valores generados en runtime como secretos; corregido y verificado
+  contra falsos y verdaderos positivos de control.
+
+### Added
+- `scripts/.bundle-manifest` + `scripts/build-local-snapshot.sh`
+  (`--apply/--check/--dry-run`) para mantener sincronizados `scripts/` y
+  `.opencode/scripts/`, con `tests/scripts-parity.test.sh` en CI.
+- Marcador `# lens:ok <motivo>` en `skalling-review.sh` para excepciones
+  puntuales por línea (el motivo queda en el diff, no en un YAML aparte).
+- `rm_targets_are_mktemp()`: reconoce variables asignadas vía `mktemp`
+  como guarda válida en el lens de riesgo, en vez de exigir un chequeo
+  redundante sobre algo seguro por construcción.
+
+### Migration
+- `029_version_0_11_2.sql` eleva bases existentes a schema `0.11.2`.
+
 ## [0.11.1] — en preparación
 
 ### Fixed
