@@ -16,11 +16,6 @@ PROJECT="${1:-$(pwd)}"
 local_db="$(teamdb_project_path "$PROJECT")"
 [ -f "$local_db" ] || { echo "no DB: $local_db" >&2; exit 1; }
 
-# Helper: escape single quotes for SQL string interpolation
-sql_escape() {
-  echo "$1" | sed "s/'/''/g"
-}
-
 status_icon() {
   case "$1" in
     resolved) echo "✅" ;;
@@ -36,11 +31,9 @@ status_icon() {
 print_children() {
   local indent="$1"
   local parent_slug="$2"
-  local escaped_slug
-  escaped_slug=$(sql_escape "$parent_slug")
 
   local children
-  children=$(sqlite3 -separator $'\t' "$local_db" "SELECT slug, title, type, status, owner FROM work_in_progress WHERE parent_id = (SELECT id FROM work_in_progress WHERE slug='$escaped_slug') ORDER BY priority, created_at")
+  children=$(sqlite3 -separator $'\t' "$local_db" "SELECT slug, title, type, status, owner FROM work_in_progress WHERE parent_id = (SELECT id FROM work_in_progress WHERE slug=$(_sql_quote "$parent_slug")) ORDER BY priority, created_at")
 
   while IFS=$'\t' read -r cslug ctitle ctype cstatus cowner; do
     [ -z "$cslug" ] && continue

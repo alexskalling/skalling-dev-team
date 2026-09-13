@@ -51,7 +51,7 @@ DB="$(teamdb_project_path "$PROJECT")"
 [ -f "$DB" ] || { echo "DB no existe: $DB (corre teamdb-init primero)" >&2; exit 1; }
 
 count_type() {
-  sqlite3 "$DB" "SELECT COUNT(*) FROM memory_links WHERE link_type = '$1'"
+  sqlite3 "$DB" "SELECT COUNT(*) FROM memory_links WHERE link_type = $(_sql_quote "$1")"
 }
 
 related_before="$(count_type related)"

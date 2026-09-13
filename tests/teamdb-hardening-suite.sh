@@ -14,6 +14,9 @@ for t in tests/dashboard-server.test.py \
          tests/teamdb-safe-query.test.sh \
          tests/teamdb-search-sqli.test.sh \
          tests/teamdb-related-sqli.test.sh \
+         tests/teamdb-wip-tree-sqli.test.sh \
+         tests/teamdb-link-sqli.test.sh \
+         tests/scripts-parity.test.sh \
          tests/teamdb-problems-fts.test.sh \
          tests/install-script-copies.test.sh \
          tests/install-hooks-paths.test.sh \
@@ -23,6 +26,7 @@ for t in tests/dashboard-server.test.py \
          tests/teamdb-resume.test.sh \
          tests/teamdb-export-audit.test.sh \
          tests/teamdb-migrate-md-preserve.test.sh \
+         tests/migrate-plans-sqli.test.sh \
          tests/version-coherence.test.sh \
          tests/portability-bash32.test.sh \
          tests/snippets-sync.test.sh \

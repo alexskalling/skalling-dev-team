@@ -1,5 +1,17 @@
 #!/usr/bin/env python3
-"""Read-only Git gates: exact staged/published diffs, never memory maintenance."""
+"""Read-only Git gates: exact staged/published diffs, never memory maintenance.
+
+SCOPE: este hook corre cosas RÁPIDAS contra el candidato exacto (staged en
+pre-commit, commits publicados en pre-push):
+  - Detección de secretos hardcodeados (regex SECRET).
+  - Coherencia memoria ↔ repo (.md en .opencode/context/ ↔ fila en TeamDB).
+  - Receipt sellado por el review (tree_hash en receipts con exit_code=0).
+
+FUERA DE SCOPE: el linter SQLi (`scripts/skalling-review.sh --lens risk`) NO se
+corre aquí. Es un escaneo completo de `scripts/**` que tarda segundos y mira
+más allá del candidato exacto. Vive en CI → `.github/workflows/lint-sqli.yml`.
+Justificación en AGENTS.md § "Hooks (separación de scopes)".
+"""
 import hashlib
 import re
 import sqlite3
