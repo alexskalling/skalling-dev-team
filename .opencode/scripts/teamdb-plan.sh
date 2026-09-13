@@ -81,7 +81,10 @@ mkdir -p "$(dirname "$LOCK_DIR")" 2>/dev/null || true
 if ! teamdb_lock "$LOCK_DIR" 10; then
   exit 1
 fi
-trap 'teamdb_unlock "$LOCK_DIR"' EXIT
+# Un solo trap EXIT: el segundo `trap ... EXIT` reemplaza al primero (no se
+# acumulan), así que el `trap 'cleanup' EXIT` de arriba quedaba sin efecto y
+# TMP_DIRS nunca se limpiaba salvo en el único punto que hacía rm manual.
+trap 'teamdb_unlock "$LOCK_DIR"; cleanup' EXIT
 
 ACTOR="${ACTOR:-${TEAMDB_ACTOR:-sol}}"
 
@@ -152,7 +155,6 @@ while IFS= read -r line; do
       # Bloque 2 v0.7.7: rechazar títulos poéticos en strict-contract
       if [ "$STRICT_CONTRACT" = "1" ] && is_poetic_title "$title"; then
         echo "[ERROR] task '$task_slug' tiene título poético: '$title'. Usá título descriptivo (verbo + objeto)." >&2
-        rm -rf "$TMP_DIR"
         exit 1
       fi
       printf '%s\t%s\t%s\t%s\n' "$ORDER" "$task_slug" "$title" "$deps" >> "$TMP_TSV"

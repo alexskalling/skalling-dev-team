@@ -91,7 +91,12 @@ mkdir -p "$(dirname "$LOCK_DIR")" 2>/dev/null || true
 if ! teamdb_lock "$LOCK_DIR" 10; then
   exit 1
 fi
-trap 'teamdb_unlock "$LOCK_DIR"' EXIT
+# cleanup() aislado (no inline en el trap): cubre también el caso set -e
+# abortando entre el mktemp de TMP_DIR y los puntos de salida que antes hacían
+# rm manual. ${TMP_DIR:-} por si el trap dispara antes de que TMP_DIR se asigne.
+# shellcheck disable=SC2329 # invocada indirectamente por trap EXIT
+cleanup() { rm -rf "${TMP_DIR:-}"; }
+trap 'teamdb_unlock "$LOCK_DIR"; cleanup' EXIT
 
 DB="$(teamdb_project_path "$PROJECT")"
 [ -f "$DB" ] || { echo "[ERROR] DB no existe: $DB" >&2; exit 1; }
@@ -253,7 +258,6 @@ if [ "$DRY_RUN" = true ]; then
   if [ -n "$DESIGN_CONTENT" ]; then
     echo "[dry-run] design: ${#DESIGN_CONTENT} bytes"
   fi
-  rm -rf "$TMP_DIR"
   exit 0
 fi
 
@@ -335,5 +339,4 @@ if [ "$INGEST_RC" = "0" ]; then
   teamdb_refresh_dump "$PROJECT" >/dev/null 2>&1 || true
 fi
 
-rm -rf "$TMP_DIR"
 exit $INGEST_RC
