@@ -1039,7 +1039,15 @@ test_handoff_schema_validation() {
         "artifacts": ["/src/auth/login.ts"],
         "tests_passed": true,
         "coverage": 85,
-        "next_action": "Ejecutar suite de regresión"
+        "next_action": "Ejecutar suite de regresión",
+        "verification": {
+            "type": "test",
+            "command": "npm test -- auth",
+            "exit_code": 0,
+            "tests_total": 5,
+            "tests_passed": 5,
+            "tests_failed": 0
+        }
     }'
 
     # Validar con python si está disponible
