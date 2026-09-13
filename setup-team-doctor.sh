@@ -491,6 +491,60 @@ check_teamdb() {
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Paridad scripts/ ↔ .opencode/scripts/ (bundle local)
+#
+# Fase 2: el bundle local debe coincidir byte-a-byte con scripts/. El contrato lo
+# define scripts/.bundle-manifest (TSV) y el comparador es build-local-snapshot.sh.
+# Sin paridad, los agentes que invocan $SKALLING_ROOT/scripts/* pueden leer versiones
+# distintas en scripts/ y .opencode/scripts/.
+# ──────────────────────────────────────────────────────────────────────────────
+
+check_scripts_parity() {
+    if [[ "$GLOBAL_ONLY" == true ]]; then
+        return 0
+    fi
+
+    section "Scripts parity (bundle local)"
+
+    local snapshot="$SCRIPT_DIR/scripts/build-local-snapshot.sh"
+    local manifest="$SCRIPT_DIR/scripts/.bundle-manifest"
+
+    if [[ ! -x "$snapshot" ]]; then
+        warn "build-local-snapshot.sh no encontrado o no ejecutable: $snapshot"
+        return 0
+    fi
+    if [[ ! -f "$manifest" ]]; then
+        warn "manifest no encontrado: $manifest"
+        return 0
+    fi
+
+    local rc=0
+    local out
+    out="$(bash "$snapshot" --check 2>&1)" || rc=$?
+
+    if [[ "$rc" -eq 0 ]]; then
+        ok "scripts/ ↔ .opencode/scripts/ sin drift (build-local-snapshot.sh --check)"
+    else
+        # Mostrar las últimas líneas del output de build-local-snapshot para guiar
+        local detail
+        detail="$(printf '%s\n' "$out" | tail -8 | sed 's/^/      /')"
+        if [[ "$STRICT" == true ]]; then
+            err "scripts/ ↔ .opencode/scripts/ drift detectado (--strict promueve a error)"
+            if [[ -n "$detail" ]]; then
+                printf "%b\n" "$detail" >&2
+            fi
+            info "regenerá con: bash scripts/build-local-snapshot.sh --apply"
+        else
+            warn "scripts/ ↔ .opencode/scripts/ drift detectado"
+            if [[ -n "$detail" ]]; then
+                printf "%b\n" "$detail" >&2
+            fi
+            info "regenerá con: bash scripts/build-local-snapshot.sh --apply"
+        fi
+    fi
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
 # MAIN
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -507,6 +561,7 @@ main() {
     fi
     check_inteligencia_codigo
     check_teamdb
+    check_scripts_parity
     check_receipts
     check_routing
 

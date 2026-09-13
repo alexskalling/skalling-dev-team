@@ -313,9 +313,20 @@ tu-proyecto/.opencode/
 ```bash
 cd ~/skalling-dev-team
 bash tests/setup.test.sh
+bash tests/scripts-parity.test.sh   # bundle local scripts/ ↔ .opencode/scripts/
 ```
 
 268+ pruebas que verifican agentes, reglas, comandos, scripts, detección de lenguajes, instalación completa, helpers de memoria y doctor.
+
+El test `scripts-parity.test.sh` garantiza que la copia local
+`.opencode/scripts/` no diverge de `scripts/`. Si drift, regenerá con:
+
+```bash
+bash scripts/build-local-snapshot.sh --apply   # sincroniza
+bash scripts/build-local-snapshot.sh --check   # exit 0 si sin drift
+```
+
+Más detalle en [`AGENTS.md`](./AGENTS.md#bundle-local-opencodescripts).
 
 ---
 
@@ -337,8 +348,6 @@ Skalling usa **skalling-memory** (estilo Engram) para reducir contexto:
 ```
 
 **Los archivos de memoria `.jsonl`/`.md` ya NO se crean desde v0.7.0**: viven en `team.db` (se exportan a `.sql` en cada commit y se importan al pull). Los legacy se migran con `teamdb-migrate.sh`.
-
-**Ahorro: ~90% tokens** (de ~8000 a ~700 por tarea).
 
 Los receipts (`skalling-receipt`) formalizan cada verificación con evidence antes de claims.
 

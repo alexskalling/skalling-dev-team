@@ -48,6 +48,7 @@ jobs:
           node --test tests/skalling-goal-plugin.test.mjs
           bash tests/bootstrap-readiness.test.sh
           bash tests/teamdb-hardening-suite.sh
+          bash tests/scripts-parity.test.sh
 
       - name: Run doctor strictly against a fresh installation
         run: |

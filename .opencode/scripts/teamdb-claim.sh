@@ -233,6 +233,24 @@ try:
     if not t:
         json.dump({'error': 'task not found: %s/%s' % (plan_slug, task_slug)}, sys.stdout)
         conn.rollback(); sys.exit(1)
+    if target == 'approved':
+        implementation = conn.execute("""
+            SELECT actor FROM task_claims
+            WHERE task_id=? AND status='done'
+            ORDER BY released_at DESC, id DESC LIMIT 1
+        """, (t['id'],)).fetchone()
+        if implementation and implementation['actor'] == actor:
+            json.dump({'error': 'in_review->approved requiere verificador distinto al implementador'}, sys.stdout)
+            conn.rollback(); sys.exit(1)
+        verification = conn.execute("""
+            SELECT id FROM receipts
+            WHERE task_id=? AND agent='jhon' AND exit_code=0
+              AND tree_hash IS NOT NULL AND tree_hash != ''
+            ORDER BY ts DESC, rowid DESC LIMIT 1
+        """, (t['id'],)).fetchone()
+        if not verification:
+            json.dump({'error': 'in_review->approved requiere receipt sellado exitoso de jhon para la task'}, sys.stdout)
+            conn.rollback(); sys.exit(1)
     if target == 'approved' and t['status'] != 'in_review':
         json.dump({'error': 'approved requiere status=in_review (actual=%s)' % t['status']}, sys.stdout)
         conn.rollback(); sys.exit(1)
