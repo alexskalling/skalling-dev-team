@@ -12,8 +12,12 @@
       "*.sqlite3": "deny"
     },
     "todowrite": "allow",
+    "read": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "list": "allow",
     "bash": {
-      "*": "ask",
+      "*": "allow",
       "cat": "allow",
       "cat *": "allow",
       "head": "allow",
@@ -416,11 +420,20 @@
       "head *id_rsa*": "ask",
       "tail *.env*": "ask",
       "tail *.pem*": "ask",
-      "tail *id_rsa*": "ask"
-    },
-    "read": "allow",
-    "glob": "allow",
-    "grep": "allow",
-    "list": "allow"
+      "tail *id_rsa*": "ask",
+      "sudo": "deny",
+      "sudo *": "deny",
+      "npm install": "ask",
+      "npm install *": "ask",
+      "npm i *": "ask",
+      "pnpm add *": "ask",
+      "pnpm install": "ask",
+      "pnpm install *": "ask",
+      "pnpm remove *": "ask",
+      "yarn add *": "ask",
+      "yarn remove *": "ask",
+      "rm *.db*": "deny",
+      "rm *.sqlite*": "deny"
+    }
   }
 }

@@ -22,7 +22,7 @@ permission:
   task:
     "*": allow
   bash:
-    "*": ask
+    "*": allow
     cat: allow
     "cat *": allow
     head: allow
@@ -291,6 +291,19 @@ permission:
     "tail *.env*": ask
     "tail *.pem*": ask
     "tail *id_rsa*": ask
+    sudo: deny
+    "sudo *": deny
+    "npm install": ask
+    "npm install *": ask
+    "npm i *": ask
+    "pnpm add *": ask
+    "pnpm install": ask
+    "pnpm install *": ask
+    "pnpm remove *": ask
+    "yarn add *": ask
+    "yarn remove *": ask
+    "rm *.db*": deny
+    "rm *.sqlite*": deny
 ---
 
 # Alex — Orquestador
