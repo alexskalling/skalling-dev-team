@@ -119,10 +119,21 @@ jobs:
           mock=$(mktemp -d)
           cd "$mock"
           git init -q
-          echo '{"name":"test","dependencies":{"react":"^18.0.0"}}' > package.json
+          echo '{"name":"test","dependencies":{"typescript":"^5.0.0"}}' > package.json
           echo '{}' > tsconfig.json
           echo "# Test" > README.md
-          bash $GITHUB_WORKSPACE/bootstrap-context.sh --target "$mock" --force
+          bootstrap_rc=0
+          bash $GITHUB_WORKSPACE/bootstrap-context.sh --target "$mock" --force || bootstrap_rc=$?
+          # exit 3 = "readiness=degraded" (falta contexto/evidencia real hidratada).
+          # Un mock sintético de 3 archivos nunca va a satisfacer ese chequeo — no
+          # es un fallo del instalador, es el gate de v0.10.3 funcionando como
+          # debe. Este smoke test valida que TeamDB se inicialice con la versión
+          # correcta, no que el proyecto quede "listo para implementar". Cualquier
+          # otro código de salida (falla real de instalación) sigue rompiendo el step.
+          if [ "$bootstrap_rc" != "0" ] && [ "$bootstrap_rc" != "3" ]; then
+            echo "bootstrap-context.sh falló con código inesperado: $bootstrap_rc" >&2
+            exit "$bootstrap_rc"
+          fi
           bash $GITHUB_WORKSPACE/setup.sh --target "$mock" --force
           expected="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' "$GITHUB_WORKSPACE/VERSION" | head -1)"
           test "$(sqlite3 "$HOME/.config/opencode/team.db" "SELECT value FROM schema_meta WHERE key='version'")" = "$expected"

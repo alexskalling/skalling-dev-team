@@ -8,7 +8,7 @@ PROJECT="${PROJECT:-$(pwd)}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}"
 TMP_DIRS=""
-# shellcheck disable=SC2329 # invocada indirectamente por trap EXIT
+# shellcheck disable=SC2329,SC2317 # invocada indirectamente por trap EXIT
 cleanup() {
   local dir
   for dir in $TMP_DIRS; do

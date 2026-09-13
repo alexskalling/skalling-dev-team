@@ -94,7 +94,7 @@ fi
 # cleanup() aislado (no inline en el trap): cubre también el caso set -e
 # abortando entre el mktemp de TMP_DIR y los puntos de salida que antes hacían
 # rm manual. ${TMP_DIR:-} por si el trap dispara antes de que TMP_DIR se asigne.
-# shellcheck disable=SC2329 # invocada indirectamente por trap EXIT
+# shellcheck disable=SC2329,SC2317 # invocada indirectamente por trap EXIT
 cleanup() { rm -rf "${TMP_DIR:-}"; }
 trap 'teamdb_unlock "$LOCK_DIR"; cleanup' EXIT
 
