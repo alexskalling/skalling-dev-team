@@ -36,7 +36,7 @@ find "$BACKUP_DIR" -maxdepth 1 -type f -name 'team.db.backup-*' -print \
           if [ "$DRY_RUN" = true ]; then
             printf '[dry-run] retiraría %s\n' "$backup"
           else
-            rm -f -- "$backup"
+            rm -f -- "$backup"  # lens:ok: case de arriba ya valida el prefijo "$BACKUP_DIR"/team.db.backup-*
           fi
           ;;
         *) echo "ERROR: ruta de backup inesperada: $backup" >&2; exit 1 ;;

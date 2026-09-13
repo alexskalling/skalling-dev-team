@@ -247,7 +247,7 @@ skalling_atomic_write() {
 
     # Atomic rename (POSIX garantiza atomicidad en mismo filesystem)
     mv -f "$tmp_file" "$file_path" || {
-        rm -f "$tmp_file" 2>/dev/null
+        rm -f "$tmp_file" 2>/dev/null  # lens:ok: sufijo .tmp.$$ propio, nunca vacío
         return 1
     }
 
@@ -270,7 +270,7 @@ skalling_atomic_append() {
             flock -x 200
             printf '%s\n' "$line" >> "$file_path"
         ) 200>"${file_path}.lock"
-        rm -f "${file_path}.lock"
+        rm -f "${file_path}.lock"  # lens:ok: sufijo .lock fijo sobre file_path, nunca vacío
     else
         # Sin flock (macOS sin coreutils): leer todo + append + write atómico
         local current; current="$(cat "$file_path" 2>/dev/null || true)"

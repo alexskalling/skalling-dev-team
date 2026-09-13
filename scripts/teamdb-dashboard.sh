@@ -71,7 +71,7 @@ stop_server() {
   else
     echo "El dashboard de $PROJECT_NAME no estaba activo."
   fi
-  rm -f "$PIDFILE" "$PORTFILE"
+  rm -f "$PIDFILE" "$PORTFILE"  # lens:ok: rutas fijas armadas una vez en STATE_DIR, nunca vacías
 }
 
 if [ "$ACTION" = "stop" ]; then stop_server; exit 0; fi
@@ -90,7 +90,7 @@ for required in "$DB_PATH" "$SERVER_SCRIPT" "$HTML_PATH"; do
 done
 
 if ! is_running; then
-  rm -f "$PIDFILE" "$PORTFILE"
+  rm -f "$PIDFILE" "$PORTFILE"  # lens:ok: rutas fijas armadas una vez en STATE_DIR, nunca vacías
   PORT="$(python3 -c "import socket; s=socket.socket(); s.bind(('127.0.0.1',0)); print(s.getsockname()[1]); s.close()")"
   env TDB_DB="$DB_PATH" TDB_HTML="$HTML_PATH" TDB_PROJECT="$PROJECT_NAME" TDB_PORT="$PORT" \
     nohup python3 "$SERVER_SCRIPT" >"$LOGFILE" 2>&1 &

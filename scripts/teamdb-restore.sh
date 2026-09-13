@@ -84,7 +84,7 @@ if [ -f "$DB" ]; then
       TO_DELETE=$((BACKUP_COUNT - 5))
       find "$BACKUP_DIR" -maxdepth 1 -name 'team.db.backup-*' -type f 2>/dev/null \
         | sort | head -n "$TO_DELETE" \
-        | while IFS= read -r f; do rm -f -- "$f"; done
+        | while IFS= read -r f; do rm -f -- "$f"; done  # lens:ok: f viene de find sobre BACKUP_DIR, nunca de input externo
     fi
   else
     echo "WARN: backup falló (¿permisos?)" >&2
@@ -93,7 +93,7 @@ fi
 
 # ── Full reset: recrear desde schema (usa el mismo mecanismo de init) ────────
 if [ "$FULL_RESET" = true ]; then
-  rm -f "$DB" "$DB-wal" "$DB-shm"
+  rm -f "$DB" "$DB-wal" "$DB-shm"  # lens:ok: guarda explícita [ "$FULL_RESET" = true ] en la línea de arriba
 fi
 
 if [ ! -f "$DB" ]; then
