@@ -231,7 +231,13 @@ init_teamdb() {
         if [[ -f "$SCRIPT_DIR/scripts/teamdb-init.sh" ]]; then
             # bootstrap es ejecutado por Alex → seteamos TEAMDB_ACTOR=alex
             # para que audit_log refleje el actor real (INV-AUDIT-1).
-            if TEAMDB_ACTOR=alex bash "$SCRIPT_DIR/scripts/teamdb-init.sh" "$project" 2>/dev/null; then
+            # R10: no silenciar el error — un `2>/dev/null` ciego dejaba
+            # "teamdb no se pudo inicializar" sin ninguna pista de la causa
+            # real (rompía en macOS/Windows CI sin forma de diagnosticar).
+            local init_err_log
+            init_err_log="$(mktemp)"
+            if TEAMDB_ACTOR=alex bash "$SCRIPT_DIR/scripts/teamdb-init.sh" "$project" 2>"$init_err_log"; then
+                rm -f "$init_err_log"
                 ok "teamdb inicializado"
                 if [[ -f "$SCRIPT_DIR/scripts/teamdb-link.sh" ]]; then
                     TEAMDB_ACTOR=alex bash "$SCRIPT_DIR/scripts/teamdb-link.sh" "$project" --quiet >/dev/null
@@ -239,6 +245,8 @@ init_teamdb() {
                 fi
             else
                 err "teamdb no se pudo inicializar"
+                [[ -s "$init_err_log" ]] && sed 's/^/  /' "$init_err_log" >&2
+                rm -f "$init_err_log"
                 return 1
             fi
         else
