@@ -62,7 +62,7 @@ tabla `applied_migrations`.
 Los scripts siguen el patrón `teamdb-<verbo>.sh`:
 
 - **Ciclo de planes**: `teamdb-plan.sh`, `teamdb-execute-plan.sh`,
-  `teamdb-resume.sh`, `teamdb-claim-task.sh`, `teamdb-claim.sh`.
+  `teamdb-resume.sh`, `teamdb-claim.sh`.
 - **Memoria**: `teamdb-context.sh`, `teamdb-context-cache.sh`, `teamdb-search.sh`,
   `teamdb-related.sh`, `teamdb-link.sh`, `teamdb-amend.sh`, `mem-review.sh`,
   `teamdb-status.sh`, `teamdb-graph.sh`.
@@ -108,8 +108,9 @@ Usuario → Alex (frontend) → Pol (spec/scope) → Sol (negocio)
 
 1. **Espec**: `Pol` convierte la intención en `proposals`/`specs` (tablas
    `proposals`, `plans`, `specs`).
-2. **Planeo**: se crean `tasks` con dependencias y claims; `teamdb-claim-task.sh`
-   asigna el trabajo.
+2. **Planeo**: se crean `tasks` con dependencias y claims; `teamdb-claim.sh`
+   asigna el trabajo (claim con lease/epoch, input_hash y transiciones
+   verificadas por rol).
 3. **Implementación**: `Teo` ejecuta; `Jhon` verifica con tests.
 4. **Revisión**: `skalling-review.sh` corre los 4 lenses sobre el diff; si
    pasa, `teamdb-seal-receipt.sh` sella el estado con el `tree_hash` (SHA-256 de

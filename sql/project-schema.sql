@@ -127,6 +127,7 @@ INSERT INTO schema_meta VALUES ('type', 'project');
 INSERT INTO schema_meta VALUES ('legacy_surface.work_in_progress', 'read_only_compatibility');
 INSERT INTO schema_meta VALUES ('legacy_surface.code_graph_cache', 'external_codegraph');
 INSERT INTO schema_meta VALUES ('legacy_surface.code_imports', 'external_codegraph');
+INSERT INTO schema_meta VALUES ('legacy_surface.task_lock_history', 'read_only_compatibility');
 
 CREATE VIRTUAL TABLE concepts_fts USING fts5(title, body_md, content='concepts', content_rowid='id');
 CREATE VIRTUAL TABLE decisions_fts USING fts5(title, body_md, content='decisions', content_rowid='id');

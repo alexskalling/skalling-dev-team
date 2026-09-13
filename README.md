@@ -434,7 +434,7 @@ bash scripts/teamdb-claim.sh claim auth-jwt /path/to/project
 bash scripts/teamdb-execute-plan.sh auth-jwt /path/to/project
 ```
 
-> **Legacy de solo lectura**: `work_in_progress` y `wip-tree.sh` se conservan únicamente para consultar instalaciones antiguas. El inicio de sesión, el contexto y el ciclo operativo usan `proposals`/`plans`/`tasks`. Las tablas históricas `code_graph_cache` y `code_imports` no reciben escrituras nuevas; CodeGraph mantiene su propio índice.
+> **Legacy de solo lectura**: `work_in_progress` y `wip-tree.sh` se conservan únicamente para consultar instalaciones antiguas. El inicio de sesión, el contexto y el ciclo operativo usan `proposals`/`plans`/`tasks`. Las tablas históricas `code_graph_cache` y `code_imports` no reciben escrituras nuevas; CodeGraph mantiene su propio índice. `task_lock_history` es la misma categoría: la escribía `teamdb-claim-task.sh` (CAS simple, sin lease), removido porque el ciclo de claims real usa `teamdb-claim.sh` (lease/epoch, transiciones verificadas por rol) desde antes de que ese script tuviera algún caller activo.
 
 ### Hooks git
 

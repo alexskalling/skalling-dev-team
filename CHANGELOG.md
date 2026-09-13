@@ -35,8 +35,20 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
   como guarda válida en el lens de riesgo, en vez de exigir un chequeo
   redundante sobre algo seguro por construcción.
 
+### Removed
+- `teamdb-claim-task.sh` (CAS simple sobre `tasks.status/version`, sin
+  expiración de lease): sin ningún caller real (ningún agente ni skill lo
+  invocaba) desde antes de esta auditoría. El ciclo de claims quedó
+  unificado en `teamdb-claim.sh` (lease/epoch, `input_hash`, transiciones
+  `in_review→approved`/`approved→resolved` verificadas por rol), que ya
+  era lo único que usaban los 8 agentes y `teamdb-execute-plan.sh`.
+  `task_lock_history` queda como superficie legacy de solo lectura, mismo
+  tratamiento que `work_in_progress`/`code_graph_cache`.
+
 ### Migration
 - `029_version_0_11_2.sql` eleva bases existentes a schema `0.11.2`.
+- `030_deprecate_task_claim_task.sql` marca `task_lock_history` como
+  `legacy_surface`.
 
 ## [0.11.1] — en preparación
 

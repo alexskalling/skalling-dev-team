@@ -15,7 +15,7 @@ check() {
   fi
 }
 
-check "claim legacy no interpola SQL con sqlite3" sh -c "! grep -q 'sqlite3 \"\$DB\"' '$ROOT/scripts/teamdb-claim-task.sh'"
+check "teamdb-claim-task.sh removido (CAS legacy sin caller, unificado en teamdb-claim.sh)" sh -c "[ ! -f '$ROOT/scripts/teamdb-claim-task.sh' ]"
 check "pre-commit usa consultas parametrizadas" grep -q 'WHERE tree_hash=?' "$ROOT/scripts/hooks/git-gate.py"
 check "migración legacy falla si sqlite falla" sh -c "! grep -q 'sqlite3 \"\$local_db\" < \"\$1\".*|| true' '$ROOT/scripts/teamdb-migrate.sh'"
 check "CI ejecuta pruebas del dashboard" grep -q 'dashboard-server.test.py' "$ROOT/.github/workflows/tests.yml"
@@ -40,8 +40,7 @@ VALUES('secure','Secure',(SELECT id FROM proposals WHERE slug='secure'),'# desig
 INSERT INTO tasks(plan_id,slug,title,status)
 VALUES((SELECT id FROM plans WHERE slug='secure'),'task-1','Task 1','pending');
 SQL
-TASK_ID="$(sqlite3 "$FIXTURE/.opencode/context/team.db" "SELECT id FROM tasks WHERE slug='task-1'")"
-bash "$ROOT/scripts/teamdb-claim-task.sh" "$TASK_ID" "teo'; DROP TABLE tasks; --" "$FIXTURE" >/dev/null
+bash "$ROOT/scripts/teamdb-claim.sh" secure task-1 "--actor=teo'; DROP TABLE tasks; --" "$FIXTURE" >/dev/null 2>&1 || true
 check "claim conserva la tabla ante entrada hostil" sqlite3 "$FIXTURE/.opencode/context/team.db" "SELECT 1 FROM tasks LIMIT 1"
 
 ROUTE_OUTPUT="$(bash "$ROOT/scripts/skalling-route.sh" classify --risk high --kind code --record --intent "auditar ' routing" --project "$FIXTURE")"

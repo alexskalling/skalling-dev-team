@@ -250,31 +250,15 @@ assert "receipts existe" "sqlite3 '$DB_R' 'SELECT 1 FROM receipts'"
 rm -rf "$TEST_R"
 
 # ────────────────────────────────────────────────────────────────────────────
-# v0.8.0: CAS (compare-and-swap) para tasks
+# Fase 4 (auditoría 2026-09-13): teamdb-claim-task.sh (CAS simple, v0.8.0)
+# removido — sin caller real, unificado en teamdb-claim.sh (lease/epoch).
+# La cobertura de "double-claim rechazado" vive en
+# tests/teamdb-claim-lease.test.sh ("conflicto: distinto actor rechazado").
+# task_lock_history queda legacy (ver sql/migrations/030_*.sql).
 # ────────────────────────────────────────────────────────────────────────────
 
-# Test CAS
-TEST_CAS=$(mktemp -d)
-mkdir -p "$TEST_CAS/.opencode/context"
-SKALLING_ROOT="$SKALLING_ROOT" bash "$SKALLING_ROOT/scripts/teamdb-init.sh" "$TEST_CAS" >/dev/null 2>&1
-DB_CAS="$TEST_CAS/.opencode/context/team.db"
-
-# Crear task
-sqlite3 "$DB_CAS" "INSERT INTO tasks (plan_id, slug, title, status) VALUES (0, 'test-cas', 'CAS test', 'pending')"
-TASK_ID=$(sqlite3 "$DB_CAS" "SELECT id FROM tasks WHERE slug='test-cas'")
-
-# Primer claim: debe funcionar
-out=$(bash "$SKALLING_ROOT/scripts/teamdb-claim-task.sh" "$TASK_ID" teo "$TEST_CAS" 2>&1)
-assert "primer claim OK" "echo '$out' | grep -q 'claimed'"
-
-# Segundo claim: debe fallar (ya in_progress)
-out2=$(bash "$SKALLING_ROOT/scripts/teamdb-claim-task.sh" "$TASK_ID" teo "$TEST_CAS" 2>&1 || true)
-assert "segundo claim falla" "echo '$out2' | grep -q 'no estaba pending'"
-
-# Lock history existe
-count=$(sqlite3 "$DB_CAS" "SELECT COUNT(*) FROM task_lock_history WHERE task_id=$TASK_ID")
-assert "lock history registrado" "[ \"$count\" -ge 1 ]"
-rm -rf "$TEST_CAS"
+assert "task_lock_history marcada legacy_surface" "grep -q \"legacy_surface.task_lock_history\" '$SKALLING_ROOT/sql/project-schema.sql'"
+assert "teamdb-claim-task.sh removido (sin caller real)" "[ ! -f '$SKALLING_ROOT/scripts/teamdb-claim-task.sh' ]"
 
 # ────────────────────────────────────────────────────────────────────────────
 # BUG C — teamdb_lock recupera locks stale (pid muerto) y respeta locks vivos
