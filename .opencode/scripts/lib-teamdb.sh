@@ -152,6 +152,40 @@ CREATE TABLE IF NOT EXISTS workflow_metrics (
 );
 CREATE INDEX IF NOT EXISTS idx_workflow_metrics_started ON workflow_metrics(started_at DESC);
 SQL
+  # CREATE TABLE IF NOT EXISTS de arriba es un no-op sobre una tabla que ya
+  # existe, aunque su CHECK constraint sea el viejo -- SQLite no permite
+  # ALTER de un CHECK. Una DB global creada antes de que 'DISCOVERY' se
+  # agregara al contrato de routing quedaba con el constraint viejo para
+  # siempre pese a reinstalar. Mismo rebuild que ya usa la migracion
+  # 024_version_0_10_3.sql para las DBs de proyecto; aca aplicado al global.
+  local routing_needs_discovery
+  routing_needs_discovery="$(sqlite3 "$db" "SELECT CASE WHEN sql NOT LIKE '%DISCOVERY%' THEN 1 ELSE 0 END FROM sqlite_master WHERE type='table' AND name='routing_decisions'" 2>/dev/null || echo 0)"
+  if [ "$routing_needs_discovery" = "1" ]; then
+    sqlite3 "$db" <<'SQL' || { echo "[ERROR] No se pudo migrar routing_decisions (agregar DISCOVERY) en team.db global" >&2; return 1; }
+PRAGMA foreign_keys=OFF;
+BEGIN TRANSACTION;
+CREATE TABLE routing_decisions_new (
+  id INTEGER PRIMARY KEY,
+  ts TEXT NOT NULL,
+  user_intent TEXT NOT NULL,
+  chosen_route TEXT NOT NULL CHECK (chosen_route IN ('DISCOVERY','INLINE','INTERVENTION','FAST-TRACK','SDD','DIRECT','RESEARCH')),
+  route_reason TEXT,
+  agents_involved TEXT,
+  outcome TEXT DEFAULT 'PENDING' CHECK (outcome IN ('PENDING','SUCCESS','FAIL','CANCELLED')),
+  completed_at TEXT
+);
+INSERT INTO routing_decisions_new
+  (id, ts, user_intent, chosen_route, route_reason, agents_involved, outcome, completed_at)
+SELECT id, ts, user_intent, chosen_route, route_reason, agents_involved, outcome, completed_at
+FROM routing_decisions;
+DROP TABLE routing_decisions;
+ALTER TABLE routing_decisions_new RENAME TO routing_decisions;
+CREATE INDEX IF NOT EXISTS idx_routing_decisions_ts ON routing_decisions(ts);
+CREATE INDEX IF NOT EXISTS idx_routing_decisions_route ON routing_decisions(chosen_route);
+COMMIT;
+PRAGMA foreign_keys=ON;
+SQL
+  fi
   local has_col
   has_col="$(sqlite3 "$db" "SELECT 1 FROM pragma_table_info('audit_log') WHERE name='actor_source'" 2>/dev/null)"
   if [ "$has_col" != "1" ]; then
