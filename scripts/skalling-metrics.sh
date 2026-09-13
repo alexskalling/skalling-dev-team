@@ -20,6 +20,12 @@ write_sql() {
 case "$OP" in
   start)
     REQUEST_ID="${1:?Falta request-id}"; RISK="${2:?Falta risk}"; project_from_last "${3:-$(pwd)}"; ROUTE="${4:-}"; AGENTS="${5:-0}"
+    # Auto-cierre de metricas huerfanas: si "finish" nunca se llamo (agente
+    # cortado, sesion perdida), la fila queda con completed_at NULL para
+    # siempre y el reporte/summary la ignora en vez de contarla como fallo.
+    # Umbral de 2h para no cerrar una request concurrente legitima que
+    # sigue en curso en otra sesion sobre el mismo proyecto.
+    write_sql "UPDATE workflow_metrics SET outcome='abandoned', completed_at=datetime('now'), duration_ms=CAST((julianday('now')-julianday(started_at))*86400000 AS INTEGER) WHERE completed_at IS NULL AND request_id != ? AND started_at < datetime('now','-2 hours')" "$REQUEST_ID"
     write_sql "INSERT INTO workflow_metrics(request_id,risk_level,route,agents_count,started_at) VALUES(?,?,?,?,datetime('now')) ON CONFLICT(request_id) DO NOTHING" "$REQUEST_ID" "$RISK" "$ROUTE" "$AGENTS"
     ;;
   event)

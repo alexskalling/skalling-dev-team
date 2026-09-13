@@ -9,6 +9,7 @@ for t in tests/dashboard-server.test.py \
          tests/dashboard-launcher.test.sh \
          tests/quality-priorities.test.sh \
          tests/skalling-metrics-summary.test.sh \
+         tests/skalling-metrics-orphan-cleanup.test.sh \
          tests/permission-generation.test.py \
          tests/workflow-engine.test.py \
          tests/teamdb-safe-query.test.sh \
