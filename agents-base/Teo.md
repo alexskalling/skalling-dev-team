@@ -58,6 +58,25 @@ permission:
     "pwd *": allow
     find: allow
     "find *": allow
+    "which *": allow
+    "command -v *": allow
+    "type *": allow
+    "basename *": allow
+    "dirname *": allow
+    date: allow
+    "date *": allow
+    whoami: allow
+    uname: allow
+    "uname *": allow
+    "stat *": allow
+    "file *": allow
+    "readlink *": allow
+    "realpath *": allow
+    "test *": allow
+    "[ *": allow
+    sed: allow
+    "sed *": allow
+    "sed -i*": ask
     "bash -n *": allow
     diff: allow
     "diff *": allow
