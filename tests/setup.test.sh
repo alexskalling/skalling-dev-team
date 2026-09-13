@@ -893,8 +893,13 @@ test_migration_009_plan_contract() (
   local fixture_dir
   fixture_dir="$(mktemp -d)"
   trap '[ -n "$fixture_dir" ] && [ -d "$fixture_dir" ] && rm -rf -- "$fixture_dir"' EXIT
-  local DB="$fixture_dir/team.db"
-  sqlite3 "$DB" < "$REPO_ROOT/sql/project-schema.sql"
+  mkdir -p "$fixture_dir/.opencode/context"
+  local DB="$fixture_dir/.opencode/context/team.db"
+  # Init canónico: aplica migrations, valida tablas críticas y audit_log.actor_source.
+  # Antes este test usaba `sqlite3 ... < project-schema.sql` directo, lo que BYPASSEABA
+  # teamdb-init.sh y dejaba la DB sin `applied_migrations`/sin PRAGMAs y sin
+  # validación de version — frágil ante cambios de schema.
+  SKALLING_ROOT="$REPO_ROOT" bash "$REPO_ROOT/scripts/teamdb-init.sh" "$fixture_dir" >/dev/null 2>&1
 
   # 1. Versión alineada con VERSION
   local version
@@ -1246,8 +1251,11 @@ test_migration_script_exists() {
     fi
     local fixture_dir
     fixture_dir="$(mktemp -d)"
-    mkdir -p "$fixture_dir/.opencode/context"
-    sqlite3 "$fixture_dir/.opencode/context/team.db" < "$REPO_ROOT/sql/project-schema.sql"
+    # Init canónico (idéntico al patrón de tests/teamdb-claim-lease.test.sh):
+    # aplica migrations, valida version y tablas críticas. Antes este test creaba
+    # la DB con `sqlite3 ... < project-schema.sql` directo, lo que BYPASSEABA
+    # teamdb-init.sh y dejaba la DB sin migrations aplicadas — frágil.
+    SKALLING_ROOT="$REPO_ROOT" bash "$REPO_ROOT/scripts/teamdb-init.sh" "$fixture_dir" >/dev/null 2>&1
     pass "FIX 1.6: script existe"
 
     if [[ ! -x "$script" ]]; then
