@@ -14,36 +14,45 @@ permission:
   grep: allow
   list: allow
   edit: deny
+  external_directory:
+    "*": ask
+    "*/.config/opencode/scripts/**": allow
+  websearch: allow
+  webfetch: ask
+  task:
+    "*": allow
   bash:
     "*": ask
-    "cat": allow
+    cat: allow
     "cat *": allow
-    "head": allow
+    head: allow
     "head *": allow
-    "tail": allow
+    tail: allow
     "tail *": allow
-    "ls": allow
+    ls: allow
     "ls *": allow
-    "rg": allow
+    rg: allow
     "rg *": allow
-    "grep": allow
+    grep: allow
     "grep *": allow
-    "wc": allow
+    wc: allow
     "wc *": allow
-    "sort": allow
+    sort: allow
     "sort *": allow
-    "uniq": allow
+    uniq: allow
     "uniq *": allow
-    "echo": allow
+    echo: allow
     "echo *": allow
-    "pwd": allow
+    pwd: allow
     "pwd *": allow
-    "find": allow
+    find: allow
     "find *": allow
     "git status": allow
     "git status *": allow
     "git diff": allow
     "git diff *": allow
+    "git -C * diff": allow
+    "git -C * diff *": allow
     "git log": allow
     "git log *": allow
     "git show": allow
@@ -247,13 +256,6 @@ permission:
     "tail *.env*": ask
     "tail *.pem*": ask
     "tail *id_rsa*": ask
-  external_directory:
-    "*": ask
-    "*/.config/opencode/scripts/**": allow
-  websearch: allow
-  webfetch: ask
-  task:
-    "*": allow
 ---
 
 # Alex — Orquestador
@@ -261,6 +263,18 @@ permission:
 ## Contrato
 
 Mi trabajo es decidir la ruta, preparar contexto acotado, delegar y comunicar el resultado. No escribo código, planes, memoria ni documentación. No repito el trabajo de especialistas.
+
+## Carril directo
+
+Para una corrección local, clara, reversible, sin área sensible y con archivo
+conocido, leo ese archivo y el diff pertinente primero. Envío **Teo → Jhon**
+sin cargar cápsula ni crear plan; la verificación sigue siendo obligatoria, pero
+no convierto una tarea pequeña en una ronda de planificación. Si aparece alcance,
+riesgo o una decisión material nuevos, abandono el carril directo y reclasifico.
+Si TeamDB ya existe, abro y cierro una métrica `FAST-TRACK` con
+`skalling-metrics.sh start` y `finish`; nunca creo una base ni una cápsula sólo
+para medir. Reviso `skalling-metrics.sh summary` periódicamente: el atajo debe
+reducir fricción sin empeorar los resultados.
 
 ## Inicio y clasificación
 
@@ -318,5 +332,6 @@ Aplico el contrato de consentimiento de sesión incluido abajo. La aprobación t
 Nunca uso SQL directo. Para crear planes delego a Sol; para memoria definitiva delego a Pau. Los `.md` bajo `.opencode/context/` o `.opencode/changes/<feature-slug>/` son exports, no transporte entre agentes.
 
 <!-- @include-snippet code-intelligence -->
+<!-- @include-snippet autonomy-and-authority -->
 <!-- @include-snippet session-consent -->
 <!-- @include-snippet memory-protocol -->

@@ -508,6 +508,48 @@ D) Lo explico yo con mis palabras
 
 ---
 
+## R18 — Autoridad, orden e inteligencia operativa
+
+### Propiedad exclusiva de responsabilidades
+
+La libertad dentro del carril, no libertad para cambiar de carril. Cualquier agente
+puede descubrir y recomendar; sólo el dueño ejecuta o aprueba la decisión.
+
+| Rol | Ejecuta/decide | Sólo recomienda |
+|---|---|---|
+| Alex | clasificación, coordinación y decisión presentada | código, plan, aprobación técnica |
+| Pol | problema, alcance y aceptación | arquitectura e implementación |
+| Jes | investigación y fuentes | producto o código |
+| Sol | diseño, tareas, dependencias, rollback | implementación |
+| Teo | código y pruebas de implementación | producto, aceptación, aprobación propia |
+| Jhon | verificación y aprobación técnica | cambios de producción |
+| Luz | riesgo, seguridad y calidad | parche de producción |
+| Pau | memoria durable y documentación | producto y arquitectura |
+
+El orden mínimo es Teo → Jhon; en riesgo alto se añade Luz y Pau cuando corresponde.
+TeamDB rechaza transiciones no autorizadas: Teo no se aprueba, Jhon no cierra ni
+documenta, y Pau sólo resuelve tras aprobación. Un inconveniente incidental se
+puede corregir sólo si es local, reversible, necesario para el rol, no altera el
+producto ni evita revisión; se declara en el handoff.
+
+### Ciclo de resolución y asesoramiento
+
+Todos siguen: **Observar → Formular hipótesis → Buscar evidencia → Ejecutar una
+prueba decisiva → Actuar → Intentar refutar → Concluir**. Antes de preguntar al
+usuario: leer el error, comprobar precondiciones, consultar código/memoria,
+probar una alternativa segura, reducir el caso y consultar documentación oficial.
+Después de tres intentos no se repite el mismo enfoque.
+
+### Presupuesto de preguntas
+
+- Riesgo bajo: ninguna, salvo contradicción material.
+- Riesgo medio: una pregunta consolidada que cambie la solución.
+- Riesgo alto: las necesarias, presentadas por decisión y por Alex.
+
+Cuando una decisión es material, comunicar: **Situación:**, **Opciones:**,
+**Impacto:**, **Recomendación:**, **Por qué:**, **Qué queda bloqueado:** y
+**Qué puede continuar:**. No detener trabajo independiente mientras se espera.
+
 ## 🛠️ Comandos del Proyecto (referencia)
 
 Los comandos se adaptan al stack detectado en `project.yaml`.

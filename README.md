@@ -2,7 +2,7 @@
 
 Skalling es un equipo de **8 agentes de IA** que trabajan juntos adentro de [OpenCode](https://opencode.ai). Cada agente tiene un rol específico y siguen un ciclo ordenado para construir software bien hecho.
 
-**Versión actual: 0.11.0**
+**Versión actual: 0.11.1**
 
 ---
 
@@ -77,7 +77,7 @@ no ejecuta la operación. El respaldo no autoriza borrarla: la aprobación sigue
 No hay permiso general para `cp`, `rm`, SQL libre o restauraciones. Los programas de terceros
 y otras bases requieren sus propios controles: esto no es un sandbox del sistema operativo.
 Las pruebas del proyecto deben usar bases aisladas, nunca datos reales. Reiniciar OpenCode
-después de instalar para cargar ambos plugins. La herramienta requiere el SDK de plugins
+después de instalar para cargar los tres plugins. La herramienta requiere el SDK de plugins
 que OpenCode instala en su configuración; si falta, no usar el backend Python para eludirlo.
 
 Requisitos esenciales: **SQLite 3** y **Python 3**. El instalador los valida antes de escribir archivos y muestra el comando adecuado si falta alguno. OpenCode y Git también son recomendados para usar el equipo completo.
@@ -111,6 +111,13 @@ Podés indicar una ubicación no estándar del repositorio:
 ### Code Intelligence (opt-in, v0.4.0+)
 
 **Code Intelligence (opt-in)**: Skalling usa CodeGraph para responder preguntas estructurales como “¿quién llama a X?” o “¿qué afecta Y?” antes de recorrer muchos archivos. Su índice `.codegraph/` es independiente de TeamDB: TeamDB conserva conocimiento del proyecto; CodeGraph representa el código. Si CodeGraph no está disponible, los agentes informan la limitación y usan búsquedas normales.
+
+### Límites de seguridad
+
+Los hooks y receipts son controles locales de calidad, no una frontera de
+seguridad frente a quien controla el checkout. Las decisiones críticas requieren
+permisos del runtime y la integración confiable requiere CI y ramas protegidas.
+Ver el [modelo de seguridad](docs/security-model.md).
 
 ### Drift detection
 

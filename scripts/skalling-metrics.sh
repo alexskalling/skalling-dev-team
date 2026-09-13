@@ -35,5 +35,22 @@ case "$OP" in
     project_from_last "${1:-$(pwd)}"
     sqlite3 -separator ' ' "$DB" "SELECT request_id||' risk='||risk_level||' route='||COALESCE(route,'')||' agents='||agents_count||' handoffs='||handoffs||' permissions='||permission_prompts||' context_bytes='||context_bytes||' duration_ms='||COALESCE(duration_ms,0)||' outcome='||COALESCE(outcome,'pending') FROM workflow_metrics ORDER BY started_at DESC;"
     ;;
-  *) echo "Uso: skalling-metrics.sh start|event|finish|report ..." >&2; exit 2 ;;
+  summary)
+    project_from_last "${1:-$(pwd)}"
+    sqlite3 -separator ' ' "$DB" "
+      SELECT
+        'route=' || COALESCE(route,'unclassified') ||
+        ' risk=' || risk_level ||
+        ' runs=' || COUNT(*) ||
+        ' completed=' || SUM(CASE WHEN completed_at IS NOT NULL THEN 1 ELSE 0 END) ||
+        ' success=' || SUM(CASE WHEN outcome = 'success' THEN 1 ELSE 0 END) ||
+        ' avg_duration_ms=' || COALESCE(CAST(AVG(duration_ms) AS INTEGER),0) ||
+        ' avg_handoffs=' || CAST(AVG(handoffs) AS INTEGER) ||
+        ' avg_permissions=' || CAST(AVG(permission_prompts) AS INTEGER) ||
+        ' avg_context_bytes=' || CAST(AVG(context_bytes) AS INTEGER)
+      FROM workflow_metrics
+      GROUP BY COALESCE(route,'unclassified'), risk_level
+      ORDER BY route, risk_level;"
+    ;;
+  *) echo "Uso: skalling-metrics.sh start|event|finish|report|summary ..." >&2; exit 2 ;;
 esac

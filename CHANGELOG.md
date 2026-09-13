@@ -4,6 +4,12 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.11.1] — en preparación
+
+### Fixed
+- Flujo runtime con identidad de sesión, estados ordenados y evidencia independiente.
+- Política de permisos generada desde una fuente única.
+
 ## [0.11.0] — pendiente de publicación
 
 ### Protección de datos

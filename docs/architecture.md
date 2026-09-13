@@ -11,7 +11,9 @@
 `skalling-dev-team` es un sistema de desarrollo asistido **self-hosted** que
 persiste el trabajo de un equipo de agentes (memoria de proyecto), le impone
 disciplina de calidad (revisión por lentes, sellos de inmutabilidad, intentos
-acotados) y hace cumplir esas garantías a través de **git hooks locales**.
+acotados) y usa **git hooks locales** como feedback rápido. Los hooks no son
+una frontera de seguridad; CI y ramas protegidas son la capa autoritativa de
+integración (ver `docs/security-model.md`).
 
 La premisa central es: el equipo no depende de un servicio externo para
 recordar decisiones, tracks de trabajo ni planes. Todo vive en una base SQLite

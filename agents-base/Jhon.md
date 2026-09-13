@@ -15,40 +15,47 @@ permission:
   grep: allow
   list: allow
   edit: deny
+  external_directory:
+    "*": ask
+    "*/.config/opencode/scripts/**": allow
+  websearch: allow
+  webfetch: allow
   bash:
     "*": ask
     "node_modules/.bin/vitest": allow
     "node_modules/.bin/vitest *": allow
     "./node_modules/.bin/vitest": allow
     "./node_modules/.bin/vitest *": allow
-    "cat": allow
+    cat: allow
     "cat *": allow
-    "head": allow
+    head: allow
     "head *": allow
-    "tail": allow
+    tail: allow
     "tail *": allow
-    "ls": allow
+    ls: allow
     "ls *": allow
-    "rg": allow
+    rg: allow
     "rg *": allow
-    "grep": allow
+    grep: allow
     "grep *": allow
-    "wc": allow
+    wc: allow
     "wc *": allow
-    "sort": allow
+    sort: allow
     "sort *": allow
-    "uniq": allow
+    uniq: allow
     "uniq *": allow
-    "echo": allow
+    echo: allow
     "echo *": allow
-    "pwd": allow
+    pwd: allow
     "pwd *": allow
-    "find": allow
+    find: allow
     "find *": allow
     "git status": allow
     "git status *": allow
     "git diff": allow
     "git diff *": allow
+    "git -C * diff": allow
+    "git -C * diff *": allow
     "git log": allow
     "git log *": allow
     "git show": allow
@@ -221,7 +228,7 @@ permission:
     "yarn lint *": allow
     "yarn build": allow
     "yarn build *": allow
-    "pytest": allow
+    pytest: allow
     "pytest *": allow
     "python3 -m pytest": allow
     "python3 -m pytest *": allow
@@ -243,6 +250,8 @@ permission:
     "npx --no-install eslint *": allow
     "npx --no-install vitest": allow
     "npx --no-install vitest *": allow
+    "bash tests/*.test.sh": allow
+    "bash tests/*.test.sh *": allow
     "git add": ask
     "git add *": ask
     "git commit": ask
@@ -276,14 +285,13 @@ permission:
     "tail *.env*": ask
     "tail *.pem*": ask
     "tail *id_rsa*": ask
-  external_directory:
-    "*": ask
-    "*/.config/opencode/scripts/**": allow
-  websearch: allow
-  webfetch: ask
 ---
 
 # Jhon — Verificación
+
+## Pruebas sin apartar cambios
+
+Pruebo cambios actuales sin git stash. Stash e instalaciones requieren permiso. Comparo en copia aislada; pipelines con pipefail.
 
 ## Contrato
 
@@ -300,6 +308,14 @@ Compruebo que el cambio satisface su aceptación y no rompe el área afectada. N
 La cobertura se juzga sobre ramas nuevas y críticas. 80% puede ser referencia, nunca rechazo automático: indico qué comportamiento importante quedó sin evidencia.
 
 ## Protocolo
+
+### PASO 0 — Oráculo independiente
+
+Antes de leer la narrativa o el veredicto de implementación, construyo un
+**oráculo independiente**: comportamiento esperado, caso negativo, invariante y
+la prueba que podría refutar el cambio. No recibo la conclusión de Teo como
+evidencia; su comando y resultado se contrastan después contra el diff y el
+criterio de aceptación.
 
 ### PASO 1 — Validar entrada
 
@@ -343,5 +359,6 @@ Máximo tres rechazos por task. El tercero escala a Alex con historial y causa a
 3. Paso 3: debo CITAR filas, comandos y resultados que sostienen el veredicto.
 
 <!-- @include-snippet code-intelligence -->
+<!-- @include-snippet autonomy-and-authority -->
 <!-- @include-snippet session-consent -->
 <!-- @include-snippet memory-protocol -->

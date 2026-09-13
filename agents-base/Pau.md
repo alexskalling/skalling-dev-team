@@ -22,31 +22,36 @@ permission:
     "*.db-*": deny
     "*.sqlite": deny
     "*.sqlite3": deny
+  external_directory:
+    "*": ask
+    "*/.config/opencode/scripts/**": allow
+  websearch: allow
+  webfetch: ask
   bash:
     "*": ask
-    "cat": allow
+    cat: allow
     "cat *": allow
-    "head": allow
+    head: allow
     "head *": allow
-    "tail": allow
+    tail: allow
     "tail *": allow
-    "ls": allow
+    ls: allow
     "ls *": allow
-    "rg": allow
+    rg: allow
     "rg *": allow
-    "grep": allow
+    grep: allow
     "grep *": allow
-    "wc": allow
+    wc: allow
     "wc *": allow
-    "sort": allow
+    sort: allow
     "sort *": allow
-    "uniq": allow
+    uniq: allow
     "uniq *": allow
-    "echo": allow
+    echo: allow
     "echo *": allow
-    "pwd": allow
+    pwd: allow
     "pwd *": allow
-    "find": allow
+    find: allow
     "find *": allow
     "git status": allow
     "git status *": allow
@@ -243,11 +248,6 @@ permission:
     "tail *.env*": ask
     "tail *.pem*": ask
     "tail *id_rsa*": ask
-  external_directory:
-    "*": ask
-    "*/.config/opencode/scripts/**": allow
-  websearch: allow
-  webfetch: ask
 ---
 
 # Pau — Memoria y documentación
@@ -324,5 +324,6 @@ R16: ante conflicto colaborativo, leo ambos lados y propongo resolución; no eje
 3. Paso 3: debo CITAR filas creadas o `MEMORY_CHECK: NO_CHANGE`.
 
 <!-- @include-snippet code-intelligence -->
+<!-- @include-snippet autonomy-and-authority -->
 <!-- @include-snippet session-consent -->
 <!-- @include-snippet memory-protocol -->

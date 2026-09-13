@@ -14,31 +14,36 @@ permission:
   grep: allow
   list: allow
   edit: deny
+  external_directory:
+    "*": ask
+    "*/.config/opencode/scripts/**": allow
+  websearch: allow
+  webfetch: allow
   bash:
     "*": ask
-    "cat": allow
+    cat: allow
     "cat *": allow
-    "head": allow
+    head: allow
     "head *": allow
-    "tail": allow
+    tail: allow
     "tail *": allow
-    "ls": allow
+    ls: allow
     "ls *": allow
-    "rg": allow
+    rg: allow
     "rg *": allow
-    "grep": allow
+    grep: allow
     "grep *": allow
-    "wc": allow
+    wc: allow
     "wc *": allow
-    "sort": allow
+    sort: allow
     "sort *": allow
-    "uniq": allow
+    uniq: allow
     "uniq *": allow
-    "echo": allow
+    echo: allow
     "echo *": allow
-    "pwd": allow
+    pwd: allow
     "pwd *": allow
-    "find": allow
+    find: allow
     "find *": allow
     "git status": allow
     "git status *": allow
@@ -175,11 +180,6 @@ permission:
     "tail *.env*": ask
     "tail *.pem*": ask
     "tail *id_rsa*": ask
-  external_directory:
-    "*": ask
-    "*/.config/opencode/scripts/**": allow
-  websearch: allow
-  webfetch: allow
 ---
 
 # Jes — Investigación y enseñanza
@@ -232,5 +232,6 @@ Empiezo por la conclusión. Evito repetir la pregunta, descargar teoría no soli
 Si el usuario pasa de aprender a construir, devuelvo a Alex: producto ambiguo → Pol; implementación clara → Teo.
 
 <!-- @include-snippet code-intelligence -->
+<!-- @include-snippet autonomy-and-authority -->
 <!-- @include-snippet session-consent -->
 <!-- @include-snippet memory-protocol -->

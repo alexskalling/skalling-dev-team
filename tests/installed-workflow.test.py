@@ -43,7 +43,7 @@ class InstalledWorkflow(unittest.TestCase):
             self.assertTrue((config / 'hooks/git-gate.py').is_file())
             for artifact in ('plugins/skalling-goal.js', 'scripts/skalling-goal.sh', 'scripts/skalling-goal.py', 'command/skalling-goal.md'):
                 self.assertTrue((config / artifact).is_file(), artifact)
-            for artifact in ('plugins/skalling-data-safety.js', 'plugins/lib/data-safety.mjs', 'scripts/teamdb_guard.py', 'scripts/teamdb-destructive.py'):
+            for artifact in ('plugins/skalling-data-safety.js', 'plugins/lib/data-safety.mjs', 'plugins/skalling-workflow.js', 'plugins/lib/workflow.mjs', 'scripts/teamdb_guard.py', 'scripts/teamdb-destructive.py', 'scripts/skalling-workflow.py'):
                 self.assertTrue((config / artifact).is_file(), artifact)
             hook_result = run(config / 'hooks/pre-commit', check=False)
             # A non-Git fixture must fail explicitly, not silently bypass the gate.

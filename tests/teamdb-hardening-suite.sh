@@ -8,6 +8,9 @@ PASS=0; FAIL=0
 for t in tests/dashboard-server.test.py \
          tests/dashboard-launcher.test.sh \
          tests/quality-priorities.test.sh \
+         tests/skalling-metrics-summary.test.sh \
+         tests/permission-generation.test.py \
+         tests/workflow-engine.test.py \
          tests/teamdb-safe-query.test.sh \
          tests/teamdb-search-sqli.test.sh \
          tests/teamdb-related-sqli.test.sh \
@@ -37,6 +40,7 @@ for t in tests/dashboard-server.test.py \
          tests/teamdb-context-capsule.test.sh \
          tests/teamdb-cycle-amended.test.sh \
          tests/teamdb-claim-strict.test.sh \
+         tests/teamdb-independent-verification.test.sh \
          tests/teamdb-claim-history.test.sh \
          tests/teamdb-context-issue8.test.sh \
          tests/teamdb-execute-plan-no-shell.test.sh \

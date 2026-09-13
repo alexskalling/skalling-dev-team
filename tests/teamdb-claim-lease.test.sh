@@ -87,14 +87,14 @@ else
   assert_fail "conflicto: distinto actor rechazado" "rc=$CAPTURE_RC out=$CAPTURE_OUT"
 fi
 
-# 5. Lease expiry: simular vencido (epoch) y permitir re-claim
+# 5. Lease expiry: simular vencido (epoch) y permitir re-claim del implementador
 EXPIRED_EPOCH=$(( $(date +%s) - 60 ))
 teamdb_exec_write "$DB" "UPDATE task_claims SET lease_until=? WHERE id=?" "$EXPIRED_EPOCH" "$CLAIM_ID" >/dev/null
-run_capture "TEAMDB_ACTOR=jhon bash '$ROOT/scripts/teamdb-claim.sh' 'claim-test' 'task-1' --actor=jhon --input-hash=def456 --ttl=300 '$TEST_DIR'"
+run_capture "TEAMDB_ACTOR=teo bash '$ROOT/scripts/teamdb-claim.sh' 'claim-test' 'task-1' --actor=teo --input-hash=def456 --ttl=300 '$TEST_DIR'"
 if [ "$CAPTURE_RC" = "0" ] && echo "$CAPTURE_OUT" | grep -qE '"claim_id": [0-9]+'; then
-  assert_pass "lease-expired: re-claim con nuevo actor OK"
+  assert_pass "lease-expired: re-claim del implementador OK"
 else
-  assert_fail "lease-expired: re-claim con nuevo actor" "rc=$CAPTURE_RC out=$CAPTURE_OUT"
+  assert_fail "lease-expired: re-claim del implementador" "rc=$CAPTURE_RC out=$CAPTURE_OUT"
 fi
 
 # 6. Attempt se incrementa tras lease expiry
@@ -116,7 +116,7 @@ fi
 
 # 8. Release marca claim como done (solo el owner del claim)
 TASK1_ACTIVE=$(teamdb_exec_value "$DB" "SELECT id FROM task_claims WHERE task_id=(SELECT id FROM tasks WHERE plan_id=? AND slug='task-1') AND status='active'" "$PLAN_ID")
-run_capture "TEAMDB_ACTOR=jhon bash '$ROOT/scripts/teamdb-claim.sh' --release '$TASK1_ACTIVE' --status=done --by=jhon '$TEST_DIR'"
+run_capture "TEAMDB_ACTOR=teo bash '$ROOT/scripts/teamdb-claim.sh' --release '$TASK1_ACTIVE' --status=done --by=teo '$TEST_DIR'"
 if [ "$CAPTURE_RC" = "0" ]; then
   NEW_STATUS=$(teamdb_exec_value "$DB" "SELECT status FROM task_claims WHERE id=?" "$TASK1_ACTIVE")
   if [ "$NEW_STATUS" = "done" ]; then
@@ -143,6 +143,8 @@ if [ "$CAPTURE_RC" != "0" ]; then
 else
   assert_fail "advance approved: actor no-Jhon rechazado" "rc=0 out=$CAPTURE_OUT"
 fi
+TASK_ID="$(teamdb_exec_value "$DB" "SELECT id FROM tasks WHERE slug=?" "task-1")"
+teamdb_exec_write "$DB" "INSERT INTO receipts(id,task_id,agent,command,exit_code,ts,tree_hash) VALUES(?,?,?,'test',0,datetime('now'),'frozen-test')" "jhon-review" "$TASK_ID" "jhon" >/dev/null
 run_capture "TEAMDB_ACTOR=jhon bash '$ROOT/scripts/teamdb-claim.sh' --advance 'claim-test' 'task-1' --to=approved '$TEST_DIR'"
 APPROVED_STATUS=$(teamdb_exec_value "$DB" "SELECT status FROM tasks WHERE plan_id=? AND slug='task-1'" "$PLAN_ID")
 if [ "$CAPTURE_RC" = "0" ] && [ "$APPROVED_STATUS" = "approved" ]; then

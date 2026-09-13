@@ -352,6 +352,9 @@ step_install_hooks() {
     run mkdir -p "$TARGET_DIR/.opencode/plugins/lib"
     run cp "$SCRIPT_DIR/plugins/skalling-data-safety.js" "$TARGET_DIR/.opencode/plugins/skalling-data-safety.js"
     run cp "$SCRIPT_DIR/plugins/lib/data-safety.mjs" "$TARGET_DIR/.opencode/plugins/lib/data-safety.mjs"
+    run cp "$SCRIPT_DIR/plugins/skalling-workflow.js" "$TARGET_DIR/.opencode/plugins/skalling-workflow.js"
+    run cp "$SCRIPT_DIR/plugins/lib/workflow.mjs" "$TARGET_DIR/.opencode/plugins/lib/workflow.mjs"
+    run cp "$SCRIPT_DIR/scripts/skalling-workflow.py" "$TARGET_DIR/.opencode/scripts/skalling-workflow.py"
     run cp "$SCRIPT_DIR/command/skalling-goal.md" "$TARGET_DIR/.opencode/command/skalling-goal.md"
     log INFO "Instalando git hooks en .git/hooks/"
 

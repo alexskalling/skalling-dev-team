@@ -8,7 +8,11 @@ AGENT_FILE="${1:-}"
 
 [ -f "$AGENT_FILE" ] || { echo "ERROR: agente no encontrado: $AGENT_FILE" >&2; exit 1; }
 
-resolved_content="$(cat "$AGENT_FILE")"
+if [ -f "$ROOT/data/permission-policy.json" ]; then
+  resolved_content="$(python3 "$SCRIPT_DIR/permission-policy.py" --render "$AGENT_FILE")"
+else
+  resolved_content="$(cat "$AGENT_FILE")"
+fi
 depth=0
 while [[ "$resolved_content" =~ @include-snippet[[:space:]]+([a-z-]+) ]]; do
   snippet_name="${BASH_REMATCH[1]}"

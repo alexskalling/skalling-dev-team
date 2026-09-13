@@ -450,6 +450,10 @@ install_skalling_scripts() {
     run mkdir -p "$OPENCODE_DIR/plugins/lib"
     run cp "$SCRIPT_DIR/plugins/skalling-data-safety.js" "$OPENCODE_DIR/plugins/skalling-data-safety.js"
     run cp "$SCRIPT_DIR/plugins/lib/data-safety.mjs" "$OPENCODE_DIR/plugins/lib/data-safety.mjs"
+    run cp "$SCRIPT_DIR/plugins/skalling-workflow.js" "$OPENCODE_DIR/plugins/skalling-workflow.js"
+    run cp "$SCRIPT_DIR/plugins/lib/workflow.mjs" "$OPENCODE_DIR/plugins/lib/workflow.mjs"
+    run mkdir -p "$OPENCODE_DIR/scripts"
+    run cp "$SCRIPT_DIR/scripts/skalling-workflow.py" "$OPENCODE_DIR/scripts/skalling-workflow.py"
   # Scripts core de orquestación (skalling-route, skalling-session-start, skalling-receipt).
   # Cualquier skalling-*.sh en scripts/ se copia a ~/.config/opencode/scripts/.
   log INFO "Instalando scripts de orquestación skalling-* en $OPENCODE_DIR/scripts"

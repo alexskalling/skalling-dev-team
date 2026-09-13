@@ -1,0 +1,13 @@
+# Política canónica mínima. Las configuraciones de OpenCode la materializan por
+# rol; los contratos impiden que las rutas seguras o críticas deriven.
+shared_safe_bash:
+  - git -C * diff
+  - git -C * diff *
+  - bash tests/*.test.sh
+  - bash tests/*.test.sh *
+
+critical_bash:
+  - git push
+  - git push *
+  - git reset
+  - git reset *

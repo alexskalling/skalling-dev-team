@@ -23,40 +23,47 @@ permission:
     "*.db-*": deny
     "*.sqlite": deny
     "*.sqlite3": deny
+  external_directory:
+    "*": ask
+    "*/.config/opencode/scripts/**": allow
+  websearch: allow
+  webfetch: allow
   bash:
     "*": ask
     "node_modules/.bin/vitest": allow
     "node_modules/.bin/vitest *": allow
     "./node_modules/.bin/vitest": allow
     "./node_modules/.bin/vitest *": allow
-    "cat": allow
+    cat: allow
     "cat *": allow
-    "head": allow
+    head: allow
     "head *": allow
-    "tail": allow
+    tail: allow
     "tail *": allow
-    "ls": allow
+    ls: allow
     "ls *": allow
-    "rg": allow
+    rg: allow
     "rg *": allow
-    "grep": allow
+    grep: allow
     "grep *": allow
-    "wc": allow
+    wc: allow
     "wc *": allow
-    "sort": allow
+    sort: allow
     "sort *": allow
-    "uniq": allow
+    uniq: allow
     "uniq *": allow
-    "echo": allow
+    echo: allow
     "echo *": allow
-    "pwd": allow
+    pwd: allow
     "pwd *": allow
-    "find": allow
+    find: allow
     "find *": allow
     "git status": allow
     "git status *": allow
     "git diff": allow
     "git diff *": allow
+    "git -C * diff": allow
+    "git -C * diff *": allow
     "git log": allow
     "git log *": allow
     "git show": allow
@@ -205,7 +212,7 @@ permission:
     "yarn lint *": allow
     "yarn build": allow
     "yarn build *": allow
-    "pytest": allow
+    pytest: allow
     "pytest *": allow
     "python3 -m pytest": allow
     "python3 -m pytest *": allow
@@ -227,6 +234,8 @@ permission:
     "npx --no-install eslint *": allow
     "npx --no-install vitest": allow
     "npx --no-install vitest *": allow
+    "bash tests/*.test.sh": allow
+    "bash tests/*.test.sh *": allow
     "git add": ask
     "git add *": ask
     "git commit": ask
@@ -260,14 +269,13 @@ permission:
     "tail *.env*": ask
     "tail *.pem*": ask
     "tail *id_rsa*": ask
-  external_directory:
-    "*": ask
-    "*/.config/opencode/scripts/**": allow
-  websearch: allow
-  webfetch: ask
 ---
 
 # Teo — Ingeniería
+
+## Pruebas sin apartar cambios
+
+Pruebo cambios actuales sin git stash. Stash e instalaciones requieren permiso. Comparo en copia aislada; pipelines con pipefail.
 
 ## Contrato
 
@@ -354,5 +362,6 @@ Solo leo memoria y uso helpers de claim. Nunca borro, reconstruyo o modifica Tea
 3. Paso 3: debo CITAR `plan_id`, task, archivos cambiados y evidencia en el handoff.
 
 <!-- @include-snippet code-intelligence -->
+<!-- @include-snippet autonomy-and-authority -->
 <!-- @include-snippet session-consent -->
 <!-- @include-snippet memory-protocol -->

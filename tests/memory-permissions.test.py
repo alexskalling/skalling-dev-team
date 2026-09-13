@@ -9,6 +9,22 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class MemoryPermissions(unittest.TestCase):
+    def test_local_tests_preserve_working_changes(self):
+        for name in ('Teo', 'Jhon', 'Luz'):
+            rendered = (ROOT / '.opencode/agents' / (name + '.md')).read_text()
+            self.assertIn('## Pruebas sin apartar cambios', rendered)
+            self.assertIn('sin git stash', rendered)
+            rules = yaml.safe_load(rendered.split('---', 2)[1])['permission']['bash']
+            def action(command):
+                return next((value for pattern, value in reversed(list(rules.items()))
+                             if fnmatch.fnmatchcase(command, pattern)), 'ask')
+            for command in ('./node_modules/.bin/vitest run tests/example.test.jsx',
+                            'npx --no-install vitest run tests/example.test.jsx', 'tail -10'):
+                self.assertEqual(action(command), 'allow')
+            for command in ('git stash', 'git stash push', 'git stash pop', 'git stash drop',
+                            'npx vitest run tests/example.test.jsx'):
+                self.assertEqual(action(command), 'ask')
+
     def test_every_agent_has_baseline_read_and_scoped_database_access(self):
         for name in ('Alex', 'Jes', 'Pol', 'Sol', 'Teo', 'Jhon', 'Luz', 'Pau'):
             for folder in ('agents-base', '.opencode/agents'):

@@ -1,5 +1,10 @@
 name: Tests
 
+# La CI sólo necesita leer el checkout; publicar, comentar o modificar estados
+# requiere una autorización explícita en otro workflow.
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main, develop]
@@ -32,8 +37,13 @@ jobs:
           python3 tests/context-regressions.test.py
           python3 tests/installed-workflow.test.py
           python3 tests/memory-permissions.test.py
+          python3 tests/agent-autonomy-contract.test.py
+          python3 tests/agent-behavioral-evals.test.py
+          python3 tests/permission-generation.test.py
+          python3 tests/workflow-engine.test.py
           python3 tests/data-safety.test.py
           node --test tests/data-safety-plugin.test.mjs
+          node --test tests/workflow-plugin.test.mjs
           python3 tests/skalling-goal.test.py
           node --test tests/skalling-goal-plugin.test.mjs
           bash tests/bootstrap-readiness.test.sh
@@ -73,6 +83,9 @@ jobs:
 
       - name: Validate skills-by-stack.yaml
         run: python3 -c "import yaml; yaml.safe_load(open('data/skills-by-stack.yaml'))"
+
+      - name: Validate agent permission policy
+        run: python3 -c "import yaml; yaml.safe_load(open('data/agent-permissions.yaml'))"
 
       - name: Validate handoff.schema.json
         run: python3 -c "import json; json.load(open('templates/handoff.schema.json'))"
