@@ -486,6 +486,14 @@ install_teamdb() {
     log INFO "Instalando teamdb (libSQL)"
 
     run mkdir -p "$OPENCODE_DIR/scripts"
+    # teamdb-claim-task.sh (CAS legacy, removido en Fase 4: sin caller real,
+    # unificado en teamdb-claim.sh). El glob de abajo copia lo que existe en
+    # la fuente pero nunca borra lo que ya no existe -- sin este rm explicito
+    # el fantasma queda instalado para siempre y un agente puede seguir
+    # invocandolo. Mismo patron que skalling-models.sh mas abajo.
+    if [[ -e "$OPENCODE_DIR/scripts/teamdb-claim-task.sh" ]]; then
+        run rm -f "$OPENCODE_DIR/scripts/teamdb-claim-task.sh"  # lens:ok: guarda [[ -e ]] en la línea de arriba, ruta fija
+    fi
     # Descubrir todos los teamdb-*.sh via glob (captura nuevos sin tocar install).
     local script
     for script in "$SCRIPT_DIR"/scripts/teamdb-*.sh; do
