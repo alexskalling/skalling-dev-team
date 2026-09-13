@@ -178,6 +178,7 @@ build_scope_filelist() {
   while IFS= read -r file; do
     [ -z "$file" ] && continue
     # sin comillas alrededor de $scope_pat para permitir expansión de glob
+    # shellcheck disable=SC2254
     case "$file" in
       $scope_pat) ;;
       *) continue ;;
