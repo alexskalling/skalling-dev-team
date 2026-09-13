@@ -95,6 +95,7 @@ jobs:
     name: Cross-platform smoke test
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
 
@@ -109,6 +110,13 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: choco install sqlite --no-progress -y
+
+      - name: Use Homebrew SQLite on macOS (el sqlite3 del sistema no trae FTS5)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          brew install sqlite
+          echo "$(brew --prefix sqlite)/bin" >> "$GITHUB_PATH"
 
       - name: Run complete Bash installation
         shell: bash
