@@ -1,0 +1,30 @@
+name: SQLi Lint
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  sqli-lint:
+    name: "SQL injection linter (gate bloqueante)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install sqlite3 (lib-teamdb.sh helpers)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sqlite3
+      - name: Run SQLi linter on scripts/**
+        # --lens=risk: corre pat_sqli + pat_sqli_dq (comilla simple y doble).
+        # --scope: limita el escaneo a scripts/** (evita ruido en docs/, .opencode/, etc).
+        # --exclude: lista de archivos que matchean por diseño (ver comentario al
+        # tope de scripts/skalling-review.sh para justificación de cada uno).
+        # Si el linter encuentra un BLOCKER, el step falla y bloquea el merge.
+        run: >
+          bash scripts/skalling-review.sh
+          --lens risk
+          --scope 'scripts/**'
+          --exclude 'scripts/lib/lib-teamdb.sh,scripts/skalling-review.sh,scripts/teamdb_exec.py,scripts/hooks/git-gate.py,tests/**,scripts/test-teamdb-safe.sh,scripts/test-teamdb-git-sync.sh,scripts/migrate-legacy-md-to-db.sh'
+          || (echo "::error::SQLi linter encontró patrones vulnerables (ver logs arriba)" && exit 1)

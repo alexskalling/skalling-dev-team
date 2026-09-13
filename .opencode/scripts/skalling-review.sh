@@ -10,10 +10,57 @@
 #   para que el orchestrator delegue a subagentes. El script NO lanza subagentes.
 # Modo --collect <dir>: incorpora findings-<lens>.json producidos por agentes
 #   (BLOCKER → exit 1) y sella el receipt de la revisión con el tree_hash del bundle.
+# Modo --scope/--exclude: CI gate del linter SQLi. Construye un diff sintético con
+#   todas las líneas marcadas como added para los archivos que matchean el glob,
+#   excepto los listados en --exclude. Pensado para correr en .github/workflows/
+#   lint-sqli.yml sobre scripts/** sin tener que preparar un diff staged.
 # Kill switch: SKALLING_REVIEW_MODE=off desactiva (default: on).
+#
+# ─── Excepciones del linter SQLi (pat_sqli + pat_sqli_dq) ──────────────────────
+# El linter detecta interpolación de variables en queries `sqlite3 ... "$VAR"` /
+# `sqlite3 ... '$VAR'` (riesgo de SQL injection si $VAR contiene caracteres de
+# control). Estos archivos son EXCEPCIONES documentadas — los patrones matchean
+# por diseño, no por bug:
+#   - scripts/lib/lib-teamdb.sh  → provee helpers seguros (_sql_quote,
+#                                 teamdb_exec_value con real parameter binding).
+#                                 El linter vería las firmas y los usos internos.
+#   - scripts/skalling-review.sh → define pat_sqli/pat_sqli_dq como literales
+#                                 regex (líneas ~447-453). Los '$' que matchea
+#                                 son parte de la definición del patrón.
+#   - scripts/teamdb_exec.py     → wrapper Python con sqlite3 bind params (R10).
+#                                 Matchea por las definiciones de patrones
+#                                 DML_DANGEROUS/DDL_BENIGN_PREFIXES.
+#   - tests/**                   → fixtures con payloads SQLi intencionales
+#                                 para validar que el código NO es vulnerable.
+#   - scripts/hooks/git-gate.py  → gate Python pre-push, no shell con sqlite3.
+#   - scripts/test-teamdb-safe.sh,
+#     scripts/test-teamdb-git-sync.sh → fixtures de test bajo scripts/ (no
+#                                 tests/ por legacy de nombres); slugs/valores
+#                                 hardcodeados en asserts, mismo caso que
+#                                 tests/**.
+#   - scripts/migrate-legacy-md-to-db.sh → `SELECT COUNT(*) FROM $t` interpola
+#                                 un nombre de TABLA, no un valor; $t itera un
+#                                 enum fijo definido en la misma línea de arriba
+#                                 (concepts/decisions/work_in_progress/
+#                                 preferences/known_problems), nunca input
+#                                 externo. Los `?` de sqlite3 no bindean
+#                                 identificadores de tabla/columna, así que esto
+#                                 no es parametrizable — es el patrón correcto.
+# La lista se materializa en el flag --exclude de .github/workflows/lint-sqli.yml.
+# Si agregás una excepción nueva, actualizá AMBOS: este comentario y el workflow.
+#
+# ─── Excepción de línea puntual: `# lens:ok <motivo>` ──────────────────────────
+# Para un caso aislado dentro de un archivo que por lo demás sí queremos
+# revisado (no amerita excluir el archivo entero), se puede marcar la línea
+# exacta con un comentario al final: `algo-riesgoso  # lens:ok: por qué es
+# seguro`. El motivo queda al lado del código, visible en cualquier diff o
+# blame — no en un YAML aparte que nadie relee. Usar con criterio: es una
+# excepción por línea, no una forma de silenciar el lens en general.
+#
 # Uso: bash skalling-review.sh [--lens risk|resilience|readability|reliability|all]
 #                              [--cwd <dir>] [--diff <range>]
 #                              [--deep] [--collect <bundle-dir>]
+#                              [--scope <glob>] [--exclude <csv>]
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -40,9 +87,11 @@ CWD="$(pwd)"
 DIFF_RANGE=""
 DEEP=0
 COLLECT_DIR=""
+SCOPE=""
+EXCLUDE=""
 
 usage() {
-  echo "Uso: bash skalling-review.sh [--lens risk|resilience|readability|reliability|all] [--cwd <dir>] [--diff <range>] [--deep] [--collect <bundle-dir>]"
+  echo "Uso: bash skalling-review.sh [--lens risk|resilience|readability|reliability|all] [--cwd <dir>] [--diff <range>] [--deep] [--collect <bundle-dir>] [--scope <glob>] [--exclude <csv>]"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -65,6 +114,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --collect)
       COLLECT_DIR="${2:-}"
+      shift 2
+      ;;
+    --scope)
+      SCOPE="${2:-}"
+      shift 2
+      ;;
+    --exclude)
+      EXCLUDE="${2:-}"
       shift 2
       ;;
     --help|-h)
@@ -98,6 +155,73 @@ if [ -z "$PROJECT" ]; then
   echo "ERROR: $CWD no es un repositorio git" >&2
   exit 2
 fi
+
+# ── Helpers para modo --scope (CI gate lint-sqli.yml) ──
+# Definidos aquí (antes de su uso en línea ~269) porque bash registra funciones
+# en runtime, no eagerly: si se llaman antes de llegar a su `function_name() {`,
+# fallan con "command not found".
+
+# build_scope_filelist: emite paths tracked que matchean <glob>, uno por línea,
+# saltando los listados en <csv>. Pensado para diff_files en modo --scope.
+# NOTA: el pattern va SIN comillas en el `case` para que bash expanda `*` y
+# `**` como glob (pathname expansion). Si se pone `"$scope_glob"`, bash trata
+# el `*` como literal y NUNCA matchea. Soporta `**` traduciéndolo a `*` porque
+# bash 3.2 (macOS) no tiene globstar; el case-pattern de bash expande `*` a
+# "cualquier secuencia incluso con /", así que `scripts/*` matchea todo lo
+# debajo de scripts/ incluyendo subdirectorios.
+build_scope_filelist() {
+  local scope_glob="$1"
+  local excludes_csv="$2"
+  local file
+  # `**` → `*` (bash 3.2 case-pattern ya trata `*` como "cualquier cosa")
+  local scope_pat="${scope_glob//\*\*/*}"
+  while IFS= read -r file; do
+    [ -z "$file" ] && continue
+    # sin comillas alrededor de $scope_pat para permitir expansión de glob
+    case "$file" in
+      $scope_pat) ;;
+      *) continue ;;
+    esac
+    if [ -n "$excludes_csv" ]; then
+      case ",${excludes_csv}," in
+        *,"$file,"*) continue ;;
+      esac
+    fi
+    printf '%s\n' "$file"
+  done < <(git -C "$PROJECT" ls-files 2>/dev/null || true)
+}
+
+# build_scope_diff: arma un diff sintético donde cada archivo en scope aparece
+# con todas sus líneas marcadas como added. Esto permite que `added_lines` y los
+# lenses corran el mismo flujo que con un diff real, sin staged changes.
+build_scope_diff() {
+  local scope_glob="$1"
+  local excludes_csv="$2"
+  local file line_count line
+  while IFS= read -r file; do
+    [ -z "$file" ] && continue
+    local full_path="$PROJECT/$file"
+    [ -f "$full_path" ] || continue
+    line_count=$(wc -l < "$full_path" | tr -d ' ')
+    if [ "$line_count" = "0" ]; then
+      # wc -l devuelve 0 para archivos sin trailing newline; también si el archivo está vacío.
+      printf '%s\n' "--- a/$file"
+      printf '%s\n' "+++ b/$file"
+      printf '%s\n' "@@ -0,0 +1,1 @@"
+      printf '%s\n' "+"
+      continue
+    fi
+    printf '%s\n' "--- a/$file"
+    printf '%s\n' "+++ b/$file"
+    printf '%s\n' "@@ -0,0 +1,$line_count @@"
+    # Marcar cada línea como added; preservar contenido literal (los `+` que
+    # pudiera haber en el código fuente se interpretan como prefijo de diff, no
+    # como contenido — el parser de added_lines los maneja tal cual).
+    while IFS= read -r line; do
+      printf '%s\n' "+$line"
+    done < "$full_path"
+  done < <(build_scope_filelist "$scope_glob" "$excludes_csv")
+}
 
 # ── Modo --collect: incorpora findings de agentes (resultado de --deep) ──
 # Lee findings-<lens>.json del bundle congelado; cualquier BLOCKER falla el
@@ -224,6 +348,13 @@ fi
 DUMP_EXCLUDE='-- . :(exclude)db/teamdb/team.dump.sql'
 if [ -n "$DIFF_RANGE" ]; then
   DIFF_TEXT="$(git -C "$PROJECT" diff "$DIFF_RANGE" $DUMP_EXCLUDE 2>/dev/null || true)"
+  TREE_HASH="$(printf '%s' "$DIFF_TEXT" | shasum -a 256 | cut -c1-16)"
+elif [ -n "$SCOPE" ]; then
+  # ── Modo --scope: CI gate (lint-sqli.yml). Construye un diff sintético donde
+  # todas las líneas de los archivos en scope aparecen como added, para que
+  # `added_lines` las procese con el mismo código del lens_risk sin tener que
+  # preparar un diff staged. Pensado para escaneo completo, no incremental.
+  DIFF_TEXT="$(build_scope_diff "$SCOPE" "$EXCLUDE")"
   TREE_HASH="$(printf '%s' "$DIFF_TEXT" | shasum -a 256 | cut -c1-16)"
 else
   DIFF_TEXT="$(git -C "$PROJECT" diff --cached $DUMP_EXCLUDE 2>/dev/null || true)"
@@ -417,9 +548,27 @@ diff_files() {
   if [ -n "$DIFF_RANGE" ]; then
     # shellcheck disable=SC2086
     git -C "$PROJECT" diff $DIFF_RANGE --name-only 2>/dev/null || true
+  elif [ -n "$SCOPE" ]; then
+    # Modo --scope: lista archivos tracked que matchean el glob (excluyendo los de --exclude).
+    build_scope_filelist "$SCOPE" "$EXCLUDE"
   else
     git -C "$PROJECT" diff --cached --name-only 2>/dev/null || true
   fi
+}
+
+# rm_targets_are_mktemp <file> <content>
+# true si TODAS las variables ($VAR o ${VAR}) referenciadas en <content> (la
+# línea del rm) fueron asignadas vía `mktemp` en algún lugar de <file>. Exige
+# que TODAS lo sean (no alguna) para no aflojar de más una línea que mezcla
+# una var segura con una que no lo es (ej: `rm -rf "$TMP_DIR" "$USER_INPUT"`).
+rm_targets_are_mktemp() {
+  local file="$1" content="$2" var found_any=0
+  [ -f "$file" ] || return 1
+  for var in $(printf '%s' "$content" | grep -oE '\$\{?[A-Za-z_][A-Za-z0-9_]*\}?' | tr -d '${}' | sort -u); do
+    found_any=1
+    grep -qE "^[[:space:]]*(local[[:space:]]+)?${var}=.*mktemp" "$file" || return 1
+  done
+  [ "$found_any" = "1" ]
 }
 
 # ── Lens risk ──
@@ -436,14 +585,37 @@ lens_risk() {
   # $TMP/$TMPDIR/$HOME y ~/ sí son variables controladas (dependen de la sesión,
   # no son destructivas por sí solas); `[ -n/-z/-f/-d ]` en la MISMA línea es la
   # verificación previa que exige el repo antes de rm sobre una variable.
-  # NOTA: $TMP_DIR/$TARGET_DIR NO protegen → siguen siendo BLOCKER (el repo pide
-  # verificación explícita en la misma línea antes de rm sobre variables propias).
+  # NOTA (revisado): $TMP_DIR/$TARGET_DIR YA NO son BLOCKER automático si la
+  # MISMA variable objetivo del rm fue asignada vía `mktemp` en el archivo —
+  # ver rm_targets_are_mktemp() más abajo. mktemp garantiza una ruta única y
+  # no vacía por construcción (y bajo `set -e` el script aborta antes de llegar
+  # al rm si mktemp falla); exigir además un `[ -n ]` en la misma línea es
+  # verificación redundante, no protección real. Cualquier otra variable propia
+  # (no-mktemp) sigue exigiendo guarda explícita en la misma línea.
   local pat_rm_guard='\$TMPDIR|\$TMP\b|\$HOME|~/|\[[[:space:]]+-[nzfd]'
   local pat_rm_sys='rm[[:space:]]+-[rf]+[[:space:]]+/(tmp|var/tmp|var/folders)/'
   local pat_curl='(curl|wget)[^|;]*( -k|--insecure)'
   local pat_http='http://'
   local pat_chmod='chmod[[:space:]]+777'
-  local pat_secret="(api[_-]?key|secret|password|passwd|token)[[:space:]]*=[[:space:]]*[\"']?[^\"'[:space:]$]"
+  # Requiere valor entre comillas SIN '$' adentro (6+ chars): descarta
+  # placeholders de bind (`token=?`) y valores generados en runtime
+  # (`token="atmp_$(...)"`) sin dejar de detectar un literal hardcodeado real
+  # (`password="hunter2ABCDEF"`). "token" se sacó de la lista de keywords: es
+  # genérico (locks, request tokens) y produce ruido; los tokens reales con
+  # forma de credencial (ghp_/sk-/AIza/AKIA/Bearer) ya los cubre git-gate.py
+  # con prefijos específicos, más preciso que este heurístico por palabra.
+  local pat_secret="(api[_-]?key|secret|password|passwd)[[:space:]]*=[[:space:]]*[\"'][^\"'\$]{6,}[\"']"  # lens:ok: definición del propio patrón, no un secreto real (mismo caso que pat_sqli/pat_sqli_dq)
+  # SQL injection (pat_sqli + pat_sqli_dq). Coincide con código del estilo
+  # `sqlite3 "$DB" "...'$VAR..."` o `sqlite3 "$DB" "...\"$VAR...\""`. Riesgo:
+  # si $VAR contiene `';DROP TABLE ...;--` u otros payloads, el SQL se ejecuta.
+  # EXCEPCIONES (ver cabecera): estos archivos matchean por diseño, no por bug:
+  #   - scripts/lib/lib-teamdb.sh       (provee _sql_quote + teamdb_exec_value)
+  #   - scripts/skalling-review.sh      (define estos patrones como regex)
+  #   - scripts/teamdb_exec.py          (wrapper Python con real bind params)
+  #   - tests/**                        (fixtures con payloads SQLi)
+  #   - scripts/hooks/git-gate.py       (gate Python, no shell con sqlite3)
+  # Las exclusiones se materializan en .github/workflows/lint-sqli.yml via
+  # `--exclude` (no en este script — operate on diff, no on file path).
   local pat_sqli="sqlite3[^;]*'\\\$[A-Za-z_]"
   # Interpolación de variables dentro de la QUERY (comillas dobles). Pide keyword
   # SQL (SELECT/INSERT/UPDATE/DELETE) en la MISMA línea para no apuntar al path
@@ -459,6 +631,14 @@ lens_risk() {
     case "$content_trim" in
       \#*) continue ;;
     esac
+    # Marcador de excepción auditable: un humano revisó ESTA línea puntual y
+    # dejó por qué es segura, en vez de ensanchar una regex genérica para un
+    # caso puntual (ej: ruta fija construida una vez, loop ya validado por un
+    # `case` previo). Vive en el diff, no en un YAML aparte — se ve al lado
+    # del código que justifica. Formato: `# lens:ok <motivo>` al final de línea.
+    case "$content" in
+      *'# lens:ok'*) continue ;;
+    esac
     if printf '%s' "$content" | grep -qE "$pat_eval" \
        && ! printf '%s' "$content" | grep -qE "$pat_eval_quoted"; then
       add_finding "BLOCKER" "risk" "$file:$ln" "eval sin comillas"
@@ -468,7 +648,8 @@ lens_risk() {
     if printf '%s' "$content" | grep -qE "$pat_rm"; then
       if printf '%s' "$content" | grep -qE "$pat_rm_sys"; then
         add_finding "BLOCKER" "risk" "$file:$ln" "rm -rf sobre ruta temp del sistema (/tmp,/var/tmp,/var/folders)"
-      elif ! printf '%s' "$content" | grep -qE "$pat_rm_guard"; then
+      elif ! printf '%s' "$content" | grep -qE "$pat_rm_guard" \
+           && ! rm_targets_are_mktemp "$file" "$content"; then
         add_finding "BLOCKER" "risk" "$file:$ln" "rm -rf sin guarda de ruta"
       fi
     fi
