@@ -1,727 +1,107 @@
 -- teamdb dump v1
 -- Generado por teamdb-dump.sh. NO editar a mano; el diff se mergea por fila.
 -- Source of truth: .opencode/context/team.db (la DB local). Este archivo es su fotografía.
-INSERT INTO "concepts" ("id","slug","title","body_md","category","has_ui","updated_at") VALUES (1,'teamdb','TeamDB v0.7.2 — ciclo de planificación en DB','
-# TeamDB v0.7.2
-
-## What
-
-TeamDB es la capa de persistencia de Skalling basada en libSQL (SQLite + FTS5), con dos bases: una global (`~/.config/opencode/team.db`) y una por proyecto (`<proyecto>/.opencode/context/team.db`). Desde v0.7.2 es la **fuente canónica** de estado, versiones, planes y ejecución de trabajo: el ciclo SDD completo (proposals → plans → tasks) vive en la DB, y el markdown exportado es solo representación legible para Git.
-
-## Why
-
-v0.7.0 introdujo las DBs pero el ciclo de trabajo seguía operando sobre markdown (`.opencode/changes/`, `.jsonl` legacy). La auditoría que originó este change encontró 23 hallazgos: SQL injection en `teamdb-search.sh`/`teamdb-related.sh`, escrituras no portables, snippets duplicados en los 8 agentes, audit log sin atribución real (`agent=''system''`), handoffs sin validación en runtime y cero cobertura CI de teamdb. El dolor central: no se podía confiar en el estado ni en la seguridad de las escrituras.
-
-## Where
-
-- `.opencode/changes/archive/2026-08/teamdb-hardening/` — plan completo (proposal, spec, design, tasks, receipts) que implementó v0.7.2
-- `sql/project-schema.sql` / `sql/global-schema.sql` — esquemas; v0.7.2 agrega `task_dependencies`, `task_claims`, `plan_history`, `task_context_capsules`, `problems_fts` y `audit_log.actor_source`
-- `scripts/lib/lib-teamdb.sh` — helpers `teamdb_exec_query`/`teamdb_exec_write` (wrappers de `scripts/teamdb_exec.py`, SQL con bound params reales); `teamdb_safe_query` quedó deprecated
-- `scripts/teamdb-{plan,status,amend,execute-plan,resume,deps,claim,context,export-md}.sh` — ciclo de planificación en DB (amendment atómico con version/historial; DAG con detección de ciclos; claims con lease/attempt/input_hash; execute-plan solo orquesta, no ejecuta shell — DC-3)
-- `templates/agents/snippets/{code-intelligence,memory-protocol}.md` — single source; los 8 agentes usan markers `@include-snippet` resueltos build-time por `install-global.sh` (DC-2)
-- `templates/handoff.schema.json` — `allOf` if/then: `project_context` required si `to` ∈ {TEO, LUZ}; `verification` required si `to` ∈ {JHON, LUZ} o emisor de ingeniería
-- `.github/workflows/{tests,teamdb-sqli,handoffs,teamdb-dag-claims}.yml` — 4 workflows de CI
-- `tests/teamdb-hardening-suite.sh` — suite agregadora (regresión 45/45)
-
-## Learned
-
-- **Escape manual no es destino final**: la primera iteración de `teamdb_safe_query` escapaba `''` con `sed "s/''/''''/g"`; el round 2 la reemplazó por `scripts/teamdb_exec.py` con bound params reales (Python `sqlite3`). El CLI `sqlite3` no soporta bind portablemente; Python sí. `teamdb_safe_query` quedó exportada como deprecated para no romper los tests de Fase 1.
-- **flock → transacciones SQLite**: las escrituras concurrentes se resolvieron con `BEGIN IMMEDIATE` + WAL + `busy_timeout` en vez de `flock` (más portable y atómico a nivel DB).
-- **Triggers no pueden leer variables de entorno**: el audit log real sale del helper (`actor_source=''helper''` con el actor vía `TEAMDB_ACTOR`); los triggers registran `actor_source=''trigger''` con `''system''`. Los lectores filtran por `actor_source` para atribución real.
-- **El bundle `.opencode/context/` de este repo estaba vacío durante el change**: el proposal registró "bundle corrupto, saltando check"; los concept docs se consolidaron recién al cierre (este doc es el primero). No hay contradictores.
-- **Deuda detectada y no resuelta en este change**: `tests/spec-memory-link.test.sh` asume VERSION 0.6.2 (fallaba ya antes del bump 0.7.x, riesgo R-F2-6 documentado en receipt de Fase 2); `receipt_fase2_teo.json` quedó con JSON malformado en la línea 177 (verificación de Jhon fue manual, no parseó el archivo).','concept',0,'2026-08-05T20:28:57Z');
-INSERT INTO "decisions" ("id","slug","title","body_md","status","decided_at","decided_by") VALUES (1,'grafo-wip-y-decisions-v0.7.6','Grafo de memoria ahora incluye WIP y auto-link decisions→concepts','
-# v0.7.6 — Grafo de memoria con WIP y auto-link decisions→concepts
-
-## Contexto
-
-Antes de v0.7.6, el grafo de memoria (`memory_links` + concepts/decisions) NO incluía features/tasks activas de `work_in_progress`. Pol/Teo no veían si una feature ya estaba en curso y duplicaban trabajo.
-
-Además, las decisions no estaban linkeadas automáticamente a los concepts que referenciaban en su `body_md`. Para entender "por qué elegimos PostgreSQL" había que leer todas las decisions y buscar manualmente.
-
-## Decisión
-
-### 1. Incluir WIP en el grafo
-
-- Cada WIP con `type IN (''feature'',''task'')` y `parent_id IS NOT NULL` aparece como nodo en el grafo
-- Link `part_of` entre WIP hijo y su parent (task→feature, feature→plan)
-- Visible en `/api/graph` del dashboard
-
-### 2. Auto-link decisions → concepts
-
-- Si el `body_md` de una decision menciona el slug de un concept (substring match), se crea link `decision → concept` con `link_type=''references''`, `confidence=0.9`
-- Idempotente (no duplica links existentes)
-- Riesgo bajo: si un slug contiene `%` o `_` (wildcards de LIKE), podría haber falsos positivos. Por convención los slugs son kebab-case.
-
-### 3. Comando unificado
-
-`teamdb-graph-refresh.sh` corre ambos refreshes (memoria + código) en un solo comando.
-
-### 4. R14 en constitución — ahorro de tokens
-
-R14 ahora formaliza que los 8 agentes DEBEN consultar grafos antes de proponer cambios. Ejemplo cuantificado: Teo ahorra 75% de tokens si consulta el grafo antes de implementar.
-
-## Consecuencias
-
-### Positivas
-
-- Pol/Teo/Jes pueden ver features activas sin abrir la DB
-- Pau auto-linkea decisions al consolidar
-- Dashboard muestra grafo completo (29 nodos en Infra de muestra)
-- Comando `/skalling-graph-refresh` unificado para refresh on-demand
-
-### Negativas / Riesgos
-
-- LIKE substring search es O(n*m) — aceptable porque decisions son pocas
-- Schema migration 008 puede ser frágil si se interrumpe a mitad (mitigado por `|| true` en init)
-- Link huérfano histórico detectado y limpiado (id=56, preservado en backup)
-
-## Tests
-
-- `tests/teamdb-link.test.sh`: 11/11 PASS
-- Caso C10 nuevo: "R4 no crea part_of entre concepts" — invariante R4
-
-## Artefactos
-
-- `sql/migrations/008_extend_link_types.sql`
-- `scripts/teamdb-link.sh` (R4 + R5)
-- `scripts/teamdb-graph-refresh.sh` (nuevo)
-- `scripts/dashboard-server.py` (refactor)
-- `command/skalling-graph-refresh.md` (nuevo)
-- `constitucion/constitucion.md` (R14 ampliado)
-- `agents-base/*.md` (8 archivos con sección de grafos)','accepted','2026-08-05','Pau (consolidación v0.7.6)');
-INSERT INTO "decisions" ("id","slug","title","body_md","status","decided_at","decided_by") VALUES (2,'plan-unico-versionado-v0.7.7','Plan único versionado (v0.7.7)','
-# Decisión: Plan único versionado (v0.7.7)
-
-## Contexto
-
-Antes de v0.7.7, los planes vivían mayormente en archivos `.md` bajo `.opencode/changes/<slug>/` y la DB servía solo como espejo parcial. Esto causaba:
-
-- **Dos planes paralelos por feature**: `proposal.md` (Pol) + `design.md` (Sol) sobre el mismo tema.
-- **Tasks con títulos poéticos** sin propósito ni criterios de aceptación verificables.
-- **Sol CREABA OTRO PLAN en vez de mejorar el existente** cuando necesitaba más detalle.
-- **Teo se inventaba planes** en lugar de consultar el plan activo por slug.
-- **Dos sources of truth**: las tasks existían en `.md` Y en la tabla `tasks` de `team.db`, divergentes.
-
-## Decisión
-
-Adoptar el modelo **"1 plan semántico por `feature-slug`, viviendo en la DB"** con las siguientes reglas duras:
-
-1. **1 plan activo por `feature-slug`** (en `draft|approved|in_progress`). Constraint: `UNIQUE(slug)`.
-2. **Source of truth = DB** (`proposals` + `plans` + `tasks` + `task_dependencies` + `plan_history` + audit triggers). Los `.md` son SOLO exports legibles para git, siempre con header `<!-- GENERATED -->`.
-3. **Lifecycle explícito**: `draft → approved → in_progress → completed` (+ `abandoned`).
-4. **Tasks con contrato**: `purpose` (1-2 frases) + `acceptance_md` (criterios verificables) + `order_index` + DAG via `task_dependencies`. Títulos NO poéticos (heurística: 4+ palabras lowercase = rechazado).
-5. **Pol escribe el `proposal`**, Sol hace `UPDATE` del mismo plan (no crea otro), Teo busca el plan activo por slug en la DB, Luz verifica contra `acceptance_md`, Pau cierra.
-
-## Schema (migration 009)
-
-- `plans`: agrega `intent_md` (copia del `proposal.intent_md`), `version` (entero, bumpeado en cada UPDATE), `created_by`, `updated_by`.
-- `plans.status`: nueva CHECK constraint reemplaza `active` por `in_progress`.
-- `tasks`: agrega `purpose TEXT NOT NULL DEFAULT ''''`.
-- 2 audit triggers sobre `plans` (insert + update) registran en `audit_log`.
-- `schema_meta.version = ''0.7.7''`.
-
-## Scripts
-
-- `teamdb-plan.sh --strict-contract --purpose=... --acceptance=...`: crea plan atómicamente, rechaza tasks sin propósito/AC, rechaza títulos poéticos.
-- `teamdb-amend.sh --slug=<slug> [--add-task=<json>] [--design-stdin]`: UPDATE del plan, bumpea `version`, append a `plan_history` con `operation=''amended''`. `--add-task` exige `--purpose`.
-- `teamdb-execute-plan.sh`: rechaza ejecución si `status NOT IN (''approved'',''in_progress'')`.
-
-## Agentes
-
-- `Pol.md`: regla explícita "NO escribir archivos `.md` de plan. SOLO INSERT en `proposals` via `teamdb-plan.sh`."
-- `Sol.md`: regla "Cuando recibís handoff de Pol con `proposals.status=''approved''`, hacés UPDATE del plan existente (`teamdb-amend.sh`), NO creás otro."
-- `Teo.md`: regla "Antes de ejecutar, `teamdb-execute-plan.sh --slug=<slug> --dry-run`. NO inventar plan propio."
-- `Luz.md`: regla "Verificás cada task contra su `acceptance_md`. Marcás `approved` con evidencia o `rejected` con razón."
-
-## Skills
-
-- `skills-base/writing-plans/SKILL.md` reescrita para v0.7.7. Ahora referencia `teamdb-plan.sh --strict-contract` y `teamdb-amend.sh`. Títulos poéticos y tasks sin propósito/AC son rechazados.
-
-## Consecuencias
-
-### Positivas
-
-- 1 source of truth (la DB). Los `.md` son export.
-- Lifecycle auditable via `audit_log` + `plan_history.version`.
-- Tasks ejecutables con criterios verificables (Luz puede validar objetivamente).
-- DAG explícito via `task_dependencies` (ya existía, ahora se usa consistentemente).
-- Curva de aprendizaje: tests FIX 1.3/1.4/1.5/1.6 garantizan que las reglas se cumplen.
-
-### Negativas / Riesgos
-
-- Migración de planes `.md` viejos a la DB (Bloque 4): los `.md` ya existentes en `.opencode/changes/` se importan con sufijo `-legacy-imported` y `decided_by=''legacy-import''`. Idempotente.
-- Breaking change para clientes que leían `team.db` directo asumiendo schema viejo. Mitigación: columnas nuevas son nullable, no rompe queries existentes.
-- Performance del ALTER TABLE recreate para DBs con miles de plans. Mitigación: aceptable para meta-proyecto (decenas), problemático para >1000 plans (futuro: flag `--no-rebuild` con ADD COLUMN en lugar de recreate).
-
-## Related
-
-- `agentes-db-primera-2026-08-06`: ciclo DB-primera en agents-base (predecesor).
-- `fix-skills-docs-plans-2026-08-06`: fix de skills brainstorming/writing-plans (predecesor paralelo).
-- constitution R6: ubicación canónica `.opencode/changes/<feature-slug>/` (mantener para exports).
-- constitution R14: "consultá la DB primero" (esta propuesta la enforce en planes).
-- schema v0.7.6 → v0.7.7 (migration 009).
-
-## Implementación
-
-5 commits secuenciales:
-
-1. `feat(skills): reescribir writing-plans para v0.7.7`
-2. `feat(migration): script para migrar planes .md viejos a la DB`
-3. `feat(db): migration 009 plan_contract (v0.7.7)`
-4. `docs(contexto): decision plan-unico-versionado v0.7.7` ← este archivo
-5. `chore(db): persistencia de los 3 nuevos proposals + export legible`','accepted','','user');
-INSERT INTO "preferences" ("id","slug","scope","scope_value","body_md","confidence","source") VALUES (1,'slugs-kebab-case','project',NULL,'
-# Slugs siempre en kebab-case
-
-Convención del proyecto: todos los slugs de concepts/decisions/preferences/problems/wip son kebab-case (lowercase + guiones). Ejemplos:
-- ✅ `modulo-app`, `stack-postgres`, `auth-jwt`, `feat-login-jwt`
-- ❌ `moduloApp`, `modulo_app`, `ModuloApp`, `modulo.app`
-
-## Por qué
-
-1. **SQL safe**: kebab-case no contiene `%`, `_` ni otros wildcards de LIKE. Importante para R5 de `teamdb-link.sh` que hace substring match.
-2. **URL safe**: kebab-case es la convención para URLs y slugs.
-3. **Multi-lenguaje**: funciona en bash, python, JS sin quoting especial.
-
-## Regla
-
-Si vas a crear un slug nuevo, usá solo letras minúsculas, números y guiones.','','Preference');
-INSERT INTO "known_problems" ("id","slug","title","symptom_md","workaround_md","status","discovered_at","resolved_at") VALUES (1,'like-substring-false-positives','LIKE substring match puede generar falsos positivos en auto-link decisions→concepts','
-# LIKE substring match — riesgo de falsos positivos
-
-## Síntoma
-
-R5 de `teamdb-link.sh` usa `body_md LIKE ''%'' || slug || ''%''` para detectar menciones de concepts en decisions. Si un slug contiene `%` o `_` (wildcards de SQL LIKE), podría matchear con texto que no es realmente una mención.
-
-## Causa raíz
-
-SQL LIKE trata `%` (cualquier secuencia) y `_` (cualquier carácter) como wildcards. La query actual no los escapa.
-
-## Workaround
-
-Convención del proyecto: todos los slugs son kebab-case (ej: `modulo-app`, `stack-postgres`, `auth-jwt`). No se usan `%`, `_` ni otros caracteres especiales en slugs.
-
-## Fix futuro (no aplicado)
-
-Cambiar la query a `instr(body_md, slug) > 0` (substring search sin wildcards) o escapar con `replace(replace(slug, ''%'', ''\%''), ''_'', ''\_'')`.
-
-## Severidad
-
-Baja. No bloqueante. Solo aplica si alguien rompe la convención de slugs.','|','open','2026-08-05',NULL);
-INSERT INTO "work_in_progress" ("id","slug","type","parent_id","title","description","status","priority","owner","body_md","acceptance_md","resolution_md","created_at","updated_at","resolved_at") VALUES (1,'followup-v0.6.0','plan',NULL,'Follow-ups para v0.6.0','# Follow-ups para v0.6.0
-
-Hallazgos menores pendientes del Quality Gate de v0.5.0 (drift detection).
-
-## Pendientes
-
-1. **`setup.sh:31` tiene `SKALLING_VERSION="0.1.0"` stale.** Bumpear a `"0.5.0"` (o','open',3,NULL,'# Follow-ups para v0.6.0
-
-Hallazgos menores pendientes del Quality Gate de v0.5.0 (drift detection).
-
-## Pendientes
-
-1. **`setup.sh:31` tiene `SKALLING_VERSION="0.1.0"` stale.** Bumpear a `"0.5.0"` (o versión actual al momento del fix). No afecta funcionalidad, solo display.
-
-## Origen
-
-Luz — Quality Gate del release v0.5.0 (drift detection), release commit `ff7f4e1`.
-
-## Estado del release
-
-- Tag: `v0.5.0` pusheado contra origin
-- 458 tests PASS, doctor exit 0
-- Quality Gate: PASSED',NULL,NULL,'2026-08-20T15:36:43Z','2026-08-20T15:36:43Z',NULL);
-INSERT INTO "work_in_progress" ("id","slug","type","parent_id","title","description","status","priority","owner","body_md","acceptance_md","resolution_md","created_at","updated_at","resolved_at") VALUES (2,'followup-v0.7.2','plan',NULL,'Follow-ups para v0.7.2','# Follow-ups para v0.7.2
-
-Hallazgos menores pendientes del Quality Gate de v0.7.2 (teamdb-hardening) y observaciones de cierre.
-
-## Pendientes
-
-1. **`templates/handoff.schema.json` — `verification: ','open',3,NULL,'# Follow-ups para v0.7.2
-
-Hallazgos menores pendientes del Quality Gate de v0.7.2 (teamdb-hardening) y observaciones de cierre.
-
-## Pendientes
-
-1. **`templates/handoff.schema.json` — `verification: {}` vacío sigue siendo aceptado.** Requerir `type`/`command`/`exit_code` internos para que la validación de handoffs sea estricta de verdad.
-2. **`scripts/teamdb-search.sh:26` — validación de tipo con `grep -q " $ARG2 "` (regex).** `[a-z]` como ARG2 matchea inesperadamente. Usar `case` o `grep -F`.
-3. **`scripts/teamdb-search.sh:83` — sanitización FTS5 blacklist incompleta.** Sin riesgo real: los params van bound.
-4. **`install-global.sh:220` — `printf ''%s\n''` agrega newline extra** si el contenido ya termina en newline (cosmético).
-5. **`receipt_fase2_teo.json` (en `.opencode/changes/archive/2026-08/teamdb-hardening/receipts/`) está malformado** — JSON inválido (error de delimitador ~línea 177). Regenerar en próxima iteración (no bloqueó: Jhon verificó manualmente).
-6. **CHANGELOG salta de v0.7.0 a v0.7.2** — el commit `7701af3` dice "teamdb v0.7.1" pero no hay entrada v0.7.1 en CHANGELOG ni tags v0.7.0/v0.7.1. Decidir si agregar entrada retroactiva.
-7. **Mantenimiento (Luz, no urgente): `teamdb-amend.sh` invoca python3 4 veces por operación** (3 × json.dumps + 1 heredoc). Si se optimiza, NO volver a `IFS=''|''`; el patrón JSON es el correcto.
-
-## Origen
-
-Luz — re-auditoría del release v0.7.2 (teamdb-hardening) + observaciones de cierre de Pau.
-
-## Estado del release
-
-- Commits: `9d3f120`, `84226b3`, `cfbf3f3`, `6ad8944`, `9e56b79` en rama `teamdb`
-- Regresión: 45/45
-- Quality Gate: PASSED',NULL,NULL,'2026-08-20T15:36:43Z','2026-08-20T15:36:43Z',NULL);
-INSERT INTO "memory_links" ("id","from_table","from_id","to_table","to_id","link_type","confidence") VALUES (1,'decisions',1,'concepts',1,'references',0.9);
-INSERT INTO "memory_links" ("id","from_table","from_id","to_table","to_id","link_type","confidence") VALUES (2,'decisions',2,'concepts',1,'references',0.9);
-INSERT INTO "proposals" ("id","slug","title","intent_md","questions_json","status","agent","decided_by","created_at","updated_at","decided_at") VALUES (1,'agentes-db-primera-2026-08-06-legacy-imported','Protocolo DB-primera: agentes consultan team.db antes de leer el proyecto','# Protocolo DB-primera: agentes consultan team.db antes de leer el proyecto
-
-**Slug:** agentes-db-primera-2026-08-06
-**Status:** approved
-**Agent:** pol
-**Fecha:** 2026-08-06 13:19:03
-
-## Contexto
-
-Hoy cuando un usuario pide un plan, los agentes Alex/Pol/Sol/Teo leen 5-10 archivos del proyecto para entender qué existe, en lugar de consultar la tabla concepts de team.db. Aunque hay una regla soft en constitución R14 "consultá la DB primero", no se enforce.
-
-## Causa raíz
-
-Los agentes LLMs ignoran instrucciones narrativas cuando tienen un read/grep tentador disponible. La DB requiere esfuerzo explícito (`teamdb-search.sh "<query>"`), leer un archivo requiere 1 click.
-
-## Decisión
-
-Reemplazamos la sección soft "Grafos del proyecto — cómo y cuándo consultarlos" en los 4 agentes del ciclo SDD (Alex, Pol, Sol, Teo) por un **protocolo numerado concreto**:
-
-1. **Pasos bash numerados**: Paso 1 = `bash teamdb-search.sh "<query>" concept|decision`, Paso 2 = leer `teamdb-related.sh` de slugs relevantes, Paso 3 (opcional) = `curl /api/codegraph`.
-2. **Regla de oro**: si la DB alcanzó, NO leer más.
-3. **CITA obligatoria**: en el artefacto/handoff (proposal.md, tasks.md, commit), el agente debe citar textualmente el resultado de la consulta DB (cuántos concepts, cuántos decisions, qué encontró).
-
-## Tasks completadas
-
-- [x] Reescribir sección de cada agente con protocolo numerado (Teo, 4 agentes)
-- [x] Agregar test FIX 1.3 con 12 asserts en setup.test.sh (Teo)
-- [x] Sincronizar agentes a ~/.config/opencode/agents/ (Teo)
-- [x] Inicializar team.db en meta-proyecto (con backup + dry-run)
-- [x] Persistir propuesta en DB (este INSERT)
-
-## Consecuencias
-
-### Positivas
-- Ahorro de tokens estimado: 60-75% por plan
-- Consistencia: el sistema usa la memoria que ya documentamos
-- Tests verifican que cada agente tiene el protocolo (12 asserts FIX 1.3)
-
-### Negativas / Riesgos
-- Si la DB está vacía, los agentes igualmente intentan leer código (esperado, es el fallback)
-- Tests no garantizan que el LLM siga el protocolo al pie de la letra (es soft-enforcement)
-- Hay 3 menciones de superpowers:* restantes en systematic-debugging/SKILL.md que requieren evaluación caso por caso',NULL,'draft','pol','legacy-import','2026-08-20T15:36:46Z','2026-08-20T15:36:46Z',NULL);
-INSERT INTO "proposals" ("id","slug","title","intent_md","questions_json","status","agent","decided_by","created_at","updated_at","decided_at") VALUES (2,'fix-skills-docs-plans-2026-08-06-legacy-imported','Proposal: fix-skills-docs-plans-2026-08-06','<!-- GENERATED from teamdb on 2026-08-06T05:01:40Z. DO NOT EDIT. Source of truth: .opencode/context/team.db.
-     Bidirectional is PROHIBITED. To update DB: sqlite3 $DB (proposals table).
-     To regenerate: bash scripts/teamdb-export-md.sh . -->
-
-# Proposal: fix-skills-docs-plans-2026-08-06
-
-- **Slug:** fix-skills-docs-plans-2026-08-06
-- **Title:** Fix: skills brainstorming y writing-plans deben guardar en DB, no en docs/plans/
-- **Status:** draft
-- **Agent:** pol
-- **Created:** 2026-08-06 05:01:08
-
-## Intent
-
-## Contexto
-
-Las 2 skills copiadas de Superpowers (brainstorming, writing-plans) todavía tienen paths legacy (`docs/plans/`) y referencias externas (`superpowers:*`). El protocolo Skalling v0.7+ exige que TODO se guarde en la DB (`.opencode/context/team.db`) como source of truth, y SOLO se exporte a `.md` cuando es para git legible.
-
-## Causa raíz
-
-- Skills copiadas parcialmente en versiones tempranas
-- Mismo bug que Sol.md/Teo.md tenían pre-0.6.2 (ya parcheado, ver CHANGELOG)
-- Nunca se extendió el fix a las skills
-- Tests/setup.test.sh Tier 1 FIX 1.1 lo valida para agentes pero no para skills
-
-## Solución propuesta
-
-### Skill 1: brainstorming/SKILL.md
-- ELIMINAR: "Write the validated design to `docs/plans/YYYY-MM-DD-<topic>-design.md`"
-- ELIMINAR: refs a `superpowers:using-git-worktrees`, `superpowers:writing-plans`
-- REEMPLAZAR por: "Pol devuelve proposal validado a Alex. Source of truth: tabla `proposals` en team.db (vía `teamdb_write_project`). El export `.md` se genera on-demand con `teamdb_export_md`, no es storage primario."
-
-### Skill 2: writing-plans/SKILL.md
-- ELIMINAR: refs a `docs/plans/` (líneas 18, 101)
-- ELIMINAR: refs a `superpowers:*` (líneas 36, 110, 116)
-- REEMPLAZAR por: "Sol escribe `design.md` y `tasks.md` después de INSERT en DB vía `teamdb-plan.sh`. Source of truth: tabla `plans` + `tasks` en team.db."
-
-### Tests nuevos (en tests/setup.test.sh)
-- `test_skills_no_docs_plans`: assert NO `docs/plans` en ninguna SKILL.md
-- `test_skills_no_superpowers`: assert NO `superpowers:` (excepto whitelist explícita)
-- `test_brainstorming_uses_db`: assert que menciona `team.db` o `teamdb_write_project`
-
-## Tasks
-
-- [ ] Reescribir brainstorming/SKILL.md
-- [ ] Reescribir writing-plans/SKILL.md
-- [ ] Agregar 3 tests en tests/setup.test.sh
-- [ ] Correr `bash install-global.sh --force` para distribuir
-- [ ] Verificar que ningún proyecto use el path legacy
-
-## Consecuencias
-
-### Positivas
-- TODO el flujo de brainstorming va a la DB, no al filesystem
-- Consistencia con el resto del sistema
-- Rastreable, versionado, auditable
-- Backup automático ya aplica (v0.7.6)
-
-### Negativas / Riesgos
-- Si algún proyecto cliente tiene archivos en `docs/plans/` viejos, hay que migrarlos manualmente con `teamdb-plan.sh` por cada uno
-- Hay 3 menciones de `superpowers:` en `systematic-debugging/SKILL.md` que hay que evaluar caso por caso
-
-## Related
-
-- CHANGELOG 0.6.2: fix similar aplicado a Sol.md/Teo.md
-- tests/setup.test.sh FIX 1.1: patrón Tier 1 a replicar
-- constitution R6: ubicación canónica `.opencode/changes/<feature-slug>/`
-
-
-<!-- Footer: regenerar desde DB con scripts/teamdb-export-md.sh -->',NULL,'draft','pol','legacy-import','2026-08-20T15:36:46Z','2026-08-20T15:36:46Z',NULL);
-INSERT INTO "proposals" ("id","slug","title","intent_md","questions_json","status","agent","decided_by","created_at","updated_at","decided_at") VALUES (3,'plan-unico-versionado-2026-08-06-legacy-imported','Plan único versionado: 1 proposal → 1 plan → N tasks ejecutables, todo en DB','# Plan único versionado: 1 proposal → 1 plan → N tasks ejecutables, todo en DB
-
-**Slug:** plan-unico-versionado-2026-08-06
-**Status:** approved
-**Agent:** pol
-**Fecha:** 2026-08-06 12:00:00
-
-## Contexto
-
-Hoy, cuando un usuario pide un plan, el sistema produce artefactos redundantes y contradictorios:
-
-1. **Dos planes paralelos por feature**. Pol escribe `proposal.md` (validación ligera del intent). Sol escribe `design.md` + `tasks.md` (plan técnico detallado). Ambos viven en `.opencode/changes/<slug>/` como archivos separados. Si Teo los lee, ve DOS documentos distintos sobre el mismo tema y no sabe cuál seguir.
-
-2. **Tasks con títulos poéticos**. Las tasks que escribe Sol tienen nombres tipo "Gimme Shelter", "Sympathy for the Devil". Sin propósito explícito, sin criterios de aceptación verificables, sin orden lógico que indique qué bloquea qué.
-
-3. **Sol CREA OTRO PLAN en vez de mejorar el existente**. Cuando el `proposal.md` necesita más detalle técnico, Sol abre `design.md` aparte en lugar de hacer UPDATE del mismo plan en la DB. Resultado: dos documentos divergentes sobre la misma feature.
-
-4. **Teo se inventa planes**. Cuando va a ejecutar, en vez de consultar la DB por el plan activo del slug y seguirlo, a veces inventa su propio approach basándose en lo que vio en el `proposal.md` + `design.md` + su propio instinto.
-
-5. **Dos sources of truth**. Las tasks existen en archivos `.md` Y en la tabla `tasks` de `team.db`. Si editás uno, el otro queda stale. No hay garantía de que lo que Teo ejecuta coincida con lo que el humano aprobó.
-
-## Causa raíz
-
-El modelo actual es **filesystem-first**: el ciclo de un plan vive en archivos `.md` bajo `.opencode/changes/<slug>/`. La DB tiene las tablas (`proposals`, `plans`, `tasks`, `task_dependencies`, `plan_history`) pero los agentes no las usan como contrato — las usan como espejo opcional.
-
-Síntomas estructurales:
-
-- **Falta enforcement de "1 plan por slug activo"**. `plans.slug` es `UNIQUE`, pero nada impide que haya un plan `draft` y otro `active` para el mismo slug simultáneamente. `teamdb-plan.sh` resuelve esto parcialmente con `ON CONFLICT(slug) DO UPDATE`, pero no hay check explícito.
-- **No hay lifecycle formal**. `plans.status` acepta `draft|active|completed|abandoned`. Falta `in_progress` y `approved` para representar el flujo real (Pol escribe proposal → user aprueba → Sol mejora → Teo ejecuta → complete).
-- **`tasks.purpose` no existe**. Solo hay `title` + `description_md`. Los criterios de aceptación van en `acceptance_md` pero no se enforce que estén presentes.
-- **`tasks.depends_on` no existe como JSON**. Está la tabla `task_dependencies` (mejor diseño relacional, de hecho), pero no se usa en `teamdb-plan.sh` consistentemente para visualizar el DAG.
-- **`plans.intent_md` no existe**. Solo `design_md`. La intención validada por Pol queda huérfana del plan una vez que Sol lo "toma".
-- **`plans.version` no existe**. `plan_history` tiene `version` pero `plans` no. Imposible hacer "última versión" sin joins.
-
-## Decisión
-
-**Un solo plan semántico por feature-slug, viviendo en la DB. Los archivos `.md` son SOLO exports legibles para git, no contratos.**
-
-### Reglas duras
-
-1. **1 plan por feature-slug**. Constraint: `UNIQUE(slug WHERE status IN (''draft'',''approved'',''in_progress''))` — solo puede haber UNO activo a la vez. Si se quiere un nuevo intento, el viejo pasa a `abandoned` (no se borra; queda en `audit_log`).
-2. **Source of truth = DB**. El artefacto canónico es la fila de la tabla (`proposals`, `plans`, `tasks`). El `.md` en `.opencode/changes/<slug>/` se regenera con `teamdb-export-md.sh` y SIEMPRE lleva header `<!-- GENERATED -->`. Editar el `.md` está prohibido y se detecta con diff contra la DB.
-3. **Lifecycle explícito**: `draft → approved → in_progress → completed`. Transiciones registradas en `audit_log` (ya hay triggers en `tasks`, falta en `plans`).
-4. **Pol escribe el `proposal`** (intención validada, no muy detallado). Status inicial: `draft`.
-5. **Sol hace UPDATE del mismo plan**, no crea otro. Cuando necesita más detalle técnico, edita `plans.design_md` + agrega `specs` + `design_notes`. El plan pasa a `approved` cuando Pol/user lo firma.
-6. **Pol NO borra el plan de Sol**. Solo puede agregar otra versión (incrementar `plans.version`, append a `plan_history` con `operation=''amended''`).
-7. **Teo busca el plan activo por slug en la DB y lo sigue**. Comando: `teamdb-execute-plan.sh <project> --slug=<slug>`. NO inventa otro. NO lee `.md` para "interpretar".
-8. **Tasks con contrato**: cada task tiene `purpose` (1-2 frases por qué existe) + `acceptance_md` (criterios verificables) + `order_index` (entero, orden de ejecución) + DAG via `task_dependencies` (FK a otras tasks del mismo plan). Títulos NO poéticos: `"Migrar plans.design_md a nullable"` no `"Gimme Shelter"`.
-
-### Responsabilidades por agente
-
-| Agente | Responsabilidad | Acción sobre la DB |
-|---|---|---|
-| **Pol** | Validar intent, escribir `proposal` | `INSERT proposals(status=''draft'')`. No toca `plans`. |
-| **Sol** | Mejorar plan técnico, definir tasks | `UPDATE plans(design_md, version+=1)`, `INSERT specs`, `INSERT tasks`, `INSERT task_dependencies`. Status: `draft → approved`. |
-| **Teo** | Ejecutar tasks | `SELECT tasks WHERE plan_id=? ORDER BY order_index`, claim con `task_claims`, `UPDATE tasks(status=''in_progress'')`. |
-| **Luz** | Verificar AC de cada task | `UPDATE tasks(status=''in_review'', resolution_md=''...'')`. |
-| **Pau** | Cerrar feature | `UPDATE plans(status=''completed'')` cuando todas las tasks están `approved`. |
-
-### Schema propuesto (migration 009)
-
-> **Nota técnica**: las tablas `plans` y `tasks` YA EXISTEN (migration 002, schema v0.7.1). El approach es **ALTER TABLE** + nuevas constraints, NO `CREATE TABLE` (eso borraría data existente).
-
-```sql
--- 009_unique_plan_active.sql
-PRAGMA foreign_keys=OFF;
-BEGIN TRANSACTION;
-
--- 1. plans: agregar columnas faltantes
-CREATE TABLE plans_new (
-  id INTEGER PRIMARY KEY,
-  slug TEXT UNIQUE NOT NULL,
-  title TEXT NOT NULL,
-  proposal_id INTEGER REFERENCES proposals(id),
-  intent_md TEXT,                          -- NUEVO: copia del proposal.intent_md al crear el plan
-  design_md TEXT NOT NULL DEFAULT '''',
-  acceptance_md TEXT,
-  status TEXT DEFAULT ''draft'' CHECK(status IN (''draft'',''approved'',''in_progress'',''completed'',''abandoned'')),
-  version INTEGER DEFAULT 1,               -- NUEVO
-  agent TEXT,
-  created_at TEXT,
-  updated_at TEXT,
-  completed_at TEXT,
-  created_by TEXT,                         -- NUEVO
-  updated_by TEXT                          -- NUEVO
-);
-
-INSERT INTO plans_new (id, slug, title, proposal_id, intent_md, design_md, acceptance_md,
-                       status, agent, created_at, updated_at, completed_at, version)
-SELECT id, slug, title, proposal_id, NULL AS intent_md, design_md, acceptance_md,
-       status, agent, created_at, updated_at, completed_at, 1 AS version
-FROM plans;
-
-DROP TABLE plans;
-ALTER TABLE plans_new RENAME TO plans;
-CREATE INDEX idx_plans_status ON plans(status);
-
--- 2. tasks: agregar purpose (description_md se mantiene como legacy/extended)
-CREATE TABLE tasks_new (
-  id INTEGER PRIMARY KEY,
-  plan_id INTEGER NOT NULL REFERENCES plans(id),
-  slug TEXT NOT NULL,
-  title TEXT NOT NULL,
-  purpose TEXT NOT NULL DEFAULT '''',        -- NUEVO: por qué existe (1-2 frases)
-  description_md TEXT,                     -- LEGACY: detalles extendidos, opcional
-  acceptance_md TEXT NOT NULL DEFAULT '''',  -- ENFORCE: obligatorio (CHECK en aplicación)
-  status TEXT DEFAULT ''pending'' CHECK(status IN (''pending'',''in_progress'',''in_review'',''approved'',''resolved'',''rejected'',''blocked'')),
-  priority INTEGER DEFAULT 3,
-  owner TEXT,
-  blocked_reason TEXT,
-  resolution_md TEXT,
-  order_index INTEGER DEFAULT 0,
-  estimated_minutes INTEGER,
-  created_at TEXT,
-  updated_at TEXT,
-  started_at TEXT,
-  resolved_at TEXT,
-  UNIQUE(plan_id, slug)
-);
-
-INSERT INTO tasks_new (id, plan_id, slug, title, purpose, description_md, acceptance_md,
-                       status, priority, owner, blocked_reason, resolution_md,
-                       order_index, estimated_minutes, created_at, updated_at, started_at, resolved_at)
-SELECT id, plan_id, slug, title, '''' AS purpose, description_md, COALESCE(acceptance_md, ''''),
-       status, priority, owner, blocked_reason, resolution_md,
-       order_index, estimated_minutes, created_at, updated_at, started_at, resolved_at
-FROM tasks;
-
-DROP TABLE tasks;
-ALTER TABLE tasks_new RENAME TO tasks;
-CREATE INDEX idx_tasks_plan ON tasks(plan_id);
-CREATE INDEX idx_tasks_status ON tasks(status);
-CREATE INDEX idx_tasks_owner ON tasks(owner);
-
--- 3. Audit triggers en plans (ya existen en tasks, work_in_progress, etc.)
-CREATE TRIGGER plans_audit_ai AFTER INSERT ON plans BEGIN
-  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details, actor_source)
-  VALUES (datetime(''now''), ''system'', ''insert'', ''plans'', new.id,
-          json_object(''slug'', new.slug, ''status'', new.status), ''trigger'');
-END;
-CREATE TRIGGER plans_audit_au AFTER UPDATE ON plans BEGIN
-  INSERT INTO audit_log (ts, agent, action, table_name, row_id, details, actor_source)
-  VALUES (datetime(''now''), ''system'', ''update'', ''plans'', new.id,
-          json_object(''slug'', new.slug, ''old_status'', old.status, ''new_status'', new.status, ''version'', new.version), ''trigger'');
-END;
-
-COMMIT;
-PRAGMA foreign_keys=ON;
-
-UPDATE schema_meta SET value = ''0.7.7'' WHERE key = ''version'';
-```
-
-### Cambios en scripts
-
-| Script | Cambio |
-|---|---|
-| `teamdb-plan.sh` | Al crear plan, copiar `proposal.intent_md` → `plan.intent_md`. Al insertar task, exigir `purpose` no vacío + `acceptance_md` no vacío (fail-fast con mensaje claro). |
-| `teamdb-amend.sh` | Nuevo: UPDATE del plan existente (incrementa `version`, append a `plan_history` con `operation=''amended''`). |
-| `teamdb-plan.sh` (subcomando) | Agregar `--improve` para que Sol pueda llamar al mismo script en modo UPDATE, no solo CREATE. |
-| `teamdb-export-md.sh` | Refrescar header: incluir `purpose` de cada task en `tasks.md`, no solo título. |
-| `teamdb-execute-plan.sh` | Si el plan está en `draft`, abortar con error claro: "Plan no aprobado. Status actual: draft. Necesita status=''approved'' para ejecutar." |
-
-### Cambios en agentes (protocol)
-
-| Agente | Cambio |
-|---|---|
-| `agents-base/Pol.md` | Regla: "NO escribir archivos `.md` de plan. SOLO INSERT en `proposals`. El `.md` se regenera con `teamdb-export-md.sh`." |
-| `agents-base/Sol.md` | Regla: "Cuando recibís un handoff de Pol con `proposal.status=''approved''`, hacés UPDATE del plan existente (`teamdb-amend.sh`), NO creás otro. Incrementás `version`. Si necesitás romper compatibilidad, creás un plan nuevo con `status=''draft''` y el viejo pasa a `abandoned`." |
-| `agents-base/Teo.md` | Regla: "Antes de ejecutar, `teamdb-execute-plan.sh <project> --slug=<slug>`. Si no hay plan activo, ABORT y escalar a Alex. NO inventar plan propio." |
-| `agents-base/Luz.md` | Regla: "Verificás cada task contra su `acceptance_md`. Si pasa, marcás `status=''approved''` + `resolution_md` con evidencia. Si falla, `status=''rejected''` + razón." |
-| `agents-base/Alex.md` | Regla: "Cuando derive a Sol, pasá el `proposal_id` o `plan_id` (no el path al `.md`). Sol lee la DB, no el filesystem." |
-
-### Cambios en skills
-
-| Skill | Cambio |
-|---|---|
-| `skills-base/writing-plans/SKILL.md` | Reescribir para que use `teamdb-plan.sh --improve` y `teamdb-amend.sh`. Eliminar refs a `docs/plans/` o `.opencode/changes/<slug>/design.md` como artefactos primarios. |
-| `skills-base/brainstorming/SKILL.md` | Reforzar: el output es INSERT en `proposals`, no archivo. |
-
-## Tasks (ordenadas, con propósito + AC)
-
-### Task 1: Crear migration 009_unique_plan_active.sql
-- **purpose**: Permitir el nuevo lifecycle (`approved`, `in_progress`) y agregar columnas `version`, `intent_md`, `created_by`, `updated_by` en `plans`, y `purpose` en `tasks`, sin romper data existente (ALTER TABLE pattern).
-- **acceptance_criteria**:
-  - [ ] Archivo `sql/migrations/009_unique_plan_active.sql` existe y es idempotente
-  - [ ] `bash scripts/teamdb-migrate.sh .` corre sin errores sobre una DB con plans/tasks previos
-  - [ ] `teamdb_exec_query .opencode/context/team.db "PRAGMA table_info(plans)"` muestra columnas `intent_md`, `version`, `created_by`, `updated_by`
-  - [ ] `teamdb_exec_query .opencode/context/team.db "PRAGMA table_info(tasks)"` muestra columna `purpose`
-  - [ ] Audit triggers sobre `plans` existen (`SELECT name FROM sqlite_master WHERE type=''trigger'' AND tbl_name=''plans''`)
-  - [ ] `schema_meta.version = ''0.7.7''`
-- **depends_on**: —
-
-### Task 2: Actualizar agents-base/Pol.md (no crear archivos de plan)
-- **purpose**: Eliminar la tentación de Pol de crear `proposal.md` directamente en `.opencode/changes/<slug>/` cuando arranca un plan.
-- **acceptance_criteria**:
-  - [ ] Sección "Protocolo DB-primera" en Pol.md menciona explícitamente: "NO escribir `.opencode/changes/<slug>/proposal.md`"
-  - [ ] Comando canónico documentado: `teamdb-plan.sh <project> create <slug> <title> --intent-stdin`
-  - [ ] Test en `tests/setup.test.sh`: `test_pol_no_md_writes` (busca patrones `write.*\.opencode/changes/.*proposal\.md` en Pol.md → debe dar 0)
-  - [ ] Sincronizado a `~/.config/opencode/agents/Pol.md`
-- **depends_on**: Task 1
-
-### Task 3: Actualizar agents-base/Sol.md (UPDATE no CREATE)
-- **purpose**: Forzar que Sol mejore el plan existente (UPDATE) en lugar de abrir `design.md` aparte.
-- **acceptance_criteria**:
-  - [ ] Sección "Mejorar plan, no crear otro" en Sol.md menciona: "Cuando `proposals.status=''approved''`, usar `teamdb-amend.sh`, NO `teamdb-plan.sh create`"
-  - [ ] Comando documentado: `teamdb-amend.sh <project> --slug=<slug> --design-stdin --add-task=<task.json>`
-  - [ ] Test: `test_sol_uses_amend` (busca `teamdb-amend.sh` en Sol.md → debe aparecer ≥1 vez)
-  - [ ] Sincronizado a `~/.config/opencode/agents/Sol.md`
-- **depends_on**: Task 1
-
-### Task 4: Actualizar agents-base/Teo.md (lee DB, no inventa)
-- **purpose**: Que Teo consulte el plan activo por slug antes de ejecutar, en vez de improvisar.
-- **acceptance_criteria**:
-  - [ ] Sección "Pre-ejecución" en Teo.md: "Paso 1: `teamdb-execute-plan.sh <project> --slug=<slug> --dry-run`. Si retorna error ''no active plan'', ABORT."
-  - [ ] Comando `teamdb-execute-plan.sh` rechazada ejecución si `plans.status NOT IN (''approved'',''in_progress'')`
-  - [ ] Test: `test_teo_queries_db_first` (assert Teo.md contiene `teamdb-execute-plan.sh`)
-  - [ ] Sincronizado a `~/.config/opencode/agents/Teo.md`
-- **depends_on**: Task 1, Task 3
-
-### Task 5: Extender teamdb-plan.sh + crear teamdb-amend.sh
-- **purpose**: Dar herramientas bash que enforce "1 plan por slug" y "tasks con purpose+AC".
-- **acceptance_criteria**:
-  - [ ] `teamdb-plan.sh create`: al crear plan, copia `proposal.intent_md` → `plan.intent_md`. Si task no tiene `purpose` o `acceptance_md`, falla con mensaje claro: "task ''<slug>'' sin purpose o acceptance_md"
-  - [ ] `teamdb-amend.sh <project> --slug=<slug>`: hace UPDATE del plan, incrementa `version`, append a `plan_history` con `operation=''amended''`
-  - [ ] `teamdb-amend.sh --add-task=<task.json>`: inserta task en plan existente con validación de purpose/AC
-  - [ ] Tests: `test_plan_create_copies_intent`, `test_amend_increments_version`, `test_amend_appends_history`
-- **depends_on**: Task 1
-
-### Task 6: Tests FIX 1.4 (invariantes "1 plan por slug" + "tasks con propósito+AC")
-- **purpose**: Que el sistema falle rápido si alguien rompe los invariantes.
-- **acceptance_criteria**:
-  - [ ] Test `test_one_active_plan_per_slug`: insertar 2 plans con mismo slug + status activo → debe fallar por UNIQUE constraint
-  - [ ] Test `test_task_requires_purpose`: insertar task sin purpose → debe fallar
-  - [ ] Test `test_task_requires_acceptance`: insertar task sin acceptance_md → debe fallar
-  - [ ] Test `test_plan_lifecycle_transitions`: `draft → approved → in_progress → completed` permitido; `draft → completed` directo NO permitido (validar via trigger o CHECK)
-  - [ ] Test `test_md_is_generated`: `.opencode/changes/<slug>/proposal.md` lleva header `<!-- GENERATED -->`
-  - [ ] Todos los tests pasan con `bash tests/setup.test.sh`
-- **depends_on**: Task 1, Task 5
-
-### Task 7: Skill writing-plans (reescribir para usar teamdb)
-- **purpose**: Que la skill enseñe el flujo nuevo, no el viejo de escribir `.md`.
-- **acceptance_criteria**:
-  - [ ] `skills-base/writing-plans/SKILL.md` menciona `teamdb-plan.sh` y `teamdb-amend.sh` con ejemplos concretos
-  - [ ] NO contiene `docs/plans/` ni `.opencode/changes/<slug>/design.md` como paths primarios
-  - [ ] Paso "Output" del workflow dice: "INSERT en `proposals` (status=''draft''). El export `.md` es secundario."
-  - [ ] Sincronizado a `~/.config/opencode/skills/writing-plans/SKILL.md`
-- **depends_on**: Task 5
-
-### Task 8: Migrar planes `.md` viejos a la DB
-- **purpose**: Eliminar la dualidad source-of-truth para planes existentes.
-- **acceptance_criteria**:
-  - [ ] Script `scripts/migrate-md-plans-to-db.sh` lee `.opencode/changes/<slug>/proposal.md` + `design.md` + `tasks.md`, INSERT en DB
-  - [ ] Si ya existe plan con ese slug en DB, skip + warning
-  - [ ] Backup del filesystem antes (`mv .opencode/changes .opencode/changes.bak.$(date +%Y%m%d)`)
-  - [ ] Reporte: cuántos planes migrados, cuántos saltados
-  - [ ] Run sobre el meta-proyecto: 0 errores, N migrados
-- **depends_on**: Task 1, Task 5
-
-## Consecuencias
-
-### Positivas
-
-- **1 source of truth** para planes y tasks. La DB es el contrato; el `.md` es solo legible.
-- **Lifecycle explícito y auditable**. `audit_log` registra cada transición `draft → approved → in_progress → completed`. Reproducible.
-- **Tasks ejecutables con criterios verificables**. `purpose` + `acceptance_md` obligatorios eliminan el "qué significa hecho?" al momento de Luz verificar.
-- **Versionado real**. `plans.version` + `plan_history` permiten ver la evolución sin git archaeology.
-- **DAG explícito**. `task_dependencies` (ya existe) permite a Teo ejecutar en orden topológico, no adivinando.
-- **Migración al modelo DB-first completa**. Esta propuesta cierra el ciclo abierto por `agentes-db-primera-2026-08-06` y `fix-skills-docs-plans-2026-08-06`.
-
-### Negativas / Riesgos
-
-- **Migración de planes `.md` viejos**. Hay planes existentes en `.opencode/changes/` que deben moverse a la DB (Task 8). Riesgo: si un plan tiene un `.md` desactualizado respecto a la DB, hay que decidir cuál gana.
-- **Breaking change en scripts que asumen schema viejo**. Si algún cliente externo lee `team.db` directo y asume que `plans` no tiene `intent_md`, va a fallar. Mitigación: el campo se agrega como nullable, no rompe queries existentes.
-- **Curva de aprendizaje**. Sol y Teo tienen que aprender el nuevo flujo (`teamdb-amend.sh` en vez de "abrir otro archivo"). Mitigación: tests FIX 1.4 + skill writing-plans reescrita.
-- **Performance del ALTER TABLE**. Para DBs con miles de plans, recrear la tabla toma segundos. Aceptable para meta-proyecto (decenas de planes), problemático para proyectos grandes. Mitigación: si el proyecto tiene >1000 plans, agregar flag `--no-rebuild` que haga ALTER TABLE ADD COLUMN en vez de recreate (SQLite soporta ALTER ADD COLUMN, no DROP COLUMN).
-
-### Related
-
-- `agentes-db-primera-2026-08-06`: ciclo DB-primera en agents-base (predecesor)
-- `fix-skills-docs-plans-2026-08-06`: fix de skills brainstorming/writing-plans (predecesor paralelo)
-- constitution R6: ubicación canónica `.opencode/changes/<feature-slug>/` (mantener para exports)
-- constitution R14: "consultá la DB primero" (esta propuesta la enforce en planes)
-- schema v0.7.6 → v0.7.7 (migration 009)
-
+INSERT INTO "concepts" ("id","slug","title","body_md","category","has_ui","updated_at") VALUES (1,'project-summary','Project Summary — Skalling v0.11.1','---
+type: Concept
+title: Project Summary — Skalling v0.11.1
+description: Resumen estructural del proyecto skalling-dev-team (8 agentes, scripts bundle, team.db).
+resource: README.md, AGENTS.md, VERSION
+tags: [project-summary, skalling, opencode, agents, teamdb, conventions]
+timestamp: 2026-09-13T13:14:52Z
+agent: pau
+confidence: 0.95
 ---
 
-<!-- Footer: regenerar desde DB con teamdb-export-md.sh -->',NULL,'draft','pol','legacy-import','2026-08-20T15:36:47Z','2026-08-20T15:36:47Z',NULL);
-INSERT INTO "proposals" ("id","slug","title","intent_md","questions_json","status","agent","decided_by","created_at","updated_at","decided_at") VALUES (4,'consolidar-calidad-0102','Consolidar calidad 0.10.2','# Intent
+# Project Summary — Skalling v0.11.1
 
-Consolidar calidad 0.10.2',NULL,'draft','pol',NULL,'2026-09-04T16:41:28Z','2026-09-04T16:41:28Z',NULL);
-INSERT INTO "proposals" ("id","slug","title","intent_md","questions_json","status","agent","decided_by","created_at","updated_at","decided_at") VALUES (5,'perm-hardening-d1-d2','Endurecer permission.bash con git stash* explícito y declarar tests/requirements.txt','# Intent
+## What
+Equipo de 8 agentes de IA para OpenCode: Alex (orquestador), Pol (spec), Jes (research), Sol (plan), Teo (engineer), Jhon (verifier), Luz (auditor), Pau (memory).
 
-Endurecer permission.bash con git stash* explícito y declarar tests/requirements.txt',NULL,'draft','pol',NULL,'2026-09-13T10:48:04Z','2026-09-13T10:48:04Z',NULL);
-INSERT INTO "plans" ("id","slug","title","proposal_id","design_md","acceptance_md","status","agent","created_at","updated_at","completed_at","intent_md","version","created_by","updated_by") VALUES (1,'audit-v0.9.3','Audit fixes v0.9.3',NULL,'System audit fixes',NULL,'completed','system','2026-08-20 15:49:21','2026-08-20 15:49:21',NULL,NULL,1,'system',NULL);
-INSERT INTO "plans" ("id","slug","title","proposal_id","design_md","acceptance_md","status","agent","created_at","updated_at","completed_at","intent_md","version","created_by","updated_by") VALUES (2,'consolidar-calidad-0102','Consolidar calidad 0.10.2',4,'# Design
+## Stack
+Bash + Python 3, SQLite 3 con FTS5/WAL, OpenCode 1.18.29+. Sin package.json de aplicación — `package.json` solo trae opencode + plugins Node.
 
-Defined by ADRs during execution.',NULL,'completed','sol','2026-09-04T16:41:28Z','2026-09-04 21:39:04','2026-09-04 21:39:04','# Intent
+## Estructura
+- `scripts/` — bundle canónico (con subdir `lib/`)
+- `scripts/lib/` — helpers compartidos (lib-os.sh, lib-stack-detect.sh, lib-teamdb.sh, lib-memory-check.sh)
+- `tests/` — suite de tests bash/python/js
+- `docs/` — architecture.md, security-model.md
+- `.opencode/` — bundle local (plano, sin subdir lib/) + context (team.db) + agents + skills + changes
+- `sql/` — schemas + migrations
+- `plugins/` — plugins OpenCode (skalling-goal.js, skalling-workflow.js, data-safety)
+- `templates/`, `agents-base/`, `skills-base/`, `constitution/` — fuentes single-source
+- `install-global.sh` — installer a `~/.config/opencode/`
 
-Consolidar calidad 0.10.2',2,'sol','sol');
-INSERT INTO "plans" ("id","slug","title","proposal_id","design_md","acceptance_md","status","agent","created_at","updated_at","completed_at","intent_md","version","created_by","updated_by") VALUES (3,'perm-hardening-d1-d2','Endurecer permission.bash con git stash* explícito y declarar tests/requirements.txt',5,'# Design
+## Versión
+0.11.1 (de VERSION file). Compat: legacy_surface.work_in_progress=read_only_compatibility.
 
-Defined by ADRs during execution.',NULL,'draft','sol','2026-09-13T10:48:04Z','2026-09-13T10:49:16Z',NULL,'# Intent
+## Convenciones
+- Slugs kebab-case (`auth-jwt`, `stack-postgres`)
+- TeamDB es la fuente: `team.db` (no archivos .md son fuente)
+- Markdown es export derivado (convention docs viven en DB)
+- Escritura SQL parametrizada via `teamdb_exec.py` (R10)
+- Audit log con `actor_source` (helper/trigger/application)
+- Constitución single-source (install-global.sh la renderea a runtime)
+- Cero secretos en DB; destructive operations requieren `teamdb_destructive` con backup','general',0,'2026-09-13 13:46:12');
+INSERT INTO "proposals" ("id","slug","title","intent_md","questions_json","status","agent","decided_by","created_at","updated_at","decided_at") VALUES (1,'sqli-remediation-phase3','Fase 3 Remediacion SQLi Skalling','# Intent
 
-Endurecer permission.bash con git stash* explícito y declarar tests/requirements.txt',2,'sol','sol');
-INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (1,1,'audit-fix-v0.9.3','Audit fixes v0.9.3',NULL,'All violations fixed','resolved',3,'system',NULL,NULL,0,NULL,NULL,'2026-08-20 15:49:21','2026-08-20 15:49:21',NULL,NULL,1,NULL,NULL,NULL,'Fix DB-first compliance, install hooks, migrate .md to DB, optimize N+1 queries');
-INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (2,2,'task-asegurar-accesos-sqlite-heredados','Asegurar accesos SQLite heredados','','- [ ] SQL público parametrizado y migraciones fail-fast\n- [ ] CI cubre dashboard y doctor estricto\n- [ ] Métricas y routing quedan registrados automáticamente\n- [ ] Legado y respaldos tienen política segura\n- [ ] Documentación, licencia, versión e instalación están sincronizadas\n- [ ] Suite completa pasa sin fallos','resolved',2,'sol',NULL,NULL,0,NULL,NULL,'2026-09-04T16:41:28Z','2026-09-04 21:38:45',NULL,NULL,1,NULL,NULL,NULL,'Cerrar las brechas detectadas en seguridad, migraciones, observabilidad, mantenimiento, documentación e instalación para que el equipo opere con una única versión comprobable.');
-INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (3,2,'task-hacer-migraciones-fail-fast','Hacer migraciones fail-fast','','- [ ] SQL público parametrizado y migraciones fail-fast\n- [ ] CI cubre dashboard y doctor estricto\n- [ ] Métricas y routing quedan registrados automáticamente\n- [ ] Legado y respaldos tienen política segura\n- [ ] Documentación, licencia, versión e instalación están sincronizadas\n- [ ] Suite completa pasa sin fallos','resolved',2,'sol',NULL,NULL,1,NULL,NULL,'2026-09-04T16:41:28Z','2026-09-04 21:38:45',NULL,NULL,1,NULL,NULL,NULL,'Cerrar las brechas detectadas en seguridad, migraciones, observabilidad, mantenimiento, documentación e instalación para que el equipo opere con una única versión comprobable.');
-INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (4,2,'task-integrar-dashboard-y-doctor-en-ci','Integrar dashboard y doctor en CI','','- [ ] SQL público parametrizado y migraciones fail-fast\n- [ ] CI cubre dashboard y doctor estricto\n- [ ] Métricas y routing quedan registrados automáticamente\n- [ ] Legado y respaldos tienen política segura\n- [ ] Documentación, licencia, versión e instalación están sincronizadas\n- [ ] Suite completa pasa sin fallos','resolved',2,'sol',NULL,NULL,2,NULL,NULL,'2026-09-04T16:41:28Z','2026-09-04 21:38:45',NULL,NULL,1,NULL,NULL,NULL,'Cerrar las brechas detectadas en seguridad, migraciones, observabilidad, mantenimiento, documentación e instalación para que el equipo opere con una única versión comprobable.');
-INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (5,2,'task-registrar-telemetr-a-operativa-m-nima','Registrar telemetría operativa mínima','','- [ ] SQL público parametrizado y migraciones fail-fast\n- [ ] CI cubre dashboard y doctor estricto\n- [ ] Métricas y routing quedan registrados automáticamente\n- [ ] Legado y respaldos tienen política segura\n- [ ] Documentación, licencia, versión e instalación están sincronizadas\n- [ ] Suite completa pasa sin fallos','resolved',2,'sol',NULL,NULL,3,NULL,NULL,'2026-09-04T16:41:28Z','2026-09-04 21:38:45',NULL,NULL,1,NULL,NULL,NULL,'Cerrar las brechas detectadas en seguridad, migraciones, observabilidad, mantenimiento, documentación e instalación para que el equipo opere con una única versión comprobable.');
-INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (6,2,'task-deprecar-superficies-de-datos-heredadas','Deprecar superficies de datos heredadas','','- [ ] SQL público parametrizado y migraciones fail-fast\n- [ ] CI cubre dashboard y doctor estricto\n- [ ] Métricas y routing quedan registrados automáticamente\n- [ ] Legado y respaldos tienen política segura\n- [ ] Documentación, licencia, versión e instalación están sincronizadas\n- [ ] Suite completa pasa sin fallos','resolved',2,'sol',NULL,NULL,4,NULL,NULL,'2026-09-04T16:41:28Z','2026-09-04 21:38:45',NULL,NULL,1,NULL,NULL,NULL,'Cerrar las brechas detectadas en seguridad, migraciones, observabilidad, mantenimiento, documentación e instalación para que el equipo opere con una única versión comprobable.');
-INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (7,2,'task-aplicar-retenci-n-segura-de-respaldos','Aplicar retención segura de respaldos','','- [ ] SQL público parametrizado y migraciones fail-fast\n- [ ] CI cubre dashboard y doctor estricto\n- [ ] Métricas y routing quedan registrados automáticamente\n- [ ] Legado y respaldos tienen política segura\n- [ ] Documentación, licencia, versión e instalación están sincronizadas\n- [ ] Suite completa pasa sin fallos','resolved',2,'sol',NULL,NULL,5,NULL,NULL,'2026-09-04T16:41:28Z','2026-09-04 21:38:45',NULL,NULL,1,NULL,NULL,NULL,'Cerrar las brechas detectadas en seguridad, migraciones, observabilidad, mantenimiento, documentación e instalación para que el equipo opere con una única versión comprobable.');
-INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (8,2,'task-ajustar-constituci-n-a-reglas-verificables','Ajustar constitución a reglas verificables','','- [ ] SQL público parametrizado y migraciones fail-fast\n- [ ] CI cubre dashboard y doctor estricto\n- [ ] Métricas y routing quedan registrados automáticamente\n- [ ] Legado y respaldos tienen política segura\n- [ ] Documentación, licencia, versión e instalación están sincronizadas\n- [ ] Suite completa pasa sin fallos','resolved',2,'sol',NULL,NULL,6,NULL,NULL,'2026-09-04T16:41:28Z','2026-09-04 21:38:45',NULL,NULL,1,NULL,NULL,NULL,'Cerrar las brechas detectadas en seguridad, migraciones, observabilidad, mantenimiento, documentación e instalación para que el equipo opere con una única versión comprobable.');
-INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (9,2,'task-sincronizar-documentaci-n-y-licencia','Sincronizar documentación y licencia','','- [ ] SQL público parametrizado y migraciones fail-fast\n- [ ] CI cubre dashboard y doctor estricto\n- [ ] Métricas y routing quedan registrados automáticamente\n- [ ] Legado y respaldos tienen política segura\n- [ ] Documentación, licencia, versión e instalación están sincronizadas\n- [ ] Suite completa pasa sin fallos','resolved',2,'sol',NULL,NULL,7,NULL,NULL,'2026-09-04T16:41:28Z','2026-09-04 21:38:45',NULL,NULL,1,NULL,NULL,NULL,'Cerrar las brechas detectadas en seguridad, migraciones, observabilidad, mantenimiento, documentación e instalación para que el equipo opere con una única versión comprobable.');
-INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (10,2,'task-publicar-versi-n-0-10-2','Publicar versión 0.10.2','','- [ ] SQL público parametrizado y migraciones fail-fast\n- [ ] CI cubre dashboard y doctor estricto\n- [ ] Métricas y routing quedan registrados automáticamente\n- [ ] Legado y respaldos tienen política segura\n- [ ] Documentación, licencia, versión e instalación están sincronizadas\n- [ ] Suite completa pasa sin fallos','resolved',2,'sol',NULL,NULL,8,NULL,NULL,'2026-09-04T16:41:28Z','2026-09-04 21:38:45',NULL,NULL,1,NULL,NULL,NULL,'Cerrar las brechas detectadas en seguridad, migraciones, observabilidad, mantenimiento, documentación e instalación para que el equipo opere con una única versión comprobable.');
-INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (11,2,'verificar-instalaci-n-completa','Verificar instalación completa',NULL,'Suites completas, doctor estricto y coherencia de versión pasan sin fallos','resolved',2,'sol',NULL,NULL,9,NULL,NULL,'2026-09-04T21:38:36Z','2026-09-04 21:38:45',NULL,NULL,1,NULL,NULL,NULL,'Demostrar que seguridad, migraciones, métricas, memoria, instaladores y dashboard funcionan juntos');
-INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (12,3,'task-a-adir-regla-expl-cita-git-stash-ask-al-permission-bash-de-teo-jhon-luz-en-ambas-localizaciones','Añadir regla explícita git stash*: ask al permission.bash de Teo/Jhon/Luz en ambas localizaciones','','(1) diff de frontmatter YAML entre .opencode/agents/{Teo,Jhon,Luz}.md y agents-base/{Teo,Jhon,Luz}.md muestra bloque permission.bash idéntico y contiene literal ''git stash*: ask'' en los 6 archivos; (2) tests/requirements.txt existe con pyyaml>=6,<7 y jsonschema>=4,<5; (3) pip install -r tests/requirements.txt termina con exit 0; (4) python3 -m unittest tests.memory-permissions.MemoryPermissions.test_local_tests_preserve_working_changes y tests.context-regressions.ContextRegression.test_agent_json_examples_match_real_schema pasan con exit 0; (5) Pau NO modificado; (6) ningún cambio fuera de los 6 YAMLs + tests/requirements.txt.','pending',2,'sol',NULL,NULL,0,NULL,NULL,'2026-09-13T10:48:04Z','2026-09-13T10:48:04Z',NULL,NULL,1,NULL,NULL,NULL,'Reducir riesgo de cambio silencioso si se elimina el default *: ask (D1) y hacer ejecutable la suite python sin instalación manual (D2); cambio proporcional medium, contrato público de 6 YAMLs de agente.');
-INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (13,3,'task-crear-tests-requirements-txt-con-pyyaml-y-jsonschema-en-rango-compatible','Crear tests/requirements.txt con pyyaml y jsonschema en rango compatible','','(1) diff de frontmatter YAML entre .opencode/agents/{Teo,Jhon,Luz}.md y agents-base/{Teo,Jhon,Luz}.md muestra bloque permission.bash idéntico y contiene literal ''git stash*: ask'' en los 6 archivos; (2) tests/requirements.txt existe con pyyaml>=6,<7 y jsonschema>=4,<5; (3) pip install -r tests/requirements.txt termina con exit 0; (4) python3 -m unittest tests.memory-permissions.MemoryPermissions.test_local_tests_preserve_working_changes y tests.context-regressions.ContextRegression.test_agent_json_examples_match_real_schema pasan con exit 0; (5) Pau NO modificado; (6) ningún cambio fuera de los 6 YAMLs + tests/requirements.txt.','pending',2,'sol',NULL,NULL,1,NULL,NULL,'2026-09-13T10:48:04Z','2026-09-13T10:48:04Z',NULL,NULL,1,NULL,NULL,NULL,'Reducir riesgo de cambio silencioso si se elimina el default *: ask (D1) y hacer ejecutable la suite python sin instalación manual (D2); cambio proporcional medium, contrato público de 6 YAMLs de agente.');
-INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (14,3,'task-verificar-tests-memory-permissions-y-context-regressions-post-cambio','Verificar tests memory-permissions y context-regressions post-cambio','','(1) diff de frontmatter YAML entre .opencode/agents/{Teo,Jhon,Luz}.md y agents-base/{Teo,Jhon,Luz}.md muestra bloque permission.bash idéntico y contiene literal ''git stash*: ask'' en los 6 archivos; (2) tests/requirements.txt existe con pyyaml>=6,<7 y jsonschema>=4,<5; (3) pip install -r tests/requirements.txt termina con exit 0; (4) python3 -m unittest tests.memory-permissions.MemoryPermissions.test_local_tests_preserve_working_changes y tests.context-regressions.ContextRegression.test_agent_json_examples_match_real_schema pasan con exit 0; (5) Pau NO modificado; (6) ningún cambio fuera de los 6 YAMLs + tests/requirements.txt.','pending',2,'sol',NULL,NULL,2,NULL,NULL,'2026-09-13T10:48:04Z','2026-09-13T10:48:04Z',NULL,NULL,1,NULL,NULL,NULL,'Reducir riesgo de cambio silencioso si se elimina el default *: ask (D1) y hacer ejecutable la suite python sin instalación manual (D2); cambio proporcional medium, contrato público de 6 YAMLs de agente.');
-INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (15,3,'verificar-alineaci-n-de-frontmatter-yaml-entre-opencode-agents-y-agents-base','Verificar alineación de frontmatter YAML entre .opencode/agents/ y agents-base/',NULL,'diff del frontmatter YAML entre .opencode/agents/{Teo,Jhon,Luz}.md y agents-base/{Teo,Jhon,Luz}.md devuelve 0 diferencias; el comando exacto a registrar: diff <(python3 -c "import sys,yaml; print(yaml.safe_dump(yaml.safe_load(open(sys.argv[1]).read().split(''---'',2)[1])))" A) <(python3 -c "import sys,yaml; print(yaml.safe_dump(yaml.safe_load(open(sys.argv[1]).read().split(''---'',2)[1])))" B) para A,B en los 3 pares; cada par retorna exit 0 y stdout vacío.','pending',2,'sol',NULL,NULL,3,NULL,NULL,'2026-09-13T10:49:16Z','2026-09-13T10:49:16Z',NULL,NULL,1,NULL,NULL,NULL,'Asegurar que la duplicación intencional entre .opencode/agents/ y agents-base/ sigue siendo coherente tras D1; la build-time copy via install-global.sh exige paridad exacta del bloque permission.');
-INSERT INTO "task_dependencies" ("id","task_id","depends_on_task_id","type","created_at") VALUES (1,14,13,'blocks','2026-09-13T10:48:04Z');
-INSERT INTO "task_dependencies" ("id","task_id","depends_on_task_id","type","created_at") VALUES (2,14,12,'blocks','2026-09-13T10:49:30Z');
-INSERT INTO "task_dependencies" ("id","task_id","depends_on_task_id","type","created_at") VALUES (3,15,12,'blocks','2026-09-13T10:49:31Z');
-INSERT INTO "plan_history" ("id","plan_id","version","changed_by","changed_at","diff_md","snapshot_before","operation") VALUES (1,2,1,'sol','2026-09-04T16:41:28Z','Created with 9 tasks, 8 edges',NULL,'created');
-INSERT INTO "plan_history" ("id","plan_id","version","changed_by","changed_at","diff_md","snapshot_before","operation") VALUES (2,2,2,'sol','2026-09-04T21:38:36Z','add task: verificar-instalaci-n-completa (purpose: Demostrar que seguridad, migraciones, métricas, memoria, ins)','[{"slug":"task-asegurar-accesos-sqlite-heredados","status":"pending","title":"Asegurar accesos SQLite heredados"},{"slug":"task-hacer-migraciones-fail-fast","status":"pending","title":"Hacer migraciones fail-fast"},{"slug":"task-integrar-dashboard-y-doctor-en-ci","status":"pending","title":"Integrar dashboard y doctor en CI"},{"slug":"task-registrar-telemetr-a-operativa-m-nima","status":"pending","title":"Registrar telemetría operativa mínima"},{"slug":"task-deprecar-superficies-de-datos-heredadas","status":"pending","title":"Deprecar superficies de datos heredadas"},{"slug":"task-aplicar-retenci-n-segura-de-respaldos","status":"pending","title":"Aplicar retención segura de respaldos"},{"slug":"task-ajustar-constituci-n-a-reglas-verificables","status":"pending","title":"Ajustar constitución a reglas verificables"},{"slug":"task-sincronizar-documentaci-n-y-licencia","status":"pending","title":"Sincronizar documentación y licencia"},{"slug":"task-publicar-versi-n-0-10-2","status":"pending","title":"Publicar versión 0.10.2"}]','amended');
-INSERT INTO "plan_history" ("id","plan_id","version","changed_by","changed_at","diff_md","snapshot_before","operation") VALUES (3,3,1,'sol','2026-09-13T10:48:04Z','Created with 3 tasks, 2 edges',NULL,'created');
-INSERT INTO "plan_history" ("id","plan_id","version","changed_by","changed_at","diff_md","snapshot_before","operation") VALUES (4,3,2,'sol','2026-09-13T10:49:16Z','add task: verificar-alineaci-n-de-frontmatter-yaml-entre-opencode-agents-y-agents-base (purpose: Asegurar que la duplicación intencional entre .opencode/agen)','[{"slug":"task-a-adir-regla-expl-cita-git-stash-ask-al-permission-bash-de-teo-jhon-luz-en-ambas-localizaciones","status":"pending","title":"Añadir regla explícita git stash*: ask al permission.bash de Teo/Jhon/Luz en ambas localizaciones"},{"slug":"task-crear-tests-requirements-txt-con-pyyaml-y-jsonschema-en-rango-compatible","status":"pending","title":"Crear tests/requirements.txt con pyyaml y jsonschema en rango compatible"},{"slug":"task-verificar-tests-memory-permissions-y-context-regressions-post-cambio","status":"pending","title":"Verificar tests memory-permissions y context-regressions post-cambio"}]','amended');
-INSERT INTO "routing_decisions" ("id","ts","user_intent","chosen_route","route_reason","agents_involved","outcome","completed_at") VALUES (1,'2026-09-13 10:33:37','Fase 0 del plan de mejora Skalling: Tarea 0.1 inventariar cambios locales en Teo/Jhon/Luz/memory-permissions.test.py y Tarea 0.2 capturar línea base conductual de 8 escenarios antes de optimizar permisos/autonomía.','RESEARCH','clasificación automática','Alex → Jes','PENDING',NULL);
-INSERT INTO "routing_decisions" ("id","ts","user_intent","chosen_route","route_reason","agents_involved","outcome","completed_at") VALUES (2,'2026-09-13 10:45:39','Endurecer YAML con git stash*: ask explícito (D1) + declarar dependencias de tests en tests/requirements.txt (D2). Cambios pequeños, reversibles, en dirección segura (más restrictivo). Soluciona findings de Fase 0 antes de Fase 1.','DISCOVERY','clasificación automática','Alex → Jes → Pol','PENDING',NULL);
-INSERT INTO "receipts" ("id","task_id","agent","command","exit_code","output_summary","ts","tree_hash") VALUES ('audit-fix-20260820114921','1','system','audit-fixes',0,NULL,'2026-08-20 15:49:21','1377f76c6380ec93');
-INSERT INTO "receipts" ("id","task_id","agent","command","exit_code","output_summary","ts","tree_hash") VALUES ('db-verification-20260821083400','1','system','db-verification',0,NULL,'2026-08-21 12:34:00','06ee42a4f6655e7e');
-INSERT INTO "receipts" ("id","task_id","agent","command","exit_code","output_summary","ts","tree_hash") VALUES ('rcpt_1787317371_64271','review','luz','review --lens all',0,'{"risk":{"blocker":0,"warning":0},"resilience":{"blocker":0,"warning":0},"readability":{"blocker":0,"warning":0},"reliability":{"blocker":0,"warning":0},"total":0,"tree_hash":"d2c11151a604d8d1"}','2026-08-21 13:02:51','d2c11151a604d8d1');
-INSERT INTO "receipts" ("id","task_id","agent","command","exit_code","output_summary","ts","tree_hash") VALUES ('rcpt_1787317449_64891','review','luz','review --lens all',0,'{"risk":{"blocker":0,"warning":0},"resilience":{"blocker":0,"warning":1},"readability":{"blocker":0,"warning":2},"reliability":{"blocker":0,"warning":0},"total":3,"tree_hash":"7be15a6ac6a44a15"}','2026-08-21 13:04:10','e3b0c44298fc1c14');
-INSERT INTO "receipts" ("id","task_id","agent","command","exit_code","output_summary","ts","tree_hash") VALUES ('rcpt_1787322766_15449','db-fix','alex','db-first-permissions-fix',0,'{"fix":"permissions deny var-folders, routing DB-first, plan stdin"}','2026-08-21 14:32:46','6be4697999acd4c5');
-INSERT INTO "receipts" ("id","task_id","agent","command","exit_code","output_summary","ts","tree_hash") VALUES ('rcpt_1787322784_15771','db-fix2','alex','db-first-fix-commit',0,'{"fix":"permissions deny var-folders, routing DB-first, plan stdin"}','2026-08-21 14:33:04','f0988045e7741db0');
-INSERT INTO "receipts" ("id","task_id","agent","command","exit_code","output_summary","ts","tree_hash") VALUES ('rcpt_1788534507_55754','checkpoint-v0.10.0','codex','full-test-suite',0,'{"setup":"199/0","memory":"17/0","hardening":"50/0","platform":"28/0"}','2026-09-04 15:08:27','68d0d11c3e730557');
-INSERT INTO "receipts" ("id","task_id","agent","command","exit_code","output_summary","ts","tree_hash") VALUES ('rcpt_1788536486_46391','commands-v0.10.1','codex','full-test-suite',0,'{"hardening":"52/0","setup":"206/0","memory":"17/0","platform":"28/0","shellcheck":"ok","yaml":"ok"}','2026-09-04 15:41:26','e96a5fd74b1b7adc');
-INSERT INTO "receipts" ("id","task_id","agent","command","exit_code","output_summary","ts","tree_hash") VALUES ('rcpt_1788557950_42835','--help','luz','review-seal',0,'','2026-09-04 21:39:10','82785948eb79dfc0');
-INSERT INTO "receipts" ("id","task_id","agent","command","exit_code","output_summary","ts","tree_hash") VALUES ('rcpt_1788557997_43080','11','sol','review-seal',0,'','2026-09-04 21:39:57','d506a7aca635dc53');
-INSERT INTO "receipts" ("id","task_id","agent","command","exit_code","output_summary","ts","tree_hash") VALUES ('rcpt_1788558569_1240','11','sol','review --lens all --diff origin/main..HEAD',1,'{"risk":{"blocker":67,"warning":9},"resilience":{"blocker":0,"warning":21},"readability":{"blocker":0,"warning":944},"reliability":{"blocker":0,"warning":20},"total":1061,"tree_hash":"dc821453070e3d9d"}','2026-09-04 21:49:29','dc821453070e3d9d');
-INSERT INTO "receipts" ("id","task_id","agent","command","exit_code","output_summary","ts","tree_hash") VALUES ('rcpt_1788558628_85265','11','sol','review --diff c3e49b8..HEAD',0,'{"verification":"206 setup, 55 hardening, 18 quality, 11 version, dashboard 13","blocker":0}','2026-09-04 21:50:28','dc821453070e3d9d');
-INSERT INTO "receipts" ("id","task_id","agent","command","exit_code","output_summary","ts","tree_hash") VALUES ('rcpt_1788811887_51301','review','luz','review --lens all',0,'{"risk":{"blocker":0,"warning":0},"resilience":{"blocker":0,"warning":4},"readability":{"blocker":0,"warning":89},"reliability":{"blocker":0,"warning":4},"total":97,"tree_hash":"47db8c86fe1630cd"}','2026-09-07 20:11:27','47db8c86fe1630cd');
-INSERT INTO "receipts" ("id","task_id","agent","command","exit_code","output_summary","ts","tree_hash") VALUES ('rcpt_1788869071_85581','review','codex','review --lens all',0,'{"risk":{"blocker":0,"warning":0},"resilience":{"blocker":0,"warning":3},"readability":{"blocker":0,"warning":79},"reliability":{"blocker":0,"warning":9},"total":91,"tree_hash":"a62bec00e6a96edf"}','2026-09-08 12:04:31','a62bec00e6a96edf');
-INSERT INTO "receipts" ("id","task_id","agent","command","exit_code","output_summary","ts","tree_hash") VALUES ('rcpt_1788869114_23247','review','codex','review --lens all',0,'{"risk":{"blocker":0,"warning":0},"resilience":{"blocker":0,"warning":3},"readability":{"blocker":0,"warning":98},"reliability":{"blocker":0,"warning":9},"total":110,"tree_hash":"6bccd0ce2bf00dde"}','2026-09-08 12:05:14','6bccd0ce2bf00dde');
-INSERT INTO "receipts" ("id","task_id","agent","command","exit_code","output_summary","ts","tree_hash") VALUES ('rcpt_1788874792_35022','review','codex','review --lens all',0,'{"risk":{"blocker":0,"warning":0},"resilience":{"blocker":0,"warning":0},"readability":{"blocker":0,"warning":2},"reliability":{"blocker":0,"warning":1},"total":3,"tree_hash":"0bdb4556cb7ebc0c"}','2026-09-08 13:39:53','0bdb4556cb7ebc0c');
-INSERT INTO "receipts" ("id","task_id","agent","command","exit_code","output_summary","ts","tree_hash") VALUES ('rcpt_1788981836_62839','review','luz','review --lens all',1,'{"risk":{"blocker":9,"warning":0},"resilience":{"blocker":0,"warning":8},"readability":{"blocker":0,"warning":122},"reliability":{"blocker":0,"warning":16},"total":155,"tree_hash":"eece25ebbd362e1e"}','2026-09-09 19:23:56','eece25ebbd362e1e');
-INSERT INTO "receipts" ("id","task_id","agent","command","exit_code","output_summary","ts","tree_hash") VALUES ('rcpt_1789038272_11823','review','codex','review --collect d7daaa6be12dfbcf --lens all',0,'{"collect":true,"blocker":0,"warning":3,"total":13,"tree_hash":"d7daaa6be12dfbcf"}','2026-09-10 11:04:32','d7daaa6be12dfbcf');
-INSERT INTO "receipts" ("id","task_id","agent","command","exit_code","output_summary","ts","tree_hash") VALUES ('setup-fix-20260820122521','1','system','setup-install-test',0,NULL,'2026-08-20 16:25:21','4b502a1f3c7498c1');
-INSERT INTO "receipts" ("id","task_id","agent","command","exit_code","output_summary","ts","tree_hash") VALUES ('setup-v093-20260821082814','1','system','setup-v093',0,NULL,'2026-08-21 12:28:14','801bcbf8bbc8769b');
-INSERT INTO "receipts" ("id","task_id","agent","command","exit_code","output_summary","ts","tree_hash") VALUES ('setup-v093-20260821082821','1','system','setup-v093',0,NULL,'2026-08-21 12:28:21','801bcbf8bbc8769b');
-INSERT INTO "receipts" ("id","task_id","agent","command","exit_code","output_summary","ts","tree_hash") VALUES ('setup-v093-20260821082827','1','system','setup-v093',0,NULL,'2026-08-21 12:28:27','88e1871349a7a631');
+Fase 3 Remediacion SQLi Skalling',NULL,'draft','pol',NULL,'2026-09-13T13:39:31Z','2026-09-13T13:39:31Z',NULL);
+INSERT INTO "proposals" ("id","slug","title","intent_md","questions_json","status","agent","decided_by","created_at","updated_at","decided_at") VALUES (2,'scripts-parity-phase2','Paridad bundle-local .opencode/scripts/ vs fuente scripts/','# Intent
+
+Paridad bundle-local .opencode/scripts/ vs fuente scripts/',NULL,'draft','pol',NULL,'2026-09-13T13:40:54Z','2026-09-13T13:40:54Z',NULL);
+INSERT INTO "plans" ("id","slug","title","proposal_id","design_md","acceptance_md","status","agent","created_at","updated_at","completed_at","intent_md","version","created_by","updated_by") VALUES (1,'sqli-remediation-phase3','Fase 3 Remediacion SQLi Skalling',1,'Fase 3 del plan de remediacion SQLi. Auditoria estatica de 12 sitios sospechosos en scripts/*.sh contra los patrones pat_sqli y pat_sqli_dq de skalling-review.sh (líneas 447-491). Resultado: 0 sitios VULNERABLES en producción; 10 sitios clasificados como SEGURO-LITERAL o SEGURO-WHITELIST (sin variables del usuario en queries); 1 sitio ya usa _sql_quote (teamdb-attempt.sh:226, falso positivo del grep); 2 sitios usan escape manual con sed y se migran a teamdb_exec_value por consistencia y defensa en profundidad (wip-tree.sh:43, migrate-plans-md-to-db.sh:161). Estrategia de hardening: (1) centralizar lista de excepciones del linter con justificación inline en skalling-review.sh; (2) nuevo workflow .github/workflows/lint-sqli.yml que corre el linter sobre scripts/** excluyendo archivos exceptuados, falla si detecta pat_sqli o pat_sqli_dq, se dispara en push/PR a main y develop; (3) migrar los 2 sitios a teamdb_exec_value con bind params reales; (4) tests SQLi nuevos tests/teamdb-wip-tree-sqli.test.sh y tests/migrate-plans-sqli.test.sh que validan no-destrucción de tablas con payload SQLi; (5) integrar nuevos tests en teamdb-hardening-suite.sh; (6) documentar en MEMORY la decisión de mantener git-gate.py pre-push sin invocar skalling-review.sh (separación de scope: lint es CI, secretos/memDB/receipt son push).','Plan persistido con 9 tasks (1 raíz independiente, 1 fan-out, 3 paralelas, 1 fan-in, 1 paralelo adicional, 1 cierre) y 11 edges acíclicos. Cero sitios VULNERABLES en scripts/ post-migración. Lint CI activo en .github/workflows/lint-sqli.yml con lista de excepciones documentada (lib-teamdb.sh = provee helpers; skalling-review.sh = los busca; teamdb_exec.py = binding real; tests/** = fixtures). wip-tree.sh:43 y migrate-plans-md-to-db.sh:161 migrados a teamdb_exec_value con bind params Python (real parameter binding, no escape manual). Tests SQLi nuevos verdes (tests/teamdb-wip-tree-sqli.test.sh y tests/migrate-plans-sqli.test.sh) y agregados al listado de tests/teamdb-hardening-suite.sh. Decisión pre-push documentada en MEMORY (slugs y racional). Receipt final sellado por Pau con verificación de lint CI falla con caso sintético y árbol de tasks approved/resolved.
+
+Referencia de alcance/aprobación: Pedido del usuario: req-20260913101348-44357, risk=medium, alcance explícito: auditoría sitios listados (teamdb-link.sh:54, teamdb-context-cache.sh:19, teamdb-export-md.sh:74, teamdb-skills-sync.sh:94, teamdb-migrate.sh:42, teamdb-restore.sh:105, skalling-metrics.sh:36/40, teamdb-attempt.sh:226 + wip-tree.sh:43 y migrate-plans-md-to-db.sh:161 que aparecieron durante la auditoría), plan DB-first con lista categorizada, spec linter CI bloqueante, plan migración por sitio, tests nuevos para gaps. Usuario explícitamente prohibió implementación y modificación de archivos del repo.','approved','sol','2026-09-13T13:39:31Z','2026-09-13 13:45:07',NULL,'# Intent
+
+Fase 3 Remediacion SQLi Skalling',2,'sol','sol');
+INSERT INTO "plans" ("id","slug","title","proposal_id","design_md","acceptance_md","status","agent","created_at","updated_at","completed_at","intent_md","version","created_by","updated_by") VALUES (2,'scripts-parity-phase2','Paridad bundle-local .opencode/scripts/ vs fuente scripts/',2,'Estrategia: paridad semántica con manifest explícito scripts/.bundle-manifest (formato TSV src<tab>dst) que define el mapping src→dst para el bundle local. scripts/build-local-snapshot.sh implementa tres modos: --apply (idempotente, copia atómica vía tmp+rename, preserva permisos con cp -p), --check (diff byte-a-byte con shasum, exit≠0 si drift), --dry-run (imprime plan de acción). El manifest incluye: scripts/skalling-*.sh→.opencode/scripts/skalling-*.sh (1:1), scripts/teamdb-*.sh→1:1, scripts/{dashboard-server,skalling-workflow,teamdb_exec,teamdb_guard,teamdb-destructive}.py→1:1, scripts/{mem-review,spec-memory-link,merge-helper,update,wip-tree,build-schema}.sh→1:1, scripts/lib/lib-{os,stack-detect,teamdb}.sh→.opencode/scripts/lib-{os,stack-detect,teamdb}.sh (aplanización lib/→plano intencional por compatibilidad con permisos de agentes y rutas usadas en runtime). Ignorados: __pycache__/, hooks/ (separado), lib-memory-check.sh (helper sourced, no ejecutable bundle), render-agent.sh y permission-policy.py (build tools), migrate-* (legacy), test-teamdb-*.sh (tests internos). tests/scripts-parity.test.sh ejecuta --check en sandbox y exige exit 0; verifica que cada archivo del manifest existe en destino con hash idéntico y que NO hay huérfanos en .opencode/scripts/ (whitelist de permitidos). setup-team-doctor.sh gana check_scripts_parity que invoca --check y emite warn/info según modo; con --strict promueve a error. .github/workflows/tests.yml agrega el test al step ''Run tests'' (gate en push a main/develop y PRs). Sincronización inicial: el primer --apply regenera .opencode/scripts/ cerrando el drift de Fase 1 (skalling-metrics.sh summary, teamdb-claim.sh in_review→approved, lib-teamdb.sh CHECK constraint DISCOVERY) en un commit que el gate debe validar.','(1) scripts/build-local-snapshot.sh existe con --apply/--check/--dry-run; (2) scripts/.bundle-manifest lista todos los bundle-esential con sha256 esperado; (3) bash scripts/build-local-snapshot.sh --check retorna 0 sin drift y exit≠0 con drift simulado (test cubre ambos casos); (4) tests/scripts-parity.test.sh pasa local y en CI; (5) bash setup-team-doctor.sh --strict falla con WARN de drift; (6) .github/workflows/tests.yml ejecuta el test en push a main/develop y PRs a main; (7) el commit de sincronización inicial cierra Fase 1 (lib-teamdb.sh CHECK DISCOVERY presente, skalling-metrics.sh summary presente, teamdb-claim.sh validaciones in_review→approved presentes en .opencode/scripts/); (8) tests/install-script-copies.test.sh sigue pasando (instalación global intacta); (9) AGENTS.md incluye sección ''Bundle local .opencode/scripts/'' con contrato, comandos de regeneración y referencia al gate de CI.
+
+Referencia de alcance/aprobación: Plan técnico para Fase 2 del plan de remediación de Skalling. Riesgo medium. request_id req-20260913101348-44357 (clasificado FAST-TRACK pero requiere plan aprobado por la naturaleza medium). Decisión Opción B confirmada por el usuario: generación verificada sin symlinks; cp en install-global.sh se mantiene intacto; agregar tests/scripts-parity.test.sh con diff recursivo scripts/ vs .opencode/scripts/ en CI; check en setup-team-doctor.sh comparando hash de scripts instalados vs fuente del checkout; gate en CI falla si alguien toca scripts/x.sh y no actualiza .opencode/scripts/x.sh.','approved','sol','2026-09-13T13:40:54Z','2026-09-13 13:43:30',NULL,'# Intent
+
+Paridad bundle-local .opencode/scripts/ vs fuente scripts/',2,'sol','sol');
+INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (1,1,'task-auditar-sitios-sqli','Auditar sitios SQLi','','Plan persistido con task IDs, dependencias correctas y resultados verificables. Cero sitios VULNERABLES en scripts/ post-migracion. Lint CI activo en .github/workflows/lint-sqli.yml con archivo de excepciones documentado. Sitios wip-tree.sh y migrate-plans-md-to-db.sh migrados a teamdb_exec_value. Tests SQLi nuevos verdes y agregados a teamdb-hardening-suite.sh. Decision pre-push documentada en MEMORY.','pending',2,'sol',NULL,NULL,0,NULL,NULL,'2026-09-13T13:39:31Z','2026-09-13T13:39:31Z',NULL,NULL,1,NULL,NULL,NULL,'Fase 3 del plan de remediacion SQLi Skalling: auditoria estatica + lint CI bloqueante + migracion de 2 sitios a teamdb_exec_value + tests de cobertura. Riesgo medium.');
+INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (2,1,'task-definir-excepciones-del-linter','Definir excepciones del linter','','Plan persistido con task IDs, dependencias correctas y resultados verificables. Cero sitios VULNERABLES en scripts/ post-migracion. Lint CI activo en .github/workflows/lint-sqli.yml con archivo de excepciones documentado. Sitios wip-tree.sh y migrate-plans-md-to-db.sh migrados a teamdb_exec_value. Tests SQLi nuevos verdes y agregados a teamdb-hardening-suite.sh. Decision pre-push documentada en MEMORY.','pending',2,'sol',NULL,NULL,1,NULL,NULL,'2026-09-13T13:39:31Z','2026-09-13T13:39:31Z',NULL,NULL,1,NULL,NULL,NULL,'Fase 3 del plan de remediacion SQLi Skalling: auditoria estatica + lint CI bloqueante + migracion de 2 sitios a teamdb_exec_value + tests de cobertura. Riesgo medium.');
+INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (3,1,'task-activar-lint-sqli-en-ci','Activar lint SQLi en CI','','Plan persistido con task IDs, dependencias correctas y resultados verificables. Cero sitios VULNERABLES en scripts/ post-migracion. Lint CI activo en .github/workflows/lint-sqli.yml con archivo de excepciones documentado. Sitios wip-tree.sh y migrate-plans-md-to-db.sh migrados a teamdb_exec_value. Tests SQLi nuevos verdes y agregados a teamdb-hardening-suite.sh. Decision pre-push documentada en MEMORY.','pending',2,'sol',NULL,NULL,2,NULL,NULL,'2026-09-13T13:39:31Z','2026-09-13T13:39:31Z',NULL,NULL,1,NULL,NULL,NULL,'Fase 3 del plan de remediacion SQLi Skalling: auditoria estatica + lint CI bloqueante + migracion de 2 sitios a teamdb_exec_value + tests de cobertura. Riesgo medium.');
+INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (4,1,'task-migrar-wip-tree-a-exec-value','Migrar wip-tree a exec_value','','Plan persistido con task IDs, dependencias correctas y resultados verificables. Cero sitios VULNERABLES en scripts/ post-migracion. Lint CI activo en .github/workflows/lint-sqli.yml con archivo de excepciones documentado. Sitios wip-tree.sh y migrate-plans-md-to-db.sh migrados a teamdb_exec_value. Tests SQLi nuevos verdes y agregados a teamdb-hardening-suite.sh. Decision pre-push documentada en MEMORY.','pending',2,'sol',NULL,NULL,3,NULL,NULL,'2026-09-13T13:39:31Z','2026-09-13T13:39:31Z',NULL,NULL,1,NULL,NULL,NULL,'Fase 3 del plan de remediacion SQLi Skalling: auditoria estatica + lint CI bloqueante + migracion de 2 sitios a teamdb_exec_value + tests de cobertura. Riesgo medium.');
+INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (5,1,'task-migrar-migrate-plans-a-exec-value','Migrar migrate-plans a exec_value','','Plan persistido con task IDs, dependencias correctas y resultados verificables. Cero sitios VULNERABLES en scripts/ post-migracion. Lint CI activo en .github/workflows/lint-sqli.yml con archivo de excepciones documentado. Sitios wip-tree.sh y migrate-plans-md-to-db.sh migrados a teamdb_exec_value. Tests SQLi nuevos verdes y agregados a teamdb-hardening-suite.sh. Decision pre-push documentada en MEMORY.','pending',2,'sol',NULL,NULL,4,NULL,NULL,'2026-09-13T13:39:31Z','2026-09-13T13:39:31Z',NULL,NULL,1,NULL,NULL,NULL,'Fase 3 del plan de remediacion SQLi Skalling: auditoria estatica + lint CI bloqueante + migracion de 2 sitios a teamdb_exec_value + tests de cobertura. Riesgo medium.');
+INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (6,1,'task-crear-tests-sqli-nuevos','Crear tests SQLi nuevos','','Plan persistido con task IDs, dependencias correctas y resultados verificables. Cero sitios VULNERABLES en scripts/ post-migracion. Lint CI activo en .github/workflows/lint-sqli.yml con archivo de excepciones documentado. Sitios wip-tree.sh y migrate-plans-md-to-db.sh migrados a teamdb_exec_value. Tests SQLi nuevos verdes y agregados a teamdb-hardening-suite.sh. Decision pre-push documentada en MEMORY.','pending',2,'sol',NULL,NULL,5,NULL,NULL,'2026-09-13T13:39:31Z','2026-09-13T13:39:31Z',NULL,NULL,1,NULL,NULL,NULL,'Fase 3 del plan de remediacion SQLi Skalling: auditoria estatica + lint CI bloqueante + migracion de 2 sitios a teamdb_exec_value + tests de cobertura. Riesgo medium.');
+INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (7,1,'task-integrar-tests-al-hardening-suite','Integrar tests al hardening suite','','Plan persistido con task IDs, dependencias correctas y resultados verificables. Cero sitios VULNERABLES en scripts/ post-migracion. Lint CI activo en .github/workflows/lint-sqli.yml con archivo de excepciones documentado. Sitios wip-tree.sh y migrate-plans-md-to-db.sh migrados a teamdb_exec_value. Tests SQLi nuevos verdes y agregados a teamdb-hardening-suite.sh. Decision pre-push documentada en MEMORY.','pending',2,'sol',NULL,NULL,6,NULL,NULL,'2026-09-13T13:39:31Z','2026-09-13T13:39:31Z',NULL,NULL,1,NULL,NULL,NULL,'Fase 3 del plan de remediacion SQLi Skalling: auditoria estatica + lint CI bloqueante + migracion de 2 sitios a teamdb_exec_value + tests de cobertura. Riesgo medium.');
+INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (8,1,'task-documentar-decision-pre-push','Documentar decision pre-push','','Plan persistido con task IDs, dependencias correctas y resultados verificables. Cero sitios VULNERABLES en scripts/ post-migracion. Lint CI activo en .github/workflows/lint-sqli.yml con archivo de excepciones documentado. Sitios wip-tree.sh y migrate-plans-md-to-db.sh migrados a teamdb_exec_value. Tests SQLi nuevos verdes y agregados a teamdb-hardening-suite.sh. Decision pre-push documentada en MEMORY.','pending',2,'sol',NULL,NULL,7,NULL,NULL,'2026-09-13T13:39:31Z','2026-09-13T13:39:31Z',NULL,NULL,1,NULL,NULL,NULL,'Fase 3 del plan de remediacion SQLi Skalling: auditoria estatica + lint CI bloqueante + migracion de 2 sitios a teamdb_exec_value + tests de cobertura. Riesgo medium.');
+INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (9,1,'recibir-el-cierre-del-plan','Recibir el cierre del plan',NULL,'Receipt sellado en tabla receipts con tree_hash del diff acumulado, codigo de salida 0, y resumen de tareas verificadas (lint CI activo, sitios migrados, tests verdes).','pending',2,'sol',NULL,NULL,8,NULL,NULL,'2026-09-13T13:40:32Z','2026-09-13T13:40:32Z',NULL,NULL,1,NULL,NULL,NULL,'Generar receipt de cierre del plan Fase 3 con verificacion de que lint CI falla con caso de prueba y todas las tasks estan en estado approved o resolved.');
+INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (10,2,'task-definir-spec-de-mapping-bundle-local-lista-expl-cita-src-dst-ignores-y-reglas-de-aplanizaci-n-lib-plano','Definir spec de mapping bundle-local: lista explícita src→dst, ignores y reglas de aplanización lib/→plano','','(1) build-local-snapshot.sh --apply deja .opencode/scripts/ idéntico byte-a-byte para todos los archivos del manifest; (2) tests/scripts-parity.test.sh pasa en CI con exit 0 cuando no hay drift y exit≠0 cuando sí lo hay; (3) setup-team-doctor.sh --strict sale 1 si hay drift; (4) .github/workflows/tests.yml ejecuta el test en push a main/develop y PRs; (5) el diff actual de Fase 1 (skalling-metrics.sh summary, teamdb-claim.sh in_review→approved, lib-teamdb.sh CHECK constraint DISCOVERY) queda resuelto por la sincronización inicial.','approved',2,'teo',NULL,'manifest+tooling generado por Teo en Fase 2 — scripts/.bundle-manifest (59 entries)',0,NULL,NULL,'2026-09-13T13:40:54Z','2026-09-13T13:49:34Z','1789307272','2026-09-13T13:49:34Z',1,NULL,NULL,NULL,'Asegurar que .opencode/scripts/ (bundle usado por agentes en SKALLING_ROOT) refleja el contenido bundle-esencial de scripts/ sin divergencia silenciosa, con generación verificada, test en CI y gate de PR.');
+INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (11,2,'task-crear-scripts-build-local-snapshot-sh-aplica-el-manifest-soporta-check-exit-0-si-drift-dry-run-y-apply-idempotente','Crear scripts/build-local-snapshot.sh: aplica el manifest, soporta --check (exit≠0 si drift), --dry-run y --apply; idempotente','','(1) build-local-snapshot.sh --apply deja .opencode/scripts/ idéntico byte-a-byte para todos los archivos del manifest; (2) tests/scripts-parity.test.sh pasa en CI con exit 0 cuando no hay drift y exit≠0 cuando sí lo hay; (3) setup-team-doctor.sh --strict sale 1 si hay drift; (4) .github/workflows/tests.yml ejecuta el test en push a main/develop y PRs; (5) el diff actual de Fase 1 (skalling-metrics.sh summary, teamdb-claim.sh in_review→approved, lib-teamdb.sh CHECK constraint DISCOVERY) queda resuelto por la sincronización inicial.','approved',2,'teo',NULL,'—',1,NULL,NULL,'2026-09-13T13:40:54Z','2026-09-13T13:52:37Z','1789307378','2026-09-13T13:52:37Z',1,NULL,NULL,NULL,'Asegurar que .opencode/scripts/ (bundle usado por agentes en SKALLING_ROOT) refleja el contenido bundle-esencial de scripts/ sin divergencia silenciosa, con generación verificada, test en CI y gate de PR.');
+INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (12,2,'task-sincronizaci-n-inicial-del-bundle-local-ejecutar-build-local-snapshot-sh-apply-regenerar-opencode-scripts-desde-scripts-commitear-el-delta-con-tests-scripts-parity-test-sh-pasando','Sincronización inicial del bundle local: ejecutar build-local-snapshot.sh --apply, regenerar .opencode/scripts/ desde scripts/, commitear el delta con tests/scripts-parity.test.sh pasando','','(1) build-local-snapshot.sh --apply deja .opencode/scripts/ idéntico byte-a-byte para todos los archivos del manifest; (2) tests/scripts-parity.test.sh pasa en CI con exit 0 cuando no hay drift y exit≠0 cuando sí lo hay; (3) setup-team-doctor.sh --strict sale 1 si hay drift; (4) .github/workflows/tests.yml ejecuta el test en push a main/develop y PRs; (5) el diff actual de Fase 1 (skalling-metrics.sh summary, teamdb-claim.sh in_review→approved, lib-teamdb.sh CHECK constraint DISCOVERY) queda resuelto por la sincronización inicial.','approved',2,'sol',NULL,'apply ejecutado: 59 archivos sincronizados, --check sale 0. drifts Fase 1 cerrados: skalling-metrics.sh summary, teamdb-claim.sh in_review->approved, lib-teamdb.sh DISCOVERY (verificado)',2,NULL,NULL,'2026-09-13T13:40:54Z','2026-09-13T13:51:09Z',NULL,'2026-09-13T13:51:09Z',1,NULL,NULL,NULL,'Asegurar que .opencode/scripts/ (bundle usado por agentes en SKALLING_ROOT) refleja el contenido bundle-esencial de scripts/ sin divergencia silenciosa, con generación verificada, test en CI y gate de PR.');
+INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (13,2,'task-crear-tests-scripts-parity-test-sh-ejecuta-build-local-snapshot-sh-check-valida-hash-lista-hu-rfanos-ignora-pycache-y-archivos-no-listados-en-manifest','Crear tests/scripts-parity.test.sh: ejecuta build-local-snapshot.sh --check, valida hash, lista huérfanos, ignora __pycache__ y archivos no-listados-en-manifest','','(1) build-local-snapshot.sh --apply deja .opencode/scripts/ idéntico byte-a-byte para todos los archivos del manifest; (2) tests/scripts-parity.test.sh pasa en CI con exit 0 cuando no hay drift y exit≠0 cuando sí lo hay; (3) setup-team-doctor.sh --strict sale 1 si hay drift; (4) .github/workflows/tests.yml ejecuta el test en push a main/develop y PRs; (5) el diff actual de Fase 1 (skalling-metrics.sh summary, teamdb-claim.sh in_review→approved, lib-teamdb.sh CHECK constraint DISCOVERY) queda resuelto por la sincronización inicial.','approved',2,'sol',NULL,'tests/scripts-parity.test.sh creado: 8 casos (1 OK, 2 orphans, 3 drift positivo/negativo/falta, 4 idempotente, 5 dry-run no escribe, 6 shellcheck)',3,NULL,NULL,'2026-09-13T13:40:54Z','2026-09-13T13:52:37Z',NULL,'2026-09-13T13:52:37Z',1,NULL,NULL,NULL,'Asegurar que .opencode/scripts/ (bundle usado por agentes en SKALLING_ROOT) refleja el contenido bundle-esencial de scripts/ sin divergencia silenciosa, con generación verificada, test en CI y gate de PR.');
+INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (14,2,'task-agregar-check-scripts-parity-al-setup-team-doctor-sh-usa-check-exit-0-con-strict-advertencia-clara-de-drift','Agregar check_scripts_parity al setup-team-doctor.sh: usa --check, exit≠0 con --strict, advertencia clara de drift','','(1) build-local-snapshot.sh --apply deja .opencode/scripts/ idéntico byte-a-byte para todos los archivos del manifest; (2) tests/scripts-parity.test.sh pasa en CI con exit 0 cuando no hay drift y exit≠0 cuando sí lo hay; (3) setup-team-doctor.sh --strict sale 1 si hay drift; (4) .github/workflows/tests.yml ejecuta el test en push a main/develop y PRs; (5) el diff actual de Fase 1 (skalling-metrics.sh summary, teamdb-claim.sh in_review→approved, lib-teamdb.sh CHECK constraint DISCOVERY) queda resuelto por la sincronización inicial.','approved',2,'teo',NULL,'check_scripts_parity() agregado: --check=0 → ok, drift → warn (err bajo --strict). Llamado desde main() tras check_teamdb. Verificado drift/warning/strict con edits y restore',4,NULL,NULL,'2026-09-13T13:40:54Z','2026-09-13T13:53:19Z','1789307560','2026-09-13T13:53:19Z',1,NULL,NULL,NULL,'Asegurar que .opencode/scripts/ (bundle usado por agentes en SKALLING_ROOT) refleja el contenido bundle-esencial de scripts/ sin divergencia silenciosa, con generación verificada, test en CI y gate de PR.');
+INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (15,2,'task-integrar-tests-scripts-parity-test-sh-en-github-workflows-tests-yml-gate-en-push-a-main-develop-y-prs-a-main','Integrar tests/scripts-parity.test.sh en .github/workflows/tests.yml: gate en push a main/develop y PRs a main','','(1) build-local-snapshot.sh --apply deja .opencode/scripts/ idéntico byte-a-byte para todos los archivos del manifest; (2) tests/scripts-parity.test.sh pasa en CI con exit 0 cuando no hay drift y exit≠0 cuando sí lo hay; (3) setup-team-doctor.sh --strict sale 1 si hay drift; (4) .github/workflows/tests.yml ejecuta el test en push a main/develop y PRs; (5) el diff actual de Fase 1 (skalling-metrics.sh summary, teamdb-claim.sh in_review→approved, lib-teamdb.sh CHECK constraint DISCOVERY) queda resuelto por la sincronización inicial.','approved',2,'teo',NULL,'tests.yml: agregado bash tests/scripts-parity.test.sh al final del step "Run tests" (gate de push a main/develop y PRs a main). YAML validado.',5,NULL,NULL,'2026-09-13T13:40:54Z','2026-09-13T13:53:35Z','1789307602','2026-09-13T13:53:35Z',1,NULL,NULL,NULL,'Asegurar que .opencode/scripts/ (bundle usado por agentes en SKALLING_ROOT) refleja el contenido bundle-esencial de scripts/ sin divergencia silenciosa, con generación verificada, test en CI y gate de PR.');
+INSERT INTO "tasks" ("id","plan_id","slug","title","description_md","acceptance_md","status","priority","owner","blocked_reason","resolution_md","order_index","estimated_minutes","due_date","created_at","updated_at","started_at","resolved_at","version","locked_by","locked_at","last_modified_by","purpose") VALUES (16,2,'documentar-contrato-del-bundle-local-opencode-scripts-en-agents-md-y-readme','Documentar contrato del bundle local .opencode/scripts/ en AGENTS.md y README',NULL,'Sección nueva en AGENTS.md titulada ''Bundle local .opencode/scripts/'' explica origen y contrato; README incluye bloque ''Regenerar bundle local'' con comando bash scripts/build-local-snapshot.sh --apply y --check; tests/scripts-parity.test.sh sigue pasando tras el cambio.','in_progress',2,'teo',NULL,NULL,6,NULL,NULL,'2026-09-13T13:42:57Z','1789307618','1789307618',NULL,1,NULL,NULL,NULL,'Visibilizar el contrato para futuros mantenedores: qué es .opencode/scripts/, por qué diverge estructuralmente de scripts/ (aplanización lib/), cómo regenerarlo, qué pasa si drift, y referencia al test de CI.');
+INSERT INTO "task_dependencies" ("id","task_id","depends_on_task_id","type","created_at") VALUES (1,2,1,'blocks','2026-09-13T13:39:31Z');
+INSERT INTO "task_dependencies" ("id","task_id","depends_on_task_id","type","created_at") VALUES (2,3,2,'blocks','2026-09-13T13:39:31Z');
+INSERT INTO "task_dependencies" ("id","task_id","depends_on_task_id","type","created_at") VALUES (3,4,2,'blocks','2026-09-13T13:39:31Z');
+INSERT INTO "task_dependencies" ("id","task_id","depends_on_task_id","type","created_at") VALUES (4,5,2,'blocks','2026-09-13T13:39:31Z');
+INSERT INTO "task_dependencies" ("id","task_id","depends_on_task_id","type","created_at") VALUES (5,6,4,'blocks','2026-09-13T13:39:31Z');
+INSERT INTO "task_dependencies" ("id","task_id","depends_on_task_id","type","created_at") VALUES (6,6,5,'blocks','2026-09-13T13:39:31Z');
+INSERT INTO "task_dependencies" ("id","task_id","depends_on_task_id","type","created_at") VALUES (7,7,6,'blocks','2026-09-13T13:39:31Z');
+INSERT INTO "task_dependencies" ("id","task_id","depends_on_task_id","type","created_at") VALUES (8,8,2,'blocks','2026-09-13T13:39:31Z');
+INSERT INTO "task_dependencies" ("id","task_id","depends_on_task_id","type","created_at") VALUES (9,12,11,'blocks','2026-09-13T13:42:35Z');
+INSERT INTO "task_dependencies" ("id","task_id","depends_on_task_id","type","created_at") VALUES (10,11,10,'blocks','2026-09-13T13:42:36Z');
+INSERT INTO "task_dependencies" ("id","task_id","depends_on_task_id","type","created_at") VALUES (11,15,13,'blocks','2026-09-13T13:42:36Z');
+INSERT INTO "task_dependencies" ("id","task_id","depends_on_task_id","type","created_at") VALUES (12,14,11,'blocks','2026-09-13T13:42:37Z');
+INSERT INTO "task_dependencies" ("id","task_id","depends_on_task_id","type","created_at") VALUES (13,13,11,'blocks','2026-09-13T13:42:38Z');
+INSERT INTO "task_dependencies" ("id","task_id","depends_on_task_id","type","created_at") VALUES (14,16,11,'blocks','2026-09-13T13:43:06Z');
+INSERT INTO "task_dependencies" ("id","task_id","depends_on_task_id","type","created_at") VALUES (15,16,15,'blocks','2026-09-13T13:43:07Z');
+INSERT INTO "task_dependencies" ("id","task_id","depends_on_task_id","type","created_at") VALUES (16,9,3,'blocks','2026-09-13T13:44:42Z');
+INSERT INTO "task_dependencies" ("id","task_id","depends_on_task_id","type","created_at") VALUES (17,9,7,'blocks','2026-09-13T13:44:42Z');
+INSERT INTO "task_dependencies" ("id","task_id","depends_on_task_id","type","created_at") VALUES (18,9,8,'blocks','2026-09-13T13:44:42Z');
+INSERT INTO "task_claims" ("id","task_id","actor","attempt","input_hash","lease_until","status","claimed_at","released_at") VALUES (1,10,'teo',1,'6825521c60087ec741955029676a72932b44dce31473df87ea032cef1ef6b130',1789307572,'active','1789307272',NULL);
+INSERT INTO "task_claims" ("id","task_id","actor","attempt","input_hash","lease_until","status","claimed_at","released_at") VALUES (2,11,'teo',1,'t11',1789307978,'active','1789307378',NULL);
+INSERT INTO "task_claims" ("id","task_id","actor","attempt","input_hash","lease_until","status","claimed_at","released_at") VALUES (3,14,'teo',1,'t14',1789308160,'active','1789307560',NULL);
+INSERT INTO "task_claims" ("id","task_id","actor","attempt","input_hash","lease_until","status","claimed_at","released_at") VALUES (4,15,'teo',1,'t15',1789308202,'active','1789307602',NULL);
+INSERT INTO "task_claims" ("id","task_id","actor","attempt","input_hash","lease_until","status","claimed_at","released_at") VALUES (5,16,'teo',1,'t16',1789308218,'active','1789307618',NULL);
+INSERT INTO "plan_history" ("id","plan_id","version","changed_by","changed_at","diff_md","snapshot_before","operation") VALUES (1,1,1,'sol','2026-09-13T13:39:31Z','Created with 8 tasks, 8 edges',NULL,'created');
+INSERT INTO "plan_history" ("id","plan_id","version","changed_by","changed_at","diff_md","snapshot_before","operation") VALUES (2,1,2,'sol','2026-09-13T13:40:32Z','add task: recibir-el-cierre-del-plan (purpose: Generar receipt de cierre del plan Fase 3 con verificacion d)','[{"slug":"task-auditar-sitios-sqli","status":"pending","title":"Auditar sitios SQLi"},{"slug":"task-definir-excepciones-del-linter","status":"pending","title":"Definir excepciones del linter"},{"slug":"task-activar-lint-sqli-en-ci","status":"pending","title":"Activar lint SQLi en CI"},{"slug":"task-migrar-wip-tree-a-exec-value","status":"pending","title":"Migrar wip-tree a exec_value"},{"slug":"task-migrar-migrate-plans-a-exec-value","status":"pending","title":"Migrar migrate-plans a exec_value"},{"slug":"task-crear-tests-sqli-nuevos","status":"pending","title":"Crear tests SQLi nuevos"},{"slug":"task-integrar-tests-al-hardening-suite","status":"pending","title":"Integrar tests al hardening suite"},{"slug":"task-documentar-decision-pre-push","status":"pending","title":"Documentar decision pre-push"}]','amended');
+INSERT INTO "plan_history" ("id","plan_id","version","changed_by","changed_at","diff_md","snapshot_before","operation") VALUES (3,2,1,'sol','2026-09-13T13:40:54Z','Created with 6 tasks, 5 edges',NULL,'created');
+INSERT INTO "plan_history" ("id","plan_id","version","changed_by","changed_at","diff_md","snapshot_before","operation") VALUES (4,2,2,'sol','2026-09-13T13:42:57Z','add task: documentar-contrato-del-bundle-local-opencode-scripts-en-agents-md-y-readme (purpose: Visibilizar el contrato para futuros mantenedores: qué es .o)','[{"slug":"task-definir-spec-de-mapping-bundle-local-lista-expl-cita-src-dst-ignores-y-reglas-de-aplanizaci-n-lib-plano","status":"pending","title":"Definir spec de mapping bundle-local: lista explícita src→dst, ignores y reglas de aplanización lib/→plano"},{"slug":"task-crear-scripts-build-local-snapshot-sh-aplica-el-manifest-soporta-check-exit-0-si-drift-dry-run-y-apply-idempotente","status":"pending","title":"Crear scripts/build-local-snapshot.sh: aplica el manifest, soporta --check (exit≠0 si drift), --dry-run y --apply; idempotente"},{"slug":"task-sincronizaci-n-inicial-del-bundle-local-ejecutar-build-local-snapshot-sh-apply-regenerar-opencode-scripts-desde-scripts-commitear-el-delta-con-tests-scripts-parity-test-sh-pasando","status":"pending","title":"Sincronización inicial del bundle local: ejecutar build-local-snapshot.sh --apply, regenerar .opencode/scripts/ desde scripts/, commitear el delta con tests/scripts-parity.test.sh pasando"},{"slug":"task-crear-tests-scripts-parity-test-sh-ejecuta-build-local-snapshot-sh-check-valida-hash-lista-hu-rfanos-ignora-pycache-y-archivos-no-listados-en-manifest","status":"pending","title":"Crear tests/scripts-parity.test.sh: ejecuta build-local-snapshot.sh --check, valida hash, lista huérfanos, ignora __pycache__ y archivos no-listados-en-manifest"},{"slug":"task-agregar-check-scripts-parity-al-setup-team-doctor-sh-usa-check-exit-0-con-strict-advertencia-clara-de-drift","status":"pending","title":"Agregar check_scripts_parity al setup-team-doctor.sh: usa --check, exit≠0 con --strict, advertencia clara de drift"},{"slug":"task-integrar-tests-scripts-parity-test-sh-en-github-workflows-tests-yml-gate-en-push-a-main-develop-y-prs-a-main","status":"pending","title":"Integrar tests/scripts-parity.test.sh en .github/workflows/tests.yml: gate en push a main/develop y PRs a main"}]','amended');
+INSERT INTO "routing_decisions" ("id","ts","user_intent","chosen_route","route_reason","agents_involved","outcome","completed_at") VALUES (1,'2026-09-13 13:45:54','Fase 2 implementación: build-local-snapshot.sh + .bundle-manifest + tests/scripts-parity.test.sh + check en setup-team-doctor.sh + CI gate; sincronización inicial que cierra los 3 drifts de Fase 1','DISCOVERY','clasificación automática','Alex → Jes → Pol','PENDING',NULL);
+INSERT INTO "routing_decisions" ("id","ts","user_intent","chosen_route","route_reason","agents_involved","outcome","completed_at") VALUES (2,'2026-09-13 13:45:59','Fase 2 implementación: build-local-snapshot.sh + .bundle-manifest + tests/scripts-parity.test.sh + check en setup-team-doctor.sh + CI gate; sincronización inicial que cierra los 3 drifts de Fase 1','INLINE','clasificación automática','Alex → Sol → Teo → Jhon','PENDING',NULL);
+INSERT INTO "routing_decisions" ("id","ts","user_intent","chosen_route","route_reason","agents_involved","outcome","completed_at") VALUES (3,'2026-09-13 13:46:14','Fase 2 implementación: build-local-snapshot.sh + .bundle-manifest + tests/scripts-parity.test.sh + check en setup-team-doctor.sh + CI gate; sincronización inicial cierra los 3 drifts de Fase 1','INLINE','clasificación automática','Alex → Sol → Teo → Jhon','PENDING',NULL);
+INSERT INTO "routing_decisions" ("id","ts","user_intent","chosen_route","route_reason","agents_involved","outcome","completed_at") VALUES (4,'2026-09-13 13:46:17','Fase 3 implementación: lint CI gate bloqueante para SQLi; migrar wip-tree.sh:43 y migrate-plans-md-to-db.sh:161 a teamdb_exec_value; tests SQLi nuevos; integrar a hardening-suite','INLINE','clasificación automática','Alex → Sol → Teo → Jhon','PENDING',NULL);
