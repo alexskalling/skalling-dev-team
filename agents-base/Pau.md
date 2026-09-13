@@ -84,6 +84,22 @@ permission:
     "git ls-files *": allow
     "git rev-parse": allow
     "git rev-parse *": allow
+    "cd * && git status": allow
+    "cd * && git status *": allow
+    "cd * && git diff": allow
+    "cd * && git diff *": allow
+    "cd * && git log": allow
+    "cd * && git log *": allow
+    "cd * && git show": allow
+    "cd * && git show *": allow
+    "cd * && git ls-files": allow
+    "cd * && git ls-files *": allow
+    "cd * && git rev-parse": allow
+    "cd * && git rev-parse *": allow
+    "cd * && git stash list": allow
+    "cd * && git stash list *": allow
+    "git stash list": allow
+    "git stash list *": allow
     "codegraph status": allow
     "codegraph status *": allow
     "codegraph query": allow
