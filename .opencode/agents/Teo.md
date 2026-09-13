@@ -58,6 +58,13 @@ permission:
     "pwd *": allow
     find: allow
     "find *": allow
+    "bash -n *": allow
+    diff: allow
+    "diff *": allow
+    "sha256sum": allow
+    "sha256sum *": allow
+    mktemp: allow
+    "mktemp *": allow
     "git status": allow
     "git status *": allow
     "git diff": allow
