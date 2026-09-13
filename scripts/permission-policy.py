@@ -8,9 +8,15 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# En Windows, stdout por defecto usa el codec del locale (cp1252), no UTF-8;
+# render() puede imprimir tildes/emoji de los .md y rompe con UnicodeEncodeError.
+# reconfigure() está disponible desde Python 3.7.
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+
 
 def permissions(name):
-    policy = json.loads((ROOT / 'data/permission-policy.json').read_text())
+    policy = json.loads((ROOT / 'data/permission-policy.json').read_text(encoding='utf-8'))
     profile = policy['profiles'][name]
     result = dict(profile['permissions'])
     result['bash'] = {p: profile['overrides'].get(p, policy['rules'][p])
@@ -32,8 +38,8 @@ def yaml_mapping(mapping, depth=0):
 
 
 def render(path):
-    source = path.read_text()
-    if path.stem not in json.loads((ROOT / 'data/permission-policy.json').read_text())['profiles']:
+    source = path.read_text(encoding='utf-8')
+    if path.stem not in json.loads((ROOT / 'data/permission-policy.json').read_text(encoding='utf-8'))['profiles']:
         return source
     parts = source.split('---', 2)
     block = '\n'.join(yaml_mapping({'permission': permissions(path.stem)})) + '\n'
@@ -56,18 +62,18 @@ def main():
     for folder in ('agents-base', '.opencode/agents'):
         for path in sorted((ROOT / folder).glob('*.md')):
             expected = render(path)
-            if expected != path.read_text():
+            if expected != path.read_text(encoding='utf-8'):
                 if args.write:
-                    path.write_text(expected)
+                    path.write_text(expected, encoding='utf-8')
                 else:
                     failures.append(str(path.relative_to(ROOT)))
     for filename in ('templates/opencode.json', '.opencode/opencode.json'):
         path = ROOT / filename
-        config = json.loads(path.read_text())
+        config = json.loads(path.read_text(encoding='utf-8'))
         if config['permission'] != permissions('project'):
             if args.write:
                 config['permission'] = permissions('project')
-                path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + '\n')
+                path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
             else:
                 failures.append(filename)
     if failures:
