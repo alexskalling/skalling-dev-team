@@ -25,8 +25,8 @@ check "routing clasificado puede persistirse" grep -q -- '--record' "$ROOT/scrip
 check "schema marca work_in_progress como legacy" grep -q 'legacy_surface.*work_in_progress' "$ROOT/sql/project-schema.sql"
 check "política de retención es reutilizable" test -x "$ROOT/scripts/teamdb-prune-backups.sh"
 check "licencia del proyecto existe" test -f "$ROOT/LICENSE"
-check "versión fuente es 0.11.3" grep -q '0.11.3' "$ROOT/VERSION"
-check "migración 0.11.3 existe" test -f "$ROOT/sql/migrations/031_version_0_11_3.sql"
+check "versión fuente es 0.11.4" grep -q '0.11.4' "$ROOT/VERSION"
+check "migración 0.11.4 existe" test -f "$ROOT/sql/migrations/032_coverage_runs.sql"
 check "instalador global falla si TeamDB no puede actualizarse" grep -q 'teamdb global: upgrade aditivo no aplicado' "$ROOT/install-global.sh"
 
 FIXTURE="$(mktemp -d)"

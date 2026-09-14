@@ -16,6 +16,7 @@ for t in tests/dashboard-server.test.py \
          tests/teamdb-safe-query.test.sh \
          tests/teamdb-read.test.sh \
          tests/skalling-route-supersede.test.sh \
+         tests/skalling-coverage.test.sh \
          tests/teamdb-search-sqli.test.sh \
          tests/teamdb-related-sqli.test.sh \
          tests/teamdb-wip-tree-sqli.test.sh \

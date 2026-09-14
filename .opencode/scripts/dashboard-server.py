@@ -190,6 +190,12 @@ class DashboardData:
                 counts[table] = self.one(f"SELECT COUNT(*) AS count FROM {table}")["count"]
         return {"database": self.db_path, "size_bytes": os.path.getsize(self.db_path), "schema_version": version.get("value", "?"), "counts": counts, "read_only": True}
 
+    def coverage(self):
+        if not self.table_exists("coverage_runs"):
+            return {"latest": None, "history": []}
+        rows = self.query("SELECT * FROM coverage_runs ORDER BY ts DESC LIMIT 10")
+        return {"latest": rows[0] if rows else None, "history": rows}
+
     def change_token(self):
         parts = []
         for path in (self.db_path, self.db_path + "-wal"):
@@ -233,6 +239,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 "/api/agents": self.data.agents,
                 "/api/timeline": lambda: self.data.timeline(params.get("limit", [100])[0]),
                 "/api/system": self.data.system,
+                "/api/coverage": self.data.coverage,
                 "/api/changes": lambda: {"token": self.data.change_token()},
                 "/api/memory": lambda: self.data.memory(params.get("kind", ["concepts"])[0], params.get("q", [""])[0], params.get("limit", [100])[0]),
             }
