@@ -2,6 +2,11 @@
 # teamdb-seal-receipt.sh — Emite un receipt SELLADO con tree_hash (revisión congelada)
 # v0.8.3: congela el hash del árbol que se revisó para que pre-commit verifique
 # que los archivos staged son EXACTAMENTE los que se revisaron.
+#
+# NO confundir con skalling-receipt.sh: este escribe una fila en la tabla
+# `receipts` de TeamDB, y es lo que git-gate.py exige para permitir un commit
+# (prueba de review). skalling-receipt.sh es un archivo JSON suelto en disco,
+# bitácora de trabajo sin relación con el gate de commits.
 # Uso: bash teamdb-seal-receipt.sh <task_id> <agent> [project]
 # Entorno (patrón claim-task.sh):
 #   TEAMDB_CLAIM_COMMAND        comando registrado (default: review-seal)

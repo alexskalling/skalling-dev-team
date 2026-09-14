@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # skalling-snapshot.sh — Vuelca DB → archivos .md SOLO cuando VOS lo corrés
-# Uso: skalling-snapshot [change-slug]
-#   Sin args: exporta todos los changes activos
+# Uso: skalling-snapshot.sh [project-dir] [change-slug]
+#   Sin slug: exporta todos los changes activos del proyecto
 #   Con slug: exporta solo ese change
 
 set -euo pipefail

@@ -2,8 +2,7 @@
 # skalling-session-start.sh — Carga contexto al inicio de sesión
 #
 # Uso:
-#   bash skalling-session-start.sh             # lee DB global
-#   bash skalling-session-start.sh --project   # lee DB del proyecto (cwd)
+#   bash skalling-session-start.sh   # DB del proyecto (cwd) si existe, si no la global
 #
 # Imprime: comandos disponibles, conceptos recientes, decisiones aceptadas, WIP.
 # Best-effort: si team.db no existe, sugiere /skalling-init.
@@ -59,9 +58,3 @@ print_db_section "$DB_ACTIVE" "Decisiones aceptadas" \
   "SELECT slug, substr(title, 1, 60) FROM decisions WHERE status='accepted' LIMIT 5"
 print_db_section "$DB_ACTIVE" "Trabajo en curso" \
   "SELECT p.slug || '/' || t.slug, t.status FROM tasks t JOIN plans p ON p.id=t.plan_id WHERE t.status IN ('pending','in_progress','in_review','blocked') ORDER BY p.id,t.order_index LIMIT 12"
-
-if [[ "${1:-}" == "--project" ]] && [[ -f "$DB_PROJECT" ]]; then
-  printf 'Project DB (./.opencode/context/team.db):\n'
-  print_db_section "$DB_PROJECT" "Conceptos del proyecto" \
-    "SELECT slug, substr(title, 1, 60) FROM concepts ORDER BY updated_at DESC LIMIT 5"
-fi

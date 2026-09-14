@@ -1,38 +1,14 @@
 #!/usr/bin/env bash
-# skalling-route.sh — Tabla de despacho + audit de routing
+# skalling-route.sh — Clasificación de intención/riesgo + audit de routing
 #
 # Uso:
-#   bash skalling-route.sh list                              # imprime la tabla
-#   bash skalling-route.sh record ROUTE AGENT [INTENT]       # registra decisión
-#   bash skalling-route.sh classify --risk low|medium|high --clarity clear|ambiguous --kind code
+#   bash skalling-route.sh classify --risk low|medium|high --clarity clear|ambiguous --kind code [--record ...]
 #
-# La tabla es read-only desde bash. El LLM la lee una vez al clasificar intención.
-
+# `classify` es el único subcomando real: lo usa Alex en cada pedido (ver
+# skills/skalling-routing). `--record` persiste la decisión en TeamDB.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}"
-
-DISPATCH_TABLE="$(cat <<'EOF'
-INTENT / RISK                   | ROUTE        | AGENTS
-investigación / explicar        | RESEARCH     | Jes
-auditoría / seguridad / calidad| DIRECT       | Luz
-riesgo bajo, alcance claro       | FAST-TRACK   | Teo → Jhon
-riesgo medio, alcance claro      | INLINE       | Sol → Teo → Jhon
-riesgo alto o intención ambigua | SDD          | Pol → Sol → Teo → Jhon → Luz → Pau
-memoria / WIP / followups       | MEMORY       | Pau
-specs / propuesta de cambio     | SPEC         | Pol
-plan técnico / design / tasks   | DESIGN       | Sol
-verificación / regresión        | VERIFY       | Jhon
-commits                         | COMMIT       | Alex (con permiso)
-EOF
-)"
-
-DB_GLOBAL="${SKALLING_DB_GLOBAL:-$HOME/.config/opencode/team.db}"
-
-cmd_list() {
-  printf 'TABLA DE DESPACHO\n'
-  printf '%s\n' "$DISPATCH_TABLE"
-}
 
 persist_classification() {
   local db="$1" request_id="$2" intent="$3" route="$4" agents="$5" risk="$6"
@@ -178,41 +154,10 @@ print(json.dumps(result, ensure_ascii=False, separators=(',', ':')))
 PY
 }
 
-cmd_record() {
-  local route="${1:-}"
-  local agent="${2:-}"
-  local intent="${3:-}"
-  if [[ -z "$route" || -z "$agent" ]]; then
-    printf 'Uso: skalling-route.sh record <route> <agent> [intent]\n' >&2
-    return 1
-  fi
-  if [[ ! -f "$DB_GLOBAL" ]]; then
-    printf 'audit skipped (teamdb no disponible)\n'
-    return 0
-  fi
-  if ! command -v sqlite3 >/dev/null 2>&1; then
-    printf 'audit skipped (sqlite3 no instalado)\n'
-    return 0
-  fi
-  if ! sqlite3 "$DB_GLOBAL" "SELECT 1 FROM routing_decisions LIMIT 1" >/dev/null 2>&1; then
-    printf 'audit skipped (tabla routing_decisions no existe en schema)\n'
-    return 0
-  fi
-  if python3 "$SCRIPT_DIR/teamdb_exec.py" --db "$DB_GLOBAL" --mode write \
-    --sql "INSERT INTO routing_decisions (ts,user_intent,chosen_route,route_reason,agents_involved) VALUES (datetime('now'),?,?,'manual',?)" \
-    --params "$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1:]))' "$intent" "$route" "$agent")" >/dev/null; then
-    printf 'audit ok (%s → %s)\n' "$route" "$agent"
-  else
-    printf 'audit failed (%s)\n' "$route"
-  fi
-}
-
 case "${1:-help}" in
-  list)    shift; cmd_list "$@" ;;
   classify) shift; cmd_classify "$@" ;;
-  record)  shift; cmd_record "$@" ;;
   help|-h|--help)
-    printf 'Uso:\n  %s list\n  %s classify --kind code|research|audit --risk low|medium|high --scope local|module|cross-cutting|unknown [--clarity clear|ambiguous] [--decision none|pending|resolved] [--sensitive] [--visual] [--file RUTA --acceptance TEXTO --reuse TEXTO --plan-id ID] [--record --intent TEXTO --project RUTA]\n  %s record ROUTE AGENT [INTENT]\n' "$0" "$0" "$0"
+    printf 'Uso:\n  %s classify --kind code|research|audit --risk low|medium|high --scope local|module|cross-cutting|unknown [--clarity clear|ambiguous] [--decision none|pending|resolved] [--sensitive] [--visual] [--file RUTA --acceptance TEXTO --reuse TEXTO --plan-id ID] [--record --intent TEXTO --project RUTA]\n' "$0"
     ;;
   *)
     printf 'Subcomando desconocido: %s\n' "$1" >&2
