@@ -19,7 +19,7 @@ check() {
 }
 
 expected=(
-  skalling-codegraph skalling-dashboard skalling-doctor skalling-help
+  skalling-codegraph skalling-coverage skalling-dashboard skalling-doctor skalling-help
   skalling-init skalling-memory skalling-merge skalling-metrics
   skalling-recover skalling-refresh skalling-resume skalling-status
   skalling-update skalling-goal

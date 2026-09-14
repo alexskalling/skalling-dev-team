@@ -458,9 +458,20 @@ install_skalling_scripts() {
   # Cualquier skalling-*.sh en scripts/ se copia a ~/.config/opencode/scripts/.
   log INFO "Instalando scripts de orquestación skalling-* en $OPENCODE_DIR/scripts"
   run mkdir -p "$OPENCODE_DIR/scripts"
-  if [[ -e "$OPENCODE_DIR/scripts/skalling-models.sh" ]]; then
-    run rm -f "$OPENCODE_DIR/scripts/skalling-models.sh"
-  fi
+  # Podar fantasmas: un skalling-*.{sh,py} ya instalado cuya fuente se borró
+  # (como skalling-models.sh o skalling-context-cache.sh) quedaba instalado
+  # para siempre -- el glob de abajo solo copia lo que existe hoy, nunca borra
+  # lo que dejó de existir. Mismo patrón que teamdb-claim-task.sh en
+  # install_teamdb() más abajo, generalizado para no repetir un caso por vez.
+  local installed
+  for installed in "$OPENCODE_DIR"/scripts/skalling-*.sh "$OPENCODE_DIR"/scripts/skalling-*.py; do
+    [ -f "$installed" ] || continue
+    local installed_name; installed_name="$(basename "$installed")"
+    if [ ! -f "$SCRIPT_DIR/scripts/$installed_name" ]; then
+      run rm -f "$installed"  # lens:ok: guarda [ -f ] arriba, ruta del glob sobre OPENCODE_DIR fijo
+      [[ "$DRY_RUN" == true ]] || log OK "huérfano removido: scripts/$installed_name"
+    fi
+  done
   local script_count=0
   local script
   for script in "$SCRIPT_DIR"/scripts/skalling-*.sh; do

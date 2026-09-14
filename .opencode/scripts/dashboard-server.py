@@ -190,6 +190,12 @@ class DashboardData:
                 counts[table] = self.one(f"SELECT COUNT(*) AS count FROM {table}")["count"]
         return {"database": self.db_path, "size_bytes": os.path.getsize(self.db_path), "schema_version": version.get("value", "?"), "counts": counts, "read_only": True}
 
+    def coverage(self):
+        if not self.table_exists("coverage_runs"):
+            return {"latest": None, "history": []}
+        rows = self.query("SELECT * FROM coverage_runs ORDER BY ts DESC LIMIT 10")
+        return {"latest": rows[0] if rows else None, "history": rows}
+
     def change_token(self):
         parts = []
         for path in (self.db_path, self.db_path + "-wal"):
@@ -233,6 +239,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 "/api/agents": self.data.agents,
                 "/api/timeline": lambda: self.data.timeline(params.get("limit", [100])[0]),
                 "/api/system": self.data.system,
+                "/api/coverage": self.data.coverage,
                 "/api/changes": lambda: {"token": self.data.change_token()},
                 "/api/memory": lambda: self.data.memory(params.get("kind", ["concepts"])[0], params.get("q", [""])[0], params.get("limit", [100])[0]),
             }
@@ -267,6 +274,20 @@ class DashboardServer(http.server.ThreadingHTTPServer):
 
 
 if __name__ == "__main__":
+    # teamdb-dashboard.sh lo lanza con "nohup ... &", pero nohup solo ignora
+    # SIGHUP -- no saca al proceso del process group del bash que lo lanzó.
+    # Muchos harnesses de agentes (incluido OpenCode) matan el process group
+    # completo de cada invocación de shell cuando esa invocación termina, así
+    # que el server nohup'd moría igual apenas terminaba el comando que lo
+    # arrancó. Bug real reportado en uso: "corro /skalling-dashboard y se
+    # cierra solo". os.setsid() lo hace líder de una sesión y process group
+    # nuevos antes de servir, así una señal dirigida al grupo original nunca
+    # lo alcanza. Falla con OSError si el proceso ya es líder de su grupo
+    # (caso normal si se corre a mano en foreground); ahí no hace falta.
+    try:
+        os.setsid()
+    except OSError:
+        pass
     print(f"PORT={PORT}", flush=True)
     with DashboardServer(("127.0.0.1", PORT), Handler) as server:
         server.serve_forever()

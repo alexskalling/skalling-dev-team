@@ -2,7 +2,7 @@
 
 Skalling es un equipo de **8 agentes de IA** que trabajan juntos adentro de [OpenCode](https://opencode.ai). Cada agente tiene un rol específico y siguen un ciclo ordenado para construir software bien hecho.
 
-**Versión actual: 0.11.2**
+**Versión actual: 0.11.4**
 
 ---
 
@@ -166,10 +166,12 @@ Alex clasifica tu pedido y deriva al agente que corresponde.
 |---|---|
 | `/skalling-help` | Indica rápidamente qué comando usar |
 | `/skalling-init` | Prepara el proyecto por primera vez (detecta lenguaje, crea memoria) |
+| `/skalling-goal` | Completa un objetivo hasta un commit local, sin push |
 | `/skalling-status` | Muestra el estado del proyecto y el trabajo en curso |
 | `/skalling-resume` | Recupera una cápsula mínima para continuar el trabajo |
 | `/skalling-memory` | Busca, relaciona, grafica y revisa la memoria desde un solo lugar |
 | `/skalling-metrics` | Reporta mediciones reales del flujo, sin estimar ahorros |
+| `/skalling-coverage` | Corre la cobertura de tests del proyecto y guarda el resultado real |
 | `/skalling-codegraph` | Analiza estructura, dependencias e impacto del código |
 | `/skalling-dashboard` | Abre la vista local de TeamDB |
 | `/skalling-refresh` | Vuelve a detectar el lenguaje y herramientas |
@@ -267,7 +269,7 @@ skalling-dev-team/
 ├── agents-base/                      # Los 8 agentes (archivos .md)
 ├── constitution/
 │   └── constitucion.md               # Las 17 reglas
-├── command/                          # Los 13 comandos /skalling-*
+├── command/                          # Los 15 comandos /skalling-*
 ├── skills-base/                      # Habilidades de los agentes (7 skalling-* core)
 ├── templates/                        # Plantillas
 ├── data/                             # Detectores de lenguajes

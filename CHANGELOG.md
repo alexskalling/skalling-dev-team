@@ -4,6 +4,109 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.11.4] — en preparación
+
+Consolida la primera ronda de uso real end-to-end (proyecto Survan) y una
+auditoría completa de los comandos `/skalling-*` y el installer.
+
+### Fixed
+- Modelo de permisos: `npm install`, `pnpm add/install/remove`, `yarn
+  add/remove` pasan de `ask` a `allow` en los 8 agentes — quedaron
+  agregados como "ask" al invertir el default general, repitiendo el mismo
+  error que se estaba corrigiendo (instalar dependencias declaradas es tan
+  rutinario como correr un test, no está en la categoría de "borrar o
+  modificar una base de datos").
+- `install-global.sh` generaliza la poda de scripts `skalling-*.{sh,py}`
+  fantasma (confirmado en vivo: `skalling-context-cache.sh`, ya borrado del
+  repo, seguía instalado tras un reinstall) en vez de parchar caso por caso
+  cada vez que se remueve uno.
+- `skalling-route.sh classify --record` cierra en el código, como
+  `superseded`, cualquier métrica del mismo proyecto que haya quedado
+  abierta por una reclasificación en los últimos 30 minutos, en vez de
+  depender de que Alex lo recuerde por instrucción en markdown. El bug
+  anterior (filas colgadas en `pending`) se había "arreglado" con una
+  instrucción, que resultó igual de frágil — y el `outcome` con casing
+  inconsistente (`SUCCESS` vs `success`) que `summary` comparaba
+  literal también se corrige (compara con `LOWER()`).
+- `dashboard-server.py` sobrevive a que se mate el process group de quien
+  lo lanza: llama `os.setsid()` antes de servir, porque `nohup` (usado por
+  `teamdb-dashboard.sh`) solo ignora SIGHUP, no saca al proceso del process
+  group de quien lo lanzó. Bug real reportado en uso: "corro
+  `/skalling-dashboard` y se cierra solo".
+- Auditoría de comandos: elimina código muerto (`skalling-route.sh list` y
+  `record` sin caller real, `skalling-context-cache.sh` sin caller y con
+  bug de datos falsos si faltan `jq`/`yq`, flag `--project` de
+  `skalling-session-start.sh` que nunca cambiaba nada) y desincroniza
+  documentado entre `command/README.md` y `skalling-help.md`.
+
+### Added
+- `coverage_runs`: historial de corridas de cobertura de tests. Nuevo
+  comando `/skalling-coverage` corre el comando de cobertura detectado en
+  `project.yaml` (`testing.coverage.command`), reconoce los formatos
+  Istanbul (vitest/jest/nyc), `coverage.py` y `go tool cover`, y nunca
+  inventa un porcentaje: si el formato no se reconoce, o no hay comando
+  configurado, queda constancia de por qué en vez de fabricar un número.
+  Ignora artefactos de cobertura viejos que hayan quedado en disco de una
+  corrida anterior (compara `mtime` contra el inicio de la corrida actual).
+- Dashboard: pestaña "Planes" (activos y pasados, con progreso real —
+  el backend ya existía pero nada en el frontend lo llamaba) y panel de
+  cobertura de tests en la pestaña "Sistema".
+
+### Migration
+- `032_coverage_runs.sql` agrega la tabla y eleva bases existentes a
+  schema `0.11.4`.
+
+## [0.11.3] — en preparación
+
+### Fixed
+- `teamdb_heal_global` reconstruye `routing_decisions` si el CHECK
+  constraint global no incluye `DISCOVERY` (bug crítico bloqueante en
+  bases globales existentes; el fix equivalente para bases de proyecto
+  ya existía en `sql/migrations/024_version_0_10_3.sql` pero nunca se
+  había espejado en el camino de heal global).
+- `install-global.sh` borra `teamdb-claim-task.sh` de instalaciones ya
+  existentes: quedaba huérfano en disco tras removerlo del repo, porque
+  el instalador nunca podaba archivos eliminados.
+- `teamdb-read.sh` acepta el proyecto como último argumento posicional,
+  igual que el resto de `teamdb-*.sh` (antes exigía `--project` al
+  principio y confundía cualquier extra al final con un bind param,
+  disparando "Incorrect number of bindings supplied" sin ninguna pista
+  útil).
+- `workflow_metrics` auto-cierra requests huérfanas (`completed_at IS
+  NULL` por más de 2h) antes de insertar una nueva; se perdía sistemá-
+  ticamente telemetría por filas nunca cerradas.
+- `bootstrap-context.sh` ya no silencia el stderr de `teamdb-init.sh`.
+
+### Changed
+- Ciclo de claims unificado en `teamdb-claim.sh` (lease/epoch,
+  `input_hash`, transiciones `in_review→approved`/`approved→resolved`
+  verificadas por rol); se remueve `teamdb-claim-task.sh` (CAS simple
+  sobre `tasks.status/version`, sin expiración de lease, sin callers
+  reales).
+- Modelo de permisos `bash` de los 8 agentes invertido: de "todo pide
+  permiso salvo una lista larga de comandos seguros" a "todo permitido
+  salvo una lista corta de operaciones críticas" (`sudo`, instalación de
+  paquetes, borrado de archivos de base de datos). El modelo anterior
+  era una batalla perdida contra la combinatoria de formas de invocar un
+  mismo comando y generaba fricción constante en uso real, incluso para
+  lecturas triviales (`cat`, `stat`, `diff`, correr un test).
+- Se agregan utilitarios de lectura (`sed`, `which`, `command -v`,
+  `test`, `bash -n`, `diff`, `sha256sum`, `mktemp`, etc.) y tolerancia al
+  prefijo `cd <ruta> &&` en los `git` de solo lectura ya permitidos.
+
+### CI
+- `permission-policy.py` fuerza UTF-8 al leer/escribir (rompía en
+  Windows, que usa `cp1252` por default).
+- Instala SQLite de Homebrew en `macos-latest`: el del sistema no trae
+  FTS5.
+- Corrige `teamdb-dag-claims` (shellcheck 0.9.0 en CI vs 0.11.0 local) y
+  el smoke test de `readiness degraded`.
+- Silencia SC2254 en `skalling-review.sh` (rompía el job "Shell script
+  lint").
+
+### Migration
+- `031_version_0_11_3.sql` eleva bases existentes a schema `0.11.3`.
+
 ## [0.11.2] — en preparación
 
 ### Fixed

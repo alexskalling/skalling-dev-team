@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# mem-review.sh siempre es de solo lectura (busca duplicados/zombies/stale/
+# superseded, nunca escribe). --dry-run no cambia nada: se acepta solo por
+# simetría con el resto de subcomandos de /skalling-memory (refresh sí tiene
+# un modo real no-dry-run).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -18,6 +22,7 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --dry-run)
+            # No-op: este comando nunca escribe. Ver comentario de cabecera.
             shift
             ;;
         --help|-h)

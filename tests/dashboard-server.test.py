@@ -68,6 +68,7 @@ CREATE TABLE concepts (id INTEGER PRIMARY KEY, slug TEXT, title TEXT, body_md TE
 CREATE TABLE decisions (id INTEGER PRIMARY KEY, slug TEXT, title TEXT, body_md TEXT, status TEXT, decided_at TEXT, decided_by TEXT);
 CREATE TABLE preferences (id INTEGER PRIMARY KEY, slug TEXT, scope TEXT, scope_value TEXT, body_md TEXT, confidence REAL, source TEXT);
 CREATE TABLE known_problems (id INTEGER PRIMARY KEY, slug TEXT, title TEXT, symptom_md TEXT, workaround_md TEXT, status TEXT, discovered_at TEXT, resolved_at TEXT);
+CREATE TABLE coverage_runs (id INTEGER PRIMARY KEY, ts TEXT NOT NULL DEFAULT (datetime('now')), command TEXT NOT NULL, format TEXT, percent REAL, lines_covered INTEGER, lines_total INTEGER, note TEXT);
 """
 
 
@@ -80,6 +81,7 @@ class DashboardDataTest(unittest.TestCase):
         conn.executescript(SCHEMA)
         conn.execute("INSERT INTO schema_meta VALUES ('version', 'test')")
         conn.execute("INSERT INTO plans VALUES (1,'release','Release','in_progress','sol','2026-01-01','2026-01-02',NULL)")
+        conn.execute("INSERT INTO plans VALUES (2,'past','Plan pasado','completed','sol','2025-12-01','2025-12-05','2025-12-05')")
         conn.executemany(
             "INSERT INTO tasks VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             [
@@ -92,6 +94,8 @@ class DashboardDataTest(unittest.TestCase):
         conn.execute("INSERT INTO task_dependencies VALUES (1,3,2,'blocks','2026-01-03')")
         conn.execute("INSERT INTO task_claims VALUES (1,2,'jhon',1,'hash',9999999999,'active','2026-01-03',NULL)")
         conn.execute("INSERT INTO workflow_state VALUES (1,'release','build','jhon','2026-01-03','lock','2026-01-03')")
+        conn.execute("INSERT INTO coverage_runs VALUES (1,'2026-01-01T10:00:00','npm run coverage','istanbul',75.0,150,200,NULL)")
+        conn.execute("INSERT INTO coverage_runs VALUES (2,'2026-01-02T10:00:00','npm run coverage','unknown',NULL,NULL,NULL,'formato no reconocido')")
         conn.execute("INSERT INTO audit_log VALUES (1,'2026-01-03','jhon','update','tasks',2,'{\"status\":\"in_progress\"}','helper')")
         conn.execute("INSERT INTO receipts VALUES ('r1','2','jhon','pytest',0,'ok','2026-01-03','abc')")
         conn.commit()
@@ -103,6 +107,34 @@ class DashboardDataTest(unittest.TestCase):
         self.assertEqual(data["workflow"]["phase"], "build")
         self.assertEqual(data["blockers"][0]["blocked_reason"], "Falta revisión")
         self.assertEqual(data["next_tasks"][0]["slug"], "next")
+
+    def test_plans_reports_task_progress_and_includes_past_plans(self):
+        plans = dashboard.DashboardData(self.db_path).plans()
+        self.assertEqual({p["slug"] for p in plans}, {"release", "past"})
+        release = next(p for p in plans if p["slug"] == "release")
+        self.assertEqual((release["tasks_total"], release["tasks_done"]), (4, 1))
+        past = next(p for p in plans if p["slug"] == "past")
+        self.assertEqual(past["status"], "completed")
+        self.assertIsNotNone(past["completed_at"])
+        # in_progress ordena antes que un plan ya cerrado, aunque sea mas viejo.
+        self.assertEqual(plans[0]["slug"], "release")
+
+    def test_coverage_reports_latest_and_history_newest_first(self):
+        result = dashboard.DashboardData(self.db_path).coverage()
+        self.assertEqual(result["latest"]["id"], 2)
+        self.assertIsNone(result["latest"]["percent"])
+        self.assertEqual([row["id"] for row in result["history"]], [2, 1])
+
+    def test_coverage_degrades_gracefully_without_the_table(self):
+        handle, db_path = tempfile.mkstemp(suffix=".db")
+        os.close(handle)
+        self.addCleanup(lambda: os.path.exists(db_path) and os.unlink(db_path))
+        conn = sqlite3.connect(db_path)
+        conn.execute("CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        conn.commit()
+        conn.close()
+        result = dashboard.DashboardData(db_path).coverage()
+        self.assertEqual(result, {"latest": None, "history": []})
 
     def test_agents_combines_owners_with_active_claims(self):
         agents = dashboard.DashboardData(self.db_path).agents()
@@ -154,6 +186,7 @@ class DashboardHtmlContractTest(unittest.TestCase):
         for marker in (
             'data-view="overview"',
             'data-view="flow"',
+            'data-view="plans"',
             'data-view="history"',
             'data-view="memory"',
             'id="last-updated"',

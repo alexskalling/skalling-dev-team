@@ -3,8 +3,9 @@
 La interfaz pública está organizada por intención:
 
 - Empezar: `/skalling-init`, `/skalling-help`.
-- Entender: `/skalling-status`, `/skalling-resume`, `/skalling-codegraph`, `/skalling-dashboard`.
-- Memoria: `/skalling-memory`, `/skalling-metrics`.
+- Completar un objetivo hasta un commit local, sin push: `/skalling-goal`.
+- Entender: `/skalling-status`, `/skalling-codegraph`, `/skalling-dashboard`, `/skalling-coverage`.
+- Memoria: `/skalling-memory`, `/skalling-resume`, `/skalling-metrics`.
 - Mantener: `/skalling-refresh`, `/skalling-doctor`, `/skalling-update`.
 - Recuperar: `/skalling-recover`, `/skalling-merge`.
 

@@ -22,4 +22,4 @@ CREATE TABLE IF NOT EXISTS agent_workflow_events(
   evidence TEXT NOT NULL, ts REAL NOT NULL
 );
 
-UPDATE schema_meta SET value = '0.11.2' WHERE key = 'version';
+UPDATE schema_meta SET value = '0.11.4' WHERE key = 'version';

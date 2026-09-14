@@ -7,6 +7,7 @@ cd "$SKALLING_ROOT"
 PASS=0; FAIL=0
 for t in tests/dashboard-server.test.py \
          tests/dashboard-launcher.test.sh \
+         tests/dashboard-survives-group-kill.test.sh \
          tests/quality-priorities.test.sh \
          tests/skalling-metrics-summary.test.sh \
          tests/skalling-metrics-orphan-cleanup.test.sh \
@@ -15,6 +16,8 @@ for t in tests/dashboard-server.test.py \
          tests/workflow-git-gate-bridge.test.py \
          tests/teamdb-safe-query.test.sh \
          tests/teamdb-read.test.sh \
+         tests/skalling-route-supersede.test.sh \
+         tests/skalling-coverage.test.sh \
          tests/teamdb-search-sqli.test.sh \
          tests/teamdb-related-sqli.test.sh \
          tests/teamdb-wip-tree-sqli.test.sh \
@@ -22,6 +25,7 @@ for t in tests/dashboard-server.test.py \
          tests/scripts-parity.test.sh \
          tests/teamdb-problems-fts.test.sh \
          tests/install-script-copies.test.sh \
+         tests/install-orphan-cleanup.test.sh \
          tests/install-hooks-paths.test.sh \
          tests/audit-log-actor.test.sh \
          tests/teamdb-plan.test.sh \

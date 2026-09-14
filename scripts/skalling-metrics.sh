@@ -35,6 +35,10 @@ case "$OP" in
     ;;
   finish)
     REQUEST_ID="${1:?Falta request-id}"; OUTCOME="${2:?Falta outcome}"; project_from_last "${3:-$(pwd)}"
+    # Normalizado a minusculas: nada obliga al caller (un agente LLM) a usar
+    # una casing fija, y "summary" comparaba contra 'success' en minusculas
+    # -- una fila real con outcome='SUCCESS' quedaba fuera del conteo.
+    OUTCOME="$(printf '%s' "$OUTCOME" | tr '[:upper:]' '[:lower:]')"
     write_sql "UPDATE workflow_metrics SET outcome=?,completed_at=datetime('now'),duration_ms=CAST((julianday('now')-julianday(started_at))*86400000 AS INTEGER) WHERE request_id=?" "$OUTCOME" "$REQUEST_ID"
     ;;
   report)
@@ -49,7 +53,7 @@ case "$OP" in
         ' risk=' || risk_level ||
         ' runs=' || COUNT(*) ||
         ' completed=' || SUM(CASE WHEN completed_at IS NOT NULL THEN 1 ELSE 0 END) ||
-        ' success=' || SUM(CASE WHEN outcome = 'success' THEN 1 ELSE 0 END) ||
+        ' success=' || SUM(CASE WHEN LOWER(outcome) = 'success' THEN 1 ELSE 0 END) ||
         ' avg_duration_ms=' || COALESCE(CAST(AVG(duration_ms) AS INTEGER),0) ||
         ' avg_handoffs=' || ROUND(AVG(handoffs), 2) ||
         ' avg_permissions=' || ROUND(AVG(permission_prompts), 2) ||

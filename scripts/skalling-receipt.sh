@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # skalling-receipt.sh — Emite un receipt inmutable
 #
+# NO confundir con teamdb-seal-receipt.sh: ese sella una fila en la tabla
+# `receipts` de TeamDB y es lo que git-gate.py exige para permitir un commit
+# (prueba de review). Este script es distinto: escribe un archivo JSON suelto
+# en .opencode/changes/<slug>/receipts/ como bitácora de trabajo por tarea
+# (route/verdict/artifact), sin relación con el gate de commits.
+#
 # Uso:
 #   bash skalling-receipt.sh ROUTE TASK VERDICT [ARTIFACT]
 #

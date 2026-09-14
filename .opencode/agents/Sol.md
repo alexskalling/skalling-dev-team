@@ -265,15 +265,15 @@ permission:
     "tail *id_rsa*": ask
     sudo: deny
     "sudo *": deny
-    "npm install": ask
-    "npm install *": ask
-    "npm i *": ask
-    "pnpm add *": ask
-    "pnpm install": ask
-    "pnpm install *": ask
-    "pnpm remove *": ask
-    "yarn add *": ask
-    "yarn remove *": ask
+    "npm install": allow
+    "npm install *": allow
+    "npm i *": allow
+    "pnpm add *": allow
+    "pnpm install": allow
+    "pnpm install *": allow
+    "pnpm remove *": allow
+    "yarn add *": allow
+    "yarn remove *": allow
     "rm *.db*": deny
     "rm *.sqlite*": deny
     export: deny

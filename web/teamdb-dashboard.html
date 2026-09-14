@@ -13,9 +13,10 @@
   <nav class="nav">
     <button class="active" data-view="overview" aria-current="page"><span class="icon">01</span><span class="label">Ahora</span></button>
     <button data-view="flow"><span class="icon">02</span><span class="label">Flujo</span></button>
-    <button data-view="history"><span class="icon">03</span><span class="label">Historial</span></button>
-    <button data-view="memory"><span class="icon">04</span><span class="label">Memoria</span></button>
-    <button data-view="system"><span class="icon">05</span><span class="label">Sistema</span></button>
+    <button data-view="plans"><span class="icon">03</span><span class="label">Planes</span></button>
+    <button data-view="history"><span class="icon">04</span><span class="label">Historial</span></button>
+    <button data-view="memory"><span class="icon">05</span><span class="label">Memoria</span></button>
+    <button data-view="system"><span class="icon">06</span><span class="label">Sistema</span></button>
   </nav>
   <p class="rail-note">Lectura segura de TeamDB.<br>No modifica el trabajo.</p>
 </aside>
@@ -27,6 +28,7 @@
   <main>
     <section class="view" id="view-overview" aria-labelledby="overview-title"><div id="overview-content"><div class="skeleton"></div></div></section>
     <section class="view" id="view-flow" hidden aria-labelledby="flow-title"><div class="hero"><div><p class="eyebrow">Trabajo coordinado</p><h1 id="flow-title">Flujo de tareas</h1></div><p>Una vista por estado, con responsables, dependencias y bloqueos.</p></div><div class="toolbar"><label class="sub" for="task-search">Buscar tarea</label><input class="field" id="task-search" type="search" placeholder="Título, responsable o plan"><label class="sub" for="task-owner">Responsable</label><select class="field" id="task-owner"><option value="">Todos</option></select></div><div id="flow-content"></div></section>
+    <section class="view" id="view-plans" hidden aria-labelledby="plans-title"><div class="hero"><div><p class="eyebrow">Historial completo</p><h1 id="plans-title">Planes</h1></div><p>Todos los planes del proyecto, activos y pasados, con su avance real.</p></div><div id="plans-content"></div></section>
     <section class="view" id="view-history" hidden aria-labelledby="history-title"><div class="hero"><div><p class="eyebrow">Evidencia del trabajo</p><h1 id="history-title">Lo que ocurrió</h1></div><p>Cambios, verificaciones e intentos en una sola línea de tiempo.</p></div><div id="history-content"></div></section>
     <section class="view" id="view-memory" hidden aria-labelledby="memory-title"><div class="hero"><div><p class="eyebrow">Contexto compartido</p><h1 id="memory-title">Memoria del proyecto</h1></div><p>Encuentra decisiones y conocimiento sin abrir archivos ni recorrer toda la base.</p></div><div class="toolbar"><label class="sub" for="memory-kind">Tipo</label><select class="field" id="memory-kind"><option value="concepts">Conceptos</option><option value="decisions">Decisiones</option><option value="preferences">Preferencias</option><option value="problems">Problemas</option></select><label class="sub" for="memory-search">Buscar</label><input class="field" id="memory-search" type="search" placeholder="Escribe una palabra"></div><div id="memory-content"></div></section>
     <section class="view" id="view-system" hidden aria-labelledby="system-title"><div class="hero"><div><p class="eyebrow">Salud operativa</p><h1 id="system-title">Sistema</h1></div><p>Versión, tamaño y contenido real de TeamDB. El análisis de código vive separado en CodeGraph.</p></div><div id="system-content"></div></section>

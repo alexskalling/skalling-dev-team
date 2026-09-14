@@ -8,7 +8,7 @@ Muestra una guía breve agrupada por intención:
 
 - Empezar: `/skalling-init`, `/skalling-help`.
 - Completar un objetivo hasta un commit local, sin push: `/skalling-goal <objetivo>`; controles `status`, `pause`, `resume`, `cancel`.
-- Entender: `/skalling-status`, `/skalling-codegraph`, `/skalling-dashboard`.
+- Entender: `/skalling-status`, `/skalling-codegraph`, `/skalling-dashboard`, `/skalling-coverage`.
 - Memoria: `/skalling-memory`, `/skalling-resume`, `/skalling-metrics`.
 - Mantener: `/skalling-refresh`, `/skalling-doctor`, `/skalling-update`.
 - Recuperar: `/skalling-recover`, `/skalling-merge`.
