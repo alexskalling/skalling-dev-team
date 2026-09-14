@@ -80,6 +80,7 @@ class DashboardDataTest(unittest.TestCase):
         conn.executescript(SCHEMA)
         conn.execute("INSERT INTO schema_meta VALUES ('version', 'test')")
         conn.execute("INSERT INTO plans VALUES (1,'release','Release','in_progress','sol','2026-01-01','2026-01-02',NULL)")
+        conn.execute("INSERT INTO plans VALUES (2,'past','Plan pasado','completed','sol','2025-12-01','2025-12-05','2025-12-05')")
         conn.executemany(
             "INSERT INTO tasks VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             [
@@ -103,6 +104,17 @@ class DashboardDataTest(unittest.TestCase):
         self.assertEqual(data["workflow"]["phase"], "build")
         self.assertEqual(data["blockers"][0]["blocked_reason"], "Falta revisión")
         self.assertEqual(data["next_tasks"][0]["slug"], "next")
+
+    def test_plans_reports_task_progress_and_includes_past_plans(self):
+        plans = dashboard.DashboardData(self.db_path).plans()
+        self.assertEqual({p["slug"] for p in plans}, {"release", "past"})
+        release = next(p for p in plans if p["slug"] == "release")
+        self.assertEqual((release["tasks_total"], release["tasks_done"]), (4, 1))
+        past = next(p for p in plans if p["slug"] == "past")
+        self.assertEqual(past["status"], "completed")
+        self.assertIsNotNone(past["completed_at"])
+        # in_progress ordena antes que un plan ya cerrado, aunque sea mas viejo.
+        self.assertEqual(plans[0]["slug"], "release")
 
     def test_agents_combines_owners_with_active_claims(self):
         agents = dashboard.DashboardData(self.db_path).agents()
@@ -153,6 +165,7 @@ class DashboardHtmlContractTest(unittest.TestCase):
         for marker in (
             'data-view="overview"',
             'data-view="flow"',
+            'data-view="plans"',
             'data-view="history"',
             'data-view="memory"',
             'id="last-updated"',
