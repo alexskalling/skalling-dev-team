@@ -62,7 +62,8 @@ class WorkflowSealsGitGateReceipt(unittest.TestCase):
                   acceptance='value remains one', scope='local', decision='none')
         self.call('teo', 'deliver')
         self.call('jhon', 'oracle', expected='one', negative='two', invariant='integer', refutation='test')
-        self.call('jhon', 'check', argv=['bash', 'tests/check.test.sh'], method='falsification')
+        self.call('jhon', 'check', argv=['bash', 'tests/check.test.sh'], method='falsification', criterion='value stays 1')
+        self.call('jhon', 'approve', evidence='falsification covers the declared criterion')
         self.assertEqual(self.call('alex', 'complete')['state'], 'completed')
 
         db = sqlite3.connect((self.root / '.opencode/context/team.db').as_uri() + '?mode=ro', uri=True)

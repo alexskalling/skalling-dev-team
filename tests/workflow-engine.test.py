@@ -34,7 +34,8 @@ class Workflow(unittest.TestCase):
     def verify(self):
         self.call('teo', 'deliver')
         self.call('jhon', 'oracle', expected='value one', negative='value two', invariant='integer', refutation='test value')
-        return self.call('jhon', 'check', argv=['bash', 'tests/check.test.sh'], method='falsification')
+        self.call('jhon', 'check', argv=['bash', 'tests/check.test.sh'], method='falsification', criterion='value stays 1')
+        return self.call('jhon', 'approve', evidence='falsification check covers the declared acceptance criterion')
 
     def test_fast_route_requires_independent_executed_verification(self):
         self.assertEqual(self.start()['state'], 'implementation_ready')
@@ -43,8 +44,61 @@ class Workflow(unittest.TestCase):
         with self.assertRaises(ValueError): self.call('teo', 'check', argv=['bash', 'tests/check.test.sh'])
         with self.assertRaises(ValueError): self.call('jhon', 'check', argv=['bash', 'tests/check.test.sh'])
         self.call('jhon', 'oracle', expected='one', negative='two', invariant='integer', refutation='test')
-        self.assertEqual(self.call('jhon', 'check', argv=['bash', 'tests/check.test.sh'], method='falsification')['state'], 'verified')
+        checked = self.call('jhon', 'check', argv=['bash', 'tests/check.test.sh'], method='falsification', criterion='value stays 1')
+        self.assertEqual(checked['state'], 'verification_ready', "a check must not approve by itself")
+        with self.assertRaises(ValueError): self.call('alex', 'complete')
+        self.assertEqual(self.call('jhon', 'approve', evidence='falsification covers the criterion')['state'], 'verified')
         self.assertEqual(self.call('alex', 'complete')['state'], 'completed')
+
+    def test_running_true_records_evidence_but_never_approves(self):
+        # The exploit this locks in: `true` always exits 0, so if a check
+        # could approve by itself, "verification" would be theater. Now
+        # check() only records the observation; approve() is a distinct,
+        # deliberate act that a bare `true` run does not by itself unlock
+        # more than a real one would -- the gate is the separate approve
+        # step and the "all relevant checks pass" requirement, not this
+        # command's specific content.
+        self.start()
+        self.call('teo', 'deliver')
+        self.call('jhon', 'oracle', expected='one', negative='two', invariant='integer', refutation='test')
+        checked = self.call('jhon', 'check', argv=['true'], method='falsification', criterion='value stays 1')
+        self.assertEqual(checked['state'], 'verification_ready')
+        with self.assertRaises(ValueError):
+            self.call('alex', 'complete')
+
+    def test_check_requires_a_named_criterion(self):
+        self.start()
+        self.call('teo', 'deliver')
+        self.call('jhon', 'oracle', expected='one', negative='two', invariant='integer', refutation='test')
+        with self.assertRaises(ValueError):
+            self.call('jhon', 'check', argv=['bash', 'tests/check.test.sh'], method='falsification')
+
+    def test_approve_requires_a_recorded_check_and_evidence(self):
+        self.start()
+        self.call('teo', 'deliver')
+        self.call('jhon', 'oracle', expected='one', negative='two', invariant='integer', refutation='test')
+        with self.assertRaises(ValueError):
+            self.call('jhon', 'approve', evidence='nothing was actually run')
+        self.call('jhon', 'check', argv=['bash', 'tests/check.test.sh'], method='falsification', criterion='value stays 1')
+        with self.assertRaises(ValueError):
+            self.call('jhon', 'approve', evidence='')
+
+    def test_a_later_passing_check_does_not_erase_an_earlier_failure(self):
+        self.start()
+        self.call('teo', 'deliver')
+        self.call('jhon', 'oracle', expected='one', negative='two', invariant='integer', refutation='test')
+        self.call('jhon', 'check', argv=['false'], method='falsification', criterion='invariant holds')
+        self.call('jhon', 'check', argv=['bash', 'tests/check.test.sh'], method='falsification', criterion='value stays 1')
+        with self.assertRaises(ValueError):
+            self.call('jhon', 'approve', evidence='the second check passed')
+
+    def test_jhon_can_record_several_checks_before_approving(self):
+        self.start()
+        self.call('teo', 'deliver')
+        self.call('jhon', 'oracle', expected='one', negative='two', invariant='integer', refutation='test')
+        self.call('jhon', 'check', argv=['bash', 'tests/check.test.sh'], method='falsification', criterion='value stays 1')
+        self.call('jhon', 'check', argv=['true'], method='falsification', criterion='no crash on empty input')
+        self.assertEqual(self.call('jhon', 'approve', evidence='both criteria covered')['state'], 'verified')
 
     def test_high_route_cannot_skip_luz_or_documentation(self):
         self.start('high')
@@ -54,9 +108,10 @@ class Workflow(unittest.TestCase):
         self.verify()
         with self.assertRaises(ValueError): self.call('alex', 'complete')
         with self.assertRaises(ValueError): self.call('pau', 'document', evidence='notes')
+        self.call('luz', 'check', argv=['bash', 'tests/check.test.sh'], method='trust-boundaries', criterion='no privilege escalation')
         with self.assertRaises(ValueError):
-            self.call('luz', 'check', argv=['bash', 'tests/check.test.sh'], method='trust-boundaries')
-        self.call('luz', 'check', argv=['bash', 'tests/check.test.sh'], method='trust-boundaries',
+            self.call('luz', 'approve', evidence='reviewed')
+        self.call('luz', 'approve', evidence='reviewed trust boundaries and scope',
                   findings='No secrets, no privilege escalation; scope stays within declared files')
         self.call('pau', 'document', evidence='decision and limits')
         self.assertEqual(self.call('alex', 'complete')['state'], 'completed')
@@ -72,9 +127,11 @@ class Workflow(unittest.TestCase):
         (self.root / 'app.py').write_text('value = 2\n')
         self.call('teo', 'deliver')
         self.call('jhon', 'oracle', expected='one', negative='two', invariant='integer', refutation='test')
-        result = self.call('jhon', 'check', argv=['bash', 'tests/check.test.sh'], method='falsification')
+        result = self.call('jhon', 'check', argv=['bash', 'tests/check.test.sh'], method='falsification', criterion='value stays 1')
         self.assertEqual(result['state'], 'verification_ready')
         self.assertEqual(result['verification']['exit_code'], 1)
+        with self.assertRaises(ValueError):
+            self.call('jhon', 'approve', evidence='observed a failure but approving anyway')
         self.assertEqual(self.call('jhon', 'reject', evidence='expected one, observed two')['state'], 'implementation_ready')
 
     def test_scope_cannot_escape_project(self):
@@ -108,7 +165,7 @@ class Workflow(unittest.TestCase):
 
         def slow_check():
             start = time.monotonic()
-            self.call('jhon', 'check', argv=['bash', '-c', 'sleep 1; exit 0'], method='falsification')
+            self.call('jhon', 'check', argv=['bash', '-c', 'sleep 1; exit 0'], method='falsification', criterion='value stays 1')
             results['check_duration'] = time.monotonic() - start
 
         thread = threading.Thread(target=slow_check)

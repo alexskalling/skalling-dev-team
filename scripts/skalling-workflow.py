@@ -141,7 +141,14 @@ def read(db, identifier):
 def check(db, root, actor, session, identifier, payload, request):
     """Runs the verification command OUTSIDE any held write lock: the command
     can take up to 120s and every other agent_workflows writer only waits 10s,
-    so holding BEGIN IMMEDIATE across subprocess.run would lock them out."""
+    so holding BEGIN IMMEDIATE across subprocess.run would lock them out.
+
+    'check' only executes and records evidence; it never approves anything by
+    itself. A command that exits 0 is one recorded observation, not proof the
+    declared criteria are covered -- that judgment is a separate 'approve'
+    action, so a single lucky/irrelevant green run (e.g. `true`) can't stand
+    in for a real review, and Jhon/Luz can record several checks before
+    deciding."""
     db.execute('BEGIN IMMEDIATE')
     state = read(db, identifier)
     require(state is not None, 'Unknown workflow')
@@ -155,10 +162,8 @@ def check(db, root, actor, session, identifier, payload, request):
     argv = payload.get('argv')
     require(isinstance(argv, list) and argv and all(isinstance(v, str) and '\0' not in v for v in argv), 'Command argv required')
     require(bool(payload.get('method')), 'Verification method required')
-    findings = payload.get('findings')
-    if actor == 'luz':
-        require(isinstance(findings, str) and findings.strip(),
-                'Luz must record an explicit risk verdict, not just a command exit code')
+    require(bool(str(payload.get('criterion', '')).strip()),
+            'Each check must name which declared criterion it exercises, not just run a command')
     db.commit()  # release the write lock before the potentially slow command
 
     # Native tool wrapper obtains OpenCode permission for this exact command.
@@ -169,15 +174,11 @@ def check(db, root, actor, session, identifier, payload, request):
     require(state is not None and state['state'] == expected, 'Workflow changed during verification; retry check')
     require(fingerprint(root, state['files']) == digest == state['digest'], 'Verification changed candidate; approval denied')
     verification = {'agent': actor, 'session': session, 'method': payload['method'], 'argv': argv,
-                     'exit_code': result.returncode, 'digest': digest,
+                     'criterion': payload['criterion'], 'exit_code': result.returncode, 'digest': digest,
                      'output': (result.stdout + result.stderr)[-16000:].decode('utf-8', 'replace'),
                      'model': request.get('model'), 'independence': 'context-and-method; model diversity unverified'}
-    if actor == 'luz':
-        verification['findings'] = findings
     state['checks'].append(verification)
     state['verification'] = verification
-    if result.returncode == 0:
-        state['state'] = 'verified' if actor == 'jhon' else 'quality_reviewed'
     now = time.time()
     state = save(db, identifier, actor, session, 'check', state, payload.get('evidence', ''), now)
     db.commit()
@@ -260,6 +261,23 @@ def operate(request):
                 require(all(isinstance(payload.get(f), str) and payload[f].strip() for f in fields), 'Complete independent oracle required')
                 require(state['oracle'] is None, 'Oracle is frozen for this delivery')
                 state['oracle'] = {f: payload[f] for f in fields}
+            elif action == 'approve':
+                require(actor in {'jhon', 'luz'}, 'Only Jhon or Luz approve')
+                target = {'jhon': 'verified', 'luz': 'quality_reviewed'}[actor]
+                source = {'jhon': 'verification_ready', 'luz': 'verified'}[actor]
+                require(state['state'] == source, f'{actor} approves from {source}, not {state["state"]}')
+                require(bool(str(evidence).strip()),
+                        'Approval requires evidence that the declared criteria are covered, not just a green exit code')
+                if actor == 'luz':
+                    require(isinstance(payload.get('findings'), str) and payload['findings'].strip(),
+                            'Luz must record an explicit risk verdict, not just a command exit code')
+                relevant = [c for c in state['checks'] if c['agent'] == actor and c['digest'] == state['digest']]
+                require(relevant, f'{actor} must record at least one check on the current candidate before approving')
+                require(all(c['exit_code'] == 0 for c in relevant),
+                        'A failing check is on record for this candidate; a later passing one does not erase it')
+                if actor == 'luz':
+                    state['quality_findings'] = payload['findings']
+                state['state'] = target
             elif action == 'reject':
                 require(actor in {'jhon', 'luz'} and state['state'] in {'verification_ready', 'verified', 'quality_reviewed'}, 'Invalid rejection')
                 require(bool(str(evidence).strip()), 'Rejection requires diagnostic evidence')
