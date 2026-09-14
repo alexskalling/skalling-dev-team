@@ -7,6 +7,7 @@ cd "$SKALLING_ROOT"
 PASS=0; FAIL=0
 for t in tests/dashboard-server.test.py \
          tests/dashboard-launcher.test.sh \
+         tests/dashboard-survives-group-kill.test.sh \
          tests/quality-priorities.test.sh \
          tests/skalling-metrics-summary.test.sh \
          tests/skalling-metrics-orphan-cleanup.test.sh \

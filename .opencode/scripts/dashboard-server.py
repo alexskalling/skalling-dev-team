@@ -260,6 +260,20 @@ class DashboardServer(http.server.ThreadingHTTPServer):
 
 
 if __name__ == "__main__":
+    # teamdb-dashboard.sh lo lanza con "nohup ... &", pero nohup solo ignora
+    # SIGHUP -- no saca al proceso del process group del bash que lo lanzó.
+    # Muchos harnesses de agentes (incluido OpenCode) matan el process group
+    # completo de cada invocación de shell cuando esa invocación termina, así
+    # que el server nohup'd moría igual apenas terminaba el comando que lo
+    # arrancó. Bug real reportado en uso: "corro /skalling-dashboard y se
+    # cierra solo". os.setsid() lo hace líder de una sesión y process group
+    # nuevos antes de servir, así una señal dirigida al grupo original nunca
+    # lo alcanza. Falla con OSError si el proceso ya es líder de su grupo
+    # (caso normal si se corre a mano en foreground); ahí no hace falta.
+    try:
+        os.setsid()
+    except OSError:
+        pass
     print(f"PORT={PORT}", flush=True)
     with DashboardServer(("127.0.0.1", PORT), Handler) as server:
         server.serve_forever()
