@@ -20,6 +20,8 @@ TRANSITIONS = {
     'deliver': ('teo', 'implementation_ready', 'verification_ready'),
     'document': ('pau', 'quality_reviewed', 'documented'),
 }
+DUMP_PATHSPEC = ':(exclude)db/teamdb/team.dump.sql'
+SCOPE_EXCLUDES = [DUMP_PATHSPEC, ':(exclude).opencode', ':(exclude).git']
 
 
 def scoped(root, name):
@@ -41,9 +43,145 @@ def fingerprint(root, files):
     return digest.hexdigest()
 
 
+def changed_paths(root):
+    """Every path git sees as touched (tracked or not), regardless of stage."""
+    out = subprocess.run(['git', 'status', '--porcelain=v1', '--untracked-files=all', '-z', '--', '.', *SCOPE_EXCLUDES],
+                          cwd=root, capture_output=True, timeout=30)
+    if out.returncode != 0:
+        return set()
+    tokens = out.stdout.decode('utf-8', 'replace').split('\0')
+    paths, i = set(), 0
+    while i < len(tokens) and tokens[i]:
+        entry = tokens[i]
+        paths.add(entry[3:])
+        if entry[:2].strip('?').upper() in {'R', 'C'} or entry[0] in 'RC' or entry[1] in 'RC':
+            i += 1  # rename/copy carries an extra NUL-separated "from" path
+        i += 1
+    return paths
+
+
+def require_scope(root, files):
+    extra = changed_paths(root) - set(files)
+    require(not extra, f'Scope creep: {sorted(extra)} changed but not declared; use rescope')
+
+
 def require(condition, message):
     if not condition:
         raise ValueError(message)
+
+
+def seal_receipt(db, root, identifier, files, verifier):
+    """Bridge to the Git-facing approval: stage exactly the reviewed files and
+    seal a receipt with the same tree_hash algorithm scripts/hooks/git-gate.py
+    checks at commit time. Best-effort: any Git failure here just means the
+    receipt is not sealed, git-gate.py still requires manual evidence."""
+    try:
+        if subprocess.run(['git', 'add', '--'] + list(files), cwd=root, capture_output=True, timeout=30).returncode != 0:
+            return
+        diff = subprocess.run(['git', 'diff', '--cached', '--', '.', DUMP_PATHSPEC],
+                               cwd=root, capture_output=True, timeout=30)
+        patch = diff.stdout.rstrip(b'\n')  # git-gate.py hashes the patch with the same rstrip
+        if diff.returncode != 0 or not patch.strip():
+            return
+    except (OSError, subprocess.SubprocessError):
+        return
+    if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='receipts'").fetchone():
+        return
+    if not db.execute("SELECT 1 FROM pragma_table_info('receipts') WHERE name='tree_hash'").fetchone():
+        return
+    tree_hash = hashlib.sha256(patch).hexdigest()[:16]
+    db.execute("INSERT INTO receipts (id, task_id, agent, command, exit_code, output_summary, ts, tree_hash) "
+               "VALUES (?,?,?,?,?,?,datetime('now'),?)",
+               (f'rcpt_wf_{identifier}_{int(time.time())}', identifier, verifier, 'skalling_workflow:complete',
+                0, json.dumps({'source': 'skalling_workflow'}), tree_hash))
+
+
+def apply_pending_migrations(root):
+    init_script = Path(__file__).resolve().parent / 'teamdb-init.sh'
+    subprocess.run(['bash', str(init_script), str(root)], capture_output=True)
+
+
+def ensure_tables(root, path):
+    """agent_workflows/agent_workflow_events are versioned schema
+    (sql/migrations/031_*), not something this script fabricates at runtime.
+    Never connect() before checking existence: sqlite3.connect() creates an
+    empty file as a side effect, and teamdb-init.sh treats an existing-but-
+    schemaless file as a corrupt DB rather than a fresh one. Check first,
+    then self-heal by applying pending migrations (same pattern
+    teamdb-seal-receipt.sh uses for tree_hash) instead of silently creating
+    undeclared tables."""
+    if not path.exists():
+        apply_pending_migrations(root)
+    db = sqlite3.connect(path, timeout=10)
+    if not db.execute("SELECT 1 FROM sqlite_master WHERE name='agent_workflows'").fetchone():
+        db.close()
+        apply_pending_migrations(root)
+        db = sqlite3.connect(path, timeout=10)
+        if not db.execute("SELECT 1 FROM sqlite_master WHERE name='agent_workflows'").fetchone():
+            raise ValueError('agent_workflows falta y teamdb-init.sh no pudo migrarla; correr bash scripts/teamdb-init.sh manualmente')
+    return db
+
+
+def save(db, identifier, actor, session, action, state, evidence, now):
+    state['handoffs'] += int(state.get('actor', actor) != actor)
+    state['actor'] = actor
+    state['updated_at'] = now
+    db.execute('INSERT INTO agent_workflows(id,body) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body',
+               (identifier, json.dumps(state)))
+    db.execute('INSERT INTO agent_workflow_events(request_id,actor,session,action,state,evidence,ts) VALUES(?,?,?,?,?,?,?)',
+               (identifier, actor, session, action, state['state'], json.dumps(evidence), now))
+    return state
+
+
+def read(db, identifier):
+    row = db.execute('SELECT body FROM agent_workflows WHERE id=?', (identifier,)).fetchone()
+    return json.loads(row[0]) if row else None
+
+
+def check(db, root, actor, session, identifier, payload, request):
+    """Runs the verification command OUTSIDE any held write lock: the command
+    can take up to 120s and every other agent_workflows writer only waits 10s,
+    so holding BEGIN IMMEDIATE across subprocess.run would lock them out."""
+    db.execute('BEGIN IMMEDIATE')
+    state = read(db, identifier)
+    require(state is not None, 'Unknown workflow')
+    require(state['state'] != 'completed', 'Completed workflows are immutable')
+    expected = 'verification_ready' if actor == 'jhon' else 'verified'
+    require(actor in {'jhon', 'luz'} and state['state'] == expected, 'Check role/order invalid')
+    require(bool(state['oracle']), 'Jhon must derive an oracle before checks')
+    require(session != state['implementation_session'], 'Independent verifier session required')
+    digest = state['digest']
+    require(fingerprint(root, state['files']) == digest, 'Candidate changed; return to Teo')
+    argv = payload.get('argv')
+    require(isinstance(argv, list) and argv and all(isinstance(v, str) and '\0' not in v for v in argv), 'Command argv required')
+    require(bool(payload.get('method')), 'Verification method required')
+    findings = payload.get('findings')
+    if actor == 'luz':
+        require(isinstance(findings, str) and findings.strip(),
+                'Luz must record an explicit risk verdict, not just a command exit code')
+    db.commit()  # release the write lock before the potentially slow command
+
+    # Native tool wrapper obtains OpenCode permission for this exact command.
+    result = subprocess.run(argv, cwd=root, capture_output=True, timeout=120)
+
+    db.execute('BEGIN IMMEDIATE')
+    state = read(db, identifier)
+    require(state is not None and state['state'] == expected, 'Workflow changed during verification; retry check')
+    require(fingerprint(root, state['files']) == digest == state['digest'], 'Verification changed candidate; approval denied')
+    verification = {'agent': actor, 'session': session, 'method': payload['method'], 'argv': argv,
+                     'exit_code': result.returncode, 'digest': digest,
+                     'output': (result.stdout + result.stderr)[-16000:].decode('utf-8', 'replace'),
+                     'model': request.get('model'), 'independence': 'context-and-method; model diversity unverified'}
+    if actor == 'luz':
+        verification['findings'] = findings
+    state['checks'].append(verification)
+    state['verification'] = verification
+    if result.returncode == 0:
+        state['state'] = 'verified' if actor == 'jhon' else 'quality_reviewed'
+    now = time.time()
+    state = save(db, identifier, actor, session, 'check', state, payload.get('evidence', ''), now)
+    db.commit()
+    return state
 
 
 def operate(request):
@@ -55,17 +193,17 @@ def operate(request):
     require(isinstance(identifier, str) and 0 < len(identifier) <= 200, 'Invalid request id')
     path = root / '.opencode/context/team.db'
     require(path.parent.is_dir(), 'Initialize project context first')
-    db = sqlite3.connect(path, timeout=10)
+    db = ensure_tables(root, path)
     try:
-        db.execute('CREATE TABLE IF NOT EXISTS agent_workflows(id TEXT PRIMARY KEY, body TEXT NOT NULL)')
-        db.execute('''CREATE TABLE IF NOT EXISTS agent_workflow_events(
-            id INTEGER PRIMARY KEY, request_id TEXT NOT NULL, actor TEXT NOT NULL,
-            session TEXT NOT NULL, action TEXT NOT NULL, state TEXT NOT NULL,
-            evidence TEXT NOT NULL, ts REAL NOT NULL)''')
-        db.commit()
+        if action == 'status':
+            state = read(db, identifier)
+            require(state is not None, 'Unknown workflow')
+            return state
+        if action == 'check':
+            return check(db, root, actor, session, identifier, payload, request)
+
         db.execute('BEGIN IMMEDIATE')
-        row = db.execute('SELECT body FROM agent_workflows WHERE id=?', (identifier,)).fetchone()
-        state = json.loads(row[0]) if row else None
+        state = read(db, identifier)
         now = time.time()
         evidence = payload.get('evidence', '')
         if action == 'start':
@@ -88,19 +226,33 @@ def operate(request):
                      'started_at': now, 'handoffs': 0, 'checks': [], 'oracle': None, 'digest': None}
         else:
             require(state is not None, 'Unknown workflow')
-            if action == 'status':
-                return state
             require(state['state'] != 'completed', 'Completed workflows are immutable')
             if action in TRANSITIONS:
                 owner, previous, target = TRANSITIONS[action]
                 require(actor == owner and state['state'] == previous, f'{action} requires {owner} in {previous}')
                 require(action == 'deliver' or bool(str(evidence).strip()), 'Transition evidence required')
                 if action == 'deliver':
+                    require_scope(root, state['files'])
                     state['digest'] = fingerprint(root, state['files'])
                     state['implementation_session'] = session
                     state['oracle'] = None
                     state['checks'] = []
                 state['state'] = target
+            elif action == 'rescope':
+                require(actor == 'teo' and state['state'] in {'implementation_ready', 'verification_ready'},
+                        'Only Teo widens scope, and only before an approval is trusted')
+                added = payload.get('files', [])
+                require(isinstance(added, list) and added and all(isinstance(f, str) for f in added), 'Enumerated files required')
+                require(bool(str(evidence).strip()), 'Rescope requires evidence explaining the additional files')
+                widened = sorted(set(state['files']) | set(added))
+                require(widened != state['files'], 'Rescope must add at least one new file')
+                for name in widened:
+                    scoped(root, name)
+                state['files'] = widened
+                state['digest'] = None
+                state['oracle'] = None
+                state['checks'] = []
+                state['state'] = 'implementation_ready'
             elif action == 'oracle':
                 require(actor == 'jhon' and state['state'] == 'verification_ready', 'Only Jhon prepares the oracle before verification')
                 require(session != state['implementation_session'], 'Independent verifier session required')
@@ -108,26 +260,6 @@ def operate(request):
                 require(all(isinstance(payload.get(f), str) and payload[f].strip() for f in fields), 'Complete independent oracle required')
                 require(state['oracle'] is None, 'Oracle is frozen for this delivery')
                 state['oracle'] = {f: payload[f] for f in fields}
-            elif action == 'check':
-                expected = 'verification_ready' if actor == 'jhon' else 'verified'
-                require(actor in {'jhon', 'luz'} and state['state'] == expected, 'Check role/order invalid')
-                require(bool(state['oracle']), 'Jhon must derive an oracle before checks')
-                require(session != state['implementation_session'], 'Independent verifier session required')
-                require(fingerprint(root, state['files']) == state['digest'], 'Candidate changed; return to Teo')
-                argv = payload.get('argv')
-                require(isinstance(argv, list) and argv and all(isinstance(v, str) and '\0' not in v for v in argv), 'Command argv required')
-                require(bool(payload.get('method')), 'Verification method required')
-                # Native tool wrapper obtains OpenCode permission for this exact command.
-                result = subprocess.run(argv, cwd=root, capture_output=True, timeout=120)
-                verification = {'agent': actor, 'session': session, 'method': payload['method'], 'argv': argv,
-                                'exit_code': result.returncode, 'digest': state['digest'],
-                                'output': (result.stdout + result.stderr)[-16000:].decode('utf-8', 'replace'),
-                                'model': request.get('model'), 'independence': 'context-and-method; model diversity unverified'}
-                require(fingerprint(root, state['files']) == state['digest'], 'Verification changed candidate; approval denied')
-                state['checks'].append(verification)
-                state['verification'] = verification
-                if result.returncode == 0:
-                    state['state'] = 'verified' if actor == 'jhon' else 'quality_reviewed'
             elif action == 'reject':
                 require(actor in {'jhon', 'luz'} and state['state'] in {'verification_ready', 'verified', 'quality_reviewed'}, 'Invalid rejection')
                 require(bool(str(evidence).strip()), 'Rejection requires diagnostic evidence')
@@ -138,19 +270,16 @@ def operate(request):
                 require(actor == 'alex', 'Only Alex completes a workflow')
                 expected = 'documented' if state['risk'] == 'high' else 'verified'
                 require(state['state'] == expected, f'Completion requires {expected}')
+                require_scope(root, state['files'])
                 require(fingerprint(root, state['files']) == state['digest'], 'Candidate changed after verification')
                 state['state'] = 'completed'
                 state['completed_at'] = now
                 state['duration_ms'] = round((now - state['started_at']) * 1000)
+                verifier = state.get('verification', {}).get('agent', 'jhon')
+                seal_receipt(db, root, identifier, state['files'], verifier)
             else:
                 raise ValueError('Unknown workflow action')
-        state['handoffs'] += int(state.get('actor', actor) != actor)
-        state['actor'] = actor
-        state['updated_at'] = now
-        db.execute('INSERT INTO agent_workflows(id,body) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body',
-                   (identifier, json.dumps(state)))
-        db.execute('INSERT INTO agent_workflow_events(request_id,actor,session,action,state,evidence,ts) VALUES(?,?,?,?,?,?,?)',
-                   (identifier, actor, session, action, state['state'], json.dumps(evidence), now))
+        state = save(db, identifier, actor, session, action, state, evidence, now)
         db.commit()
         return state
     finally:

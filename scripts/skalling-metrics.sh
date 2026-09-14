@@ -51,8 +51,8 @@ case "$OP" in
         ' completed=' || SUM(CASE WHEN completed_at IS NOT NULL THEN 1 ELSE 0 END) ||
         ' success=' || SUM(CASE WHEN outcome = 'success' THEN 1 ELSE 0 END) ||
         ' avg_duration_ms=' || COALESCE(CAST(AVG(duration_ms) AS INTEGER),0) ||
-        ' avg_handoffs=' || CAST(AVG(handoffs) AS INTEGER) ||
-        ' avg_permissions=' || CAST(AVG(permission_prompts) AS INTEGER) ||
+        ' avg_handoffs=' || ROUND(AVG(handoffs), 2) ||
+        ' avg_permissions=' || ROUND(AVG(permission_prompts), 2) ||
         ' avg_context_bytes=' || CAST(AVG(context_bytes) AS INTEGER)
       FROM workflow_metrics
       GROUP BY COALESCE(route,'unclassified'), risk_level

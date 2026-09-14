@@ -1,6 +1,8 @@
 import importlib.util
 from pathlib import Path
 import tempfile
+import threading
+import time
 import unittest
 import subprocess
 
@@ -52,7 +54,10 @@ class Workflow(unittest.TestCase):
         self.verify()
         with self.assertRaises(ValueError): self.call('alex', 'complete')
         with self.assertRaises(ValueError): self.call('pau', 'document', evidence='notes')
-        self.call('luz', 'check', argv=['bash', 'tests/check.test.sh'], method='trust-boundaries')
+        with self.assertRaises(ValueError):
+            self.call('luz', 'check', argv=['bash', 'tests/check.test.sh'], method='trust-boundaries')
+        self.call('luz', 'check', argv=['bash', 'tests/check.test.sh'], method='trust-boundaries',
+                  findings='No secrets, no privilege escalation; scope stays within declared files')
         self.call('pau', 'document', evidence='decision and limits')
         self.assertEqual(self.call('alex', 'complete')['state'], 'completed')
 
@@ -75,6 +80,49 @@ class Workflow(unittest.TestCase):
     def test_scope_cannot_escape_project(self):
         with self.assertRaises(ValueError):
             self.call('alex', 'start', risk='low', files=['../outside'], acceptance='x', scope='local', decision='none')
+
+    def test_undeclared_change_is_scope_creep_until_rescoped(self):
+        self.start()
+        (self.root / 'extra.py').write_text('bonus = 1\n')
+        with self.assertRaises(ValueError):
+            self.call('teo', 'deliver')
+        self.call('teo', 'rescope', files=['extra.py'], evidence='needed a shared helper module')
+        self.assertEqual(self.call('teo', 'deliver')['state'], 'verification_ready')
+
+    def test_rescope_requires_evidence_and_new_files(self):
+        self.start()
+        with self.assertRaises(ValueError):
+            self.call('teo', 'rescope', files=['app.py'], evidence='no new file, same as declared')
+        with self.assertRaises(ValueError):
+            self.call('teo', 'rescope', files=['extra.py'], evidence='')
+
+    def test_slow_verification_does_not_hold_the_write_lock(self):
+        # A 'check' running a slow command must not block other agent_workflows
+        # writers behind it (the original bug: BEGIN IMMEDIATE held across
+        # subprocess.run, other connections only wait 10s).
+        self.start()
+        self.call('teo', 'deliver')
+        self.call('jhon', 'oracle', expected='one', negative='two', invariant='integer', refutation='test')
+
+        results = {}
+
+        def slow_check():
+            start = time.monotonic()
+            self.call('jhon', 'check', argv=['bash', '-c', 'sleep 1; exit 0'], method='falsification')
+            results['check_duration'] = time.monotonic() - start
+
+        thread = threading.Thread(target=slow_check)
+        thread.start()
+        time.sleep(0.2)  # let the slow check pass its pre-checks and release the lock
+
+        concurrent_start = time.monotonic()
+        self.engine.operate({'project': str(self.root), 'actor': 'alex', 'session': 'other-session',
+                             'action': 'start', 'payload': {'id': 'other-request', 'risk': 'low',
+                             'files': ['app.py'], 'acceptance': 'x', 'scope': 'local', 'decision': 'none'}})
+        concurrent_duration = time.monotonic() - concurrent_start
+        thread.join()
+
+        self.assertLess(concurrent_duration, 0.5, 'a concurrent write waited behind the held lock')
 
 
 if __name__ == '__main__': unittest.main()

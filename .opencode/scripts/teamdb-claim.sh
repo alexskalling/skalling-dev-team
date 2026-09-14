@@ -210,10 +210,22 @@ if [ "${1:-}" = "--advance" ]; then
   trap 'teamdb_unlock "$LOCK_DIR"' EXIT
   DB="$(teamdb_project_path "$PROJECT")"
   [ -f "$DB" ] || { echo "[ERROR] no DB" >&2; exit 1; }
-  python3 - "$DB" "$PLAN_SLUG" "$TASK_SLUG" "$TARGET_STATUS" "$ADVANCE_BY" <<'PYEOF'
-import sqlite3, sys, json, time
+  python3 - "$DB" "$PLAN_SLUG" "$TASK_SLUG" "$TARGET_STATUS" "$ADVANCE_BY" "$PROJECT" <<'PYEOF'
+import hashlib, sqlite3, subprocess, sys, json, time
 from teamdb_guard import connect as protected_connect
-db, plan_slug, task_slug, target, actor = sys.argv[1:6]
+db, plan_slug, task_slug, target, actor, project = sys.argv[1:7]
+
+
+def current_tree_hash():
+    # Same algorithm as scripts/hooks/git-gate.py: sha256 of the exact staged
+    # diff (rstripped), so a stale receipt from before the last edit can't
+    # satisfy an approval for what is staged *now*.
+    proc = subprocess.run(['git', '-C', project, 'diff', '--cached', '--', '.',
+                           ':(exclude)db/teamdb/team.dump.sql'], capture_output=True)
+    if proc.returncode != 0:
+        return None
+    patch = proc.stdout.rstrip(b'\n')
+    return hashlib.sha256(patch).hexdigest()[:16] if patch.strip() else None
 if target == 'approved' and actor != 'jhon':
     json.dump({'error': 'in_review->approved requiere actor=jhon (verificador)'}, sys.stdout)
     sys.exit(2)
@@ -243,13 +255,18 @@ try:
             json.dump({'error': 'in_review->approved requiere verificador distinto al implementador'}, sys.stdout)
             conn.rollback(); sys.exit(1)
         verification = conn.execute("""
-            SELECT id FROM receipts
+            SELECT id, tree_hash FROM receipts
             WHERE task_id=? AND agent='jhon' AND exit_code=0
               AND tree_hash IS NOT NULL AND tree_hash != ''
             ORDER BY ts DESC, rowid DESC LIMIT 1
         """, (t['id'],)).fetchone()
         if not verification:
             json.dump({'error': 'in_review->approved requiere receipt sellado exitoso de jhon para la task'}, sys.stdout)
+            conn.rollback(); sys.exit(1)
+        staged_hash = current_tree_hash()
+        if not staged_hash or verification['tree_hash'] != staged_hash:
+            json.dump({'error': 'in_review->approved: el receipt sellado no coincide con el candidato staged '
+                                 'actual (evidencia obsoleta); volver a revisar y sellar sobre el diff vigente'}, sys.stdout)
             conn.rollback(); sys.exit(1)
     if target == 'approved' and t['status'] != 'in_review':
         json.dump({'error': 'approved requiere status=in_review (actual=%s)' % t['status']}, sys.stdout)

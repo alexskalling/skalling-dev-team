@@ -210,7 +210,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(length))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:")
+        self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:")
         self.end_headers()
 
     def send_json(self, data, status=200):
@@ -241,6 +241,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             elif path in ("/", "/index.html"):
                 body = Path(HTML_PATH).read_bytes()
                 self._headers(200, "text/html; charset=utf-8", len(body))
+                self.wfile.write(body)
+            elif path in ("/teamdb-dashboard.css", "/teamdb-dashboard.js"):
+                # Siblings of HTML_PATH: extracted out of the HTML so the CSP
+                # above can require same-origin script/style sources only.
+                body = Path(HTML_PATH).with_name(path.lstrip("/")).read_bytes()
+                content_type = "text/css; charset=utf-8" if path.endswith(".css") else "text/javascript; charset=utf-8"
+                self._headers(200, content_type, len(body))
                 self.wfile.write(body)
             else:
                 self.send_json({"error": "Ruta no encontrada."}, 404)

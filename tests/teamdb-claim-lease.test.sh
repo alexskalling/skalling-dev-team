@@ -27,6 +27,9 @@ run_capture() {
 
 TEST_DIR="$(mktemp -d)"
 mkdir -p "$TEST_DIR/.opencode/context"
+git -C "$TEST_DIR" init -q
+git -C "$TEST_DIR" config user.email test@example.com
+git -C "$TEST_DIR" config user.name Test
 DB="$TEST_DIR/.opencode/context/team.db"
 SKALLING_ROOT="$ROOT" bash "$ROOT/scripts/teamdb-init.sh" "$TEST_DIR" >/dev/null 2>&1
 # shellcheck source=scripts/lib/lib-teamdb.sh
@@ -144,7 +147,13 @@ else
   assert_fail "advance approved: actor no-Jhon rechazado" "rc=0 out=$CAPTURE_OUT"
 fi
 TASK_ID="$(teamdb_exec_value "$DB" "SELECT id FROM tasks WHERE slug=?" "task-1")"
-teamdb_exec_write "$DB" "INSERT INTO receipts(id,task_id,agent,command,exit_code,ts,tree_hash) VALUES(?,?,?,'test',0,datetime('now'),'frozen-test')" "jhon-review" "$TASK_ID" "jhon" >/dev/null
+# tree_hash debe coincidir con el candidato staged real (mismo algoritmo que
+# scripts/hooks/git-gate.py), no un valor inventado.
+echo 'value = 1' > "$TEST_DIR/app.py"
+git -C "$TEST_DIR" add -- app.py
+DIFF_TEXT="$(git -C "$TEST_DIR" diff --cached -- . ':(exclude)db/teamdb/team.dump.sql')"
+TREE_HASH="$(printf '%s' "$DIFF_TEXT" | shasum -a 256 | cut -c1-16)"
+teamdb_exec_write "$DB" "INSERT INTO receipts(id,task_id,agent,command,exit_code,ts,tree_hash) VALUES(?,?,?,'test',0,datetime('now'),?)" "jhon-review" "$TASK_ID" "jhon" "$TREE_HASH" >/dev/null
 run_capture "TEAMDB_ACTOR=jhon bash '$ROOT/scripts/teamdb-claim.sh' --advance 'claim-test' 'task-1' --to=approved '$TEST_DIR'"
 APPROVED_STATUS=$(teamdb_exec_value "$DB" "SELECT status FROM tasks WHERE plan_id=? AND slug='task-1'" "$PLAN_ID")
 if [ "$CAPTURE_RC" = "0" ] && [ "$APPROVED_STATUS" = "approved" ]; then

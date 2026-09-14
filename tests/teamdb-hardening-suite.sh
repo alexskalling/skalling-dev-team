@@ -12,6 +12,7 @@ for t in tests/dashboard-server.test.py \
          tests/skalling-metrics-orphan-cleanup.test.sh \
          tests/permission-generation.test.py \
          tests/workflow-engine.test.py \
+         tests/workflow-git-gate-bridge.test.py \
          tests/teamdb-safe-query.test.sh \
          tests/teamdb-read.test.sh \
          tests/teamdb-search-sqli.test.sh \

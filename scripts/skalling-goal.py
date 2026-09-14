@@ -42,17 +42,20 @@ def operate(root, session, action, payload):
         exists = db.execute("SELECT 1 FROM sqlite_master WHERE name='session_goals'").fetchone()
         if not exists and action != 'start':
             return None
-        if action == 'start':
-            db.execute('''CREATE TABLE IF NOT EXISTS session_goal_history(
-                id INTEGER PRIMARY KEY, session TEXT NOT NULL, goal_json TEXT NOT NULL,
-                archived_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)''')
-            db.execute('''CREATE TABLE IF NOT EXISTS session_goals(
-                session TEXT PRIMARY KEY, objective TEXT NOT NULL, status TEXT NOT NULL,
-                base_head TEXT NOT NULL, protected TEXT NOT NULL, branch TEXT NOT NULL,
-                turns INTEGER NOT NULL DEFAULT 0, stagnant INTEGER NOT NULL DEFAULT 0,
-                fingerprint TEXT NOT NULL, checkpoint TEXT NOT NULL DEFAULT '',
-                reason TEXT NOT NULL DEFAULT '', commit_sha TEXT,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)''')
+        if action == 'start' and not exists:
+            # session_goals es schema versionado (sql/migrations/031_*), no
+            # algo que este script cree al vuelo. Un proyecto existente que
+            # no la tiene todavía es un schema desactualizado: se autoheala
+            # aplicando las migrations pendientes, igual que ya hace
+            # teamdb-seal-receipt.sh para tree_hash, en vez de fabricar la
+            # tabla localmente sin dejar rastro versionado.
+            db.close()
+            init_script = Path(__file__).resolve().parent / 'teamdb-init.sh'
+            subprocess.run(['bash', str(init_script), str(root)], capture_output=True)
+            db = sqlite3.connect(path, timeout=5)
+            db.row_factory = sqlite3.Row
+            if not db.execute("SELECT 1 FROM sqlite_master WHERE name='session_goals'").fetchone():
+                raise ValueError('session_goals falta y teamdb-init.sh no pudo migrarla; correr bash scripts/teamdb-init.sh manualmente')
         if action == 'status':
             result = db.execute('SELECT * FROM session_goals WHERE session=?', (session,)).fetchone()
             return dict(result) if result else None

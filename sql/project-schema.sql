@@ -532,3 +532,28 @@ CREATE TABLE IF NOT EXISTS workflow_metrics (
   outcome TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_workflow_metrics_started ON workflow_metrics(started_at DESC);
+
+-- ════════════════════════════════════════
+-- v0.11.3: session_goals/session_goal_history (scripts/skalling-goal.py) y
+-- agent_workflows/agent_workflow_events (scripts/skalling-workflow.py).
+-- El schema es versión y se migra; antes se creaban al vuelo en el primer
+-- uso de cada herramienta, sin quedar declarados acá ni en sql/migrations/.
+-- ════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS session_goals(
+  session TEXT PRIMARY KEY, objective TEXT NOT NULL, status TEXT NOT NULL,
+  base_head TEXT NOT NULL, protected TEXT NOT NULL, branch TEXT NOT NULL,
+  turns INTEGER NOT NULL DEFAULT 0, stagnant INTEGER NOT NULL DEFAULT 0,
+  fingerprint TEXT NOT NULL, checkpoint TEXT NOT NULL DEFAULT '',
+  reason TEXT NOT NULL DEFAULT '', commit_sha TEXT,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS session_goal_history(
+  id INTEGER PRIMARY KEY, session TEXT NOT NULL, goal_json TEXT NOT NULL,
+  archived_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS agent_workflows(id TEXT PRIMARY KEY, body TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS agent_workflow_events(
+  id INTEGER PRIMARY KEY, request_id TEXT NOT NULL, actor TEXT NOT NULL,
+  session TEXT NOT NULL, action TEXT NOT NULL, state TEXT NOT NULL,
+  evidence TEXT NOT NULL, ts REAL NOT NULL
+);

@@ -50,7 +50,10 @@ DB="$(teamdb_project_path "$PROJECT")"
 [ -f "$DB" ] || { echo "ERROR: no DB: $DB (corré bash scripts/teamdb-init.sh $PROJECT)" >&2; exit 1; }
 
 # Tablas de DATOS sincronizables entre máquinas (excluye audit_log/migrations).
-DUMP_TABLES=(concepts decisions preferences known_problems work_in_progress tags memory_tags memory_links proposals plans specs design_notes tasks task_dependencies task_claims plan_history task_context_capsules skills_registry routing_decisions receipts task_lock_history attempts)
+# agent_workflows es estado durable (como tasks/plans); agent_workflow_events
+# se excluye a propósito por la misma razón que audit_log: es un log de
+# trazabilidad que crece sin límite, no estado a sincronizar entre máquinas.
+DUMP_TABLES=(concepts decisions preferences known_problems work_in_progress tags memory_tags memory_links proposals plans specs design_notes tasks task_dependencies task_claims plan_history task_context_capsules skills_registry routing_decisions receipts task_lock_history attempts agent_workflows)
 
 # Directorio de salida versionado (NO en .gitignore)
 OUT_DIR="$PROJECT/db/teamdb"

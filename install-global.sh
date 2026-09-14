@@ -591,7 +591,12 @@ install_teamdb() {
 install_web_dashboard() {
     if [ -d "$SCRIPT_DIR/web" ]; then
         run mkdir -p "$OPENCODE_DIR/web"
+        # .css/.js: extraídos del HTML para que el servidor pueda mandar una
+        # CSP sin 'unsafe-inline'; sin copiarlos el dashboard instalado sirve
+        # un index.html que referencia assets 404.
         run cp "$SCRIPT_DIR/web/"*.html "$OPENCODE_DIR/web/" 2>/dev/null || true
+        run cp "$SCRIPT_DIR/web/"*.css "$OPENCODE_DIR/web/" 2>/dev/null || true
+        run cp "$SCRIPT_DIR/web/"*.js "$OPENCODE_DIR/web/" 2>/dev/null || true
         log OK "dashboard web instalado"
     fi
 }

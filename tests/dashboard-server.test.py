@@ -150,6 +150,7 @@ class DashboardDataTest(unittest.TestCase):
 class DashboardHtmlContractTest(unittest.TestCase):
     def test_dashboard_is_accessible_responsive_and_has_required_views(self):
         html = (ROOT / "web" / "teamdb-dashboard.html").read_text(encoding="utf-8")
+        css = (ROOT / "web" / "teamdb-dashboard.css").read_text(encoding="utf-8")
         for marker in (
             'data-view="overview"',
             'data-view="flow"',
@@ -157,12 +158,28 @@ class DashboardHtmlContractTest(unittest.TestCase):
             'data-view="memory"',
             'id="last-updated"',
             'aria-live="polite"',
-            'prefers-reduced-motion',
-            '100dvh',
         ):
             self.assertIn(marker, html)
-        self.assertNotIn("cdn.jsdelivr.net", html)
-        self.assertNotIn("unpkg.com", html)
+        for marker in ('prefers-reduced-motion', '100dvh'):
+            self.assertIn(marker, css)
+        for asset in (html, css, (ROOT / "web" / "teamdb-dashboard.js").read_text(encoding="utf-8")):
+            self.assertNotIn("cdn.jsdelivr.net", asset)
+            self.assertNotIn("unpkg.com", asset)
+
+    def test_csp_has_no_unsafe_inline(self):
+        source = (ROOT / "scripts" / "dashboard-server.py").read_text(encoding="utf-8")
+        self.assertNotIn("unsafe-inline", source)
+        self.assertIn("Content-Security-Policy", source)
+
+    def test_html_has_no_inline_style_or_script(self):
+        # CSP drops 'unsafe-inline' on script-src/style-src: any inline block
+        # coming back would be silently blocked by the browser, not an error
+        # here, so this locks in the extraction instead of relying on that.
+        html = (ROOT / "web" / "teamdb-dashboard.html").read_text(encoding="utf-8")
+        self.assertNotIn("<style>", html)
+        self.assertNotIn("<script>", html)
+        self.assertIn('href="teamdb-dashboard.css"', html)
+        self.assertIn('src="teamdb-dashboard.js"', html)
 
 
 if __name__ == "__main__":

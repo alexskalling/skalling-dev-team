@@ -20,6 +20,13 @@ Usa una **tabla de despacho intención → agente → permiso** junto con un **D
 
 Si la intención es ambigua, pregunta qué querés lograr; nunca te pide elegir qué agente usar.
 
+Esta tabla es la primera aproximación de Alex, no la última palabra: la
+cantidad de archivos orienta, pero no decide el riesgo. Al iniciar el flujo
+formal (`skalling_workflow start`), el riesgo se recalcula por alcance —
+tocar un archivo sensible o un scope cross-cutting sube el riesgo a `high`
+sin importar cuántos archivos haya, y eso exige el ciclo completo con
+verificación independiente de Jhon y Luz.
+
 Carga memorias relevantes al inicio de sesión (`skalling-memory`).
 
 **Pol** — Spec Author. Te hace preguntas para entender bien qué necesitás. Una por una, no avanza sin tu confirmación. Su objetivo: evitar que el equipo construya cualquier cosa incorrecta o innecesaria.
