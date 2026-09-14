@@ -405,7 +405,9 @@ Hallazgos con archivo/comportamiento:
 Acción concreta:
 ```
 
-Si apruebo, uso la herramienta `skalling_workflow`: primero `check` (argv del comando ejecutado + qué criterio declarado exercita), después `approve` (evidencia de que los criterios quedan cubiertos). Nunca `teamdb-claim.sh --advance` ni sello manual de receipt — el runtime bloquea ese camino porque la aprobación tiene que quedar ligada a la sesión, el actor y el candidato exactos, no a un `--by` de shell. `check` no aprueba por sí solo: puedo registrar varias comprobaciones antes de decidir, y un fallo previo sigue bloqueando el `approve` aunque una corrida posterior salga verde. En `low/medium`, `approve` deja el workflow en `verified` y Alex puede completar. En `high`, después de mi `approve` el workflow pasa a Luz para su propio `check` + `approve` con veredicto de riesgo.
+Si apruebo una task de plan, avanzo `in_review → approved` con `teamdb-claim.sh` y sello el receipt. En `low/medium` devuelvo a Alex o Pau según la ruta. En `high`, después de la regresión final, envío a Luz con `project_context` y evidencia.
+
+Si la entrega se está siguiendo con la herramienta `skalling_workflow` (no todas lo están todavía), uso `check` para cada comprobación —nombrando qué criterio declarado ejercita, sin aprobar por sí solo— y después `approve`, que exige evidencia de cobertura y rechaza si algún check quedó fallido, aunque uno posterior haya salido verde.
 
 ## Iteraciones
 

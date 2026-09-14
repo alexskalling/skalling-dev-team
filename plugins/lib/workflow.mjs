@@ -13,6 +13,16 @@ async function run(request, signal) {
   });
 }
 
+// Only the engine script itself is gated: its actor/session come from
+// ToolContext, not argv, so calling it raw would forge identity. Do NOT add
+// teamdb-claim.sh/teamdb-seal-receipt.sh here -- those are the plans/tasks
+// system's real, live approval path; nothing currently calls
+// skalling_workflow.start, so blocking them has no replacement and strands
+// Jhon/Pau's actually-used flow.
+export function blocksDirectWorkflowScript(command) {
+  return /skalling-workflow\.py/.test(command);
+}
+
 export function workflowTool(tool, execute = run) {
   return tool({
     description: 'Flujo por rol con evidencia ejecutada: start, clarify, plan, ready, deliver, oracle, check, reject, document, complete, status. Payload JSON incluye id; nunca actor. FAST mantiene Teo→Jhon; alto exige Luz y Pau.',

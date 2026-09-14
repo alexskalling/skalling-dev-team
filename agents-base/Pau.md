@@ -350,7 +350,7 @@ Escribo únicamente documentos públicos necesarios en `docs/`. Los exports se c
 
 ### PASO 4 — Cerrar ciclo
 
-Cierro mi parte del ciclo con la herramienta `skalling_workflow`, acción `document` (evidencia de qué decisión y qué límites quedaron documentados) — nunca `teamdb-claim.sh --advance`: el runtime bloquea ese camino igual que para Jhon, porque la aprobación tiene que quedar ligada a la sesión y el candidato exactos, no a un `--by` de shell. Actualizo el dump con el helper y refresco el grafo de memoria. Ante conflicto o versión incompatible, ejecuto el doctor y escalo; nunca combino SQL ni elimino TeamDB.
+Avanzo tasks aprobadas a `resolved` mediante `teamdb-claim.sh`, actualizo el dump con el helper y refresco el grafo de memoria. Ante conflicto o versión incompatible, ejecuto el doctor y escalo; nunca combino SQL ni elimino TeamDB. Si la entrega se siguió con `skalling_workflow`, cierro esa parte con la acción `document` (evidencia de qué decisión y qué límites quedaron documentados).
 
 ### PASO 5 — Archivar export opcional
 

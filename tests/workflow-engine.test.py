@@ -22,6 +22,10 @@ class Workflow(unittest.TestCase):
         (self.root / 'tests').mkdir()
         (self.root / 'tests/check.test.sh').write_text('test "$(cat app.py)" = "value = 1"\n')
         subprocess.run(['git', 'init', '-q', str(self.root)], check=True)
+        subprocess.run(['git', '-C', str(self.root), 'config', 'user.email', 'test@example.com'], check=True)
+        subprocess.run(['git', '-C', str(self.root), 'config', 'user.name', 'Test'], check=True)
+        subprocess.run(['git', '-C', str(self.root), 'add', '-A'], check=True)
+        subprocess.run(['git', '-C', str(self.root), 'commit', '-q', '-m', 'init'], check=True)
 
     def call(self, actor, action, **payload):
         return self.engine.operate({'project': str(self.root), 'actor': actor, 'session': actor+'-session',
@@ -152,6 +156,42 @@ class Workflow(unittest.TestCase):
             self.call('teo', 'rescope', files=['app.py'], evidence='no new file, same as declared')
         with self.assertRaises(ValueError):
             self.call('teo', 'rescope', files=['extra.py'], evidence='')
+
+    def test_delivery_identity_classifies_added_modified_deleted(self):
+        (self.root / 'tests/old.py').write_text('legacy = 1\n')
+        subprocess.run(['git', '-C', str(self.root), 'add', '-A'], check=True)
+        subprocess.run(['git', '-C', str(self.root), 'commit', '-q', '-m', 'add old.py'], check=True)
+        self.call('alex', 'start', risk='low', files=['app.py', 'tests/check.test.sh', 'tests/old.py', 'extra.py'],
+                  acceptance='x', scope='local', decision='none')
+        (self.root / 'app.py').write_text('value = 2\n')  # modified
+        (self.root / 'extra.py').write_text('bonus = 1\n')  # added (new to git)
+        (self.root / 'tests/old.py').unlink()  # deleted
+        result = self.call('teo', 'deliver')
+        delivery = result['delivery']
+        self.assertEqual(delivery['added'], ['extra.py'])
+        self.assertEqual(delivery['modified'], ['app.py'])
+        self.assertEqual(delivery['deleted'], ['tests/old.py'])
+        self.assertNotIn('tests/check.test.sh', delivery['added'] + delivery['modified'] + delivery['deleted'])
+        self.assertIsNotNone(delivery['base_head'])
+        self.assertEqual(delivery['delivery_number'], 1)
+
+    def test_delivery_number_increments_on_redelivery(self):
+        self.start()
+        self.call('teo', 'deliver')
+        self.assertEqual(self.call('jhon', 'reject', evidence='needs another pass')['delivery']['delivery_number'], 1)
+        second = self.call('teo', 'deliver')
+        self.assertEqual(second['delivery']['delivery_number'], 2)
+
+    def test_rescope_into_a_new_area_escalates_risk(self):
+        (self.root / 'src').mkdir()
+        (self.root / 'src/other.py').write_text('x = 1\n')
+        subprocess.run(['git', '-C', str(self.root), 'add', '-A'], check=True)
+        subprocess.run(['git', '-C', str(self.root), 'commit', '-q', '-m', 'add src'], check=True)
+        result = self.start()
+        self.assertEqual(result['risk'], 'low')
+        rescoped = self.call('teo', 'rescope', files=['src/other.py'], evidence='needed a shared helper in src/')
+        self.assertEqual(rescoped['risk'], 'medium')
+        self.assertEqual(rescoped['route'], 'INLINE')
 
     def test_slow_verification_does_not_hold_the_write_lock(self):
         # A 'check' running a slow command must not block other agent_workflows

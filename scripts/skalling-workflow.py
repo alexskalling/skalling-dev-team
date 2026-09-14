@@ -33,6 +33,34 @@ def scoped(root, name):
     return path
 
 
+def base_head(root):
+    out = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=root, capture_output=True, timeout=10)
+    return out.stdout.decode().strip() if out.returncode == 0 else None
+
+
+def classify_delivery(root, files, head):
+    """Delivery identity beyond the bare digest: which declared files are
+    additions, modifications or deletions relative to the revision the
+    workflow started from -- so 'Jhon approved' names the exact candidate,
+    not just a hash nobody can read back. Unchanged declared files (e.g. a
+    test file Teo read but never touched) are omitted from all three lists."""
+    added, modified, deleted = [], [], []
+    for name in sorted(files):
+        path = scoped(root, name)
+        before = None
+        if head:
+            show = subprocess.run(['git', 'show', f'{head}:{name}'], cwd=root, capture_output=True, timeout=10)
+            before = show.stdout if show.returncode == 0 else None
+        after = path.read_bytes() if path.is_file() else None
+        if after is not None and before is None:
+            added.append(name)
+        elif after is None and before is not None:
+            deleted.append(name)
+        elif after is not None and before is not None and after != before:
+            modified.append(name)
+    return {'added': added, 'modified': modified, 'deleted': deleted}
+
+
 def fingerprint(root, files):
     digest = hashlib.sha256()
     for name in sorted(files):
@@ -224,7 +252,8 @@ def operate(request):
             state = {'id': identifier, 'risk': risk, 'files': files, 'acceptance': payload['acceptance'],
                      'state': 'implementation_ready' if risk == 'low' else ('clarified' if risk == 'medium' else 'requested'),
                      'route': {'low': 'FAST-TRACK', 'medium': 'INLINE', 'high': 'SDD'}[risk],
-                     'started_at': now, 'handoffs': 0, 'checks': [], 'oracle': None, 'digest': None}
+                     'started_at': now, 'handoffs': 0, 'checks': [], 'oracle': None, 'digest': None,
+                     'base_head': base_head(root), 'delivery_number': 0, 'delivery': None}
         else:
             require(state is not None, 'Unknown workflow')
             require(state['state'] != 'completed', 'Completed workflows are immutable')
@@ -238,6 +267,10 @@ def operate(request):
                     state['implementation_session'] = session
                     state['oracle'] = None
                     state['checks'] = []
+                    state['delivery_number'] += 1
+                    state['delivery'] = {**classify_delivery(root, state['files'], state['base_head']),
+                                          'digest': state['digest'], 'delivery_number': state['delivery_number'],
+                                          'base_head': state['base_head']}
                 state['state'] = target
             elif action == 'rescope':
                 require(actor == 'teo' and state['state'] in {'implementation_ready', 'verification_ready'},
@@ -249,6 +282,10 @@ def operate(request):
                 require(widened != state['files'], 'Rescope must add at least one new file')
                 for name in widened:
                     scoped(root, name)
+                top_before = {Path(f).parts[0] for f in state['files']}
+                top_after = {Path(f).parts[0] for f in widened}
+                if (top_after - top_before) and state['risk'] == 'low':
+                    state['risk'], state['route'] = 'medium', 'INLINE'
                 state['files'] = widened
                 state['digest'] = None
                 state['oracle'] = None
