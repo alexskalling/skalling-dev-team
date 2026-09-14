@@ -129,6 +129,7 @@ if [ "${1:-}" = "--release" ]; then
   python3 - "$DB" "$CLAIM_ID" "$NEW_STATUS" "$RELEASE_BY" <<'PYEOF'
 import sqlite3, sys, json
 from teamdb_guard import connect as protected_connect
+from teamdb_workflow_state import sync_workflow_state
 db, claim_id, new_status, release_by = sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4]
 if new_status not in ('done', 'failed'):
     json.dump({'error': 'invalid status: %s (usa done|failed)' % new_status}, sys.stdout)
@@ -164,6 +165,9 @@ try:
         """, (now, c['task_id']))
     conn.execute("INSERT INTO audit_log(ts, agent, action, table_name, actor_source) VALUES(datetime('now'), ?, 'release', 'task_claims', 'helper')",
                  (release_by,))
+    plan_row = conn.execute("SELECT plan_id FROM tasks WHERE id=?", (c['task_id'],)).fetchone()
+    if plan_row:
+        sync_workflow_state(conn, plan_row['plan_id'], release_by)
     conn.commit()
     print('released: claim-id=%d status=%s' % (claim_id, new_status))
 except Exception as e:
@@ -213,6 +217,7 @@ if [ "${1:-}" = "--advance" ]; then
   python3 - "$DB" "$PLAN_SLUG" "$TASK_SLUG" "$TARGET_STATUS" "$ADVANCE_BY" "$PROJECT" <<'PYEOF'
 import hashlib, sqlite3, subprocess, sys, json, time
 from teamdb_guard import connect as protected_connect
+from teamdb_workflow_state import sync_workflow_state
 db, plan_slug, task_slug, target, actor, project = sys.argv[1:7]
 
 
@@ -239,7 +244,7 @@ conn.row_factory = sqlite3.Row
 try:
     conn.execute("BEGIN IMMEDIATE")
     t = conn.execute("""
-        SELECT id, status FROM tasks
+        SELECT id, status, plan_id FROM tasks
         WHERE plan_id=(SELECT id FROM plans WHERE slug=?) AND slug=?
     """, (plan_slug, task_slug)).fetchone()
     if not t:
@@ -276,6 +281,7 @@ try:
         conn.rollback(); sys.exit(1)
     conn.execute("UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?", (target, now, t['id']))
     conn.execute("INSERT INTO audit_log(ts, agent, action, table_name, actor_source) VALUES(datetime('now'), ?, 'advance', 'tasks', 'helper')", (actor,))
+    sync_workflow_state(conn, t['plan_id'], actor)
     conn.commit()
     print('advanced: task=%s status=%s by=%s' % (task_slug, target, actor))
 except Exception as e:
@@ -330,6 +336,7 @@ PLAN_ID="$(teamdb_exec_value "$DB" "SELECT id FROM plans WHERE slug = ?" "$PLAN_
 python3 - "$DB" "$PLAN_ID" "$PLAN_SLUG" "$TASK_SLUG" "$ACTOR" "$TTL" "$INPUT_HASH" <<'PYEOF'
 import sqlite3, sys, json, hashlib, time
 from teamdb_guard import connect as protected_connect
+from teamdb_workflow_state import sync_workflow_state
 db, plan_id, plan_slug, task_slug, actor, ttl, input_hash_in = sys.argv[1:8]
 ttl = int(ttl)
 now = int(time.time())
@@ -425,6 +432,7 @@ try:
                  (actor, now, now, task['id']))
     conn.execute("INSERT INTO audit_log(ts, agent, action, table_name, actor_source) VALUES(datetime('now'), ?, 'claim', 'task_claims', 'helper')",
                  (actor,))
+    sync_workflow_state(conn, int(plan_id), actor)
     conn.commit()
     json.dump({'claim_id': claim_id, 'lease_until': lease_end, 'attempt': new_attempt}, sys.stdout)
 except Exception as e:

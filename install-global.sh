@@ -531,6 +531,13 @@ install_teamdb() {
         run cp "$SCRIPT_DIR/scripts/teamdb-destructive.py" "$OPENCODE_DIR/scripts/teamdb-destructive.py"
         run chmod +x "$OPENCODE_DIR/scripts/teamdb_exec.py"
     fi
+    # teamdb_workflow_state.py: teamdb-claim.sh lo importa (PYTHONPATH) para
+    # sincronizar workflow_state en claim/release/advance. Sin él, claim/
+    # release/advance siguen funcionando pero workflow_state vuelve a
+    # quedar vacío como antes de este fix.
+    if [ -f "$SCRIPT_DIR/scripts/teamdb_workflow_state.py" ]; then
+        run cp "$SCRIPT_DIR/scripts/teamdb_workflow_state.py" "$OPENCODE_DIR/scripts/teamdb_workflow_state.py"
+    fi
 
     # lib-teamdb.sh va como par plana (no en lib/) para que scripts lo busquen igual.
     if [ -f "$SCRIPT_DIR/scripts/lib/lib-teamdb.sh" ]; then
