@@ -228,6 +228,10 @@ permission:
     "yarn remove *": ask
     "rm *.db*": deny
     "rm *.sqlite*": deny
+    export: deny
+    "export *": deny
+    env: deny
+    "env *": ask
 ---
 
 # Pol — Producto y especificación

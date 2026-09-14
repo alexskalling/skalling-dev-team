@@ -462,7 +462,11 @@
     "cd * && git stash list": "allow",
     "cd * && git stash list *": "allow",
     "git stash list": "allow",
-    "git stash list *": "allow"
+    "git stash list *": "allow",
+    "export": "deny",
+    "export *": "deny",
+    "env": "deny",
+    "env *": "ask"
   },
   "profiles": {
     "Alex": {
@@ -772,7 +776,11 @@
         "yarn add *",
         "yarn remove *",
         "rm *.db*",
-        "rm *.sqlite*"
+        "rm *.sqlite*",
+        "export",
+        "export *",
+        "env",
+        "env *"
       ],
       "overrides": {}
     },
@@ -1006,7 +1014,11 @@
         "yarn add *",
         "yarn remove *",
         "rm *.db*",
-        "rm *.sqlite*"
+        "rm *.sqlite*",
+        "export",
+        "export *",
+        "env",
+        "env *"
       ],
       "overrides": {}
     },
@@ -1351,7 +1363,11 @@
         "yarn add *",
         "yarn remove *",
         "rm *.db*",
-        "rm *.sqlite*"
+        "rm *.sqlite*",
+        "export",
+        "export *",
+        "env",
+        "env *"
       ],
       "overrides": {}
     },
@@ -1684,7 +1700,11 @@
         "yarn add *",
         "yarn remove *",
         "rm *.db*",
-        "rm *.sqlite*"
+        "rm *.sqlite*",
+        "export",
+        "export *",
+        "env",
+        "env *"
       ],
       "overrides": {}
     },
@@ -1986,7 +2006,11 @@
         "yarn add *",
         "yarn remove *",
         "rm *.db*",
-        "rm *.sqlite*"
+        "rm *.sqlite*",
+        "export",
+        "export *",
+        "env",
+        "env *"
       ],
       "overrides": {}
     },
@@ -2220,7 +2244,11 @@
         "yarn add *",
         "yarn remove *",
         "rm *.db*",
-        "rm *.sqlite*"
+        "rm *.sqlite*",
+        "export",
+        "export *",
+        "env",
+        "env *"
       ],
       "overrides": {}
     },
@@ -2502,7 +2530,11 @@
         "yarn add *",
         "yarn remove *",
         "rm *.db*",
-        "rm *.sqlite*"
+        "rm *.sqlite*",
+        "export",
+        "export *",
+        "env",
+        "env *"
       ],
       "overrides": {}
     },
@@ -2833,7 +2865,11 @@
         "yarn add *",
         "yarn remove *",
         "rm *.db*",
-        "rm *.sqlite*"
+        "rm *.sqlite*",
+        "export",
+        "export *",
+        "env",
+        "env *"
       ],
       "overrides": {}
     },
@@ -3272,7 +3308,11 @@
         "yarn add *",
         "yarn remove *",
         "rm *.db*",
-        "rm *.sqlite*"
+        "rm *.sqlite*",
+        "export",
+        "export *",
+        "env",
+        "env *"
       ],
       "overrides": {}
     }
