@@ -21,6 +21,7 @@ for t in tests/dashboard-server.test.py \
          tests/scripts-parity.test.sh \
          tests/teamdb-problems-fts.test.sh \
          tests/install-script-copies.test.sh \
+         tests/install-orphan-cleanup.test.sh \
          tests/install-hooks-paths.test.sh \
          tests/audit-log-actor.test.sh \
          tests/teamdb-plan.test.sh \
