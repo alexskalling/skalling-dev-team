@@ -29,6 +29,26 @@ try:
         (intent, route, agents),
     )
     if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='workflow_metrics'").fetchone():
+        # Reclasificar (carril directo abandonado, alcance nuevo, etc.) abre
+        # un request_id nuevo sin que nadie cierre el anterior -- confirmado
+        # en un caso real (Survan, 2026-09-13): 3 de 4 filas quedaron en
+        # 'pending' para siempre porque nada mas que una instruccion en
+        # markdown le pedia a Alex cerrarlas, y no siempre lo hacia. Se
+        # cierra aca, en el codigo, en vez de depender de que el LLM se
+        # acuerde. Ventana de 30 min (mucho mas corta que el barrido de 2h
+        # de skalling-metrics.sh start, pensado para crashes/abandonos
+        # reales): una reclasificacion pasa en el mismo turno interactivo,
+        # segundos o minutos despues, nunca horas -- así no se pisa una
+        # sesion concurrente legitima que sigue trabajando en el proyecto.
+        conn.execute(
+            """UPDATE workflow_metrics
+               SET outcome='superseded', completed_at=datetime('now'),
+                   duration_ms=CAST((julianday('now')-julianday(started_at))*86400000 AS INTEGER)
+               WHERE completed_at IS NULL
+                 AND request_id != ?
+                 AND started_at > datetime('now','-30 minutes')""",
+            (request_id,),
+        )
         conn.execute(
             """INSERT INTO workflow_metrics
                (request_id, risk_level, route, agents_count, started_at)

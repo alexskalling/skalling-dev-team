@@ -318,11 +318,10 @@ Para una corrección local, clara, reversible, sin área sensible y con archivo
 conocido, leo ese archivo y el diff pertinente primero. Envío **Teo → Jhon**
 sin cargar cápsula ni crear plan; la verificación sigue siendo obligatoria, pero
 no convierto una tarea pequeña en una ronda de planificación. Si aparece alcance,
-riesgo o una decisión material nuevos, abandono el carril directo y reclasifico:
-si ya había abierto un `request_id` con `skalling-metrics.sh start`, lo cierro
-primero con `skalling-metrics.sh finish <request_id_anterior> reclassified`
-antes de clasificar de nuevo — si no, esa métrica queda colgada en `pending`
-para siempre en vez de reflejar que el pedido cambió de forma.
+riesgo o una decisión material nuevos, abandono el carril directo y reclasifico
+con `skalling-route.sh classify --record` normalmente — el script mismo cierra
+como `superseded` cualquier métrica abierta de los últimos 30 minutos en el
+mismo proyecto antes de registrar la nueva, así que no dejo nada a mano.
 Si TeamDB ya existe, abro y cierro una métrica `FAST-TRACK` con
 `skalling-metrics.sh start` y `finish`; nunca creo una base ni una cápsula sólo
 para medir. Reviso `skalling-metrics.sh summary` periódicamente: el atajo debe
@@ -333,7 +332,7 @@ reducir fricción sin empeorar los resultados.
 1. Ejecuto `bash ~/.config/opencode/scripts/skalling-session-start.sh`.
 2. Antes de clasificar, recupero `bash ~/.config/opencode/scripts/teamdb-context.sh for-request "<pedido completo>" --max-bytes=8000 "$PWD"` (añado `--visual` para UI). Si `needs_expansion=true`, leo las filas de `omitted` con `teamdb-read.sh` antes de delegar. El presupuesto es inicial: nunca omito una restricción para ahorrar tokens.
 3. Investigo con Jes cuando faltan archivos o componentes relevantes. Consulto la skill `skalling-routing`. Indico siempre --kind: research para explicar, audit para revisar, code para implementar. Determino intención, impacto y decisiones pendientes con evidencia; el script NO comprende el texto del usuario. Ejecuto `bash ~/.config/opencode/scripts/skalling-route.sh classify --kind <code|research|audit> --risk <low|medium|high> --scope <local|module|cross-cutting|unknown> --clarity <clear|ambiguous> --decision <none|pending|resolved> [--sensitive] [--visual] --file "<archivo leído>" --acceptance "<resultado observable>" --reuse "<patrón/componente existente>" [--plan-id ID] --record --intent "<resumen>" --project "$PWD"`; conservo el `request_id` devuelto.
-4. La clasificación registra automáticamente ruta e inicio; agrego handoffs, permisos y bytes con `skalling-metrics.sh event`, y cierro siempre con `skalling-metrics.sh finish` usando el mismo `request_id`. Si reclasifico (paso 3) antes de haber cerrado el `request_id` anterior, lo cierro con `finish <request_id_anterior> reclassified` en ese momento — nunca dejo un `request_id` abierto al pedir uno nuevo para el mismo pedido.
+4. La clasificación registra automáticamente ruta e inicio (y cierra como `superseded` cualquier métrica del proyecto que haya quedado abierta por una reclasificación reciente, sin que yo tenga que acordarme); agrego handoffs, permisos y bytes con `skalling-metrics.sh event`, y cierro siempre con `skalling-metrics.sh finish` usando el mismo `request_id`.
 
 ### Clasificación por riesgo
 
