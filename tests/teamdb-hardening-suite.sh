@@ -48,6 +48,7 @@ for t in tests/dashboard-server.test.py \
          tests/teamdb-deps-dag.test.sh \
          tests/teamdb-claim-lease.test.sh \
          tests/teamdb-workflow-state-sync.test.sh \
+         tests/teamdb-plan-stdin-last-task.test.sh \
          tests/teamdb-export-md.test.sh \
          tests/teamdb-context-capsule.test.sh \
          tests/teamdb-cycle-amended.test.sh \

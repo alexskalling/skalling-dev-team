@@ -112,7 +112,11 @@ if [ "$TASKS_MD" = "-" ]; then
   TMP_DIR="$(mktemp -d)"
   TMP_DIRS="$TMP_DIRS $TMP_DIR"
   TASKS_MD="$TMP_DIR/tasks.md"
-  printf '%s' "$TASKS_CONTENT" > "$TASKS_MD"
+  # $(cat) siempre recorta el salto de linea final de stdin; sin \n de vuelta,
+  # el archivo queda sin newline final y "while read" (abajo) descarta la
+  # ULTIMA linea en silencio -- ninguna task de la ultima linea se creaba,
+  # sin ningun error ni aviso en el conteo reportado.
+  printf '%s\n' "$TASKS_CONTENT" > "$TASKS_MD"
 else
   [ -f "$TASKS_MD" ] || { echo "[ERROR] tasks.md no existe: $TASKS_MD" >&2; exit 1; }
 fi
