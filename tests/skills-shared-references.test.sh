@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 # tests/skills-shared-references.test.sh — ninguna skill referencia un archivo
-# skills/_shared/*.md que no existe.
+# skills/_shared/*.md que no existe, y las 10 skills sdd-* + _shared quedan
+# instaladas (antes ni siquiera estaban en el catálogo core: código
+# completamente inalcanzable, ninguna sesión real podía cargarlas).
 #
-# Bug real (2026-09-14, proyecto Survan en vivo): las 9 skills sdd-* (importadas
-# de gentleman-programming) referenciaban skills/_shared/sdd-phase-common.md y
-# skills/_shared/openspec-convention.md -- archivos que NUNCA existieron en el
-# repo. Sol, sin la Sección C (persistencia) que ese archivo faltante debía
-# darle, termino haciendo "mkdir -p .opencode/plans/<slug> && cat > tasks.md"
-# -- exactamente el patron legacy que ya se habia prohibido en Sol.md/Teo.md
-# (ver test_tier1_fixes en setup.test.sh) pero que volvio a colarse por una
-# via distinta sin que nada lo detectara.
+# Contexto (2026-09-14, proyecto Survan en vivo): un agente escribió
+# "mkdir -p .opencode/plans/<slug> && cat > tasks.md" -- el patrón legacy que
+# ya se había prohibido en Sol.md/Teo.md (ver test_tier1_fixes en
+# setup.test.sh). Al investigar se encontraron dos bugs reales distintos: (1)
+# las skills sdd-* (importadas de gentleman-programming) referenciaban 4
+# archivos skills/_shared/*.md que nunca existieron, y (2) esas mismas skills
+# nunca estuvieron en data/skills-by-stack.yaml → install-global.sh jamás las
+# instalaba, en ningún proyecto. El incidente en sí probablemente no vino de
+# esa skill (no estaba cargada), pero ambos bugs eran reales y quedaban sin
+# detectar -- este test cubre los dos de una vez.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PASS=0
@@ -61,6 +65,18 @@ if grep -q "opencode/plans" "$ROOT/skills-base/_shared/sdd-phase-common.md"; the
 else
   assert_fail "sdd-phase-common.md prohíbe explícitamente escribir en .opencode/plans/"
 fi
+
+# Las skills sdd-* + _shared tienen que estar en el catálogo core, si no
+# install-global.sh nunca las copia a ningún lado -- exactamente el segundo
+# bug real que encontramos: código completo, correcto, e inalcanzable.
+CORE_SKILLS="$(source "$ROOT/scripts/lib/lib-stack-detect.sh" && skalling_core_skills "$ROOT/data/skills-by-stack.yaml")"
+for name in _shared sdd-init sdd-explore sdd-propose sdd-spec sdd-design sdd-tasks sdd-apply sdd-verify sdd-archive sdd-onboard; do
+  if grep -qx "$name" <<< "$CORE_SKILLS"; then
+    assert_pass "$name está en el catálogo core (skills-by-stack.yaml)"
+  else
+    assert_fail "$name está en el catálogo core (skills-by-stack.yaml)"
+  fi
+done
 
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -65,6 +65,39 @@ core:
   - name: skalling-memory
     reason: Memoria estilo Engram con archivos .jsonl locales.
     always: true
+  - name: _shared
+    reason: Archivos compartidos (Secciones A-D) que las skills sdd-* referencian.
+    always: true
+  - name: sdd-init
+    reason: SDD -- inicializa contexto, capacidades de testing y registry para un cambio.
+    always: true
+  - name: sdd-explore
+    reason: SDD -- explora ideas y aclara requisitos antes de comprometerse a un cambio.
+    always: true
+  - name: sdd-propose
+    reason: SDD -- crea la propuesta de cambio (intent, scope, approach).
+    always: true
+  - name: sdd-spec
+    reason: SDD -- escribe specs delta con requirements y escenarios.
+    always: true
+  - name: sdd-design
+    reason: SDD -- diseño técnico y decisiones de arquitectura.
+    always: true
+  - name: sdd-tasks
+    reason: SDD -- desglosa el cambio en tasks de implementación, persiste en TeamDB.
+    always: true
+  - name: sdd-apply
+    reason: SDD -- implementa las tasks siguiendo specs y diseño.
+    always: true
+  - name: sdd-verify
+    reason: SDD -- corre tests y prueba que la implementación cumple specs/diseño/tasks.
+    always: true
+  - name: sdd-archive
+    reason: SDD -- archiva un cambio completado, sincroniza specs delta.
+    always: true
+  - name: sdd-onboard
+    reason: SDD -- guía end-to-end del ciclo SDD sobre el código real, a pedido.
+    always: true
 
 # ──────────────────────────────────────────────────────────────────────────
 # SKILLS POR STACK
