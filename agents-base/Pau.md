@@ -71,7 +71,10 @@ permission:
     "[ *": allow
     sed: allow
     "sed *": allow
-    "sed -i*": ask
+    "sed -i*": allow
+    "sed -i*.env*": ask
+    "sed -i*.pem*": ask
+    "sed -i*id_rsa*": ask
     "git status": allow
     "git status *": allow
     "git diff": allow
