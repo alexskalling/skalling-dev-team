@@ -15,8 +15,15 @@ permission:
   list: allow
   edit: deny
   external_directory:
-    "*": ask
-    "*/.config/opencode/scripts/**": allow
+    "*": allow
+    "*/.ssh/**": ask
+    "*/.aws/credentials": ask
+    "*/.config/gh/hosts.yml": ask
+    "*/Library/Keychains/**": ask
+    "*/.credentials/**": ask
+    "**/*.pem": ask
+    "**/*.key": ask
+    "**/secrets/**": ask
   websearch: allow
   webfetch: allow
   bash:
@@ -185,8 +192,8 @@ permission:
     "*/.opencode/scripts/teamdb-resume.sh *": allow
     "bash */.opencode/scripts/teamdb-resume.sh": allow
     "bash */.opencode/scripts/teamdb-resume.sh *": allow
-    "git add": ask
-    "git add *": ask
+    "git add": allow
+    "git add *": allow
     "git commit": ask
     "git commit *": ask
     "git push": ask
@@ -206,9 +213,9 @@ permission:
     "find *-exec*": ask
     "find *-ok*": ask
     "find *-fprint*": ask
-    "git diff *--output*": ask
-    "git show *--output*": ask
-    "sort *-o*": ask
+    "git diff *--output*": allow
+    "git show *--output*": allow
+    "sort *-o*": allow
     "cat *.env*": ask
     "cat *.pem*": ask
     "cat *id_rsa*": ask
