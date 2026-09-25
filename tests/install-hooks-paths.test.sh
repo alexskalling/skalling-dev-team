@@ -102,6 +102,20 @@ else
   assert_fail "pre-commit funciona con SKALLING_ROOT" "rc=$RC"
 fi
 
+# 6b. Bug real (2026-09-25): un commit plano en el propio checkout de
+# skalling-dev-team, sin SKALLING_ROOT seteado, fallaba con "git-gate.py no
+# encontrado" -- HOOK_DIR resuelve al symlink en .git/hooks/, no a su destino
+# real en .opencode/hooks/, y el fallback "$HOOK_DIR/../hooks/git-gate.py" era
+# el mismo .git/hooks de vuelta. El test anterior (6) nunca lo agarró porque
+# siempre pasa SKALLING_ROOT explícito. Este SÍ lo saca del entorno.
+OUT6B="$(env -u SKALLING_ROOT bash -c "unset SKALLING_ROOT; cd '$ROOT' && bash .git/hooks/pre-commit" 2>&1)"
+RC6B=$?
+if [ "$RC6B" = "0" ] && ! grep -q "no encontrado" <<< "$OUT6B"; then
+  assert_pass "pre-commit funciona en el propio repo SIN SKALLING_ROOT en el entorno"
+else
+  assert_fail "pre-commit funciona en el propio repo SIN SKALLING_ROOT en el entorno" "rc=$RC6B out=$OUT6B"
+fi
+
 # 7. post-merge no falla si no hay directorio teamdb
 TMP2_RAW="$(mktemp -d)"
 TMP2="$(cd "$TMP2_RAW" && pwd -P)"
@@ -122,8 +136,11 @@ else
 fi
 
 # 8. Hooks no usan `|| true` silenciador (salvo el git add del dump, que es
-#    intencional: si el staging del dump falla, el commit no debe romperse)
-if grep -nE '2>/dev/null \|\| true' "$ROOT/scripts/hooks/pre-commit" "$ROOT/scripts/hooks/post-merge" 2>/dev/null | grep -v 'git add .*team.dump.sql'; then
+#    intencional: si el staging del dump falla, el commit no debe romperse; y
+#    el rev-parse --show-toplevel de la busqueda de git-gate.py, intencional
+#    porque un TOPLEVEL vacio se maneja despues con "${TOPLEVEL:+...}" -- sin
+#    el || true, set -e mataria el hook entero si rev-parse fallara)
+if grep -nE '2>/dev/null \|\| true' "$ROOT/scripts/hooks/pre-commit" "$ROOT/scripts/hooks/post-merge" 2>/dev/null | grep -v 'git add .*team.dump.sql' | grep -v 'show-toplevel'; then
   assert_fail "hooks NO tienen || true silenciador"
 else
   assert_pass "hooks NO tienen || true silenciador"

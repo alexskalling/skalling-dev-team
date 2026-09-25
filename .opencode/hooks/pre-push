@@ -2,8 +2,19 @@
 # Read-only gate: never repairs DB, creates receipts, or stages a dump.
 set -euo pipefail
 HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-for gate in "$HOOK_DIR/git-gate.py" "$HOOK_DIR/../hooks/git-gate.py" "${SKALLING_ROOT:-}/scripts/hooks/git-gate.py" "${SKALLING_OPENCODE_DIR:-$HOME/.config/opencode}/hooks/git-gate.py"; do
-  if [ -f "$gate" ]; then
+# HOOK_DIR resuelve a .git/hooks (la ruta del symlink, no su destino real) --
+# "$HOOK_DIR/../hooks/git-gate.py" era el mismo .git/hooks de vuelta, nunca
+# encontraba nada. git rev-parse --show-toplevel es la unica forma confiable
+# de llegar al repo real sin importar como bash resolvio BASH_SOURCE.
+TOPLEVEL="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+GATES=(
+  "$HOOK_DIR/git-gate.py"
+  "${TOPLEVEL:+$TOPLEVEL/.opencode/hooks/git-gate.py}"
+  "${SKALLING_ROOT:-}/scripts/hooks/git-gate.py"
+  "${SKALLING_OPENCODE_DIR:-$HOME/.config/opencode}/hooks/git-gate.py"
+)
+for gate in "${GATES[@]}"; do
+  if [ -n "$gate" ] && [ -f "$gate" ]; then
     exec python3 "$gate" pre-push
   fi
 done
