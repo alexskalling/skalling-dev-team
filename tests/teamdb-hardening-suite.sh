@@ -38,6 +38,7 @@ TESTS=(
   tests/skalling-route-supersede.test.sh
   tests/skalling-coverage.test.sh
   tests/skills-shared-references.test.sh
+  tests/teamdb-task-groups.test.sh
   tests/teamdb-search-sqli.test.sh
   tests/teamdb-related-sqli.test.sh
   tests/teamdb-wip-tree-sqli.test.sh
