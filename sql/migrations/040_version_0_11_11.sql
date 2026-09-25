@@ -1,0 +1,11 @@
+-- v0.11.11: teamdb-init.sh ya no ignora si falla la escritura que registra
+-- una migration como aplicada (applied_migrations). Encontrado en vivo en un
+-- proyecto real: la migration 009_plan_contract corrió y comiteó sus cambios
+-- de verdad, pero esa escritura posterior nunca quedó registrada -- cada
+-- bootstrap futuro reintentaba 009 contra un schema que YA tenía sus
+-- cambios, fallando siempre con "duplicate column name". No se puede
+-- deshacer una migration ya comiteada desde el script; ahora, si esa
+-- escritura falla, el bootstrap falla fuerte (en vez de reportar éxito en
+-- silencio) para que alguien se entere y corrija el registro a mano.
+-- Sin cambios de schema; solo eleva la versión declarada.
+UPDATE schema_meta SET value = '0.11.11' WHERE key = 'version';

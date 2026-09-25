@@ -51,9 +51,12 @@ _run_sql() {
   fi
 
   if [ "$DB_WAS_MISSING" = true ]; then
-    teamdb_exec_write "$DB" \
-      "INSERT OR IGNORE INTO applied_migrations(name, applied_at) VALUES(?, datetime('now'))" \
-      "$mig_name" >/dev/null
+    if ! teamdb_exec_write "$DB" \
+          "INSERT OR IGNORE INTO applied_migrations(name, applied_at) VALUES(?, datetime('now'))" \
+          "$mig_name" >/dev/null; then
+      echo "ERROR: no se pudo registrar $mig_name como incluida en el schema base. El baseline recién creado ya tiene sus cambios (viene de project-schema.sql); si esta fila no queda registrada, un bootstrap futuro va a intentar aplicar $mig_name de nuevo y va a fallar con 'ya existe'/'duplicate column'." >&2
+      return 1
+    fi
     echo "    [baseline] $mig_name (incluida en schema actual)"
     return 0
   fi
@@ -80,9 +83,22 @@ _run_sql() {
   rm -f "$migration_error"
   echo "    [apply] $mig_name"
 
-  teamdb_exec_write "$DB" \
-    "INSERT INTO applied_migrations(name, applied_at) VALUES(?, datetime('now'))" \
-    "$mig_name" >/dev/null
+  # $mig_name YA corrió y comiteó de verdad (la migration tiene su propio
+  # BEGIN/COMMIT) -- esto solo registra el hecho. Si ESTA escritura falla
+  # (lock, timeout, lo que sea) y se ignora en silencio, la migration queda
+  # invisible para siempre: el próximo bootstrap la va a reintentar contra un
+  # schema que YA tiene sus cambios, y va a fallar con "duplicate column
+  # name"/"already exists" -- exactamente lo que le pasó a un proyecto real
+  # con la migration 009. No hay forma de deshacer $mig_name desde acá (ya
+  # comiteó); lo único que se puede hacer es fallar fuerte para que alguien
+  # se entere y corrija el registro a mano, en vez de que quede corrompido
+  # en silencio.
+  if ! teamdb_exec_write "$DB" \
+        "INSERT INTO applied_migrations(name, applied_at) VALUES(?, datetime('now'))" \
+        "$mig_name" >/dev/null; then
+    echo "ERROR: $mig_name aplicó sus cambios reales (ya comiteados, no se pueden deshacer) pero no se pudo registrar en applied_migrations. Un bootstrap futuro va a reintentarla y va a fallar con 'ya existe'/'duplicate column'. Registrar la fila a mano: INSERT INTO applied_migrations(name, applied_at) VALUES('$mig_name', datetime('now'));" >&2
+    return 1
+  fi
 
   return 0
 }
@@ -137,7 +153,7 @@ fi
 # Verificar que las migrations dejaron el schema correcto; si no, fallar en vez
 # de seguir con una DB degradada (los errores de migración idempotentes, como el
 # "duplicate column" de 004 sobre DBs nuevas, se toleran arriba).
-EXPECTED_VERSION="0.11.10"
+EXPECTED_VERSION="0.11.11"
 VERSION="$(sqlite3 "$DB" "SELECT value FROM schema_meta WHERE key='version'" 2>/dev/null || true)"
 if [ "$VERSION" != "$EXPECTED_VERSION" ]; then
   echo "ERROR: teamdb schema version=$VERSION, esperado $EXPECTED_VERSION (migrations incompletas)" >&2

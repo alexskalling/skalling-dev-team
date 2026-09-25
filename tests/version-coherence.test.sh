@@ -29,9 +29,9 @@ VERSION="$(extract_version "$ROOT/VERSION")"
 echo "VERSION declarada: $VERSION"
 
 assert "VERSION formato semver" "grep -qE '^[0-9]+\\.[0-9]+\\.[0-9]+$' <<< '$VERSION'"
-assert "release identificado como 0.11.10" "[ '$VERSION' = '0.11.10' ]"
+assert "release identificado como 0.11.11" "[ '$VERSION' = '0.11.11' ]"
 assert "CHANGELOG documenta release actual" \
-  "grep -q '^## \\[0.11.10\\]' '$ROOT/CHANGELOG.md'"
+  "grep -q '^## \\[0.11.11\\]' '$ROOT/CHANGELOG.md'"
 
 PROJ_SCHEMA="$ROOT/sql/project-schema.sql"
 GLOB_SCHEMA="$ROOT/sql/global-schema.sql"

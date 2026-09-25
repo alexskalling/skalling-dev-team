@@ -4,6 +4,28 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.11.11] — en preparación
+
+Bug real reportado en vivo por el usuario, en un proyecto suyo
+(`actas3.0.0`): el bootstrap fallaba con `duplicate column name` al aplicar
+la migration `009_plan_contract`, en un loop imposible de resolver solo
+reintentando.
+
+### Fixed
+- `teamdb-init.sh`: diagnosticado leyendo el `team.db` real del proyecto —
+  la migration `009_plan_contract` ya había corrido y comiteado sus cambios
+  de verdad en algún momento anterior (columnas presentes, `schema_meta.
+  version` en el valor exacto que esa migration deja), pero la escritura
+  posterior que la registra en `applied_migrations` nunca se guardó. Cada
+  bootstrap futuro la reintentaba contra un schema que ya tenía esos
+  cambios, fallando siempre. La causa de código: `_run_sql()` no chequeaba
+  si esa escritura de registro fallaba — la ignoraba en silencio y reportaba
+  éxito igual. Una migration ya comiteada no se puede deshacer desde el
+  script; ahora, si el registro falla, el bootstrap falla fuerte (en los dos
+  caminos: baseline de un proyecto nuevo, y aplicación real sobre un
+  proyecto existente), para que quede evidencia clara en vez de un estado
+  corrompido en silencio.
+
 ## [0.11.10] — en preparación
 
 A pedido explícito del usuario, atiende el ítem que había quedado señalado
