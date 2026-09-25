@@ -4,6 +4,24 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.11.7] — en preparación
+
+A pedido explícito del usuario: cierra la brecha "construimos el detector,
+nadie lo usa" señalada en la autocrítica de la versión anterior.
+
+### Added
+- **`teamdb-plan.sh` corre `teamdb-task-groups.sh` automáticamente al crear
+  un plan.** Antes, saber qué tasks eran paralelizables requería que un
+  humano se acordara de correr `teamdb-task-groups.sh` a mano después de que
+  Sol armara el plan — la herramienta no generaba ningún valor real hasta
+  que alguien la usara manualmente. Ahora, si hay tasks sin vínculo entre sí
+  (candidatas a un worktree cada una) o tasks bloqueadas por una dependencia
+  sin resolver, queda anotado directamente en el `design_md` del plan, con
+  un `plan_history` versionado (`operation='amended'`) para que quede
+  auditable. Un plan trivial (una sola task, o todo en una sola cadena
+  secuencial) no recibe ninguna nota — no ensucia el plan con contenido sin
+  valor. `agents-base/Sol.md` documenta el comportamiento nuevo.
+
 ## [0.11.6] — en preparación
 
 Cierra 3 huecos reales de seguridad/calidad, a partir de una autocrítica

@@ -363,6 +363,8 @@ bash "$SKALLING_ROOT/scripts/teamdb-plan.sh" "$(pwd)" "<feature-slug>" "<título
 
 El helper crea o reutiliza propuesta, plan y tasks en una transacción. Ajustes posteriores usan `teamdb-amend.sh`; nunca SQL directo.
 
+El helper también corre `teamdb-task-groups.sh` solo y anota en el `design_md` del plan qué tasks quedan sin vínculo entre sí (candidatas a un worktree cada una) y cuáles deben ir en secuencia — no hace falta pedirlo aparte. Si el output señala tasks paralelizables, lo menciono en el handoff a Alex para que el ejecutor sepa que puede repartirlas en worktrees en vez de asumir que todo va en serie.
+
 ### PASO 4 — Validar el plan
 
 Cada task contiene propósito, aceptación, dependencias y alcance. El orden debe permitir que Jhon verifique resultados aislados. No modifico una task ya `in_progress`, `in_review`, `approved` o `resolved`.

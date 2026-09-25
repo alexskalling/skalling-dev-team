@@ -258,4 +258,68 @@ if [ "$PLAN_RC" = "0" ]; then
   teamdb_refresh_dump "$PROJECT" >/dev/null 2>&1 || true
 fi
 
+# FASE 2: anota en el plan mismo qué tasks son candidatas a paralelo, usando
+# la misma evidencia (task_dependencies) que teamdb-task-groups.sh calcula --
+# para que quien ejecute el plan lo vea ahí, en vez de depender de que
+# alguien se acuerde de correr el detector a mano. Best-effort: si el
+# detector falla o no hay nada interesante que anotar, no aborta la creación
+# del plan (que ya está commiteada) ni ensucia design_md con una nota vacía.
+if [ "$PLAN_RC" = "0" ]; then
+  GROUPS_JSON="$(bash "$SCRIPT_DIR/teamdb-task-groups.sh" "$PROJECT" "$SLUG" 2>/dev/null || true)"
+  if [ -n "$GROUPS_JSON" ]; then
+    NOTE="$(GROUPS_JSON="$GROUPS_JSON" python3 <<'PY'
+import json, os
+try:
+    d = json.loads(os.environ["GROUPS_JSON"])
+except ValueError:
+    d = {}
+if "error" not in d:
+    groups = d.get("parallel_groups", [])
+    singles = [g[0] for g in groups if len(g) == 1]
+    chains = [g for g in groups if len(g) > 1]
+    not_ready = d.get("not_ready", [])
+    lines = []
+    if len(groups) > 1:
+        lines.append("## Paralelización (detectado automáticamente, teamdb-task-groups.sh)")
+        if len(singles) > 1:
+            lines.append("- Sin vínculo entre sí, candidatas a un worktree cada una: " + ", ".join(singles))
+        for chain in chains:
+            lines.append("- Deben ir en secuencia (vínculo registrado): " + " -> ".join(chain))
+    if not_ready:
+        if not lines:
+            lines.append("## Paralelización (detectado automáticamente, teamdb-task-groups.sh)")
+        blocked = ", ".join("%s (bloqueada por %s)" % (x["slug"], x["blocked_by"]) for x in not_ready)
+        lines.append("- Bloqueadas hasta que se resuelva su dependencia: " + blocked)
+    print("\n".join(lines))
+PY
+)"
+    if [ -n "$NOTE" ]; then
+      DB="$(teamdb_project_path "$PROJECT")"
+      NOW_NOTE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      # Literales SQL (agent 'system', operation 'auto-annotated') pasan como
+      # parámetros bindeados, nunca embebidos en el SQL -- evita tener que
+      # anidar comillas simples adentro de un heredoc de python dentro de un
+      # heredoc de bash (frágil y fue exactamente lo que rompió el JSON acá).
+      BATCH="$(NOTE_TEXT="$NOTE" SLUG_VAL="$SLUG" NOW_VAL="$NOW_NOTE" python3 <<'PY'
+import json, os
+note = "\n\n" + os.environ["NOTE_TEXT"] + "\n"
+slug = os.environ["SLUG_VAL"]
+now = os.environ["NOW_VAL"]
+print(json.dumps([
+    {"sql": "UPDATE plans SET design_md = design_md || ? WHERE slug = ?",
+     "params": [note, slug]},
+    {"sql": "INSERT INTO plan_history(plan_id,version,changed_by,changed_at,operation,diff_md) "
+            "SELECT id, COALESCE((SELECT MAX(version) FROM plan_history WHERE plan_id=plans.id),0)+1, "
+            "?, ?, ?, ? FROM plans WHERE slug = ?",
+     "params": ["system", now, "amended",
+                "Paralelización auto-detectada (teamdb-task-groups.sh): " + note, slug]}
+]))
+PY
+)"
+      teamdb_exec_multi "$DB" "$BATCH" >/dev/null 2>&1 || true
+      echo "$NOTE"
+    fi
+  fi
+fi
+
 exit $PLAN_RC
