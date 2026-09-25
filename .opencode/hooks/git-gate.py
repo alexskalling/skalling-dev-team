@@ -1,5 +1,17 @@
 #!/usr/bin/env python3
-"""Read-only Git gates: exact staged/published diffs, never memory maintenance."""
+"""Read-only Git gates: exact staged/published diffs, never memory maintenance.
+
+SCOPE: este hook corre cosas RÁPIDAS contra el candidato exacto (staged en
+pre-commit, commits publicados en pre-push):
+  - Detección de secretos hardcodeados (regex SECRET).
+  - Coherencia memoria ↔ repo (.md en .opencode/context/ ↔ fila en TeamDB).
+  - Receipt sellado por el review (tree_hash en receipts con exit_code=0).
+
+FUERA DE SCOPE: el linter SQLi (`scripts/skalling-review.sh --lens risk`) NO se
+corre aquí. Es un escaneo completo de `scripts/**` que tarda segundos y mira
+más allá del candidato exacto. Vive en CI → `.github/workflows/lint-sqli.yml`.
+Justificación en AGENTS.md § "Hooks (separación de scopes)".
+"""
 import hashlib
 import re
 import sqlite3
@@ -38,8 +50,13 @@ def check(diff_args, db, label):
                     table = target
             if table and not db.execute(f'SELECT 1 FROM {table} WHERE slug=? LIMIT 1', (slug,)).fetchone():
                 raise ValueError(f'{label}: {name} no tiene registro en TeamDB; no crear memoria paralela.')
-    if not db or not any(CODE.search(name) for name in names):
+    if not any(CODE.search(name) for name in names):
         return
+    if not db:
+        raise ValueError(f'{label}: team.db no existe; no se puede validar la revisión aprobada '
+                          'de este código. Correr /skalling-init (o restaurar la base desde '
+                          'db/teamdb/team.dump.sql) antes de commitear código. Bloqueado por '
+                          'diseño: sin base no hay forma de saber si esto ya se revisó.')
     patch = git('diff', *diff_args, *PATHSPEC).rstrip(b'\n')
     digest = hashlib.sha256(patch).hexdigest()[:16]
     row = db.execute('SELECT exit_code FROM receipts WHERE tree_hash=? ORDER BY ts DESC, rowid DESC LIMIT 1', (digest,)).fetchone()

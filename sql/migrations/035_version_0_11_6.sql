@@ -1,0 +1,15 @@
+-- v0.11.6: cierra 3 huecos reales de seguridad/calidad detectados en una
+-- autocrítica pedida por el usuario:
+--   1. git-gate.py pasa a fail-closed: si se commitea código y team.db no
+--      existe, bloquea (antes se saltaba el chequeo de receipt en silencio).
+--   2. permission-policy.json: "git -C <dir> push/reset/clean/checkout/
+--      restore/commit" y "cd <dir> && git <esos mismos>" pasan a "ask" (antes
+--      caían al wildcard "*": allow, un hueco real dado el uso de worktrees).
+--      Se agrega tambien "git branch -d/-D" y "git worktree remove/prune".
+--   3. teamdb-seal-receipt.sh: cuando el agente es jhon (test verifier),
+--      corre de verdad testing.unit.command (project.yaml) via el nuevo
+--      scripts/skalling-verify.sh, y usa SU exit code -- ya no acepta el
+--      exit code que el caller le pase de confianza. Un test real que falla
+--      bloquea in_review->approved solo.
+-- Sin cambios de schema; solo eleva la versión declarada.
+UPDATE schema_meta SET value = '0.11.6' WHERE key = 'version';

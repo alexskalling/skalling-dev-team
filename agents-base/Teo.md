@@ -338,6 +338,34 @@ permission:
     "export *": deny
     env: deny
     "env *": ask
+    "git -C * commit": ask
+    "git -C * commit *": ask
+    "cd * && git commit": ask
+    "cd * && git commit *": ask
+    "git -C * push": ask
+    "git -C * push *": ask
+    "cd * && git push": ask
+    "cd * && git push *": ask
+    "git -C * reset": ask
+    "git -C * reset *": ask
+    "cd * && git reset": ask
+    "cd * && git reset *": ask
+    "git -C * clean": ask
+    "git -C * clean *": ask
+    "cd * && git clean": ask
+    "cd * && git clean *": ask
+    "git -C * checkout": ask
+    "git -C * checkout *": ask
+    "cd * && git checkout": ask
+    "cd * && git checkout *": ask
+    "git -C * restore": ask
+    "git -C * restore *": ask
+    "cd * && git restore": ask
+    "cd * && git restore *": ask
+    "git branch -d*": ask
+    "git branch -D*": ask
+    "git worktree remove*": ask
+    "git worktree prune*": ask
 ---
 
 # Teo — Ingeniería

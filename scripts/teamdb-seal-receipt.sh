@@ -73,6 +73,35 @@ COMMAND="${TEAMDB_CLAIM_COMMAND:-review-seal}"
 EXIT_CODE="${TEAMDB_CLAIM_EXIT_CODE:-0}"
 SUMMARY="${TEAMDB_CLAIM_OUTPUT_SUMMARY:-}"
 
+# jhon es "test verifier": su trabajo es ejecutar comprobaciones
+# independientes, no confiar en que quien lo invocó ya las corrió. Antes, un
+# receipt de jhon aceptaba el exit code que el caller pasara por variable de
+# entorno (default 0) sin correr nada real. Acá, si el proyecto tiene un
+# comando de test real configurado (project.yaml, nunca inventado), se corre
+# de verdad y SU exit code manda — no el que haya puesto el caller. Si no hay
+# comando configurado, se sella igual (no podemos bloquear para siempre un
+# proyecto sin tests) pero queda anotado sin ambigüedad, nunca indistinguible
+# de un test que sí corrió y pasó.
+if [ "$AGENT" = "jhon" ]; then
+  VERIFY_OUT_FILE="$(mktemp)"
+  trap 'rm -f "$VERIFY_OUT_FILE"; teamdb_unlock "$LOCK_DIR"' EXIT  # lens:ok: VERIFY_OUT_FILE viene de mktemp, ruta propia, nunca input externo
+  set +e
+  bash "$SCRIPT_DIR/skalling-verify.sh" "$PROJECT" > "$VERIFY_OUT_FILE" 2>&1
+  VERIFY_RC=$?
+  set -e
+  VERIFY_OUT="$(cat "$VERIFY_OUT_FILE")"
+  if [ "$VERIFY_RC" = "2" ]; then
+    SUMMARY="SIN-CONFIGURAR: no hay testing.unit.command en project.yaml; jhon no pudo correr una verificación real. ${SUMMARY}"
+  else
+    COMMAND="skalling-verify.sh (test real del proyecto)"
+    EXIT_CODE="$VERIFY_RC"
+    SUMMARY="$VERIFY_OUT"
+    if [ "$VERIFY_RC" != "0" ]; then
+      echo "WARN: el test real del proyecto falló (exit $VERIFY_RC); el receipt queda sellado con esa falla — in_review->approved no va a encontrar un receipt exit_code=0 de jhon para esto." >&2
+    fi
+  fi
+fi
+
 # Evidence refers to the staged candidate, not unstaged work or elapsed time.
 TREE_HASH="${TEAMDB_CLAIM_TREE_HASH:-}"
 if [ -z "$TREE_HASH" ]; then

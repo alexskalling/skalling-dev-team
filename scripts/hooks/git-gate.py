@@ -50,8 +50,13 @@ def check(diff_args, db, label):
                     table = target
             if table and not db.execute(f'SELECT 1 FROM {table} WHERE slug=? LIMIT 1', (slug,)).fetchone():
                 raise ValueError(f'{label}: {name} no tiene registro en TeamDB; no crear memoria paralela.')
-    if not db or not any(CODE.search(name) for name in names):
+    if not any(CODE.search(name) for name in names):
         return
+    if not db:
+        raise ValueError(f'{label}: team.db no existe; no se puede validar la revisión aprobada '
+                          'de este código. Correr /skalling-init (o restaurar la base desde '
+                          'db/teamdb/team.dump.sql) antes de commitear código. Bloqueado por '
+                          'diseño: sin base no hay forma de saber si esto ya se revisó.')
     patch = git('diff', *diff_args, *PATHSPEC).rstrip(b'\n')
     digest = hashlib.sha256(patch).hexdigest()[:16]
     row = db.execute('SELECT exit_code FROM receipts WHERE tree_hash=? ORDER BY ts DESC, rowid DESC LIMIT 1', (digest,)).fetchone()

@@ -4,6 +4,38 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.11.6] — en preparación
+
+Cierra 3 huecos reales de seguridad/calidad, a partir de una autocrítica
+pedida explícitamente por el usuario ("si fuera tu decisión, qué le harías a
+este agente para que sea más seguro/efectivo/evidente").
+
+### Fixed
+- **`git-gate.py` pasa a fail-closed.** Antes, si `team.db` no existía, el
+  chequeo de "receipt de revisión aprobada" se saltaba en silencio
+  (`if not db or ...: return`) y un commit de código pasaba sin ninguna
+  revisión. Ahora, si se commitea código y no hay `team.db`, bloquea con un
+  mensaje explícito en vez de dejarlo pasar.
+- **`git -C <dir> push` y `cd <dir> && git push` (y los mismos para reset,
+  clean, checkout, restore, commit) pasaban por alto el "ask".** La forma
+  literal `git push`/`git push *` ya pedía permiso, pero esas dos variantes
+  no matcheaban ningún patrón específico y caían al wildcard `"*": "allow"`
+  — un hueco real dado que el flujo de worktrees que promueve el propio
+  proyecto hace exactamente eso (`cd` a otro directorio, o `git -C
+  <worktree>`, y después `git push`). Se agrega también `git branch -d/-D` y
+  `git worktree remove/prune` (destructivos, sin cobertura previa).
+- **`teamdb-seal-receipt.sh` ya no confía en el exit code que le pase el
+  caller cuando el agente es `jhon`.** Jhon es el "test verifier": antes,
+  sellar un receipt suyo aceptaba `TEAMDB_CLAIM_EXIT_CODE` (default 0) sin
+  correr nada real. Ahora, si el proyecto tiene `testing.unit.command`
+  configurado en `project.yaml` (detectado, nunca inventado), se corre de
+  verdad vía el nuevo `scripts/skalling-verify.sh` y su exit code real es el
+  que queda sellado — un test roto bloquea `in_review->approved` solo, sin
+  depender de que alguien se acuerde de correrlo a mano. Sin comando
+  configurado, sigue sellando (no se puede bloquear para siempre un proyecto
+  sin tests) pero el `output_summary` queda anotado `SIN-CONFIGURAR`, nunca
+  indistinguible de una verificación real que pasó.
+
 ## [0.11.5] — en preparación
 
 ### Added
