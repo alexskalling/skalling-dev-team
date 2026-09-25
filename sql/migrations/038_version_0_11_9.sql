@@ -1,0 +1,32 @@
+-- v0.11.9: arregla 6 hallazgos confirmados y 3 plausibles de una revisión
+-- independiente (agente sin memoria de la sesión que escribió v0.11.6) sobre
+-- los 3 fixes de seguridad de esa versión. Sin cambios de schema.
+--   - skalling-verify.sh: parseo de project.yaml no dependía del orden de
+--     "available:"/"command:" (antes, reordenarlas o poner un comentario en
+--     medio hacía que cayera en silencio a "sin configurar" -- caller-trusted
+--     de nuevo). "available: false" con un command viejo colgado ya no se
+--     corre.
+--   - teamdb-seal-receipt.sh: exige que el working tree coincida con el
+--     índice antes de correr la verificación real de jhon (antes, un TOCTOU
+--     permitía sellar un receipt "exitoso" sobre código staged distinto al
+--     que efectivamente se probó).
+--   - git-gate.py + teamdb_project_path (lib-teamdb.sh): resuelven la raíz
+--     del proyecto vía --git-common-dir, no --show-toplevel -- antes, el
+--     fail-closed de v0.11.6 bloqueaba TODO commit en TODO git worktree
+--     (team.db está gitignored y un worktree nuevo nunca lo trae).
+--   - permission-policy.json: "git branch -d/-D" y "git worktree
+--     remove/prune" tienen ahora las mismas variantes "git -C */cd &&" que
+--     los otros 6 comandos sensibles.
+--   - plugins/skalling-git-guard.js (nuevo): bloquea encadenar git
+--     push/reset/clean/checkout/restore/commit/branch-d-D/worktree-remove-
+--     prune con && / ; / | detrás de un prefijo ya "allow" (ej. "git add .
+--     && git push") -- un hueco que ningún patrón de permission-policy.json
+--     puede cerrar por sí solo, porque el bypass no usa ninguna forma
+--     endurecida de push, usa un prefijo DISTINTO que ya era allow.
+--   - teamdb-seal-receipt.sh: libera el lock de TeamDB mientras corre la
+--     verificación real (puede tardar más que el timeout del lock) en vez
+--     de tenerlo tomado y bloquear a los otros agentes; trunca
+--     output_summary a 4000 caracteres.
+--   - mirror-parity.test.sh: detecta también huérfanos (archivo en el
+--     espejo sin fuente correspondiente), no solo desincronización.
+UPDATE schema_meta SET value = '0.11.9' WHERE key = 'version';

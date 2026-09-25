@@ -497,7 +497,15 @@
     "git branch -d*": "ask",
     "git branch -D*": "ask",
     "git worktree remove*": "ask",
-    "git worktree prune*": "ask"
+    "git worktree prune*": "ask",
+    "git -C * branch -d*": "ask",
+    "git -C * branch -D*": "ask",
+    "cd * && git branch -d*": "ask",
+    "cd * && git branch -D*": "ask",
+    "git -C * worktree remove*": "ask",
+    "git -C * worktree prune*": "ask",
+    "cd * && git worktree remove*": "ask",
+    "cd * && git worktree prune*": "ask"
   },
   "profiles": {
     "Alex": {
@@ -849,7 +857,15 @@
         "git branch -d*",
         "git branch -D*",
         "git worktree remove*",
-        "git worktree prune*"
+        "git worktree prune*",
+        "git -C * branch -d*",
+        "git -C * branch -D*",
+        "cd * && git branch -d*",
+        "cd * && git branch -D*",
+        "git -C * worktree remove*",
+        "git -C * worktree prune*",
+        "cd * && git worktree remove*",
+        "cd * && git worktree prune*"
       ],
       "overrides": {}
     },
@@ -1125,7 +1141,15 @@
         "git branch -d*",
         "git branch -D*",
         "git worktree remove*",
-        "git worktree prune*"
+        "git worktree prune*",
+        "git -C * branch -d*",
+        "git -C * branch -D*",
+        "cd * && git branch -d*",
+        "cd * && git branch -D*",
+        "git -C * worktree remove*",
+        "git -C * worktree prune*",
+        "cd * && git worktree remove*",
+        "cd * && git worktree prune*"
       ],
       "overrides": {}
     },
@@ -1512,7 +1536,15 @@
         "git branch -d*",
         "git branch -D*",
         "git worktree remove*",
-        "git worktree prune*"
+        "git worktree prune*",
+        "git -C * branch -d*",
+        "git -C * branch -D*",
+        "cd * && git branch -d*",
+        "cd * && git branch -D*",
+        "git -C * worktree remove*",
+        "git -C * worktree prune*",
+        "cd * && git worktree remove*",
+        "cd * && git worktree prune*"
       ],
       "overrides": {}
     },
@@ -1887,7 +1919,15 @@
         "git branch -d*",
         "git branch -D*",
         "git worktree remove*",
-        "git worktree prune*"
+        "git worktree prune*",
+        "git -C * branch -d*",
+        "git -C * branch -D*",
+        "cd * && git branch -d*",
+        "cd * && git branch -D*",
+        "git -C * worktree remove*",
+        "git -C * worktree prune*",
+        "cd * && git worktree remove*",
+        "cd * && git worktree prune*"
       ],
       "overrides": {}
     },
@@ -2231,7 +2271,15 @@
         "git branch -d*",
         "git branch -D*",
         "git worktree remove*",
-        "git worktree prune*"
+        "git worktree prune*",
+        "git -C * branch -d*",
+        "git -C * branch -D*",
+        "cd * && git branch -d*",
+        "cd * && git branch -D*",
+        "git -C * worktree remove*",
+        "git -C * worktree prune*",
+        "cd * && git worktree remove*",
+        "cd * && git worktree prune*"
       ],
       "overrides": {}
     },
@@ -2507,7 +2555,15 @@
         "git branch -d*",
         "git branch -D*",
         "git worktree remove*",
-        "git worktree prune*"
+        "git worktree prune*",
+        "git -C * branch -d*",
+        "git -C * branch -D*",
+        "cd * && git branch -d*",
+        "cd * && git branch -D*",
+        "git -C * worktree remove*",
+        "git -C * worktree prune*",
+        "cd * && git worktree remove*",
+        "cd * && git worktree prune*"
       ],
       "overrides": {}
     },
@@ -2831,7 +2887,15 @@
         "git branch -d*",
         "git branch -D*",
         "git worktree remove*",
-        "git worktree prune*"
+        "git worktree prune*",
+        "git -C * branch -d*",
+        "git -C * branch -D*",
+        "cd * && git branch -d*",
+        "cd * && git branch -D*",
+        "git -C * worktree remove*",
+        "git -C * worktree prune*",
+        "cd * && git worktree remove*",
+        "cd * && git worktree prune*"
       ],
       "overrides": {}
     },
@@ -3204,7 +3268,15 @@
         "git branch -d*",
         "git branch -D*",
         "git worktree remove*",
-        "git worktree prune*"
+        "git worktree prune*",
+        "git -C * branch -d*",
+        "git -C * branch -D*",
+        "cd * && git branch -d*",
+        "cd * && git branch -D*",
+        "git -C * worktree remove*",
+        "git -C * worktree prune*",
+        "cd * && git worktree remove*",
+        "cd * && git worktree prune*"
       ],
       "overrides": {}
     },
@@ -3675,7 +3747,15 @@
         "git branch -d*",
         "git branch -D*",
         "git worktree remove*",
-        "git worktree prune*"
+        "git worktree prune*",
+        "git -C * branch -d*",
+        "git -C * branch -D*",
+        "cd * && git branch -d*",
+        "cd * && git branch -D*",
+        "git -C * worktree remove*",
+        "git -C * worktree prune*",
+        "cd * && git worktree remove*",
+        "cd * && git worktree prune*"
       ],
       "overrides": {}
     }

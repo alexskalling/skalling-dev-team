@@ -469,6 +469,8 @@ install_skalling_scripts() {
     run cp "$SCRIPT_DIR/plugins/lib/data-safety.mjs" "$OPENCODE_DIR/plugins/lib/data-safety.mjs"
     run cp "$SCRIPT_DIR/plugins/skalling-workflow.js" "$OPENCODE_DIR/plugins/skalling-workflow.js"
     run cp "$SCRIPT_DIR/plugins/lib/workflow.mjs" "$OPENCODE_DIR/plugins/lib/workflow.mjs"
+    run cp "$SCRIPT_DIR/plugins/skalling-git-guard.js" "$OPENCODE_DIR/plugins/skalling-git-guard.js"
+    run cp "$SCRIPT_DIR/plugins/lib/git-guard.mjs" "$OPENCODE_DIR/plugins/lib/git-guard.mjs"
     run mkdir -p "$OPENCODE_DIR/scripts"
     run cp "$SCRIPT_DIR/scripts/skalling-workflow.py" "$OPENCODE_DIR/scripts/skalling-workflow.py"
   # Scripts core de orquestación (skalling-route, skalling-session-start, skalling-receipt).
@@ -739,6 +741,8 @@ do_uninstall() {
     if [ -f "$OPENCODE_DIR/plugins/skalling-goal.js" ]; then run rm -f "$OPENCODE_DIR/plugins/skalling-goal.js"; fi
     if [ -f "$OPENCODE_DIR/plugins/skalling-data-safety.js" ]; then run rm -f "$OPENCODE_DIR/plugins/skalling-data-safety.js"; fi
     if [ -f "$OPENCODE_DIR/plugins/lib/data-safety.mjs" ]; then run rm -f "$OPENCODE_DIR/plugins/lib/data-safety.mjs"; fi
+    if [ -f "$OPENCODE_DIR/plugins/skalling-git-guard.js" ]; then run rm -f "$OPENCODE_DIR/plugins/skalling-git-guard.js"; fi
+    if [ -f "$OPENCODE_DIR/plugins/lib/git-guard.mjs" ]; then run rm -f "$OPENCODE_DIR/plugins/lib/git-guard.mjs"; fi
 
     for d in "$SKILLS_DIR"/*/; do
         [[ -d "$d" ]] || continue

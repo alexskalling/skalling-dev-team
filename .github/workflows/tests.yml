@@ -44,6 +44,7 @@ jobs:
           python3 tests/data-safety.test.py
           node --test tests/data-safety-plugin.test.mjs
           node --test tests/workflow-plugin.test.mjs
+          node --test tests/git-guard-plugin.test.mjs
           python3 tests/skalling-goal.test.py
           node --test tests/skalling-goal-plugin.test.mjs
           bash tests/bootstrap-readiness.test.sh

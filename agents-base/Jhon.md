@@ -382,6 +382,14 @@ permission:
     "git branch -D*": ask
     "git worktree remove*": ask
     "git worktree prune*": ask
+    "git -C * branch -d*": ask
+    "git -C * branch -D*": ask
+    "cd * && git branch -d*": ask
+    "cd * && git branch -D*": ask
+    "git -C * worktree remove*": ask
+    "git -C * worktree prune*": ask
+    "cd * && git worktree remove*": ask
+    "cd * && git worktree prune*": ask
 ---
 
 # Jhon — Verificación

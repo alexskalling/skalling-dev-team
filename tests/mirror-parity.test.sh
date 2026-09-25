@@ -56,5 +56,24 @@ for src in "$ROOT"/scripts/hooks/*; do
   fi
 done
 
+# ── huérfanos: un archivo que quedó en el espejo después de borrarse en la
+#    fuente no lo detecta el loop de arriba (solo recorre fuente -> espejo).
+ORPHANS=""
+for mirror in "$ROOT"/.opencode/agents/*.md; do
+  [ -f "$mirror" ] || continue
+  name="$(basename "$mirror")"
+  [ -f "$ROOT/agents-base/$name" ] || ORPHANS="$ORPHANS .opencode/agents/$name"
+done
+for mirror in "$ROOT"/.opencode/hooks/*; do
+  [ -f "$mirror" ] || continue
+  name="$(basename "$mirror")"
+  [ -f "$ROOT/scripts/hooks/$name" ] || ORPHANS="$ORPHANS .opencode/hooks/$name"
+done
+if [ -z "$ORPHANS" ]; then
+  assert_pass "sin huérfanos en .opencode/agents/ ni .opencode/hooks/"
+else
+  assert_fail "sin huérfanos en .opencode/agents/ ni .opencode/hooks/" "huérfanos:$ORPHANS"
+fi
+
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

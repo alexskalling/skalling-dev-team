@@ -83,13 +83,39 @@ SUMMARY="${TEAMDB_CLAIM_OUTPUT_SUMMARY:-}"
 # proyecto sin tests) pero queda anotado sin ambigüedad, nunca indistinguible
 # de un test que sí corrió y pasó.
 if [ "$AGENT" = "jhon" ]; then
+  # skalling-verify.sh corre sobre el WORKING TREE, pero lo que este script
+  # sella es el hash de lo STAGED (git diff --cached, más abajo). Si hay
+  # cambios sin stagear en archivos trackeados, el test real puede estar
+  # evaluando contenido DISTINTO al que efectivamente quedaría commiteado
+  # (por ejemplo: se stageó código malo, después se sobreescribió el archivo
+  # con código bueno sin volver a hacer git add) -- el receipt quedaría
+  # sellado para código que nunca se probó. Ante la duda, bloquear: exigir
+  # que el working tree coincida con el índice antes de correr la
+  # verificación real.
+  UNSTAGED="$(git -C "$PROJECT" diff --name-only -- . ':(exclude)db/teamdb/team.dump.sql')"
+  if [ -n "$UNSTAGED" ]; then
+    echo "ERROR: hay cambios sin stagear en archivos trackeados; el test real correría sobre contenido distinto al que queda staged. Hacer 'git add' de todo (o descartar lo suelto) antes de sellar un receipt de jhon:" >&2
+    echo "$UNSTAGED" >&2
+    exit 1
+  fi
   VERIFY_OUT_FILE="$(mktemp)"
-  trap 'rm -f "$VERIFY_OUT_FILE"; teamdb_unlock "$LOCK_DIR"' EXIT  # lens:ok: VERIFY_OUT_FILE viene de mktemp, ruta propia, nunca input externo
+  trap 'rm -f "$VERIFY_OUT_FILE"' EXIT  # lens:ok: VERIFY_OUT_FILE viene de mktemp, ruta propia, nunca input externo
+  # El test real de un proyecto puede tardar bastante mas que el timeout del
+  # lock (10s) -- soltarlo mientras corre, para no dejar a los otros 7
+  # agentes bloqueados escribiendo en TeamDB durante ese tiempo. No hace
+  # falta el lock para correr un comando externo de solo lectura sobre el
+  # working tree; se vuelve a tomar recien antes de escribir el receipt.
+  teamdb_unlock "$LOCK_DIR"
   set +e
   bash "$SCRIPT_DIR/skalling-verify.sh" "$PROJECT" > "$VERIFY_OUT_FILE" 2>&1
   VERIFY_RC=$?
   set -e
-  VERIFY_OUT="$(cat "$VERIFY_OUT_FILE")"
+  if ! teamdb_lock "$LOCK_DIR" 10; then
+    echo "ERROR: no se pudo re-tomar el lock para sellar el receipt tras la verificación" >&2
+    exit 1
+  fi
+  trap 'rm -f "$VERIFY_OUT_FILE"; teamdb_unlock "$LOCK_DIR"' EXIT  # lens:ok: VERIFY_OUT_FILE viene de mktemp, ruta propia, nunca input externo
+  VERIFY_OUT="$(tail -c 4000 "$VERIFY_OUT_FILE")"  # lens:ok: output_summary no es una columna sin limite, evita filas gigantes
   if [ "$VERIFY_RC" = "2" ]; then
     SUMMARY="SIN-CONFIGURAR: no hay testing.unit.command en project.yaml; jhon no pudo correr una verificación real. ${SUMMARY}"
   else

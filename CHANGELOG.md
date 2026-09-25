@@ -4,6 +4,73 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.11.9] — en preparación
+
+Un agente sin memoria de la sesión que escribió v0.11.6 hizo una revisión
+adversarial de esos 3 fixes de seguridad, a pedido explícito del usuario
+(preocupación válida: el autor revisando su propio código no es
+independiente). Encontró 6 bugs confirmados y 3 puntos plausibles que la
+sesión original no había visto. Se arreglan acá.
+
+### Fixed
+- `skalling-verify.sh`: el parseo de `project.yaml` exigía que
+  `available:` estuviera pegado justo antes de `command:`; reordenar esas
+  dos claves (o poner un comentario en medio) hacía que cayera en silencio
+  a "sin configurar", volviendo a confiar en el exit code del caller —
+  exactamente lo que v0.11.6 decía haber cerrado. Ahora aísla el bloque de
+  `unit:` y busca ambas claves sin asumir orden ni adyacencia. También
+  ignoraba `available: false` si quedaba un `command:` viejo colgado; ahora
+  lo respeta.
+- `teamdb-seal-receipt.sh`: TOCTOU real — el test corría sobre el working
+  tree pero el hash sellado era el del índice (staged). Confirmado en vivo:
+  stagear código malo, sobreescribir el archivo con código bueno sin volver
+  a `git add`, sellar — quedaba un receipt "exitoso" para código que nunca
+  se probó. Ahora exige que el working tree coincida con el índice antes de
+  correr la verificación real de jhon.
+- `git-gate.py` + `teamdb_project_path` (`lib-teamdb.sh`): el fail-closed de
+  v0.11.6 resolvía la raíz del proyecto con `--show-toplevel`, que en un
+  `git worktree` da la raíz del WORKTREE, no la del repo principal. Como
+  `team.db` está gitignored y un worktree nuevo nunca lo trae, el
+  fail-closed bloqueaba literalmente TODO commit en TODO worktree — la
+  contradicción exacta con el propio commit de paralelización de esta
+  sesión. Ahora resuelven vía `--git-common-dir` (compartido entre el repo
+  principal y todos sus worktrees).
+- `permission-policy.json`: `git branch -d/-D` y `git worktree
+  remove/prune` (agregados en v0.11.6) se quedaron sin las variantes
+  `git -C */cd &&` que sí se les dio a los otros 6 comandos sensibles en la
+  misma versión — inconsistencia detectada por la revisión.
+- `teamdb-seal-receipt.sh`: mantenía el lock de TeamDB tomado durante toda
+  la corrida del test real del proyecto, que puede tardar bastante más que
+  el timeout del lock (10s) — bloqueando de hecho a los otros agentes que
+  quisieran escribir en TeamDB mientras tanto. Ahora lo libera antes de
+  correr la verificación y lo vuelve a tomar recién para escribir el
+  receipt. También trunca `output_summary` a 4000 caracteres (no tiene
+  límite en la columna).
+- `tests/mirror-parity.test.sh`: solo recorría fuente → espejo; un archivo
+  huérfano en `.opencode/agents/` o `.opencode/hooks/` (borrado de la
+  fuente pero no del espejo) no se detectaba. Ahora también busca
+  huérfanos.
+
+### Added
+- `plugins/skalling-git-guard.js` (+ `plugins/lib/git-guard.mjs`): cierra
+  un hueco que `permission-policy.json` por sí solo NO puede cerrar — el
+  matcher de OpenCode compara el comando bash completo contra cada glob, así
+  que un `"allow"` amplio como `"git add *"` matchea literalmente
+  `"git add . && git push"` (el `*` final absorbe el `&& git push` pegado
+  atrás). Ninguna de las variantes endurecidas en v0.11.6 usa ese prefijo,
+  así que ese fix no lo cerraba. El plugin intercepta `tool.execute.before`
+  y bloquea cualquier comando bash que encadene (`&&`/`;`/`|`) uno de los
+  git sensibles detrás de otro prefijo — forzando a que se corra como su
+  propio comando, donde el permiso `"ask"` ya configurado sí aplica.
+
+### Sin resolver, a propósito
+- La revisión también señaló que sellar un receipt de jhon ahora ejecuta
+  código controlado por el propio proyecto (`testing.unit.command`). No es
+  una clase de vulnerabilidad nueva — es el trabajo real de un "test
+  verifier", y `skalling-coverage.sh` ya ejecutaba comandos de proyecto de
+  la misma forma antes de esta sesión — pero antes de v0.11.6, sellar un
+  receipt nunca ejecutaba nada. Documentado, no mitigado.
+
 ## [0.11.8] — en preparación
 
 A pedido explícito del usuario: agrega el test de paridad de espejos que

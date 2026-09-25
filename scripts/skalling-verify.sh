@@ -29,12 +29,23 @@ fi
 COMMAND="$(python3 -c '
 import re, sys
 text = open(sys.argv[1], encoding="utf-8").read()
-m = re.search(r"unit:\s*\n\s*available:\s*\w+\s*\n\s*command:\s*(.*)", text)
-print((m.group(1).strip().strip("\"'"'"'") if m else ""))
+# Aisla el bloque de "unit:" (sus hijos, indentados MAS que "unit:" mismo)
+# y busca available:/command: DENTRO de ese bloque, sin asumir orden ni
+# adyacencia -- una version anterior exigia "available:" pegado justo antes
+# de "command:", y con las claves en el orden real que genera
+# bootstrap-context.py (o un comentario de por medio) el regex no matcheaba
+# nada y silenciosamente se trataba como "sin configurar".
+m = re.search(r"unit:[ \t]*\n((?:[ \t]{3,}\S.*\n?)*)", text)
+block = m.group(1) if m else ""
+avail_m = re.search(r"available:\s*(\w+)", block)
+cmd_m = re.search(r"command:\s*(.*)", block)
+available = bool(avail_m) and avail_m.group(1).strip().lower() == "true"
+command = cmd_m.group(1).strip().strip("\"'"'"'") if cmd_m else ""
+print(command if (available and command) else "")
 ' "$YAML")"
 
 if [ -z "$COMMAND" ]; then
-  echo "SIN-CONFIGURAR: no hay comando de test detectado en project.yaml (testing.unit.command vacío)." >&2
+  echo "SIN-CONFIGURAR: no hay comando de test detectado en project.yaml (testing.unit.available es false, o testing.unit.command está vacío)." >&2
   exit 2
 fi
 

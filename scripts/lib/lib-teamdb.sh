@@ -5,9 +5,32 @@ teamdb_global_path() {
   echo "${SKALLING_DB_GLOBAL:-${SKALLING_OPENCODE_DIR:-${HOME}/.config/opencode}/team.db}"
 }
 
+# _teamdb_project_root <dir>: si <dir> es un git worktree LINKED (no el
+# principal), resuelve a la raiz del repo principal. team.db esta gitignored
+# y solo existe ahi -- un worktree nuevo nunca lo trae consigo, asi que
+# resolver la ruta de la DB contra la raiz del worktree hace que CUALQUIER
+# operacion de TeamDB (claim, plan, seal-receipt, etc.) "no encuentre" una
+# base que en realidad existe, uno o dos directorios al lado. Encontrado por
+# una revision independiente al escribir el fix fail-closed de git-gate.py,
+# que tenia el mismo bug antes de esto.
+_teamdb_project_root() {
+  local project="$1"
+  if [ -d "$project/.git" ] || [ -f "$project/.git" ]; then
+    local common_dir
+    common_dir="$(cd "$project" 2>/dev/null && git rev-parse --git-common-dir 2>/dev/null)" || { echo "$project"; return; }
+    case "$common_dir" in
+      /*) : ;;
+      *) common_dir="$project/$common_dir" ;;
+    esac
+    (cd "$common_dir/.." 2>/dev/null && pwd) || echo "$project"
+  else
+    echo "$project"
+  fi
+}
+
 teamdb_project_path() {
   local project="${1:-$(pwd)}"
-  echo "${project}/.opencode/context/team.db"
+  echo "$(_teamdb_project_root "$project")/.opencode/context/team.db"
 }
 
 teamdb_check_sqlite3() {

@@ -66,8 +66,23 @@ def check(diff_args, db, label):
     print(f'OK: {label} coincide con el receipt sellado ({digest})')
 
 
+def project_root():
+    # --show-toplevel da la raiz del WORKTREE actual, no la del repo
+    # principal. team.db esta gitignored y solo existe en el checkout
+    # original -- un git worktree nuevo nunca lo trae, asi que resolver por
+    # show-toplevel hacia fail-closed bloqueaba TODO commit en TODO worktree,
+    # justo el flujo que el propio proyecto promueve. --git-common-dir
+    # siempre apunta al .git compartido (en el repo principal o en
+    # cualquiera de sus worktrees); su padre es la raiz real del proyecto.
+    common_dir = Path(git('rev-parse', '--git-common-dir').decode().strip())
+    if not common_dir.is_absolute():
+        toplevel = Path(git('rev-parse', '--show-toplevel').decode().strip())
+        common_dir = toplevel / common_dir
+    return common_dir.resolve().parent
+
+
 def main():
-    root = Path(git('rev-parse', '--show-toplevel').decode().strip())
+    root = project_root()
     path = root / '.opencode/context/team.db'
     db = sqlite3.connect(path.as_uri() + '?mode=ro', uri=True, timeout=5) if path.exists() else None
     try:
