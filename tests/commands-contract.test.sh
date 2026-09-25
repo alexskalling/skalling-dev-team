@@ -22,7 +22,7 @@ expected=(
   skalling-codegraph skalling-coverage skalling-dashboard skalling-doctor skalling-help
   skalling-init skalling-memory skalling-merge skalling-metrics
   skalling-recover skalling-refresh skalling-resume skalling-status
-  skalling-update skalling-goal
+  skalling-update skalling-goal skalling-models
 )
 
 for command in "${expected[@]}"; do
@@ -35,7 +35,7 @@ for command in "${expected[@]}"; do
   fi
 done
 
-for removed in skalling-forget skalling-graph skalling-graph-refresh skalling-models; do
+for removed in skalling-forget skalling-graph skalling-graph-refresh; do
   check "$removed fue consolidado o desactivado" test ! -e "$ROOT/command/$removed.md"
 done
 

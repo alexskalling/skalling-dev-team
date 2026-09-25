@@ -227,6 +227,23 @@ install_agents() {
         agent_count=$((agent_count + 1))
     done
     log OK "$agent_count agentes instalados (con snippets resueltos)"
+
+    apply_model_overrides
+}
+
+# Reaplica model-overrides.json (si existe) sobre los agentes recién
+# reinstalados -- así una asignación de modelo hecha con skalling-models.sh
+# sobrevive a este reinstall, en vez de perderse porque install_agents()
+# siempre regenera cada archivo desde cero a partir de agents-base/.
+apply_model_overrides() {
+    local overrides_file="${OPENCODE_DIR}/model-overrides.json"
+    [[ -f "$overrides_file" ]] || return 0
+    [[ "$DRY_RUN" == true ]] && { echo "    [dry-run] reaplicaría model-overrides.json"; return 0; }
+
+    if [[ -x "$SCRIPT_DIR/scripts/skalling-models.sh" ]]; then
+        SKALLING_OPENCODE_DIR="$OPENCODE_DIR" "$SCRIPT_DIR/scripts/skalling-models.sh" apply >/dev/null 2>&1 || true
+        log OK "model-overrides.json reaplicado a los agentes instalados"
+    fi
 }
 
 install_skills_core() {

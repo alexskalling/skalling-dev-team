@@ -6,7 +6,7 @@ La interfaz pública está organizada por intención:
 - Completar un objetivo hasta un commit local, sin push: `/skalling-goal`.
 - Entender: `/skalling-status`, `/skalling-codegraph`, `/skalling-dashboard`, `/skalling-coverage`.
 - Memoria: `/skalling-memory`, `/skalling-resume`, `/skalling-metrics`.
-- Mantener: `/skalling-refresh`, `/skalling-doctor`, `/skalling-update`.
+- Mantener: `/skalling-refresh`, `/skalling-doctor`, `/skalling-update`, `/skalling-models`.
 - Recuperar: `/skalling-recover`, `/skalling-merge`.
 
 Cada comando es un contrato corto. La lógica ejecutable vive en scripts probados;

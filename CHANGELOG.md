@@ -4,6 +4,39 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.11.5] — en preparación
+
+### Added
+- `/skalling-models`: asigna un modelo de OpenCode a cada uno de los 8
+  agentes de forma independiente (`show` / `set <Agente> <modelo>` /
+  `reset [Agente]`), usando el campo `model:` del frontmatter del agente
+  instalado. La asignación queda en `model-overrides.json`, en la
+  instalación global (no en el repo) — `install-global.sh` la reaplica
+  después de cada reinstall, para que no se pierda al regenerar los
+  agentes desde `agents-base/`. Reemplaza al viejo `skalling-models.sh`
+  retirado, que compartía solo 4 slots genéricos entre los 8 agentes; la
+  versión actual de OpenCode sí soporta `model:` independiente por agente.
+- `teamdb-task-groups.sh`: agrupa las tasks pendientes de un plan en lotes
+  seguros para trabajar en paralelo (un worktree por lote), usando solo
+  `task_dependencies` real — cualquier vínculo registrado, no solo
+  `blocks`, fuerza secuencia entre dos tasks ya listas para arrancar.
+
+### Fixed
+- `tests/teamdb-hardening-suite.sh` corre en paralelo (antes secuencial),
+  con `dashboard-survives-group-kill.test.sh` aislado en serie aparte
+  porque su aislamiento de process group (`set -m`) es incompatible con
+  correr como hijo de `xargs -P`.
+- `.git/hooks/pre-commit`/`pre-push` resuelven `git-gate.py` con `git
+  rev-parse --show-toplevel` en vez de `$(dirname "${BASH_SOURCE[0]}")`,
+  que resolvía al path del symlink en `.git/hooks/` y nunca encontraba el
+  script real.
+- `external_directory` (permiso separado de `bash`, nunca tocado en
+  rondas anteriores) pasa de pedir permiso por defecto fuera del proyecto
+  a `allow` con una lista corta de rutas sensibles (`.ssh`, credenciales
+  de AWS/GitHub, keychains, `.pem`/`.key`, `secrets/`) — el resto de
+  operación fuera del proyecto (temporales, `cat`, etc.) no debería pedir
+  permiso.
+
 ## [0.11.4] — en preparación
 
 Consolida la primera ronda de uso real end-to-end (proyecto Survan) y una
