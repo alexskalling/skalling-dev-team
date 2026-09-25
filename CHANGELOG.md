@@ -4,6 +4,29 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.11.8] — en preparación
+
+A pedido explícito del usuario: agrega el test de paridad de espejos que
+faltaba de la autocrítica.
+
+### Added
+- `tests/mirror-parity.test.sh` vigila dos mecanismos de "espejo" de
+  archivos que no tenían ningún test: `agents-base/*.md` →
+  `.opencode/agents/*.md` (vía `render-agent.sh`) y `scripts/hooks/*` →
+  `.opencode/hooks/*` (copia cruda, sin script que la aplique). El tercer
+  mecanismo (`scripts/.bundle-manifest` → `.opencode/scripts/`) ya tenía
+  cobertura en `tests/scripts-parity.test.sh` y no se duplica.
+
+### Fixed
+- **`.opencode/agents/Alex.md` tenía `hidden: true` colado por accidente**
+  en el commit `1ea5523` (cuyo mensaje no lo menciona en absoluto) — nunca
+  estuvo en `agents-base/Alex.md`, la fuente. `hidden: true` es un patrón
+  real e intencional para agentes internos delegados (Jhon, Pau, Luz), pero
+  nunca debería aplicar a Alex, el orquestador de cara al usuario y punto de
+  entrada de Skalling; en esta copia local del repo, Alex podía estar
+  invisible en el selector de agentes sin que nadie lo hubiera decidido.
+  Encontrado por el propio `mirror-parity.test.sh` recién escrito.
+
 ## [0.11.7] — en preparación
 
 A pedido explícito del usuario: cierra la brecha "construimos el detector,

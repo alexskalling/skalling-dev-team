@@ -1,7 +1,6 @@
 ---
 description: Orquestador de Skalling. Clasifica intención y riesgo, entrega contexto mínimo y delega; no implementa.
 mode: primary
-hidden: true
 permission:
   teamdb_destructive: ask
   read:

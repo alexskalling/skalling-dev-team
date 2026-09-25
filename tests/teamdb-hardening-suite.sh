@@ -43,6 +43,7 @@ TESTS=(
   tests/git-gate-failclosed.test.sh
   tests/skalling-verify-gate.test.sh
   tests/teamdb-plan-parallel-groups.test.sh
+  tests/mirror-parity.test.sh
   tests/teamdb-search-sqli.test.sh
   tests/teamdb-related-sqli.test.sh
   tests/teamdb-wip-tree-sqli.test.sh
