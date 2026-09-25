@@ -1,0 +1,12 @@
+-- v0.11.10: agrega un 5to lens a skalling-review.sh, "sast", que corre
+-- semgrep real (taint-aware) sobre el contenido STAGED de los archivos
+-- tocados -- complementa a "risk" (regex de una línea), no lo reemplaza:
+-- sigue el dato a través de variables intermedias, no solo el patrón de la
+-- línea donde termina. Config default: registry p/owasp-top-ten +
+-- p/security-audit (override con SKALLING_SEMGREP_CONFIG). Si semgrep no
+-- está instalado, o no puede correr (sin red la primera vez que hace falta
+-- el ruleset), no bloquea -- deja un INFO explícito en el receipt, nunca
+-- indistinguible de una corrida que sí tuvo esa capa. Respeta el mismo
+-- escape hatch "# lens:ok: motivo" que los otros 4 lenses.
+-- Sin cambios de schema; solo eleva la versión declarada.
+UPDATE schema_meta SET value = '0.11.10' WHERE key = 'version';

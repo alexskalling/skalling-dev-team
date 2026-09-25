@@ -4,6 +4,43 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.11.10] — en preparación
+
+A pedido explícito del usuario, atiende el ítem que había quedado señalado
+como pendiente en la autocrítica original: "los lenses de revisión siguen
+siendo regex, no análisis estático real".
+
+### Added
+- `skalling-review.sh --lens sast` (incluido en `--lens all`): corre
+  `semgrep` de verdad (registry `p/owasp-top-ten` + `p/security-audit`,
+  override con `SKALLING_SEMGREP_CONFIG`) sobre el contenido STAGED de los
+  archivos tocados con extensión soportada (`.py .js .jsx .mjs .ts .tsx .go
+  .java .rb .php`). La diferencia real con "risk" (el lens regex existente):
+  sigue el dato entre variables intermedias antes de llegar al sink
+  peligroso, no solo mira la línea donde termina. Probado en vivo: un caso
+  donde el dato pasa por dos variables (`dato -> parte -> query ->
+  cursor.execute(query)`) — invisible para cualquier regex de una sola línea
+  — semgrep sí lo marca como BLOCKER, y una query parametrizada equivalente
+  no genera falso positivo.
+- Degradación honesta si `semgrep` no está instalado o no puede correr (sin
+  red la primera vez que hace falta el ruleset del registry, timeout): NO
+  bloquea — no se puede exigir esa herramienta en toda máquina para
+  siempre — pero deja un `INFO` explícito en el receipt sellado
+  (`"sast":{"ran":1,"available":0,...}`), nunca indistinguible de una
+  corrida que sí tuvo esa capa. Mismo principio que la degradación de
+  `skalling-coverage.sh` cuando no hay comando de test configurado.
+- El escape hatch `# lens:ok: motivo` (ya usado por los otros 4 lenses)
+  también aplica acá — se lee la línea real del archivo (no el campo
+  `extra.lines` de semgrep, que viene redactado para ciertos rulesets sin
+  cuenta) en cualquier punto del rango que reporta el finding, porque una
+  relación de taint puede cruzar varias líneas entre la fuente y el sink.
+
+### Fixed (encontrado implementando esto)
+- Un heredoc de Python anidado dentro de un `process substitution
+  < <(...)` rompía en bash 3.2 (el bash default de macOS, el que este
+  proyecto explícitamente soporta) con "ambiguous redirect" — se resolvió
+  escribiendo el script a un archivo temporal aparte antes de invocarlo.
+
 ## [0.11.9] — en preparación
 
 Un agente sin memoria de la sesión que escribió v0.11.6 hizo una revisión

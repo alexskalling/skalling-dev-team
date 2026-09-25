@@ -1,10 +1,18 @@
 #!/usr/bin/env bash
-# skalling-review.sh — Revisión estructurada con 4 lenses (bash/sqlite)
+# skalling-review.sh — Revisión estructurada con 5 lenses (4 bash/regex + 1 SAST real)
 # v0.8.3: reemplaza la revisión visual por un análisis de patrones sobre el diff.
 #   risk         → eval/rm -rf/curl -k/http:///secretos/chmod 777/SQL injection
 #   resilience   → set -euo pipefail, mktemp sin trap, locks sin timeout
 #   readability  → funciones largas, vars genéricas, TODO/FIXME/HACK, líneas largas
 #   reliability  → scripts sin test que los cubra, tests sin asserts
+#   sast         → semgrep (si está instalado) sobre los archivos tocados, vía
+#                 --config p/security-audit. Sigue el flujo del dato entre
+#                 variables (taint), no solo el patrón de una línea suelta --
+#                 complementa a "risk", no lo reemplaza. Si semgrep no está
+#                 instalado, o no puede correr (sin red la primera vez que se
+#                 necesita el ruleset del registry), NO bloquea: deja un INFO
+#                 explícito de que esta revisión corrió sin esa capa, nunca
+#                 indistinguible de una corrida que sí la tuvo.
 # Modo --deep: congela el diff en .opencode/context/review/<tree_hash>/ y genera
 #   un prompt por lens (risk→Luz, resilience→Jhon, readability→Pau, reliability→Jhon)
 #   para que el orchestrator delegue a subagentes. El script NO lanza subagentes.
@@ -57,7 +65,7 @@
 # blame — no en un YAML aparte que nadie relee. Usar con criterio: es una
 # excepción por línea, no una forma de silenciar el lens en general.
 #
-# Uso: bash skalling-review.sh [--lens risk|resilience|readability|reliability|all]
+# Uso: bash skalling-review.sh [--lens risk|resilience|readability|reliability|sast|all]
 #                              [--cwd <dir>] [--diff <range>]
 #                              [--deep] [--collect <bundle-dir>]
 #                              [--scope <glob>] [--exclude <csv>]
@@ -91,7 +99,7 @@ SCOPE=""
 EXCLUDE=""
 
 usage() {
-  echo "Uso: bash skalling-review.sh [--lens risk|resilience|readability|reliability|all] [--cwd <dir>] [--diff <range>] [--deep] [--collect <bundle-dir>] [--scope <glob>] [--exclude <csv>]"
+  echo "Uso: bash skalling-review.sh [--lens risk|resilience|readability|reliability|sast|all] [--cwd <dir>] [--diff <range>] [--deep] [--collect <bundle-dir>] [--scope <glob>] [--exclude <csv>]"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -136,13 +144,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-RUN_RISK=0 RUN_RESILIENCE=0 RUN_READABILITY=0 RUN_RELIABILITY=0
+RUN_RISK=0 RUN_RESILIENCE=0 RUN_READABILITY=0 RUN_RELIABILITY=0 RUN_SAST=0
 case "$LENS" in
-  all)       RUN_RISK=1 RUN_RESILIENCE=1 RUN_READABILITY=1 RUN_RELIABILITY=1 ;;
+  all)       RUN_RISK=1 RUN_RESILIENCE=1 RUN_READABILITY=1 RUN_RELIABILITY=1 RUN_SAST=1 ;;
   risk)      RUN_RISK=1 ;;
   resilience) RUN_RESILIENCE=1 ;;
   readability) RUN_READABILITY=1 ;;
   reliability) RUN_RELIABILITY=1 ;;
+  sast)      RUN_SAST=1 ;;
   *)
     echo "Lens inválido: $LENS" >&2
     usage >&2
@@ -777,11 +786,118 @@ lens_reliability() {
   done
 }
 
+# ── Lens sast: semgrep real (taint-aware), no solo el patrón de una línea ──
+# Escanea el contenido STAGED de cada archivo tocado (no el working tree: el
+# mismo motivo que llevó a exigir working tree == índice en
+# teamdb-seal-receipt.sh -- lo que se revisa tiene que ser lo que se va a
+# commitear, no lo que haya quedado sin stagear al lado). Config fijo
+# (registry p/security-audit) salvo override explícito por variable de
+# entorno, para no tener que tocar este script para probar otro ruleset.
+SAST_AVAILABLE=1
+lens_sast() {
+  if ! command -v semgrep >/dev/null 2>&1; then
+    add_finding "INFO" "sast" "-" "semgrep no está instalado; esta revisión corrió SIN análisis estático real (solo los lenses regex)."
+    SAST_AVAILABLE=0
+    return
+  fi
+  local tmp_dir out_file file blob_path any_file=0
+  tmp_dir="$(mktemp -d)"
+  out_file="$(mktemp)"
+  for file in $(diff_files); do
+    case "$file" in
+      *.py|*.js|*.jsx|*.mjs|*.ts|*.tsx|*.go|*.java|*.rb|*.php) ;;
+      *) continue ;;
+    esac
+    blob_path="$tmp_dir/$file"
+    mkdir -p "$(dirname "$blob_path")"
+    if git -C "$PROJECT" show ":$file" > "$blob_path" 2>/dev/null && [ -s "$blob_path" ]; then
+      any_file=1
+    else
+      rm -f "$blob_path"  # lens:ok: blob_path vive bajo tmp_dir (mktemp -d), ruta propia, nunca input externo
+    fi
+  done
+  if [ "$any_file" = "0" ]; then
+    rm -rf "$tmp_dir"  # lens:ok: tmp_dir viene de mktemp -d, ruta propia, nunca input externo
+    rm -f "$out_file"
+    return
+  fi
+  local -a semgrep_args=()
+  local cfg
+  # shellcheck disable=SC2206  # override intencional (variable de entorno, no input de usuario) con nombres de pack simples, sin espacios
+  local -a configs=(${SKALLING_SEMGREP_CONFIG:-p/owasp-top-ten p/security-audit})
+  for cfg in "${configs[@]}"; do
+    semgrep_args+=(--config "$cfg")
+  done
+  if ! SEMGREP_SEND_METRICS=off semgrep "${semgrep_args[@]}" \
+        --json --quiet --timeout 10 "$tmp_dir" > "$out_file" 2>/dev/null; then
+    add_finding "INFO" "sast" "-" "semgrep no pudo correr (¿sin red para el ruleset del registry la primera vez, o timeout?); esta revisión corrió SIN análisis estático real."
+    SAST_AVAILABLE=0
+    rm -rf "$tmp_dir"  # lens:ok: tmp_dir viene de mktemp -d, ruta propia, nunca input externo
+    rm -f "$out_file"
+    return
+  fi
+  # bash 3.2 (macOS) no soporta bien un heredoc ANIDADO dentro de un
+  # process substitution `< <(...)` -- se escribe el script a un archivo
+  # aparte primero (heredoc simple, sin anidar) y se invoca desde ahí.
+  local parse_py; parse_py="$(mktemp)"
+  cat > "$parse_py" <<'PY'
+import json, sys
+
+out_path, tmp_dir = sys.argv[1:3]
+with open(out_path, encoding="utf-8") as f:
+    data = json.load(f)
+sev_map = {"ERROR": "BLOCKER", "WARNING": "WARNING", "INFO": "INFO"}
+prefix = tmp_dir.rstrip("/") + "/"
+
+
+def source_line(path, line_no):
+    # extra.lines viene redactado ("requires login") para varios rulesets del
+    # registry en la CLI sin cuenta -- no sirve para el escape hatch lens:ok.
+    # Se lee la línea real directo del blob copiado (path YA es la copia
+    # staged en tmp_dir, no el working tree).
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            for i, text in enumerate(fh, start=1):
+                if i == line_no:
+                    return text
+    except OSError:
+        pass
+    return ""
+
+
+for r in data.get("results", []):
+    path = r.get("path", "")
+    rel = path[len(prefix):] if path.startswith(prefix) else path
+    line_no = r.get("start", {}).get("line", 0)
+    end_line_no = r.get("end", {}).get("line", line_no)
+    # lens:ok en CUALQUIER línea del rango marcado (una relación taint puede
+    # cruzar varias líneas entre la fuente y el sink que semgrep reporta).
+    if any("lens:ok" in source_line(path, n) for n in range(line_no, end_line_no + 1)):
+        continue
+    sev = sev_map.get(r.get("extra", {}).get("severity", "WARNING"), "WARNING")
+    msg = r.get("extra", {}).get("message", r.get("check_id", "semgrep")).splitlines()[0]
+    check_id = r.get("check_id", "semgrep").rsplit(".", 1)[-1]
+    print("%s\t%s:%s\t[%s] %s" % (sev, rel, line_no, check_id, msg))
+PY
+  # El script de arriba imprime SEV<TAB>loc<TAB>msg; se lee acá y se vuelca a
+  # add_finding (bash) -- add_finding llena un array bash, así que tiene que
+  # ejecutarse en ESTE proceso, no en el subproceso de python.
+  local sev loc msg
+  while IFS=$'\t' read -r sev loc msg; do
+    [ -n "$sev" ] || continue
+    add_finding "$sev" "sast" "$loc" "$msg"
+  done < <(python3 "$parse_py" "$out_file" "$tmp_dir")
+  rm -f "$parse_py"  # lens:ok: parse_py viene de mktemp, ruta propia, nunca input externo
+  rm -rf "$tmp_dir"  # lens:ok: tmp_dir viene de mktemp -d, ruta propia, nunca input externo
+  rm -f "$out_file"
+}
+
 # ── Ejecutar lenses seleccionados ──
 [ "$RUN_RISK" = "1" ] && lens_risk "$DIFF_TEXT"
 [ "$RUN_RESILIENCE" = "1" ] && lens_resilience
 [ "$RUN_READABILITY" = "1" ] && lens_readability "$DIFF_TEXT"
 [ "$RUN_RELIABILITY" = "1" ] && lens_reliability
+[ "$RUN_SAST" = "1" ] && lens_sast
 
 # ── Salida legible ──
 count_for() {
@@ -825,6 +941,7 @@ SUMMARY="{\"risk\":{\"blocker\":$(count_for BLOCKER risk),\"warning\":$(count_fo
 \"resilience\":{\"blocker\":$(count_for BLOCKER resilience),\"warning\":$(count_for WARNING resilience)},\
 \"readability\":{\"blocker\":$(count_for BLOCKER readability),\"warning\":$(count_for WARNING readability)},\
 \"reliability\":{\"blocker\":$(count_for BLOCKER reliability),\"warning\":$(count_for WARNING reliability)},\
+\"sast\":{\"ran\":$RUN_SAST,\"available\":$SAST_AVAILABLE,\"blocker\":$(count_for BLOCKER sast),\"warning\":$(count_for WARNING sast)},\
 \"total\":$TOTAL,\"tree_hash\":\"$TREE_HASH\"}"
 
 # Receipt sellado (best-effort; el exit code final lo definen los blockers)
