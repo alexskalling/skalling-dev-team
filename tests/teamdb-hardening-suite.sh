@@ -34,6 +34,7 @@ TESTS=(
   tests/workflow-engine.test.py
   tests/workflow-git-gate-bridge.test.py
   tests/teamdb-runtime-identity.test.sh
+  tests/doctor-stale-agents-md.test.sh
   tests/teamdb-read.test.sh
   tests/skalling-route-supersede.test.sh
   tests/skalling-coverage.test.sh

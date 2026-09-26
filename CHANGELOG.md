@@ -4,6 +4,59 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.11.15] — en preparación
+
+El flujo ya no depende de que Alex quiera respetarlo. Motivo: una sesión
+real (proyecto ucadigital, OpenCode 2.0.18) donde Alex, con el editor
+bloqueado, buscó otra vía y cambió 3 archivos por la terminal (`sed -i`,
+`python3 <<PY open(path, 'w')`), sin clasificar, sin Teo y sin Jhon, y
+después lo justificó con un `AGENTS.md` viejo del proyecto.
+
+### Fixed
+- **Los plugins de Skalling no cargaban en OpenCode v2.** La v2 exige
+  `export default { id, setup }` y los rechazaba ("Plugin must export a
+  default definition…"); además su terminal se llama `shell`, no `bash`, y
+  el guard solo miraba `bash`. En v2 no había guard, ni identidad de
+  runtime, ni bloqueos. Ahora cada plugin exporta un único
+  `default { id, server, setup }`: la v1 usa `server` y la v2 usa `setup`.
+  El guard corre en las dos (v1: `tool.execute.before` + `shell.env`; v2:
+  `ctx.tool.hook('execute.before'|'execute.after')` +
+  `ctx.shell.hook('create.before')`).
+- En v2 un bloqueo reemplaza el comando por un `echo` con el motivo, porque
+  un error lanzado desde un hook de la v2 no se convierte en un rechazo
+  limpio.
+- La identidad del runtime ya no se inyecta reescribiendo el comando (eso
+  hacía que dejara de coincidir con su permiso y preguntara de más): va en
+  el entorno del proceso (v1: `shell.env`; v2: `create.before`).
+
+### Security
+- **Alex no escribe archivos por ninguna vía de la terminal** (ni los roles
+  sin edición): `sed -i`, `perl -i`, `cp/mv/touch/tee/patch/git apply`,
+  redirecciones y código inline (`python -c`, `node -e`) que escribe
+  archivos. El mensaje le dice qué hacer: delegar a Teo con la herramienta
+  de subagente. Su prompt lo refuerza: un bloqueo es la señal de que el
+  trabajo es de otro, no una herramienta que falte; nunca "hacer de Teo".
+- **Sin clasificación no se delega implementación**: Alex no puede mandar
+  trabajo a Teo (`task`/`subagent`) si en esa sesión no corrió
+  `skalling-route.sh classify` con un `request_id`. Delegar investigación
+  (Jes) no lo requiere.
+- **Commit solo con aprobación de un verificador**: `git-gate.py` exige un
+  receipt de Jhon o Luz sobre el candidato exacto staged; uno de Alex o de
+  Teo ya no habilita el commit. Jhon sella también en el carril directo, y
+  Alex le pide ese sello antes de commitear.
+
+### Added
+- El doctor avisa si el proyecto tiene un `AGENTS.md` de una versión vieja
+  de Skalling con el "fast-track, ejecuta bajo tu criterio" que contradice
+  el flujo actual (`tests/doctor-stale-agents-md.test.sh`).
+
+### Límite conocido
+- En OpenCode v2, `teamdb_destructive`, `skalling_workflow` y
+  `/skalling-goal` no se registran todavía: la API de plugins de la 2.0.18
+  no da una forma de que una herramienta pida al humano una aprobación
+  exacta (como `context.ask` de la v1). Fallan cerrado: sin ellas nada se
+  habilita sin aprobación. En v1 siguen igual.
+
 ## [0.11.14] — en preparación
 
 Cierra los hallazgos verificados de una auditoría externa de v0.11.12.

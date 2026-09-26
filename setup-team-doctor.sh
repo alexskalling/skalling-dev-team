@@ -302,6 +302,20 @@ check_memory_health() {
     fi
 }
 
+# Un AGENTS.md de una versión vieja de Skalling (copiado al proyecto) puede
+# contradecir las reglas actuales de Alex. Caso real: su "Fast-track: voy
+# directo a Teo, ejecuta bajo tu criterio" le sirvió a Alex de excusa para
+# cambiar código él mismo y saltarse a Teo y a Jhon.
+check_stale_agents_md() {
+    local file="$PROJECT_DIR/AGENTS.md"
+    [[ -f "$file" ]] || return 0
+    if grep -qiE 'fast-track' "$file" && grep -qiE 'ejecuta bajo tu criterio|sin Pol ni Sol|Solo actúa con un plan de Sol o en fast-track' "$file"; then
+        warn "AGENTS.md trae reglas viejas de Skalling (\"fast-track\" sin Jhon) que contradicen el flujo actual"
+        info "  → Alex puede usarlas para saltarse a Teo y a Jhon. Borrá esa sección de $file"
+        info "    o reemplazala por: \"El flujo de Skalling lo definen los agentes globales (Alex → Teo → Jhon como mínimo).\""
+    fi
+}
+
 check_project_install() {
     section "Instalación Per-Project ($PROJECT_DIR)"
 
@@ -311,6 +325,7 @@ check_project_install() {
         return
     fi
     ok ".opencode/ existe"
+    check_stale_agents_md
 
     # Agentes per-project (opcional)
     if [[ -d "$PROJECT_DIR/.opencode/agents" ]]; then

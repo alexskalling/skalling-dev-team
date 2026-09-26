@@ -1,0 +1,21 @@
+-- v0.11.15: el flujo deja de depender de que Alex quiera respetarlo, y los
+-- plugins de Skalling funcionan en OpenCode v1 y v2.
+--
+-- Motivo (sesión real, proyecto ucadigital, OpenCode 2.0.18): Alex, con el
+-- editor bloqueado, cambió 3 archivos por la terminal (sed -i, python3
+-- heredoc), sin clasificar el pedido, sin Teo y sin Jhon. Al revisar se vio
+-- además que en OpenCode v2 NINGÚN plugin de Skalling cargaba (la v2 exige
+-- `export default { id, setup }`) y que la terminal se llama `shell`, no
+-- `bash`: el guard no estaba actuando.
+--
+-- 1. Plugins con un solo default export { id, server, setup }: la v1 usa
+--    `server`, la v2 `setup`. El guard corre en las dos.
+-- 2. Alex (y los roles sin edición) no pueden escribir archivos por la
+--    terminal; el mensaje de bloqueo le dice que delegue a Teo.
+-- 3. Alex no puede delegar implementación a Teo sin una clasificación
+--    registrada (skalling-route.sh classify con request_id) en esa sesión.
+-- 4. git-gate.py solo acepta receipts de Jhon o Luz para commitear código.
+-- 5. El doctor avisa si el proyecto tiene un AGENTS.md viejo con el
+--    "fast-track" que contradice el flujo.
+-- Sin cambios de schema; solo eleva la versión declarada.
+UPDATE schema_meta SET value = '0.11.15' WHERE key = 'version';

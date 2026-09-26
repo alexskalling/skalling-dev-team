@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 const engine = fileURLToPath(new URL('../scripts/skalling-goal.py', import.meta.url));
 
 // Only explicitly invoked goals are resumed. No goals start from model text.
-export const SkallingGoal = async ({ client, directory }) => {
+const SkallingGoal = async ({ client, directory }) => {
   // OpenCode can discover both the global and project copy. Register once per workspace.
   const registry = globalThis[Symbol.for('skalling.goal.instances')] ||= new Set();
   if (registry.has(directory)) return {};
@@ -120,3 +120,8 @@ export const SkallingGoal = async ({ client, directory }) => {
     },
   };
 };
+
+// v1: `server` (client, hooks de comando y compactación). v2: /skalling-goal
+// depende del cliente y de hooks de la v1 sin equivalente directo en la API
+// 2.0.18; no se registra (goal no concede autoridad extra si no corre).
+export default { id: 'skalling-goal', server: SkallingGoal, setup: async () => {} };

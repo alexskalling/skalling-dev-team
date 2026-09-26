@@ -4,7 +4,9 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { SkallingGoal } from '../plugins/skalling-goal.js';
+import plugin from '../plugins/skalling-goal.js';
+
+const SkallingGoal = plugin.server;
 
 test('plugin: explicit authority, one continuation, pause, child scope and publication guards', async (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'skalling-goal-plugin-'));

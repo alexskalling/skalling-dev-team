@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  blocksChainedSensitiveGit, guardCommand, identityViolation, injectRuntimeAgent, createGuard,
+  blocksChainedSensitiveGit, guardCommand, identityViolation, createGuard, setupGuardV2,
   writeViolation,
 } from '../plugins/lib/git-guard.mjs';
 
@@ -74,20 +74,7 @@ test('un comando no puede fijar la identidad del agente', () => {
   assert.equal(identityViolation('bash .opencode/scripts/teamdb-claim.sh advance p t'), null);
 });
 
-test('inyecta el agente del runtime en los scripts que registran quién aprueba o sella', () => {
-  assert.equal(
-    injectRuntimeAgent('bash .opencode/scripts/teamdb-claim.sh advance p t --by=jhon', 'Teo'),
-    'SKALLING_RUNTIME_AGENT=teo bash .opencode/scripts/teamdb-claim.sh advance p t --by=jhon',
-  );
-  assert.equal(
-    injectRuntimeAgent('cd /x && bash ~/.config/opencode/scripts/skalling-review.sh --lens all', 'luz'),
-    'cd /x && SKALLING_RUNTIME_AGENT=luz bash ~/.config/opencode/scripts/skalling-review.sh --lens all',
-  );
-  assert.equal(injectRuntimeAgent('git status', 'teo'), 'git status');
-  assert.equal(injectRuntimeAgent('bash teamdb-claim.sh x', 'te o; rm'), 'bash teamdb-claim.sh x');
-});
-
-test('hooks: recuerda el agente por sesión, lo inyecta y bloquea falsificaciones', async () => {
+test('v1: recuerda el agente por sesión, pone la identidad en el entorno y bloquea falsificaciones', async () => {
   const hooks = createGuard();
   await hooks['chat.params']({ sessionID: 's1', agent: 'Teo' }, {});
   await hooks['chat.params']({ sessionID: 's2', agent: 'Jhon' }, {});
@@ -96,9 +83,10 @@ test('hooks: recuerda el agente por sesión, lo inyecta y bloquea falsificacione
   await hooks['shell.env']({ cwd: '/x', sessionID: 's1' }, env);
   assert.equal(env.env.SKALLING_RUNTIME_AGENT, 'teo');
 
-  const out = { args: { command: 'bash .opencode/scripts/teamdb-claim.sh advance p t --by=jhon' } };
+  // El comando no se reescribe: así sigue coincidiendo con su permiso.
+  const out = { args: { command: 'bash .opencode/scripts/teamdb-claim.sh advance p t' } };
   await hooks['tool.execute.before']({ tool: 'bash', sessionID: 's1', callID: 'c' }, out);
-  assert.match(out.args.command, /^SKALLING_RUNTIME_AGENT=teo /);
+  assert.equal(out.args.command, 'bash .opencode/scripts/teamdb-claim.sh advance p t');
 
   await assert.rejects(hooks['tool.execute.before'](
     { tool: 'bash', sessionID: 's1', callID: 'c' },
@@ -112,6 +100,95 @@ test('hooks: recuerda el agente por sesión, lo inyecta y bloquea falsificacione
   const other = { args: { command: 'git add . && git push' } };
   await hooks['tool.execute.before']({ tool: 'read', sessionID: 's1', callID: 'c' }, other);
   assert.equal(other.args.command, 'git add . && git push');
+});
+
+// El caso real (sesión ucadigital): Alex, con el editor bloqueado, buscó otra
+// vía y cambió 3 archivos por la terminal, sin clasificar ni pasar por Teo.
+test('Alex no escribe archivos por ninguna vía de la terminal', () => {
+  for (const c of [
+    'sed -i "s/a - d - n/a - d/" app/x.jsx', "perl -pi -e 's/a/b/' app/x.jsx", 'cp app/x.jsx app/x.jsx.bak',
+    "python3 -c \"open('app/x.jsx','w').write('')\"", 'echo x > app/x.jsx', 'cat a | tee app/x.jsx',
+    "node -e \"require('fs').writeFileSync('a','b')\"", 'touch app/nuevo.jsx',
+  ]) assert.ok(writeViolation(c, 'Alex'), `debía bloquear a Alex: ${c}`);
+  assert.match(writeViolation('sed -i s/a/b/ f.js', 'alex'), /Teo/);
+  for (const c of [
+    'git status', 'git diff', 'bash ~/.config/opencode/scripts/skalling-route.sh classify --kind code --record',
+    "git commit -m \"$(cat <<'EOF'\nfix: a > b\nEOF\n)\"", 'python3 -c "print(1 > 0)"', 'cp app.log /tmp/app.log',
+  ]) assert.equal(writeViolation(c, 'alex'), null, `no debía bloquear a Alex: ${c}`);
+  assert.equal(writeViolation('sed -i s/a/b/ f.js', 'teo'), null);
+});
+
+test('v1: Alex no delega implementación a Teo sin clasificar primero', async () => {
+  const hooks = createGuard();
+  await hooks['chat.params']({ sessionID: 'a', agent: 'Alex' }, {});
+  const task = { args: { subagent_type: 'teo', prompt: 'saca la resta', description: 'fix' } };
+  await assert.rejects(hooks['tool.execute.before']({ tool: 'task', sessionID: 'a', callID: '1' }, task), /Clasific/);
+  // Delegar investigación (Jes) no necesita clasificación previa.
+  await hooks['tool.execute.before']({ tool: 'task', sessionID: 'a', callID: '2' },
+    { args: { subagent_type: 'jes', prompt: 'dónde se calcula', description: 'buscar' } });
+
+  const classify = 'bash ~/.config/opencode/scripts/skalling-route.sh classify --kind code --record --project .';
+  await hooks['tool.execute.before']({ tool: 'bash', sessionID: 'a', callID: '3' }, { args: { command: classify } });
+  await hooks['tool.execute.after']({ tool: 'bash', sessionID: 'a', callID: '3', args: { command: classify } },
+    { title: '', output: '{"request_id":"r-1","route":"FAST"}', metadata: {} });
+  await hooks['tool.execute.before']({ tool: 'task', sessionID: 'a', callID: '4' }, task);
+});
+
+function fakeV2() {
+  const hooks = {};
+  const register = (domain) => async (name, callback) => { hooks[`${domain}:${name}`] = callback; return { dispose: async () => {} }; };
+  return { hooks, ctx: { tool: { hook: register('tool') }, shell: { hook: register('shell') } } };
+}
+
+test('v2: bloquea reemplazando el comando por el motivo (sin lanzar errores)', async () => {
+  const { hooks, ctx } = fakeV2();
+  await setupGuardV2(ctx);
+  const event = { tool: 'shell', agent: 'Alex', sessionID: 's', messageID: 'm', id: '1',
+    input: { command: 'sed -i "s/a - d - n/a - d/" app/x.jsx' } };
+  await hooks['tool:execute.before'](event);
+  assert.equal(event.tool, 'shell');
+  assert.match(event.input.command, /^echo 'BLOQUEADO por Skalling: Alex no implementa/);
+
+  const sub = { tool: 'subagent', agent: 'Alex', sessionID: 's', messageID: 'm', id: '2',
+    input: { agent: 'teo', description: 'fix', prompt: 'x' } };
+  await hooks['tool:execute.before'](sub);
+  assert.equal(sub.tool, 'shell');
+  assert.match(sub.input.command, /Clasific/);
+
+  const ok = { tool: 'shell', agent: 'Jhon', sessionID: 't', messageID: 'm', id: '3', input: { command: 'npm test' } };
+  await hooks['tool:execute.before'](ok);
+  assert.equal(ok.input.command, 'npm test');
+});
+
+test('v2: la identidad del runtime llega al entorno del comando aprobado', async () => {
+  const { hooks, ctx } = fakeV2();
+  await setupGuardV2(ctx);
+  const command = 'bash ~/.config/opencode/scripts/teamdb-claim.sh --advance p t --to=approved';
+  await hooks['tool:execute.before']({ tool: 'shell', agent: 'Jhon', sessionID: 's', messageID: 'm', id: '1', input: { command } });
+  const create = { command, cwd: '/x', timeout: 0, shell: '/bin/bash', env: { PATH: '/bin' } };
+  await hooks['shell:create.before'](create);
+  assert.equal(create.env.SKALLING_RUNTIME_AGENT, 'jhon');
+  assert.equal(create.env.PATH, '/bin');
+});
+
+test('v2: tras clasificar, Alex sí puede delegar a Teo', async () => {
+  const { hooks, ctx } = fakeV2();
+  await setupGuardV2(ctx);
+  const command = 'bash ~/.config/opencode/scripts/skalling-route.sh classify --kind code --record';
+  await hooks['tool:execute.after']({ tool: 'shell', agent: 'Alex', sessionID: 's', messageID: 'm', id: '1',
+    input: { command }, status: 'completed', result: { output: { stdout: '{"request_id":"r-9"}' } } });
+  const sub = { tool: 'subagent', agent: 'Alex', sessionID: 's', messageID: 'm', id: '2',
+    input: { agent: 'teo', description: 'fix', prompt: 'x' } };
+  await hooks['tool:execute.before'](sub);
+  assert.equal(sub.tool, 'subagent');
+});
+
+test('el plugin exporta una sola definición válida para v1 (server) y v2 (setup)', async () => {
+  const mod = await import('../plugins/skalling-git-guard.js');
+  assert.deepEqual(Object.keys(mod), ['default']);
+  assert.equal(mod.default.id, 'skalling-git-guard');
+  assert.equal(typeof mod.default.server, 'function');
+  assert.equal(typeof mod.default.setup, 'function');
 });
 
 test('roles de solo lectura no escriben archivos por redirección ni tee', () => {

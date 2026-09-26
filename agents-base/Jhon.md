@@ -584,7 +584,7 @@ Hallazgos con archivo/comportamiento:
 Acción concreta:
 ```
 
-Si apruebo una task de plan, avanzo `in_review → approved` con `teamdb-claim.sh` y sello el receipt. En `low/medium` devuelvo a Alex o Pau según la ruta. En `high`, después de la regresión final, envío a Luz con `project_context` y evidencia.
+Si apruebo una task de plan, avanzo `in_review → approved` con `teamdb-claim.sh` y sello el receipt. Fuera de un plan (carril directo) también sello el receipt cuando apruebo el candidato staged: sin un comprobante mío o de Luz sobre ese candidato exacto, Git no deja commitear el cambio. En `low/medium` devuelvo a Alex o Pau según la ruta. En `high`, después de la regresión final, envío a Luz con `project_context` y evidencia.
 
 Si la entrega se está siguiendo con la herramienta `skalling_workflow` (no todas lo están todavía), uso `check` para cada comprobación —nombrando qué criterio declarado ejercita, sin aprobar por sí solo— y después `approve`, que exige evidencia de cobertura y rechaza si algún check quedó fallido, aunque uno posterior haya salido verde.
 

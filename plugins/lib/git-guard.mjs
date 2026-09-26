@@ -66,7 +66,6 @@ const CANONICAL_OTHER = [
 ];
 
 const IDENTITY_VARS = /\b(?:SKALLING_RUNTIME_AGENT|TEAMDB_ACTOR|SKALLING_REVIEW_AGENT)\b/;
-const IDENTITY_SCRIPTS = /(?:^|[\s;&|(`'"/])(?:bash\s+)?(\S*(?:teamdb-claim|teamdb-seal-receipt|skalling-review)\.sh)\b/;
 
 // Cuerpos de heredoc: con delimitador entre comillas (<<'EOF') son texto
 // inerte; sin comillas solo se ejecuta lo que esté en $(...) o `...`. El
@@ -292,11 +291,17 @@ export function normalizeAgent(agent) {
 
 // La identidad la pone el runtime (OpenCode sabe qué agente corre cada
 // sesión); un comando que intente fijarla o cambiarla es una falsificación.
-// Roles sin permiso de edición (revisan, prueban, planifican, investigan).
-// Su lista blanca de bash incluye `echo *`, `cat *`, etc.; sin este chequeo,
-// `echo x > src/app.ts` o `cat a | tee b` escribirían archivos igual.
-const READ_ONLY_AGENTS = new Set(['luz', 'jhon', 'pol', 'sol', 'jes']);
+// Agentes sin permiso de edición. Alex orquesta; Luz, Jhon, Pol, Sol y Jes
+// revisan, verifican, planifican o investigan. Su bash permite `echo *`,
+// `cat *`, scripts de TeamDB, etc.; sin este chequeo podían escribir código
+// igual por la terminal (el caso real: Alex con el editor bloqueado cambió 3
+// archivos con `sed -i` y `python3 <<PY open(path, 'w')`).
+const NO_EDIT_AGENTS = new Set(['alex', 'luz', 'jhon', 'pol', 'sol', 'jes']);
 const SCRATCH_TARGET = /^(?:\/dev\/(?:null|stdout|stderr|fd\/\d+)|\/tmp\/|\/private\/tmp\/|\/var\/folders\/|\$\{?TMPDIR\}?\/)/;
+const IN_PLACE = /^(?:sed|gsed) (?:.* )?(?:-i|--in-place)|^(?:perl|ruby) (?:.* )?-[a-zA-Z]*i/;
+const FILE_WRITERS = /^(?:cp|mv|install|ln|rsync|touch|truncate|dd|patch|tee|mkdir|rmdir|chmod|chown)(?: |$)|^git (?:apply|am|mv|rm)(?: |$)/;
+const INLINE_CODE = /^(?:python3?|node|ruby|perl|php|deno|bun) (?:-c|-e|-p|--eval|-r) /;
+const WRITE_CALL = /\bopen\([^)]*['"][wax+]|\.write_(?:text|bytes)\(|\bshutil\.|\bos\.(?:remove|unlink|rename|replace|makedirs|mkdir|rmdir|symlink)\(|\bfs\.(?:promises\.)?(?:write|append|unlink|rename|rm|mkdir|copy|cp|symlink|truncate)\w*\(|\.(?:unlink|rename|touch|mkdir)\(|\bFile\.(?:write|open)|\.(?:write|append)File\w*\(|\.(?:rm|unlink|rename|copyFile|cp|mkdir|symlink|truncate)Sync\(|\bfile_put_contents\(|\bunlink\(/;
 
 function readWord(text, i) {
   while (i < text.length && /\s/.test(text[i])) i += 1;
@@ -313,8 +318,19 @@ function readWord(text, i) {
   return word;
 }
 
+function noEditMessage(agent, detail) {
+  if (agent === 'alex') {
+    return `Alex no implementa (${detail}). No es una herramienta que falte: es a propósito. `
+      + 'Pasale el cambio a Teo con la herramienta de subagente (agent: teo) y después a Jhon para verificar. '
+      + 'Si todavía no clasificaste el pedido, corré primero skalling-route.sh classify --record.';
+  }
+  return `${agent} no edita archivos del proyecto (${detail}). Si necesitás guardar una salida, usá /tmp/...; `
+    + 'si hay que cambiar código, devolvé el hallazgo para que lo haga Teo.';
+}
+
 export function writeViolation(command, agent) {
-  if (!READ_ONLY_AGENTS.has(normalizeAgent(agent))) return null;
+  const who = normalizeAgent(agent);
+  if (!NO_EDIT_AGENTS.has(who)) return null;
   const base = removeHeredocBodies(command || '');
   const masked = maskInert(base);
   const targets = [];
@@ -325,15 +341,19 @@ export function writeViolation(command, agent) {
   while ((m = both.exec(base)) !== null) targets.push(readWord(base, m.index + m[0].length));
   for (const seg of splitSegments(base).segments) {
     const norm = normalize(seg);
-    if (/^tee(?: |$)/.test(norm)) {
-      norm.split(/\s+/).slice(1).filter((a) => a && !a.startsWith('-')).forEach((a) => targets.push(a));
+    if (IN_PLACE.test(norm)) return noEditMessage(who, `edición en el lugar: \`${norm}\``);
+    if (INLINE_CODE.test(norm) && WRITE_CALL.test(seg)) return noEditMessage(who, `código inline que escribe archivos: \`${norm}\``);
+    if (FILE_WRITERS.test(norm)) {
+      const args = norm.split(/\s+/).slice(1).filter((a) => a && !a.startsWith('-'));
+      const dest = /^(?:cp|mv|install|ln|rsync)(?: |$)/.test(norm) ? args.slice(-1) : args;
+      if (dest.length === 0 || dest.some((a) => !SCRATCH_TARGET.test(a))) {
+        return noEditMessage(who, `\`${norm}\` modifica archivos`);
+      }
     }
   }
   const bad = targets.find((t) => !t || !SCRATCH_TARGET.test(t));
   if (bad === undefined) return null;
-  return `${normalizeAgent(agent)} no edita archivos del proyecto: la redirección/tee hacia \`${bad || '?'}\` `
-    + 'está bloqueada. Si necesitás guardar una salida, usá /tmp/...; si hay que cambiar código, '
-    + 'devolvé el hallazgo para que lo haga el agente que implementa.';
+  return noEditMessage(who, `redirección hacia \`${bad || '?'}\``);
 }
 
 export function identityViolation(command) {
@@ -344,25 +364,62 @@ export function identityViolation(command) {
   return null;
 }
 
-// Antepone SKALLING_RUNTIME_AGENT=<agente> a cada invocación de los scripts
-// que registran quién aprueba/sella, en la posición exacta de la invocación
-// (así funciona también dentro de un `cd x && ...`).
-export function injectRuntimeAgent(command, agent) {
-  const who = normalizeAgent(agent);
-  if (!who || !/^[a-z][a-z0-9_-]*$/.test(who)) return command;
-  if (!IDENTITY_SCRIPTS.test(command || '')) return command;
-  return command.replace(
-    /(^|&&\s*|;\s*|\|\|\s*|\n\s*)((?:bash\s+)?\S*(?:teamdb-claim|teamdb-seal-receipt|skalling-review)\.sh\b)/g,
-    (_m, sep, invocation) => `${sep}SKALLING_RUNTIME_AGENT=${who} ${invocation}`,
-  );
+// ─── Núcleo compartido por OpenCode v1 y v2 ──────────────────────────────────
+// Cada versión entrega los mismos datos con otra forma; los adaptadores de
+// abajo los traducen a { tool, agent, sessionID, input } y aplican la
+// decisión a su manera (v1: throw; v2: reemplazar el comando, porque un error
+// lanzado desde un hook de la v2 no se convierte en un rechazo limpio).
+const SHELL_TOOLS = new Set(['bash', 'shell']);
+const SUBAGENT_TOOLS = new Set(['task', 'subagent']);
+const EDIT_TOOLS = new Set(['edit', 'write', 'patch', 'multiedit', 'apply_patch']);
+const CLASSIFY_RE = /skalling-route\.sh\b[^\n]*\bclassify\b/;
+
+export function createCore() {
+  // Sesiones donde Alex ya clasificó el pedido (skalling-route.sh classify
+  // devolvió un request_id). Sin eso, Alex no puede mandarle código a Teo:
+  // es el paso que se salteó en la sesión real que motivó esto.
+  const classified = new Set();
+
+  function decide({ tool, agent, sessionID, input }) {
+    const who = normalizeAgent(agent);
+    if (SHELL_TOOLS.has(tool)) {
+      const command = String(input?.command || '');
+      const identity = identityViolation(command);
+      if (identity) return identity;
+      if (/skalling-workflow\.py/.test(command)) {
+        return 'Use skalling_workflow: identidad y evidencia provienen del runtime, no de --by ni de variables shell.';
+      }
+      const finding = guardCommand(command);
+      if (finding) return guardMessage(finding);
+      return writeViolation(command, who);
+    }
+    if (EDIT_TOOLS.has(tool) && NO_EDIT_AGENTS.has(who)) {
+      return noEditMessage(who, `herramienta ${tool}`);
+    }
+    if (SUBAGENT_TOOLS.has(tool) && who === 'alex') {
+      const target = normalizeAgent(input?.agent || input?.subagent_type);
+      if (target === 'teo' && !classified.has(sessionID)) {
+        return 'Clasificá primero: corré skalling-route.sh classify ... --record y usá su ruta '
+          + '(low: Teo → Jhon; medium: Sol → Teo → Jhon; high: Pol → Sol → Teo → Jhon → Luz → Pau). '
+          + 'Sin clasificación no se delega implementación.';
+      }
+    }
+    return null;
+  }
+
+  function observe({ tool, agent, sessionID, input, output }) {
+    if (!SHELL_TOOLS.has(tool) || normalizeAgent(agent) !== 'alex') return;
+    if (!CLASSIFY_RE.test(String(input?.command || ''))) return;
+    const text = typeof output === 'string' ? output : JSON.stringify(output ?? '');
+    if (/request_id/.test(text)) classified.add(sessionID);
+  }
+
+  return { decide, observe, classified };
 }
 
-// Hooks del plugin. OpenCode informa en cada llamada al modelo qué agente
-// corre en cada sesión (los subagentes tienen su propia sesión): ese dato no
-// lo puede falsificar el agente, a diferencia de un --by=jhon en el comando.
-// Vive acá y no en plugins/skalling-git-guard.js porque OpenCode trata cada
-// export de un archivo de plugin como un plugin.
-export function createGuard(agentBySession = new Map()) {
+// OpenCode v1: hooks devueltos por la función `server`. El agente de cada
+// sesión llega en chat.params; tool.execute.before no lo trae.
+export function createGuard(agentBySession = new Map(), core = createCore()) {
   const remember = async (input) => {
     if (input?.sessionID && input?.agent) agentBySession.set(input.sessionID, normalizeAgent(input.agent));
   };
@@ -374,16 +431,47 @@ export function createGuard(agentBySession = new Map()) {
       if (agent) output.env.SKALLING_RUNTIME_AGENT = agent;
     },
     'tool.execute.before': async (input, output) => {
-      if (input.tool !== 'bash') return;
-      const command = output.args.command || '';
-      const identity = identityViolation(command);
-      if (identity) throw new Error(identity);
-      const finding = guardCommand(command);
-      if (finding) throw new Error(guardMessage(finding));
       const agent = agentBySession.get(input.sessionID);
-      const write = writeViolation(command, agent);
-      if (write) throw new Error(write);
-      if (agent) output.args.command = injectRuntimeAgent(command, agent);
+      const blocked = core.decide({ tool: input.tool, agent, sessionID: input.sessionID, input: output.args });
+      if (blocked) throw new Error(blocked);
+    },
+    'tool.execute.after': async (input, output) => {
+      core.observe({ tool: input.tool, agent: agentBySession.get(input.sessionID), sessionID: input.sessionID,
+        input: input.args, output: output?.output });
     },
   };
+}
+
+function blockedShell(message) {
+  return `echo '${`BLOQUEADO por Skalling: ${message}`.replace(/'/g, "'\\''")}'`;
+}
+
+// OpenCode v2: setup registra hooks en ctx. execute.before ya trae el agente.
+// Para bloquear, el comando se reemplaza por un echo con el motivo (lo ve el
+// agente como salida); una herramienta que no es shell se redirige a ese
+// mismo echo. La identidad se inyecta en create.before, que no trae agente:
+// se correlaciona por el texto exacto del comando aprobado un instante antes.
+export async function setupGuardV2(ctx, core = createCore()) {
+  const pendingAgent = new Map();
+  await ctx.tool.hook('execute.before', async (event) => {
+    const blocked = core.decide({ tool: event.tool, agent: event.agent, sessionID: event.sessionID, input: event.input });
+    if (blocked) {
+      event.tool = 'shell';
+      event.input = { command: blockedShell(blocked) };
+      return;
+    }
+    if (SHELL_TOOLS.has(event.tool) && event.agent && typeof event.input?.command === 'string') {
+      pendingAgent.set(event.input.command, normalizeAgent(event.agent));
+    }
+  });
+  await ctx.tool.hook('execute.after', async (event) => {
+    core.observe({ tool: event.tool, agent: event.agent, sessionID: event.sessionID, input: event.input,
+      output: event.status === 'completed' ? event.result : '' });
+  });
+  await ctx.shell.hook('create.before', async (event) => {
+    const agent = pendingAgent.get(event.command);
+    if (!agent) return;
+    pendingAgent.delete(event.command);
+    event.env = { ...(event.env || {}), SKALLING_RUNTIME_AGENT: agent };
+  });
 }

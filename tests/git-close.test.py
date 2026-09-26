@@ -35,12 +35,12 @@ class GitClose(unittest.TestCase):
         (self.project / 'app.py').write_text(f'value = {number}\n')
         self.git('add', 'app.py')
 
-    def receipt(self, success=0):
+    def receipt(self, success=0, agent='jhon'):
         patch = self.git('diff', '--cached', '--', '.', ':(exclude)db/teamdb/team.dump.sql').stdout.rstrip('\n')
         digest = hashlib.sha256(patch.encode()).hexdigest()[:16]
         with sqlite3.connect(self.db) as conn:
             conn.execute("INSERT INTO receipts(id,task_id,agent,command,exit_code,ts,tree_hash) VALUES(?,?,?,?,?,'2020-01-01 00:00:00',?)",
-                         (digest + str(success), 'fixture', 'fixture', 'synthetic fixture verification', success, digest))
+                         (digest + str(success) + agent, 'fixture', agent, 'synthetic fixture verification', success, digest))
 
     def hook(self, name, input=None):
         return subprocess.run(['bash', str(ROOT / 'scripts/hooks' / name)], cwd=self.project,
@@ -55,6 +55,18 @@ class GitClose(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(before, self.git('diff', '--cached').stdout)
         self.assertFalse((self.project / 'db/teamdb/team.dump.sql').exists())
+
+    def test_only_verifier_receipts_unlock_commit(self):
+        # Un comprobante de quien orquesta o implementó no prueba nada: el
+        # commit exige a Jhon o Luz sobre el candidato exacto.
+        self.change(2)
+        for agent in ('alex', 'teo'):
+            self.receipt(agent=agent)
+            result = self.hook('pre-commit')
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('Jhon', result.stderr)
+        self.receipt(agent='luz')
+        self.assertEqual(self.hook('pre-commit').returncode, 0)
 
     def test_changed_or_failed_evidence_blocks(self):
         self.change(2)
