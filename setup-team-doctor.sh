@@ -544,6 +544,37 @@ check_scripts_parity() {
     fi
 }
 
+check_dead_code() {
+    if [[ "$GLOBAL_ONLY" == true ]]; then
+        return 0
+    fi
+
+    section "Código sin uso real (scripts/plugins instalables)"
+
+    local checker="$SCRIPT_DIR/scripts/skalling-dead-code-check.sh"
+    if [[ ! -x "$checker" ]]; then
+        warn "skalling-dead-code-check.sh no encontrado o no ejecutable: $checker"
+        return 0
+    fi
+
+    local rc=0
+    local out
+    out="$(bash "$checker" --root "$SCRIPT_DIR" 2>&1)" || rc=$?
+
+    if [[ "$rc" -eq 0 ]]; then
+        ok "$out"
+    else
+        local detail
+        detail="$(printf '%s\n' "$out" | sed 's/^/      /')"
+        if [[ "$STRICT" == true ]]; then
+            err "hay código instalable sin caller real (--strict promueve a error)"
+        else
+            warn "hay código instalable sin caller real"
+        fi
+        printf "%b\n" "$detail" >&2
+    fi
+}
+
 # ──────────────────────────────────────────────────────────────────────────────
 # MAIN
 # ──────────────────────────────────────────────────────────────────────────────
@@ -562,6 +593,7 @@ main() {
     check_inteligencia_codigo
     check_teamdb
     check_scripts_parity
+    check_dead_code
     check_receipts
     check_routing
 

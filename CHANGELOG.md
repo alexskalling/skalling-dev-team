@@ -4,6 +4,43 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.11.12] — en preparación
+
+A partir de comparar Skalling con otro framework de agentes (rsc-harness),
+cuyo principio de "evidencia antes que anticipación" esta sesión no venía
+aplicando: cada fix de esta noche agregó código sin chequear si algo
+anterior había quedado sin conectar.
+
+### Added
+- `scripts/skalling-dead-code-check.sh` (+ `check_dead_code` en
+  `setup-team-doctor.sh`): detecta scripts/plugins instalables sin ningún
+  caller real (agente, comando, skill u otro script) — solo aparecer en
+  `tests/`, en `install-global.sh` (copiado) o en `.bundle-manifest`
+  (listado) NO cuenta como uso real. Convierte en chequeo repetible lo que
+  hasta ahora se encontraba por auditoría manual casual (pasó dos veces en
+  esta misma sesión: `skalling-context-cache.sh` instalado y nunca llamado;
+  `teamdb-task-groups.sh` construido sin wire hasta que un humano lo notó).
+
+### Fixed
+- Corriendo el checker contra el propio repo, encontró 5 huérfanos reales:
+  - `teamdb-context-cache.sh` — reemplazada por `teamdb-context.sh` (sin
+    cache), que es la que de verdad se usa. **Borrada.**
+  - `teamdb-graph-refresh.sh` — sobrante de cuando `/skalling-graph-refresh`
+    se consolidó en `/skalling-memory` (que llama `teamdb-link.sh` directo).
+    **Borrada.**
+  - `teamdb-with-timeout.sh` — el manejo de timeout real terminó resuelto
+    inline en cada función (`teamdb_lock` ya tiene su propio timeout).
+    **Borrada.**
+  - `teamdb-ingest-change.sh` — herramienta de migración manual legítima
+    (misma categoría que `migrate-plans-md-to-db.sh`, que ya era excepción).
+    **Agregada al allowlist**, no borrada.
+  - `teamdb-attempt.sh` — infraestructura real de v0.8.3 (presupuesto de
+    reintentos por change, con manejo de race conditions) que nunca se
+    conectó a ningún agente. **Reconectada**: Teo ahora llama
+    `acquire`/`settle` en su flujo medium/high, reemplazando la regla de
+    prosa "máximo tres correcciones" (dependía de que Teo se acordara) por
+    un tope forzado por código.
+
 ## [0.11.11] — en preparación
 
 Bug real reportado en vivo por el usuario, en un proyecto suyo

@@ -63,17 +63,19 @@ Los scripts siguen el patrón `teamdb-<verbo>.sh`:
 
 - **Ciclo de planes**: `teamdb-plan.sh`, `teamdb-execute-plan.sh`,
   `teamdb-resume.sh`, `teamdb-claim.sh`.
-- **Memoria**: `teamdb-context.sh`, `teamdb-context-cache.sh`, `teamdb-search.sh`,
+- **Memoria**: `teamdb-context.sh`, `teamdb-search.sh`,
   `teamdb-related.sh`, `teamdb-link.sh`, `teamdb-amend.sh`, `mem-review.sh`,
   `teamdb-status.sh`, `teamdb-graph.sh`.
 - **Import/export**: `teamdb-import.sh`, `teamdb-export.sh`,
-  `teamdb-export-md.sh`, `migrate-plans-md-to-db.sh`.
+  `teamdb-export-md.sh`, `migrate-plans-md-to-db.sh`, `teamdb-ingest-change.sh`.
 - **Revisión**: `skalling-review.sh` (lenses, `--deep`, `--collect`),
-  `teamdb-seal-receipt.sh` (sello con `tree_hash`).
+  `teamdb-seal-receipt.sh` (sello con `tree_hash`), `teamdb-attempt.sh`
+  (presupuesto de reintentos por change).
 - **Operación**: `teamdb-init.sh`, `teamdb-migrate.sh`, `teamdb-deps.sh`,
-  `teamdb-with-timeout.sh`, `build-schema.sh`, `update.sh`, `merge-helper.sh`,
+  `build-schema.sh`, `update.sh`, `merge-helper.sh`,
   `wip-tree.sh`, `skalling-drift.sh`, `spec-memory-link.sh`,
-  `dashboard-server.py`, `teamdb-dashboard.sh`, `teamdb_exec.py`.
+  `dashboard-server.py`, `teamdb-dashboard.sh`, `teamdb_exec.py`,
+  `skalling-dead-code-check.sh` (audita scripts/plugins sin uso real).
 
 Todos comparten `scripts/lib/lib-teamdb.sh` (helpers: `teamdb_project_path`,
 `teamdb_exec_value`, `teamdb_exec_write`, `teamdb_lock`, `teamdb_unlock`,

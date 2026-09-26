@@ -1,0 +1,25 @@
+-- v0.11.12: agrega scripts/skalling-dead-code-check.sh (+ check_dead_code en
+-- setup-team-doctor.sh) -- detecta scripts/plugins instalables sin ningún
+-- caller real (agente, comando, skill u otro script). Inspirado en una
+-- comparación con otro framework de agentes (rsc-harness) cuya disciplina
+-- de "evidencia antes que anticipación" Skalling no venía aplicando.
+--
+-- Corriéndolo contra el propio repo encontró 5 huérfanos reales:
+--   - teamdb-context-cache.sh: reemplazada por teamdb-context.sh (sin cache),
+--     que es la que de verdad se usa. Borrada.
+--   - teamdb-graph-refresh.sh: sobrante de cuando /skalling-graph-refresh se
+--     consolidó en /skalling-memory (que llama teamdb-link.sh directo).
+--     Borrada.
+--   - teamdb-with-timeout.sh: el manejo de timeout real terminó resuelto
+--     inline en cada función (teamdb_lock ya tiene su propio timeout).
+--     Borrada.
+--   - teamdb-ingest-change.sh: herramienta de migración manual legítima
+--     (misma categoría que migrate-plans-md-to-db.sh) -- agregada al
+--     allowlist del checker, no borrada.
+--   - teamdb-attempt.sh: infraestructura real de v0.8.3 (presupuesto de
+--     reintentos por change) que nunca se conectó a ningún agente.
+--     Reconectada: Teo ahora llama acquire/settle en su flujo medium/high,
+--     reemplazando la regla de prosa "máximo tres correcciones" (que
+--     dependía de que Teo se acordara) por un tope forzado por código.
+-- Sin cambios de schema; solo eleva la versión declarada.
+UPDATE schema_meta SET value = '0.11.12' WHERE key = 'version';

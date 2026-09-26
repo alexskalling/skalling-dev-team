@@ -378,6 +378,18 @@ permission:
     "git -C * worktree prune*": ask
     "cd * && git worktree remove*": ask
     "cd * && git worktree prune*": ask
+    "*/.config/opencode/scripts/teamdb-attempt.sh": allow
+    "*/.config/opencode/scripts/teamdb-attempt.sh *": allow
+    "bash */.config/opencode/scripts/teamdb-attempt.sh": allow
+    "bash */.config/opencode/scripts/teamdb-attempt.sh *": allow
+    ".opencode/scripts/teamdb-attempt.sh": allow
+    ".opencode/scripts/teamdb-attempt.sh *": allow
+    "bash .opencode/scripts/teamdb-attempt.sh": allow
+    "bash .opencode/scripts/teamdb-attempt.sh *": allow
+    "*/.opencode/scripts/teamdb-attempt.sh": allow
+    "*/.opencode/scripts/teamdb-attempt.sh *": allow
+    "bash */.opencode/scripts/teamdb-attempt.sh": allow
+    "bash */.opencode/scripts/teamdb-attempt.sh *": allow
 ---
 
 # Luz — Calidad y seguridad

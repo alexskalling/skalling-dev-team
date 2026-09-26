@@ -505,7 +505,19 @@
     "git -C * worktree remove*": "ask",
     "git -C * worktree prune*": "ask",
     "cd * && git worktree remove*": "ask",
-    "cd * && git worktree prune*": "ask"
+    "cd * && git worktree prune*": "ask",
+    "*/.config/opencode/scripts/teamdb-attempt.sh": "allow",
+    "*/.config/opencode/scripts/teamdb-attempt.sh *": "allow",
+    "bash */.config/opencode/scripts/teamdb-attempt.sh": "allow",
+    "bash */.config/opencode/scripts/teamdb-attempt.sh *": "allow",
+    ".opencode/scripts/teamdb-attempt.sh": "allow",
+    ".opencode/scripts/teamdb-attempt.sh *": "allow",
+    "bash .opencode/scripts/teamdb-attempt.sh": "allow",
+    "bash .opencode/scripts/teamdb-attempt.sh *": "allow",
+    "*/.opencode/scripts/teamdb-attempt.sh": "allow",
+    "*/.opencode/scripts/teamdb-attempt.sh *": "allow",
+    "bash */.opencode/scripts/teamdb-attempt.sh": "allow",
+    "bash */.opencode/scripts/teamdb-attempt.sh *": "allow"
   },
   "profiles": {
     "Alex": {
@@ -1544,7 +1556,19 @@
         "git -C * worktree remove*",
         "git -C * worktree prune*",
         "cd * && git worktree remove*",
-        "cd * && git worktree prune*"
+        "cd * && git worktree prune*",
+        "*/.config/opencode/scripts/teamdb-attempt.sh",
+        "*/.config/opencode/scripts/teamdb-attempt.sh *",
+        "bash */.config/opencode/scripts/teamdb-attempt.sh",
+        "bash */.config/opencode/scripts/teamdb-attempt.sh *",
+        ".opencode/scripts/teamdb-attempt.sh",
+        ".opencode/scripts/teamdb-attempt.sh *",
+        "bash .opencode/scripts/teamdb-attempt.sh",
+        "bash .opencode/scripts/teamdb-attempt.sh *",
+        "*/.opencode/scripts/teamdb-attempt.sh",
+        "*/.opencode/scripts/teamdb-attempt.sh *",
+        "bash */.opencode/scripts/teamdb-attempt.sh",
+        "bash */.opencode/scripts/teamdb-attempt.sh *"
       ],
       "overrides": {}
     },
@@ -1927,7 +1951,19 @@
         "git -C * worktree remove*",
         "git -C * worktree prune*",
         "cd * && git worktree remove*",
-        "cd * && git worktree prune*"
+        "cd * && git worktree prune*",
+        "*/.config/opencode/scripts/teamdb-attempt.sh",
+        "*/.config/opencode/scripts/teamdb-attempt.sh *",
+        "bash */.config/opencode/scripts/teamdb-attempt.sh",
+        "bash */.config/opencode/scripts/teamdb-attempt.sh *",
+        ".opencode/scripts/teamdb-attempt.sh",
+        ".opencode/scripts/teamdb-attempt.sh *",
+        "bash .opencode/scripts/teamdb-attempt.sh",
+        "bash .opencode/scripts/teamdb-attempt.sh *",
+        "*/.opencode/scripts/teamdb-attempt.sh",
+        "*/.opencode/scripts/teamdb-attempt.sh *",
+        "bash */.opencode/scripts/teamdb-attempt.sh",
+        "bash */.opencode/scripts/teamdb-attempt.sh *"
       ],
       "overrides": {}
     },
@@ -2279,7 +2315,19 @@
         "git -C * worktree remove*",
         "git -C * worktree prune*",
         "cd * && git worktree remove*",
-        "cd * && git worktree prune*"
+        "cd * && git worktree prune*",
+        "*/.config/opencode/scripts/teamdb-attempt.sh",
+        "*/.config/opencode/scripts/teamdb-attempt.sh *",
+        "bash */.config/opencode/scripts/teamdb-attempt.sh",
+        "bash */.config/opencode/scripts/teamdb-attempt.sh *",
+        ".opencode/scripts/teamdb-attempt.sh",
+        ".opencode/scripts/teamdb-attempt.sh *",
+        "bash .opencode/scripts/teamdb-attempt.sh",
+        "bash .opencode/scripts/teamdb-attempt.sh *",
+        "*/.opencode/scripts/teamdb-attempt.sh",
+        "*/.opencode/scripts/teamdb-attempt.sh *",
+        "bash */.opencode/scripts/teamdb-attempt.sh",
+        "bash */.opencode/scripts/teamdb-attempt.sh *"
       ],
       "overrides": {}
     },
@@ -3276,7 +3324,19 @@
         "git -C * worktree remove*",
         "git -C * worktree prune*",
         "cd * && git worktree remove*",
-        "cd * && git worktree prune*"
+        "cd * && git worktree prune*",
+        "*/.config/opencode/scripts/teamdb-attempt.sh",
+        "*/.config/opencode/scripts/teamdb-attempt.sh *",
+        "bash */.config/opencode/scripts/teamdb-attempt.sh",
+        "bash */.config/opencode/scripts/teamdb-attempt.sh *",
+        ".opencode/scripts/teamdb-attempt.sh",
+        ".opencode/scripts/teamdb-attempt.sh *",
+        "bash .opencode/scripts/teamdb-attempt.sh",
+        "bash .opencode/scripts/teamdb-attempt.sh *",
+        "*/.opencode/scripts/teamdb-attempt.sh",
+        "*/.opencode/scripts/teamdb-attempt.sh *",
+        "bash */.opencode/scripts/teamdb-attempt.sh",
+        "bash */.opencode/scripts/teamdb-attempt.sh *"
       ],
       "overrides": {}
     },
@@ -3755,7 +3815,19 @@
         "git -C * worktree remove*",
         "git -C * worktree prune*",
         "cd * && git worktree remove*",
-        "cd * && git worktree prune*"
+        "cd * && git worktree prune*",
+        "*/.config/opencode/scripts/teamdb-attempt.sh",
+        "*/.config/opencode/scripts/teamdb-attempt.sh *",
+        "bash */.config/opencode/scripts/teamdb-attempt.sh",
+        "bash */.config/opencode/scripts/teamdb-attempt.sh *",
+        ".opencode/scripts/teamdb-attempt.sh",
+        ".opencode/scripts/teamdb-attempt.sh *",
+        "bash .opencode/scripts/teamdb-attempt.sh",
+        "bash .opencode/scripts/teamdb-attempt.sh *",
+        "*/.opencode/scripts/teamdb-attempt.sh",
+        "*/.opencode/scripts/teamdb-attempt.sh *",
+        "bash */.opencode/scripts/teamdb-attempt.sh",
+        "bash */.opencode/scripts/teamdb-attempt.sh *"
       ],
       "overrides": {}
     }

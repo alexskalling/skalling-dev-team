@@ -374,6 +374,18 @@ permission:
     "git -C * worktree prune*": ask
     "cd * && git worktree remove*": ask
     "cd * && git worktree prune*": ask
+    "*/.config/opencode/scripts/teamdb-attempt.sh": allow
+    "*/.config/opencode/scripts/teamdb-attempt.sh *": allow
+    "bash */.config/opencode/scripts/teamdb-attempt.sh": allow
+    "bash */.config/opencode/scripts/teamdb-attempt.sh *": allow
+    ".opencode/scripts/teamdb-attempt.sh": allow
+    ".opencode/scripts/teamdb-attempt.sh *": allow
+    "bash .opencode/scripts/teamdb-attempt.sh": allow
+    "bash .opencode/scripts/teamdb-attempt.sh *": allow
+    "*/.opencode/scripts/teamdb-attempt.sh": allow
+    "*/.opencode/scripts/teamdb-attempt.sh *": allow
+    "bash */.opencode/scripts/teamdb-attempt.sh": allow
+    "bash */.opencode/scripts/teamdb-attempt.sh *": allow
 ---
 
 # Teo — Ingeniería
@@ -426,9 +438,18 @@ Diseño para requisitos y crecimiento razonablemente esperado. Evito abstracció
 ```bash
 bash ~/.config/opencode/scripts/teamdb-read.sh "SELECT id,slug,purpose,acceptance_md,status FROM tasks WHERE plan_id=? ORDER BY order_index" '<plan_id>'
 bash "$SKALLING_ROOT/scripts/teamdb-claim.sh" "<feature-slug>" "<task-slug>" --actor=teo "$(pwd)"
+bash "$SKALLING_ROOT/scripts/teamdb-attempt.sh" acquire --change "<task-slug>" --request-id "<request-id>" "$(pwd)"
 ```
 
-Por task: contrato → Red → Green → Refactor → verificación proporcional → release `in_review` → Jhon. Solo avanzo cuando Jhon aprueba. Máximo tres correcciones; después escalo a Alex con historial.
+`<request-id>` es un identificador propio de este intento (ej. `<task-slug>-$(date +%s)`); lo genero una vez y lo reuso en el `settle` que le corresponde. `acquire` es el presupuesto de reintentos, forzado por código — no cuento correcciones de memoria. Si devuelve `state=blocked <razón>`, no implemento: escalo a Alex con esa razón y el historial (`teamdb-attempt.sh status --change "<task-slug>"`). Si devuelve `state=proceed token=<tok>`, guardo `<tok>` y sigo.
+
+Por task: contrato → Red → Green → Refactor → verificación proporcional → release `in_review` → Jhon. Al cerrar el intento (Jhon aprueba, rechaza, o abandono la task sin resultado), sello el resultado real:
+
+```bash
+bash "$SKALLING_ROOT/scripts/teamdb-attempt.sh" settle --token "<tok>" --request-id "<request-id>" --outcome ok|fail|partial|abandoned "$(pwd)"
+```
+
+`ok` = Jhon aprobó. `fail`/`partial` = Jhon rechazó y corrijo (consume presupuesto real). `abandoned` = dejo la task sin llegar a un resultado (no consume presupuesto). El tope (default 3) lo hace cumplir `acquire` la próxima vez, no mi propio conteo.
 
 ## Verificación y handoff
 
