@@ -33,6 +33,27 @@ teamdb_project_path() {
   echo "$(_teamdb_project_root "$project")/.opencode/context/team.db"
 }
 
+# Resuelve quién ejecuta una acción que queda registrada (aprobar, liberar,
+# sellar). Si el plugin de OpenCode fijó SKALLING_RUNTIME_AGENT, esa es la
+# identidad real y manda: un --by/--actor distinto es una falsificación (ej.
+# Teo intentando aprobar como jhon) y se rechaza. Sin runtime (CLI humano,
+# tests), vale lo declarado.
+# Uso: actor="$(teamdb_runtime_actor "$declarado")" || exit 2
+teamdb_runtime_actor() {
+  local declared runtime
+  declared="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  runtime="$(printf '%s' "${SKALLING_RUNTIME_AGENT:-}" | tr '[:upper:]' '[:lower:]')"
+  if [ -z "$runtime" ]; then
+    printf '%s\n' "${1:-unknown}"
+    return 0
+  fi
+  if [ -n "$declared" ] && [ "$declared" != "unknown" ] && [ "$declared" != "$runtime" ]; then
+    echo "ERROR: identidad declarada '$1' no coincide con el agente real '$runtime' (la pone OpenCode)" >&2
+    return 1
+  fi
+  printf '%s\n' "$runtime"
+}
+
 teamdb_check_sqlite3() {
   if ! command -v sqlite3 >/dev/null 2>&1; then
     echo "[ERROR] sqlite3 no instalado" >&2
@@ -54,7 +75,7 @@ teamdb_query_project() {
 
 # teamdb_write_project: usa teamdb_exec.py multi-statement atómico (T-2.11).
 # Reemplaza el flock anterior. SQLite con WAL maneja concurrencia via journal_mode.
-# DEV-2.11: path activo para writes seguros; teamdb_safe_query queda deprecada.
+# DEV-2.11: path activo para writes seguros.
 teamdb_write_project() {
   local db="$1"; local sql="$2"; shift 2
   [ -f "$db" ] || { echo "[ERROR] DB no existe: $db" >&2; return 1; }
@@ -276,7 +297,7 @@ teamdb_init_global() {
 }
 
 # teamdb_exec.py: wrapper Python con real parameter binding (T-2.10).
-# CAMINO ACTIVO para SQL seguro. teamdb_safe_query queda DEPRECATED.
+# CAMINO ACTIVO para SQL seguro (bound params reales).
 _TEAMDB_EXEC_PY=""
 _resolve_teamdb_exec_py() {
   [ -n "$_TEAMDB_EXEC_PY" ] && return 0
@@ -354,78 +375,9 @@ teamdb_exec_multi() {
   python3 "$_TEAMDB_EXEC_PY" --db "$db" --mode multi --sql "" --params-batches "$batches_json"
 }
 
-# teamdb_safe_query: wrapper con validacion + escape seguro.
-# Uso:
-#   teamdb_safe_query "$DB" <mode> <template_sql> <param>...
-# Modes: fts | like | exact
-# - Rechaza NUL/control chars en parametros
-# - Rechaza parametros > 1024 chars
-# - Valida DB y mode
-# - DESVIACION del plan T-1.1: el CLI sqlite3 NO soporta bind de ?/?N/:name.
-#   Se hace escape explicito ' -> '' (estandar SQL) y se sustituye ? en template.
-#   Es seguro porque: (1) el caller pasa templates con ? solo en valores,
-#   (2) nombres de tabla/column vienen del caller como literales en el template
-#   (e.g., "SELECT id FROM $TABLE WHERE slug = ?") y $TABLE es un whitelist.
-teamdb_safe_query() {
-  teamdb_check_sqlite3 || return 1
-  local db="$1"
-  local mode="$2"
-  local template="$3"
-  shift 3 || { echo "[ERROR] teamdb_safe_query: args insuficientes" >&2; return 1; }
-
-  [ -f "$db" ] || { echo "[ERROR] DB no existe: $db" >&2; return 1; }
-
-  case "$mode" in
-    fts|like|exact) ;;
-    *) echo "[ERROR] Mode invalido: $mode (usa fts|like|exact)" >&2; return 1 ;;
-  esac
-
-  local arg
-  for arg in "$@"; do
-    _validate_param "$arg" || return 1
-  done
-
-  local sql="$template"
-  for arg in "$@"; do
-    case "$mode" in
-      exact|fts)
-        sql="${sql/\?/$(_sql_quote "$arg")}"
-        ;;
-      like)
-        sql="${sql/\?/$(_sql_quote_like "$arg")}"
-        ;;
-    esac
-  done
-
-  sqlite3 -separator $'\t' "$db" "$sql"
-}
-
-_teamdb_max_param_len=1024
-
-_validate_param() {
-  local arg="$1"
-  if [ -z "$arg" ]; then
-    return 0
-  fi
-  if _has_control_char "$arg"; then
-    echo "[ERROR] Invalid input (control chars)" >&2
-    return 1
-  fi
-  if [ "${#arg}" -gt "$_teamdb_max_param_len" ]; then
-    echo "[ERROR] Too long (max $_teamdb_max_param_len chars)" >&2
-    return 1
-  fi
-  return 0
-}
-
 # _sql_quote: envuelve en '...' con escape de comillas (estandar SQL).
 _sql_quote() {
   printf "'%s'" "$(printf '%s' "$1" | sed "s/'/''/g")"
-}
-
-# _sql_quote_like: igual + escapa wildcards % y _ para uso en LIKE.
-_sql_quote_like() {
-  printf "'%s'" "$(printf '%s' "$1" | sed -e "s/'/''/g" -e "s/%/\\%/g" -e "s/_/\\_/g")"
 }
 
 # teamdb_has_table: retorna 1 si la tabla existe, 0 si no. Sin interpolacion user-input.
@@ -449,24 +401,6 @@ teamdb_has_table() {
 # con teamdb_write_* se hace en T-2.2 (escritura helper-side).
 _actor_or_unknown() {
   echo "${TEAMDB_ACTOR:-unknown}"
-}
-
-# _has_control_char: portable bash 3.2, sin grep -P / LC_ALL=C / od.
-# Itera cada byte y compara contra control chars problematicos.
-# Acepta TAB (0x09), LF (0x0A), CR (0x0D) por ser razonables.
-_has_control_char() {
-  local s="$1"
-  local len="${#s}"
-  local i=0
-  while [ "$i" -lt "$len" ]; do
-    case "${s:$i:1}" in
-      $'\x00'|$'\x01'|$'\x02'|$'\x03'|$'\x04'|$'\x05'|$'\x06'|$'\x07'|$'\x08'|$'\x0b'|$'\x0c'|$'\x0e'|$'\x0f'|$'\x10'|$'\x11'|$'\x12'|$'\x13'|$'\x14'|$'\x15'|$'\x16'|$'\x17'|$'\x18'|$'\x19'|$'\x1a'|$'\x1b'|$'\x1c'|$'\x1d'|$'\x1e'|$'\x1f'|$'\x7f')
-        return 0
-        ;;
-    esac
-    i=$((i + 1))
-  done
-  return 1
 }
 
 # teamdb_lock / teamdb_unlock: lock cross-platform basado en mkdir (v0.8.3).

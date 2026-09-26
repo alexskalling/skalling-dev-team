@@ -23,7 +23,7 @@ v0.7.0 introdujo las DBs pero el ciclo de trabajo seguía operando sobre markdow
 
 - `.opencode/changes/archive/2026-08/teamdb-hardening/` — plan completo (proposal, spec, design, tasks, receipts) que implementó v0.7.2
 - `sql/project-schema.sql` / `sql/global-schema.sql` — esquemas; v0.7.2 agrega `task_dependencies`, `task_claims`, `plan_history`, `task_context_capsules`, `problems_fts` y `audit_log.actor_source`
-- `scripts/lib/lib-teamdb.sh` — helpers `teamdb_exec_query`/`teamdb_exec_write` (wrappers de `scripts/teamdb_exec.py`, SQL con bound params reales); `teamdb_safe_query` quedó deprecated
+- `scripts/lib/lib-teamdb.sh` — helpers `teamdb_exec_query`/`teamdb_exec_write` (wrappers de `scripts/teamdb_exec.py`, SQL con bound params reales); `teamdb_safe_query` fue eliminada en v0.11.14 (inyectable)
 - `scripts/teamdb-{plan,status,amend,execute-plan,resume,deps,claim,context,export-md}.sh` — ciclo de planificación en DB (amendment atómico con version/historial; DAG con detección de ciclos; claims con lease/attempt/input_hash; execute-plan solo orquesta, no ejecuta shell — DC-3)
 - `templates/agents/snippets/{code-intelligence,memory-protocol}.md` — single source; los 8 agentes usan markers `@include-snippet` resueltos build-time por `install-global.sh` (DC-2)
 - `templates/handoff.schema.json` — `allOf` if/then: `project_context` required si `to` ∈ {TEO, LUZ}; `verification` required si `to` ∈ {JHON, LUZ} o emisor de ingeniería
@@ -32,7 +32,7 @@ v0.7.0 introdujo las DBs pero el ciclo de trabajo seguía operando sobre markdow
 
 ## Learned
 
-- **Escape manual no es destino final**: la primera iteración de `teamdb_safe_query` escapaba `'` con `sed "s/'/''/g"`; el round 2 la reemplazó por `scripts/teamdb_exec.py` con bound params reales (Python `sqlite3`). El CLI `sqlite3` no soporta bind portablemente; Python sí. `teamdb_safe_query` quedó exportada como deprecated para no romper los tests de Fase 1.
+- **Escape manual no es destino final**: la primera iteración de `teamdb_safe_query` escapaba `'` con `sed "s/'/''/g"`; el round 2 la reemplazó por `scripts/teamdb_exec.py` con bound params reales (Python `sqlite3`). El CLI `sqlite3` no soporta bind portablemente; Python sí. `teamdb_safe_query` quedó como deprecated hasta v0.11.14, cuando se eliminó: un `?` dentro de un parámetro era reemplazado por el parámetro siguiente (inyección).
 - **flock → transacciones SQLite**: las escrituras concurrentes se resolvieron con `BEGIN IMMEDIATE` + WAL + `busy_timeout` en vez de `flock` (más portable y atómico a nivel DB).
 - **Triggers no pueden leer variables de entorno**: el audit log real sale del helper (`actor_source='helper'` con el actor vía `TEAMDB_ACTOR`); los triggers registran `actor_source='trigger'` con `'system'`. Los lectores filtran por `actor_source` para atribución real.
 - **El bundle `.opencode/context/` de este repo estaba vacío durante el change**: el proposal registró "bundle corrupto, saltando check"; los concept docs se consolidaron recién al cierre (este doc es el primero). No hay contradictores.

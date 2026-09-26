@@ -1,7 +1,14 @@
 # Constitución Universal de Skalling
 
 > **Esta constitución aplica a todos los proyectos que usen Skalling.**
-> Es leída por Alex al inicio de cada sesión y consultada por el resto del equipo.
+> Es **referencia para personas**: ningún agente la carga en su contexto (son
+> ~25 KB; cargarla en cada llamada costaría miles de tokens por mensaje). Cada
+> agente lleva en su propio prompt (`agents-base/*.md`) las reglas que le tocan,
+> y lo que no se puede dejar a la buena voluntad del modelo lo hace cumplir el
+> código: permisos (`data/permission-policy.json`), el plugin guard
+> (`plugins/lib/git-guard.mjs`) y el gate de commits (`scripts/hooks/git-gate.py`).
+> Si cambiás una regla acá, actualizá también el prompt del agente o el
+> enforcement correspondiente — si no, el cambio no tiene efecto.
 > Las reglas son universales — aplican a cualquier stack o lenguaje.
 
 ---

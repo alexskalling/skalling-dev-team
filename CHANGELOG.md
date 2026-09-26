@@ -4,6 +4,64 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.11.14] — en preparación
+
+Cierra los hallazgos verificados de una auditoría externa de v0.11.12.
+
+### Security
+- **Permiso para borrar, ejecutar código inline y salir a la red**: `rm`,
+  `rmdir`, `unlink`, `shred`, `bash/sh/zsh -c`, `eval`, `python/python3 -c`,
+  `node -e/-p/--eval`, `ruby/perl -e`, `php -r`, `curl`, `wget`, `nc`,
+  `ssh`, `scp`, `rsync`, etc. pasan a "ask" en todos los perfiles. También
+  los git que reescriben o descartan historia: `switch`, `rebase`, `merge`,
+  `revert`, `cherry-pick`, `update-ref`, `filter-branch`, `filter-repo`,
+  `gc`, `stash drop/clear`, `reflog expire/delete` (con sus formas `-C` y
+  `cd … &&`). Los deny de `rm *.db*` / `*team.db*` se mantienen.
+- **Plugin guard reescrito** (`plugins/lib/git-guard.mjs`): un comando
+  sensible solo pasa en la forma directa que el permiso cubre. Se bloquean,
+  con una explicación, las vías de escape que la auditoría mostró:
+  `command git push`, `/usr/bin/git push`, `'git' push`, `env/timeout/nohup
+  git push`, `GIT_DIR=x git push`, `git -c k=v push`, `bash -c "git push" &&
+  ls`, `$(echo git) push`, `echo "$(git push)"`, `find … | xargs rm`, bucles
+  con `rm`, `eval` encadenado, `cat .env | curl …`. El mensaje de commit con
+  heredoc (`git commit -m "$(cat <<'EOF' …)"`) sigue funcionando.
+- **Identidad del runtime, no declarada**: el plugin sabe qué agente corre
+  cada sesión (`chat.params`) y la inyecta como `SKALLING_RUNTIME_AGENT`.
+  `teamdb-claim.sh` (claim, `--resume`, `--release`, `--advance`),
+  `teamdb-seal-receipt.sh` y `skalling-review.sh` la usan como actor; un
+  `--by`/`--actor` distinto se rechaza (exit 2). Teo ya no puede aprobar
+  como jhon ni sellar un receipt como luz. Un comando que intente fijar
+  `SKALLING_RUNTIME_AGENT`, `TEAMDB_ACTOR` o `SKALLING_REVIEW_AGENT` se
+  bloquea. Sin runtime (CLI humano, CI) vale lo declarado, como antes.
+- **Lista blanca para los roles sin edición** (Luz, Jhon, Pol, Sol, Jes):
+  `"*": ask` — lo que no está en su lista pregunta. `sed -i`, `git add`,
+  instalar/quitar paquetes y `sort -o` también preguntan. El plugin bloquea
+  que escriban archivos por redirección (`> archivo`, `>>`, `&>`) o `tee`,
+  salvo a `/tmp` o `/dev/null`. Teo y Pau mantienen su perfil amplio. Para
+  Jes (web + bash) esto separa las dos cosas: lo que lea en la web no puede
+  terminar en un comando que escriba, borre o salga a la red sin preguntar.
+- **Eliminada `teamdb_safe_query`** (deprecated desde el round 2 de
+  hardening, sin callers): el escape manual reemplazaba cada `?` del
+  template en orden, así que un `?` dentro de un parámetro se sustituía por
+  el parámetro siguiente (inyección). El único camino es `teamdb_exec_*`
+  con bound params reales. Se borra también su test.
+
+### Changed
+- `constitution/constitucion.md` ya no afirma que Alex la lee al inicio de
+  cada sesión (ningún agente la carga): se declara referencia para
+  personas, y explica dónde vive lo que sí se hace cumplir.
+- Sol puede correr `teamdb-export-md.sh` sin preguntar (sus instrucciones
+  lo usan y no estaba en su lista).
+
+### Tests
+- `tests/git-guard-plugin.test.mjs`: vías de escape, formas directas,
+  identidad, inyección, hooks y escrituras de roles de solo lectura.
+- `tests/teamdb-runtime-identity.test.sh` (nuevo, en la suite).
+
+### Límite conocido
+- Un agente con permiso de edición (Teo) puede escribir un script y
+  correrlo; la verificación que no se puede falsificar vive en CI.
+
 ## [0.11.13] — en preparación
 
 A pedido explícito del usuario: trabaja en proyectos externos (de clientes,

@@ -336,7 +336,7 @@ PYEOF
   DB="$(teamdb_project_path "$PROJECT")"
   if [ -f "$DB" ]; then
     TASK_ID="${SKALLING_TASK_ID:-review}"
-    AGENT="${SKALLING_REVIEW_AGENT:-luz}"
+    AGENT="${SKALLING_RUNTIME_AGENT:-${SKALLING_REVIEW_AGENT:-luz}}"
     SEAL_CMD="review --collect $(basename "$COLLECT_DIR") --lens $LENS"
     if ! TEAMDB_CLAIM_COMMAND="$SEAL_CMD" \
           TEAMDB_CLAIM_EXIT_CODE="$RC" \
@@ -649,13 +649,20 @@ lens_risk() {
     case "$content" in
       *'# lens:ok'*) continue ;;
     esac
-    if printf '%s' "$content" | grep -qE "$pat_eval" \
+    # eval y rm -rf son riesgos de código que se ejecuta. En datos y docs
+    # (JSON, Markdown, YAML) aparecen como texto: la política de permisos
+    # lista literalmente "eval *" o "rm -rf" para exigir permiso.
+    local is_code=1
+    case "$file" in
+      *.json|*.md|*.yml|*.yaml) is_code=0 ;;
+    esac
+    if [ "$is_code" -eq 1 ] && printf '%s' "$content" | grep -qE "$pat_eval" \
        && ! printf '%s' "$content" | grep -qE "$pat_eval_quoted"; then
       add_finding "BLOCKER" "risk" "$file:$ln" "eval sin comillas"
-    elif printf '%s' "$content" | grep -qE "$pat_eval_var"; then
+    elif [ "$is_code" -eq 1 ] && printf '%s' "$content" | grep -qE "$pat_eval_var"; then
       add_finding "BLOCKER" "risk" "$file:$ln" "eval con variable"
     fi
-    if printf '%s' "$content" | grep -qE "$pat_rm"; then
+    if [ "$is_code" -eq 1 ] && printf '%s' "$content" | grep -qE "$pat_rm"; then
       if printf '%s' "$content" | grep -qE "$pat_rm_sys"; then
         add_finding "BLOCKER" "risk" "$file:$ln" "rm -rf sobre ruta temp del sistema (/tmp,/var/tmp,/var/folders)"
       elif ! printf '%s' "$content" | grep -qE "$pat_rm_guard" \
@@ -948,7 +955,7 @@ SUMMARY="{\"risk\":{\"blocker\":$(count_for BLOCKER risk),\"warning\":$(count_fo
 DB="$(teamdb_project_path "$PROJECT")"
 if [ -f "$DB" ]; then
   TASK_ID="${SKALLING_TASK_ID:-review}"
-  AGENT="${SKALLING_REVIEW_AGENT:-luz}"
+  AGENT="${SKALLING_RUNTIME_AGENT:-${SKALLING_REVIEW_AGENT:-luz}}"
   SEAL_CMD="review --lens $LENS${DIFF_RANGE:+ --diff $DIFF_RANGE}"
   if ! TEAMDB_CLAIM_COMMAND="$SEAL_CMD" \
         TEAMDB_CLAIM_EXIT_CODE="$RC" \

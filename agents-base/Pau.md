@@ -36,6 +36,127 @@ permission:
   webfetch: ask
   bash:
     "*": allow
+    rm: ask
+    "rm *": ask
+    rmdir: ask
+    "rmdir *": ask
+    "unlink *": ask
+    "shred *": ask
+    "bash -c *": ask
+    "sh -c *": ask
+    "zsh -c *": ask
+    "python -c *": ask
+    "python3 -c *": ask
+    "node -e *": ask
+    "node -p *": ask
+    "node --eval *": ask
+    "ruby -e *": ask
+    "perl -e *": ask
+    "php -r *": ask
+    eval: ask
+    "eval *": ask
+    curl: ask
+    "curl *": ask
+    wget: ask
+    "wget *": ask
+    nc: ask
+    "nc *": ask
+    ncat: ask
+    "ncat *": ask
+    netcat: ask
+    "netcat *": ask
+    socat: ask
+    "socat *": ask
+    scp: ask
+    "scp *": ask
+    sftp: ask
+    "sftp *": ask
+    rsync: ask
+    "rsync *": ask
+    ssh: ask
+    "ssh *": ask
+    telnet: ask
+    "telnet *": ask
+    ftp: ask
+    "ftp *": ask
+    "git switch": ask
+    "git switch *": ask
+    "git -C * switch": ask
+    "git -C * switch *": ask
+    "cd * && git switch": ask
+    "cd * && git switch *": ask
+    "git rebase": ask
+    "git rebase *": ask
+    "git -C * rebase": ask
+    "git -C * rebase *": ask
+    "cd * && git rebase": ask
+    "cd * && git rebase *": ask
+    "git merge": ask
+    "git merge *": ask
+    "git -C * merge": ask
+    "git -C * merge *": ask
+    "cd * && git merge": ask
+    "cd * && git merge *": ask
+    "git revert": ask
+    "git revert *": ask
+    "git -C * revert": ask
+    "git -C * revert *": ask
+    "cd * && git revert": ask
+    "cd * && git revert *": ask
+    "git cherry-pick": ask
+    "git cherry-pick *": ask
+    "git -C * cherry-pick": ask
+    "git -C * cherry-pick *": ask
+    "cd * && git cherry-pick": ask
+    "cd * && git cherry-pick *": ask
+    "git update-ref": ask
+    "git update-ref *": ask
+    "git -C * update-ref": ask
+    "git -C * update-ref *": ask
+    "cd * && git update-ref": ask
+    "cd * && git update-ref *": ask
+    "git filter-branch": ask
+    "git filter-branch *": ask
+    "git -C * filter-branch": ask
+    "git -C * filter-branch *": ask
+    "cd * && git filter-branch": ask
+    "cd * && git filter-branch *": ask
+    "git filter-repo": ask
+    "git filter-repo *": ask
+    "git -C * filter-repo": ask
+    "git -C * filter-repo *": ask
+    "cd * && git filter-repo": ask
+    "cd * && git filter-repo *": ask
+    "git gc": ask
+    "git gc *": ask
+    "git -C * gc": ask
+    "git -C * gc *": ask
+    "cd * && git gc": ask
+    "cd * && git gc *": ask
+    "git stash drop": ask
+    "git stash drop *": ask
+    "git -C * stash drop": ask
+    "git -C * stash drop *": ask
+    "cd * && git stash drop": ask
+    "cd * && git stash drop *": ask
+    "git stash clear": ask
+    "git stash clear *": ask
+    "git -C * stash clear": ask
+    "git -C * stash clear *": ask
+    "cd * && git stash clear": ask
+    "cd * && git stash clear *": ask
+    "git reflog expire": ask
+    "git reflog expire *": ask
+    "git -C * reflog expire": ask
+    "git -C * reflog expire *": ask
+    "cd * && git reflog expire": ask
+    "cd * && git reflog expire *": ask
+    "git reflog delete": ask
+    "git reflog delete *": ask
+    "git -C * reflog delete": ask
+    "git -C * reflog delete *": ask
+    "cd * && git reflog delete": ask
+    "cd * && git reflog delete *": ask
     cat: allow
     "cat *": allow
     head: allow

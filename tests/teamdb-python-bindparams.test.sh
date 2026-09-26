@@ -150,11 +150,12 @@ else
   assert_fail "transaction inserta audit_log atómicamente" "result=$COUNT_AUDIT"
 fi
 
-# 14. teamdb_safe_query está deprecada pero sigue exportada (backward-compat Fase 1)
-if type teamdb_safe_query >/dev/null 2>&1; then
-  assert_pass "teamdb_safe_query sigue exportada (backward-compat)"
+# 14. teamdb_safe_query (escape manual, inyectable vía '?' en un parámetro)
+# fue eliminada en v0.11.14: el único camino es teamdb_exec_* con bound params.
+if ! type teamdb_safe_query >/dev/null 2>&1; then
+  assert_pass "teamdb_safe_query eliminada (sin camino de SQL por escape manual)"
 else
-  assert_fail "teamdb_safe_query sigue exportada (backward-compat)"
+  assert_fail "teamdb_safe_query eliminada (sin camino de SQL por escape manual)"
 fi
 
 # 15. Shellcheck del lib-teamdb.sh

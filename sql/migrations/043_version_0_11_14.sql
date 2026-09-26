@@ -1,0 +1,20 @@
+-- v0.11.14: cierra los hallazgos de la auditoría externa de v0.11.12.
+--
+-- 1. Borrados (rm, rmdir, unlink, shred), intérpretes con código inline
+--    (bash -c, python3 -c, node -e, eval...), red (curl, wget, ssh, scp...)
+--    y los git que reescriben historia (rebase, merge, reset, filter-branch,
+--    stash drop...) piden permiso. El plugin guard exige la forma directa:
+--    disfrazados (command git push, /usr/bin/git, bash -c "git push" && ls,
+--    $(echo git) push, VAR=x git push...) se bloquean con una explicación.
+-- 2. La identidad de quien reclama/libera/aprueba/sella la pone OpenCode
+--    (SKALLING_RUNTIME_AGENT, inyectada por el plugin), no --by/--actor:
+--    Teo ya no puede aprobar como jhon ni sellar como luz.
+-- 3. Luz, Jhon, Pol, Sol y Jes (sin permiso de edición) tienen bash en lista
+--    blanca: lo no listado pregunta, y no pueden escribir archivos por
+--    redirección (> archivo) ni tee, salvo a /tmp.
+-- 4. Eliminada teamdb_safe_query (escape manual; un '?' dentro de un
+--    parámetro era reemplazado por el siguiente parámetro -> inyección).
+-- 5. constitucion.md declara lo que es: referencia para personas, no un
+--    archivo que los agentes carguen.
+-- Sin cambios de schema; solo eleva la versión declarada.
+UPDATE schema_meta SET value = '0.11.14' WHERE key = 'version';

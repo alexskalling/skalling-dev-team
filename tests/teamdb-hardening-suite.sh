@@ -33,7 +33,7 @@ TESTS=(
   tests/permission-generation.test.py
   tests/workflow-engine.test.py
   tests/workflow-git-gate-bridge.test.py
-  tests/teamdb-safe-query.test.sh
+  tests/teamdb-runtime-identity.test.sh
   tests/teamdb-read.test.sh
   tests/skalling-route-supersede.test.sh
   tests/skalling-coverage.test.sh

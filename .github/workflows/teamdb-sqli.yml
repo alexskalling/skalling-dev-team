@@ -20,5 +20,4 @@ jobs:
         run: |
           bash tests/teamdb-search-sqli.test.sh
           bash tests/teamdb-related-sqli.test.sh
-          bash tests/teamdb-safe-query.test.sh
           bash tests/teamdb-python-bindparams.test.sh

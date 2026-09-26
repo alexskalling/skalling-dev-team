@@ -57,6 +57,7 @@ if [ "${1:-}" = "--resume" ]; then
     esac
     shift || break
   done
+  ACTOR="$(teamdb_runtime_actor "$ACTOR")" || exit 2
   [ -d "$PROJECT" ] || PROJECT="$PROJECT_DEFAULT"
   # Lock cross-platform (mkdir-based, sin flock). v0.8.3
   LOCK_DIR="$PROJECT/.opencode/context/.locks/team"
@@ -116,6 +117,7 @@ if [ "${1:-}" = "--release" ]; then
     esac
     shift || break
   done
+  RELEASE_BY="$(teamdb_runtime_actor "$RELEASE_BY")" || exit 2
   [ -d "$PROJECT" ] || PROJECT="$PROJECT_DEFAULT"
   # Lock cross-platform (mkdir-based, sin flock). v0.8.3
   LOCK_DIR="$PROJECT/.opencode/context/.locks/team"
@@ -198,6 +200,7 @@ if [ "${1:-}" = "--advance" ]; then
     esac
     shift || break
   done
+  ADVANCE_BY="$(teamdb_runtime_actor "$ADVANCE_BY")" || exit 2
   if [ -z "$TARGET_STATUS" ]; then
     echo "ERROR: --advance requiere --to=approved|resolved" >&2; exit 2
   fi
@@ -314,6 +317,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 ACTOR="${ACTOR:-${TEAMDB_ACTOR:-unknown}}"
+ACTOR="$(teamdb_runtime_actor "$ACTOR")" || exit 2
 [ -d "$PROJECT" ] || PROJECT="$PROJECT_DEFAULT"
 # Lock cross-platform (mkdir-based, sin flock). v0.8.3
 LOCK_DIR="$PROJECT/.opencode/context/.locks/team"

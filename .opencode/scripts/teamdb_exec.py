@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """teamdb_exec.py — Wrapper Python sobre sqlite3 con real parameter binding.
 
-Reemplaza teamdb_safe_query (que usaba escape manual de '). El CLI sqlite3 no
+Reemplazó a teamdb_safe_query (escape manual de ', eliminada en v0.11.14). El CLI sqlite3 no
 soporta bind de ?/?N/:name; Python sqlite3 sí.
 
 Modos:

@@ -413,6 +413,33 @@ if [ "$OK34_RC" = "0" ]; then
 else
   assert_fail "risk: \$TMP con guarda + _sql_quote + eval comentado → exit 0" "rc=$OK34_RC out=$OK34_OUT"
 fi
+# eval/rm -rf como texto en datos (la política de permisos los lista para
+# exigir "ask") no son código: no deben bloquear. En un .sh sí.
+DATA_REPO="$TMP/data-repo"
+new_repo "$DATA_REPO"
+printf '%s\n' '{' '  "eval *": "ask",' '  "rm -rf *": "ask"' '}' > "$DATA_REPO/policy.json"  # lens:ok: fixture de texto para el propio lens, no se ejecuta
+printf '%s\n' '---' 'permission:' '  bash:' '    "eval *": ask' '---' 'Nunca `rm -rf dist` sin permiso.' > "$DATA_REPO/Agent.md"  # lens:ok: fixture de texto para el propio lens, no se ejecuta
+git -C "$DATA_REPO" add policy.json Agent.md
+set +e
+DATA_OUT="$(bash "$ROOT/scripts/skalling-review.sh" --lens risk --cwd "$DATA_REPO" 2>&1)"
+DATA_RC=$?
+set -e
+if [ "$DATA_RC" = "0" ]; then
+  assert_pass "risk: eval/rm -rf como texto en JSON/Markdown → exit 0"  # lens:ok: fixture de texto para el propio lens, no se ejecuta
+else
+  assert_fail "risk: eval/rm -rf como texto en JSON/Markdown → exit 0" "rc=$DATA_RC out=$DATA_OUT"  # lens:ok: fixture de texto para el propio lens, no se ejecuta
+fi
+printf '%s\n' '#!/usr/bin/env bash' 'eval $CMD' > "$DATA_REPO/run.sh"  # lens:ok: fixture de texto para el propio lens, no se ejecuta
+git -C "$DATA_REPO" add run.sh
+set +e
+DATA_OUT="$(bash "$ROOT/scripts/skalling-review.sh" --lens risk --cwd "$DATA_REPO" 2>&1)"
+DATA_RC=$?
+set -e
+if [ "$DATA_RC" != "0" ] && grep -q "run.sh" <<< "$DATA_OUT"; then
+  assert_pass "risk: eval en un .sh sigue siendo BLOCKER"  # lens:ok: fixture de texto para el propio lens, no se ejecuta
+else
+  assert_fail "risk: eval en un .sh sigue siendo BLOCKER" "rc=$DATA_RC out=$DATA_OUT"  # lens:ok: fixture de texto para el propio lens, no se ejecuta
+fi
 # Falsos negativos que la auditoría detectó: rm sobre ruta temp del sistema y
 # SQLi dentro de comillas dobles — ahora SÍ deben dar BLOCKER.
 cat > "$BUG34_REPO/bad.sh" <<'EOF'

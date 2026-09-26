@@ -29,13 +29,16 @@ else
 fi
 
 TASK_ID="${1:-}"
-AGENT="${2:-luz}"
 PROJECT="${3:-$(pwd)}"
 
 if [ -z "$TASK_ID" ]; then
   echo "Uso: bash teamdb-seal-receipt.sh <task_id> <agent> [project]" >&2
   exit 1
 fi
+# Con runtime de OpenCode, el que sella es el agente real de la sesión, no
+# el que dice el argumento (Teo no puede sellar a nombre de luz).
+AGENT="$(teamdb_runtime_actor "${2:-}")" || exit 2
+if [ "$AGENT" = "unknown" ]; then AGENT="luz"; fi
 
 DB="$(teamdb_project_path "$PROJECT")"
 if [ ! -f "$DB" ]; then
