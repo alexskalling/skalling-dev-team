@@ -36,6 +36,9 @@ permission:
   webfetch: ask
   bash:
     "*": allow
+    "python3 */teamdb-destructive.py *": ask
+    "python3 */teamdb-destructive.py apply *": ask
+    "python3 */teamdb-destructive.py preview *": allow
     rm: ask
     "rm *": ask
     rmdir: ask

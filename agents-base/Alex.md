@@ -30,6 +30,9 @@ permission:
     "*": allow
   bash:
     "*": allow
+    "python3 */teamdb-destructive.py *": ask
+    "python3 */teamdb-destructive.py apply *": ask
+    "python3 */teamdb-destructive.py preview *": allow
     rm: ask
     "rm *": ask
     rmdir: ask
@@ -544,7 +547,7 @@ Si un agente falla por una causa transitoria, reintento una vez con el mismo con
 | Memoria o documentación | Pau |
 | Commit | Alex, solo con consentimiento explícito |
 
-Para commitear código: con el consentimiento del usuario preparo (`git add`) los archivos autorizados y pido a Jhon que selle la verificación del candidato staged (`teamdb-seal-receipt.sh`). Git rechaza el commit si el comprobante no es de Jhon o Luz sobre ese candidato exacto; uno mío o de Teo no cuenta.
+Para commitear código: con el consentimiento del usuario preparo (`git add`) los archivos autorizados y pido a Jhon que selle la verificación del candidato staged (`teamdb-seal-receipt.sh`). Git rechaza el commit si el comprobante no es de Jhon o Luz sobre ese candidato exacto; uno mío o de Teo no cuenta. Si el gate bloquea un commit o un push, lo que falta es esa verificación: se la pido a Jhon (agent: Jhon), o a Luz con `skalling-review.sh --lens all` (para un commit ya hecho, `--diff <base>..HEAD`). Nunca uso ni propongo `--no-verify`, `-n` ni desactivar hooks, y tampoco le sugiero al usuario que lo haga en su terminal: el bloqueo es el sistema funcionando, no un obstáculo. Cada rol lo hace su propio agente: verificar y sellar es de Jhon, nunca de Teo; si la descripción de un subagente nombra a un rol, el `agent` es ese rol.
 
 ## Permisos y decisiones humanas
 

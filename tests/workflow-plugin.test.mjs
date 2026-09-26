@@ -35,3 +35,37 @@ test('bash gate blocks the raw engine script but not the live plans/tasks approv
   assert.equal(blocksDirectWorkflowScript('bash scripts/teamdb-claim.sh plan task --advance --to=approved'), false);
   assert.equal(blocksDirectWorkflowScript('bash scripts/teamdb-seal-receipt.sh task-1 jhon'), false);
 });
+
+// OpenCode v2: sin context.ask; el check consulta la política compilada del agente.
+import { readFileSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { policyDecision, setupWorkflowV2 } from '../plugins/lib/workflow.mjs';
+
+test('policyDecision lee el bloque bash compilado y gana el patrón más largo', () => {
+  const jhon = readFileSync(new URL('../agents-base/Jhon.md', import.meta.url), 'utf8');
+  assert.equal(policyDecision(jhon, 'npm test'), 'allow');
+  assert.equal(policyDecision(jhon, 'bash tests/a.test.sh'), 'allow');
+  assert.equal(policyDecision(jhon, 'curl https://x.com'), 'ask');
+  assert.equal(policyDecision(jhon, 'sqlite3 team.db'), 'deny');
+  assert.equal(policyDecision('', 'npm test'), 'ask');
+});
+
+test('v2: check corre si la política del agente lo permite y se rechaza si pediría aprobación', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'agents-'));
+  writeFileSync(join(dir, 'Jhon.md'), readFileSync(new URL('../agents-base/Jhon.md', import.meta.url), 'utf8'));
+  const tools = [];
+  const calls = [];
+  await setupWorkflowV2({ location: { directory: '/project' },
+    tool: { transform: async (cb) => { cb({ add: (t) => tools.push(t) }); return { dispose: async () => {} }; } } },
+    async (request) => { calls.push(request); return { ok: true }; }, dir + '/');
+  const [wf] = tools;
+  const context = { agent: 'Jhon', sessionID: 'jhon-s', signal: new AbortController().signal };
+  const ok = await wf.execute({ action: 'check', payload: JSON.stringify({ id: 'x', argv: ['npm', 'test'] }) }, context);
+  assert.match(ok.content, /ok/);
+  assert.equal(calls[0].actor, 'jhon');
+  assert.equal(calls[0].project, '/project');
+  await assert.rejects(wf.execute({ action: 'check', payload: JSON.stringify({ id: 'x', argv: ['curl', 'https://x.com'] }) }, context),
+    /necesita aprobación/);
+  await assert.rejects(wf.execute({ action: 'complete', payload: JSON.stringify({ id: 'x', actor: 'jhon' }) }, context), /actor/);
+});

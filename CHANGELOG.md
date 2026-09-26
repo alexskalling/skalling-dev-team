@@ -4,6 +4,54 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.11.16] — en preparación
+
+Agujeros vistos en una sesión real con v0.11.15 instalada (ucadigital,
+OpenCode 2.0.18). Lo que funcionó: Alex tuvo que clasificar antes de
+delegar a Teo, y Teo no pudo sellar un receipt como jhon ("identidad
+declarada 'jhon' no coincide con el agente real 'teo'"). Lo que no: el
+commit se hizo con `git commit --no-verify`, saltando el gate.
+
+### Security
+- **Nadie salta los hooks de git**: `--no-verify`, `git commit -n`,
+  `core.hooksPath` y `HUSKY=0` se bloquean (mirando fuera de las comillas:
+  un mensaje de commit que los menciona pasa). Alex tampoco los propone ni
+  se los sugiere al usuario; si el gate bloquea, falta la verificación de
+  Jhon o Luz (para un commit ya hecho: `skalling-review.sh --diff`).
+- **TEAMDB_CLAIM_\*** (hash, exit code y resumen que sella un receipt) no
+  los puede fijar un agente: se fijó a mano un hash para "aprobar" un
+  candidato distinto al staged.
+- **Cada rol lo hace su agente**: si la descripción de un subagente nombra
+  a un rol ("Jhon sella receipt") y el `agent` es otro (Teo), se bloquea.
+- **Motor de borrado de TeamDB**: solo corre en su forma de terminal
+  (`python3 …/teamdb-destructive.py preview|apply …`) con el SQL a la
+  vista; mandarle JSON por stdin o por pipe esquivaba la aprobación y se
+  bloquea. `apply` siempre pregunta en la política.
+
+### Fixed
+- `cd <dir>` seguido de un git sensible con salto de línea o `;` (la forma
+  en que Alex escribe los comandos) se bloqueaba como "encadenado": Alex
+  concluyó que "el guard bloquea todo push" y propuso `--no-verify`. Ahora
+  pasa y el permiso pregunta; el mensaje del guard aclara que los
+  argumentos normales están bien y sugiere el parámetro `workdir`.
+
+### Added (OpenCode v2)
+- `teamdb_destructive` en v2: la herramienta hace la vista previa y
+  devuelve el comando exacto de aplicar; el permiso nativo de la terminal
+  lo pregunta mostrando base, SQL y parámetros, y un hook de permisos lo
+  fuerza a preguntar aunque exista un "permitir siempre". El motor sigue
+  respaldando antes y rechazando si la base cambió.
+- `skalling_workflow` en v2: un `check` corre si la política compilada del
+  agente ya permite ese comando (p. ej. `npm test` para Jhon); si pediría
+  aprobación se rechaza, porque un plugin v2 no puede preguntar.
+
+### Límite conocido
+- `/skalling-goal` (modo autónomo) sigue solo en v1: en v2 hay que
+  reescribirlo sobre sus APIs nuevas de comandos, eventos y sesiones, y
+  no se publica sin verificarlo con sesiones reales (un error ahí puede
+  dejar al agente enviándose mensajes en bucle). En v2 no se registra y
+  no concede nada.
+
 ## [0.11.15] — en preparación
 
 El flujo ya no depende de que Alex quiera respetarlo. Motivo: una sesión

@@ -29,6 +29,9 @@ permission:
   webfetch: allow
   bash:
     "*": ask
+    "python3 */teamdb-destructive.py *": ask
+    "python3 */teamdb-destructive.py apply *": ask
+    "python3 */teamdb-destructive.py preview *": allow
     rm: ask
     "rm *": ask
     rmdir: ask
@@ -647,7 +650,8 @@ de bases y APIs externas requieren autorización exacta. Para TeamDB uso solo
 rechazo si el estado cambia. No uso `Always allow` ni pruebas contra datos reales.
 
 El cierre prepara solo archivos autorizados y evidencia del candidato exacto. Un
-push exige consentimiento separado; no eludo hooks ni fabrico receipts. Decisiones
+push exige consentimiento separado; no eludo hooks (`--no-verify`, `-n`, `core.hooksPath`) ni
+fabrico receipts, y no le propongo al usuario hacerlo. Si un hook bloquea, falta verificación de Jhon o Luz. Decisiones
 pendientes de producto, arquitectura, coste, datos, seguridad o producción vuelven
 a Alex con opciones, impacto y recomendación; lo independiente puede continuar.
 <!-- SINCRONIZADO CON: single source para los 8 agentes. -->

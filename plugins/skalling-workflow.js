@@ -1,11 +1,10 @@
 import { tool } from '@opencode-ai/plugin';
-import { workflowTool, blocksDirectWorkflowScript } from './lib/workflow.mjs';
+import { workflowTool, blocksDirectWorkflowScript, setupWorkflowV2 } from './lib/workflow.mjs';
 
-// OpenCode v2: su API de plugins (2.0.18) no da una forma de que una
-// herramienta pida al humano una aprobación exacta como context.ask de la v1.
-// Hasta tenerla, en v2 skalling_workflow no se registra (falla cerrado: nada se habilita
-// sin aprobación); `setup` existe para que la v2 cargue el archivo sin error.
-// El bloqueo del script crudo en v2 lo hace skalling-git-guard (mismo chequeo).
+// v1: herramienta con aprobación nativa del check. v2: los checks que la
+// política del agente ya permite corren; los que pedirían aprobación se
+// rechazan (un plugin v2 no puede preguntar). El bloqueo del script crudo en
+// v2 lo hace skalling-git-guard (mismo chequeo).
 export default {
   id: 'skalling-workflow',
   server: async () => ({
@@ -17,5 +16,5 @@ export default {
       }
     },
   }),
-  setup: async () => {},
+  setup: async (ctx) => setupWorkflowV2(ctx),
 };

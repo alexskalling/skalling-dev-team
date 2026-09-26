@@ -72,9 +72,28 @@ def operate(request):
         conn.close()
 
 
+def request_from_argv(argv):
+    # Forma de terminal (OpenCode v2): el comando completo, con el SQL a la
+    # vista, es lo que el permiso nativo le muestra al usuario para aprobar.
+    import argparse
+    parser = argparse.ArgumentParser(prog='teamdb-destructive.py')
+    parser.add_argument('action', choices=['preview', 'apply'])
+    parser.add_argument('--database', required=True)
+    parser.add_argument('--sql', required=True)
+    parser.add_argument('--params', default='[]')
+    parser.add_argument('--state-hash', default=None)
+    parser.add_argument('--project', default='.')
+    args = parser.parse_args(argv)
+    if args.action == 'apply' and not args.state_hash:
+        raise ValueError('apply requiere --state-hash de la vista previa.')
+    return {'project': str(Path(args.project).resolve()), 'database': args.database, 'sql': args.sql,
+            'params': json.loads(args.params), 'action': args.action, 'state_hash': args.state_hash}
+
+
 if __name__ == '__main__':
     try:
-        print(json.dumps(operate(json.load(sys.stdin)), ensure_ascii=False))
-    except (ValueError, KeyError, sqlite3.Error, OSError) as error:
+        request = request_from_argv(sys.argv[1:]) if len(sys.argv) > 1 else json.load(sys.stdin)
+        print(json.dumps(operate(request), ensure_ascii=False))
+    except (ValueError, KeyError, sqlite3.Error, OSError, json.JSONDecodeError) as error:
         print(json.dumps({'error': str(error)}), file=sys.stderr)
         sys.exit(1)

@@ -1,12 +1,10 @@
 import { tool } from '@opencode-ai/plugin';
-import { destructiveTool } from './lib/data-safety.mjs';
+import { destructiveTool, setupDataSafetyV2 } from './lib/data-safety.mjs';
 
-// OpenCode v2: su API de plugins (2.0.18) no da una forma de que una
-// herramienta pida al humano una aprobación exacta como context.ask de la v1.
-// Hasta tenerla, en v2 esto no se registra (falla cerrado: nada se habilita
-// sin aprobación); `setup` existe para que la v2 cargue el archivo sin error.
+// v1: herramienta con aprobación nativa (context.ask). v2: vista previa +
+// comando de aplicar que el permiso de la terminal siempre pregunta.
 export default {
   id: 'skalling-data-safety',
   server: async () => ({ tool: { teamdb_destructive: destructiveTool(tool) } }),
-  setup: async () => {},
+  setup: async (ctx) => setupDataSafetyV2(ctx),
 };

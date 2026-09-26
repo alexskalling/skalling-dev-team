@@ -1,0 +1,18 @@
+-- v0.11.16: agujeros vistos en una sesión real con v0.11.15 instalada
+-- (ucadigital, OpenCode 2.0.18) y herramientas de Skalling en OpenCode v2.
+--
+-- En esa sesión la identidad del runtime funcionó (Teo no pudo sellar como
+-- jhon) y el gate bloqueó el commit sin verificación; entonces se usó
+-- `git commit --no-verify`. Además el guard bloqueaba de más `cd <dir>` +
+-- salto de línea + `git push`, y Alex mandó "Jhon sella receipt" al agente
+-- Teo, fijando TEAMDB_CLAIM_TREE_HASH a mano.
+--
+-- 1. Nadie salta hooks (--no-verify, commit -n, core.hooksPath, HUSKY=0).
+-- 2. `cd <dir>` seguido de un git sensible (&&, ; o salto de línea) pasa.
+-- 3. TEAMDB_CLAIM_* (hash/exit code del receipt) no los fija un agente.
+-- 4. El subagente tiene que ser el rol que nombra la tarea.
+-- 5. teamdb_destructive en v2: vista previa + comando de aplicar que el
+--    permiso nativo siempre pregunta; se cierra el acceso crudo al motor
+--    por stdin. skalling_workflow en v2 con checks según la política.
+-- Sin cambios de schema; solo eleva la versión declarada.
+UPDATE schema_meta SET value = '0.11.16' WHERE key = 'version';

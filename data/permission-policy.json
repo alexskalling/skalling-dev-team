@@ -1,6 +1,9 @@
 {
   "rules": {
     "*": "allow",
+    "python3 */teamdb-destructive.py *": "ask",
+    "python3 */teamdb-destructive.py apply *": "ask",
+    "python3 */teamdb-destructive.py preview *": "allow",
     "rm": "ask",
     "rm *": "ask",
     "rmdir": "ask",
@@ -675,6 +678,9 @@
       },
       "bash_patterns": [
         "*",
+        "python3 */teamdb-destructive.py *",
+        "python3 */teamdb-destructive.py apply *",
+        "python3 */teamdb-destructive.py preview *",
         "rm",
         "rm *",
         "rmdir",
@@ -1154,6 +1160,9 @@
       },
       "bash_patterns": [
         "*",
+        "python3 */teamdb-destructive.py *",
+        "python3 */teamdb-destructive.py apply *",
+        "python3 */teamdb-destructive.py preview *",
         "rm",
         "rm *",
         "rmdir",
@@ -1576,6 +1585,9 @@
       },
       "bash_patterns": [
         "*",
+        "python3 */teamdb-destructive.py *",
+        "python3 */teamdb-destructive.py apply *",
+        "python3 */teamdb-destructive.py preview *",
         "rm",
         "rm *",
         "rmdir",
@@ -2121,6 +2133,9 @@
       },
       "bash_patterns": [
         "*",
+        "python3 */teamdb-destructive.py *",
+        "python3 */teamdb-destructive.py apply *",
+        "python3 */teamdb-destructive.py preview *",
         "rm",
         "rm *",
         "rmdir",
@@ -2662,6 +2677,9 @@
       },
       "bash_patterns": [
         "*",
+        "python3 */teamdb-destructive.py *",
+        "python3 */teamdb-destructive.py apply *",
+        "python3 */teamdb-destructive.py preview *",
         "rm",
         "rm *",
         "rmdir",
@@ -3139,6 +3157,9 @@
       },
       "bash_patterns": [
         "*",
+        "python3 */teamdb-destructive.py *",
+        "python3 */teamdb-destructive.py apply *",
+        "python3 */teamdb-destructive.py preview *",
         "rm",
         "rm *",
         "rmdir",
@@ -3561,6 +3582,9 @@
       },
       "bash_patterns": [
         "*",
+        "python3 */teamdb-destructive.py *",
+        "python3 */teamdb-destructive.py apply *",
+        "python3 */teamdb-destructive.py preview *",
         "rm",
         "rm *",
         "rmdir",
@@ -4053,6 +4077,9 @@
       },
       "bash_patterns": [
         "*",
+        "python3 */teamdb-destructive.py *",
+        "python3 */teamdb-destructive.py apply *",
+        "python3 */teamdb-destructive.py preview *",
         "rm",
         "rm *",
         "rmdir",
@@ -4546,6 +4573,9 @@
       },
       "bash_patterns": [
         "*",
+        "python3 */teamdb-destructive.py *",
+        "python3 */teamdb-destructive.py apply *",
+        "python3 */teamdb-destructive.py preview *",
         "rm",
         "rm *",
         "rmdir",

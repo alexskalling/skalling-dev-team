@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   blocksChainedSensitiveGit, guardCommand, identityViolation, createGuard, setupGuardV2,
-  writeViolation,
+  writeViolation, hookBypassViolation, createCore,
 } from '../plugins/lib/git-guard.mjs';
 
 test('bloquea git push/reset/etc. encadenado detrás de un prefijo permitido', () => {
@@ -202,4 +202,36 @@ test('roles de solo lectura no escriben archivos por redirección ni tee', () =>
   assert.equal(writeViolation('git diff | tee /tmp/d', 'luz'), null);
   assert.equal(writeViolation('echo x > src/a.ts', 'teo'), null);
   assert.equal(writeViolation('echo x > src/a.ts', undefined), null);
+});
+
+// Casos reales de la sesión ucadigital con v0.11.15 instalada.
+test('nadie se salta los hooks de git (--no-verify, -n, core.hooksPath)', () => {
+  for (const c of [
+    'git commit --no-verify -F /tmp/commit_msg.txt', 'cd /p/ucadigital\ngit commit --no-verify -F /tmp/m.txt',
+    'git push --no-verify origin v2', 'git commit -n -m x', 'git commit -an -m x',
+    'git -c core.hooksPath=/dev/null commit -m x',
+  ]) assert.ok(hookBypassViolation(c), `debía bloquear: ${c}`);
+  for (const c of ['git commit -m "no usar --no-verify"', 'git commit --amend -m x', 'git push origin v2'])
+    assert.equal(hookBypassViolation(c), null, `no debía bloquear: ${c}`);
+});
+
+test('cd <dir> + salto de línea + git sensible pasa (el permiso pregunta); con más comandos no', () => {
+  assert.equal(guardCommand('cd /Users/a/ucadigital\ngit push origin v2'), null);
+  assert.equal(guardCommand('cd /Users/a/ucadigital && git commit -F /tmp/m.txt'), null);
+  assert.equal(guardCommand('cd /x; git push'), null);
+  assert.ok(guardCommand('cd /x\nls && git push'));
+});
+
+test('ningún agente fija el hash ni el resultado que sella un receipt', () => {
+  assert.ok(identityViolation('TEAMDB_CLAIM_TREE_HASH="6a775be76303e602" bash ~/.config/opencode/scripts/teamdb-seal-receipt.sh t jhon'));
+  assert.ok(identityViolation('TEAMDB_CLAIM_EXIT_CODE=0 bash teamdb-seal-receipt.sh t'));
+});
+
+test('Alex no manda el trabajo de un rol a otro agente', () => {
+  const core = createCore();
+  const blocked = core.decide({ tool: 'subagent', agent: 'Alex', sessionID: 's',
+    input: { agent: 'Teo', description: 'Jhon sella receipt', prompt: 'x' } });
+  assert.match(blocked, /es de jhon, pero la estás mandando a teo/);
+  assert.equal(core.decide({ tool: 'subagent', agent: 'Alex', sessionID: 's',
+    input: { agent: 'Jhon', description: 'Jhon sella receipt', prompt: 'x' } }), null);
 });

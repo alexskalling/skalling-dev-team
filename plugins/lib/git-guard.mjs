@@ -65,7 +65,11 @@ const CANONICAL_OTHER = [
   /^(?:curl|wget|nc|ncat|netcat|socat|scp|sftp|rsync|ssh|telnet|ftp) /,
 ];
 
-const IDENTITY_VARS = /\b(?:SKALLING_RUNTIME_AGENT|TEAMDB_ACTOR|SKALLING_REVIEW_AGENT)\b/;
+// Identidad y evidencia las ponen el runtime y los scripts, nunca el agente.
+// TEAMDB_CLAIM_* fija el hash/exit code que sella un receipt: con eso se
+// "aprobaba" un candidato distinto al staged (caso real en ucadigital).
+const IDENTITY_VARS = /\b(?:SKALLING_RUNTIME_AGENT|TEAMDB_ACTOR|SKALLING_REVIEW_AGENT|TEAMDB_CLAIM_(?:TREE_HASH|EXIT_CODE|COMMAND|OUTPUT_SUMMARY))\b/;
+
 
 // Cuerpos de heredoc: con delimitador entre comillas (<<'EOF') son texto
 // inerte; sin comillas solo se ejecuta lo que esté en $(...) o `...`. El
@@ -201,6 +205,9 @@ function xargsInner(s) {
 function classify(norm) {
   if (!norm) return null;
   if (/^\$/.test(norm)) return 'indirecto';
+  // El motor de borrado de TeamDB solo corre en su forma de terminal, con el
+  // SQL a la vista del permiso; mandarle JSON por stdin esquivaba la aprobación.
+  if (/teamdb-destructive\.py/.test(norm)) return 'borrado-db';
   if (GIT_SENSITIVE.test(norm)) return 'git';
   if (DELETE_RE.test(norm)) return 'borrado';
   if (/^find\b/.test(norm)) {
@@ -218,6 +225,7 @@ function classify(norm) {
 function isCanonical(raw, kind) {
   if (kind === 'git') return GIT_CANONICAL.test(raw);
   if (kind === 'indirecto') return false;
+  if (kind === 'borrado-db') return /^python3 \S*teamdb-destructive\.py (?:preview|apply) /.test(raw);
   return CANONICAL_OTHER.some((re) => re.test(raw));
 }
 
@@ -239,8 +247,8 @@ export function guardCommand(command) {
   }
   // Única forma compuesta aceptada: `cd <dir> && git <sensible>`, que la
   // política cubre explícitamente con "ask".
-  if (segments.length === 2 && operators.length === 1 && operators[0] === '&&'
-      && /^cd \S+$/.test(segments[0]) && findings.length === 1
+  if (segments.length === 2 && operators.length === 1 && ['&&', ';', '\n'].includes(operators[0])
+      && /^cd (?:\S+|"[^"]+"|'[^']+')$/.test(segments[0]) && findings.length === 1
       && findings[0].raw === segments[1] && findings[0].kind === 'git'
       && GIT_CANONICAL.test(segments[1])) {
     return null;
@@ -276,7 +284,9 @@ function onlyArgumentSubstitutions(operators) {
 export function guardMessage(finding) {
   return `Comando sensible (${finding.kind}) disfrazado o encadenado: \`${finding.segment}\`. `
     + 'Correlo solo, en su forma directa (ej. `git push ...`, `rm ...`, `curl ...`, `bash -c ...`), '
-    + 'para que el permiso lo pueda preguntar. No se puede encadenar con && ; | ni esconder en $(...), '
+    + 'para que el permiso lo pueda preguntar. Los argumentos normales están bien (`git push origin v2`, '
+    + '`git commit -F msg.txt`); lo único permitido antes es un `cd <dir>` (mejor: usá el parámetro workdir). '
+    + 'No se puede encadenar con otros comandos (&& ; | salto de línea) ni esconder en $(...), '
     + 'prefijos (command, env, VAR=...), rutas absolutas o comillas en el nombre del comando.';
 }
 
@@ -356,10 +366,24 @@ export function writeViolation(command, agent) {
   return noEditMessage(who, `redirección hacia \`${bad || '?'}\``);
 }
 
+export function hookBypassViolation(command) {
+  // Se mira el comando con las comillas enmascaradas: un mensaje de commit
+  // que menciona "--no-verify" no es saltarse nada.
+  const masked = maskInert(removeHeredocBodies(command || ''));
+  const bypass = (/(?:^|\s)--no-verify\b/.test(masked) && /\bgit\b/.test(masked))
+    || /\bgit\s+(?:-C\s+\S+\s+)?commit\b[^\n;&|]*\s-[a-zA-Z]*n[a-zA-Z]*(?=\s|$)/.test(masked)
+    || /\bcore\.hooksPath\b|\bHUSKY=0\b/.test(masked);
+  if (!bypass) return null;
+  return 'Los hooks de git no se saltan (--no-verify, -n, core.hooksPath): son el gate que exige la '
+    + 'verificación de Jhon o Luz sobre el candidato exacto. Si el commit o el push se bloquea, falta esa '
+    + 'verificación: pedísela a Jhon (o a Luz con skalling-review.sh). Tampoco se le sugiere al usuario saltarlos.';
+}
+
 export function identityViolation(command) {
   if (IDENTITY_VARS.test(command || '')) {
     return 'La identidad del agente la pone el runtime de OpenCode, no el comando: '
-      + 'no se puede fijar SKALLING_RUNTIME_AGENT, TEAMDB_ACTOR ni SKALLING_REVIEW_AGENT.';
+      + 'no se puede fijar SKALLING_RUNTIME_AGENT, TEAMDB_ACTOR, SKALLING_REVIEW_AGENT ni TEAMDB_CLAIM_* '
+      + '(el hash y el resultado que sella un receipt los calcula el script sobre lo staged).';
   }
   return null;
 }
@@ -384,7 +408,7 @@ export function createCore() {
     const who = normalizeAgent(agent);
     if (SHELL_TOOLS.has(tool)) {
       const command = String(input?.command || '');
-      const identity = identityViolation(command);
+      const identity = identityViolation(command) || hookBypassViolation(command);
       if (identity) return identity;
       if (/skalling-workflow\.py/.test(command)) {
         return 'Use skalling_workflow: identidad y evidencia provienen del runtime, no de --by ni de variables shell.';
@@ -398,6 +422,14 @@ export function createCore() {
     }
     if (SUBAGENT_TOOLS.has(tool) && who === 'alex') {
       const target = normalizeAgent(input?.agent || input?.subagent_type);
+      // Caso real: `agent: "Teo"` con descripción "Jhon sella receipt". La
+      // descripción nombra el rol que hace el trabajo; si nombra a otro
+      // agente del equipo, el trabajo de uno lo está haciendo otro.
+      const named = String(input?.description || '').toLowerCase().match(/\b(alex|pol|sol|teo|jhon|luz|pau|jes)\b/);
+      if (named && target && named[1] !== target) {
+        return `La tarea "${input.description}" es de ${named[1]}, pero la estás mandando a ${target}. `
+          + `Usá agent: "${named[1][0].toUpperCase() + named[1].slice(1)}" (cada rol hace su parte; Teo no verifica ni sella por Jhon).`;
+      }
       if (target === 'teo' && !classified.has(sessionID)) {
         return 'Clasificá primero: corré skalling-route.sh classify ... --record y usá su ruta '
           + '(low: Teo → Jhon; medium: Sol → Teo → Jhon; high: Pol → Sol → Teo → Jhon → Luz → Pau). '
