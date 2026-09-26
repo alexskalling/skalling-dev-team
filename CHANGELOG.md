@@ -4,6 +4,41 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.11.13] — en preparación
+
+A pedido explícito del usuario: trabaja en proyectos externos (de clientes,
+no de su propia empresa) y le preocupaba que la memoria de Skalling — o
+peor, las reglas de los agentes — terminaran commiteadas en un repositorio
+que no es suyo.
+
+### Added
+- `/skalling-privacy interno|externo` (+ `scripts/skalling-privacy.sh`,
+  acepta también `internal`/`external`): marca un proyecto como interno
+  (memoria compartida por git, comportamiento de siempre) o externo. En modo
+  externo, agrega `.opencode/` y `db/teamdb/` a `.gitignore` (bloque
+  marcado, idempotente, no toca el resto del archivo) — de ahí en más, la
+  memoria de Skalling nunca se commitea ni se pushea. Si algo ya estaba
+  commiteado ANTES de marcar el proyecto como externo, avisa explícitamente
+  con la lista de archivos — el `.gitignore` protege hacia adelante, no
+  borra el historial de git, eso queda para una decisión aparte del
+  usuario. Volver a `interno` saca solo el bloque que el propio comando
+  agregó, sin tocar el resto del `.gitignore`.
+- `/skalling-init` pregunta interno/externo la primera vez que inicializa un
+  proyecto de verdad (`privacy_mode` ausente en `schema_meta`); si ya está
+  configurado, no vuelve a preguntar.
+
+### Investigado (sin cambios de código, aclara una preocupación real)
+- Confirmado leyendo el código: en el flujo normal (`/skalling-init` →
+  `bootstrap-context.sh`), los archivos de los agentes (Alex, Sol, etc. con
+  todas sus reglas) **nunca se escriben dentro de un proyecto** — viven
+  solo en `~/.config/opencode/agents/`, en la máquina del usuario. Existe un
+  modo alternativo (`setup.sh`, "team-sharing") que si se corre a mano SÍ
+  copia los 8 agentes completos a `<proyecto>/.opencode/agents/` y puede
+  crear un `AGENTS.md` en la raíz anunciando el uso de Skalling (opt-in,
+  default "no") — pero ningún comando `/skalling-*` invoca ese modo, y como
+  los archivos que copia caen bajo `.opencode/`, el mismo `.gitignore` de
+  modo externo ya los cubre.
+
 ## [0.11.12] — en preparación
 
 A partir de comparar Skalling con otro framework de agentes (rsc-harness),

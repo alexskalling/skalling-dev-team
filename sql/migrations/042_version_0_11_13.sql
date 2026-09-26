@@ -1,0 +1,22 @@
+-- v0.11.13: agrega /skalling-privacy (scripts/skalling-privacy.sh), a
+-- pedido explícito del usuario. Por diseño, Skalling commitea una
+-- fotografía completa de TeamDB (db/teamdb/team.dump.sql: tareas, planes,
+-- decisiones) para compartir memoria en equipo -- en un proyecto ajeno (de
+-- un cliente, no de la propia empresa), eso filtra cómo trabaja el equipo
+-- hacia un repositorio que no es propio.
+--
+-- /skalling-privacy externo agrega .opencode/ y db/teamdb/ a .gitignore (un
+-- bloque marcado, no toca el resto del archivo) y chequea si esas rutas ya
+-- estaban commiteadas de antes -- si encuentra algo, avisa fuerte y no
+-- borra nada del historial de git solo (eso requiere una decisión aparte
+-- del usuario). /skalling-privacy interno vuelve al comportamiento de
+-- siempre. /skalling-init pregunta interno/externo la primera vez que
+-- inicializa un proyecto (privacy_mode ausente en schema_meta).
+--
+-- Confirmado que los archivos de los agentes (Alex, Sol, etc.) NUNCA se
+-- escriben dentro de un proyecto en el flujo normal (viven solo en
+-- ~/.config/opencode/agents/) -- el único modo que sí los copiaría adentro
+-- del proyecto (setup.sh, "team-sharing") los deja bajo .opencode/, así que
+-- el mismo .gitignore ya los cubre.
+-- Sin cambios de schema; solo eleva la versión declarada.
+UPDATE schema_meta SET value = '0.11.13' WHERE key = 'version';
