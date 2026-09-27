@@ -271,7 +271,7 @@ activate_teamdb_hooks() {
     # Loop explícito: pre-commit (receipt), post-merge (import), pre-push
     # (gate de push). Un hook previo del proyecto no se pisa: queda como
     # <hook>.skalling-prev y el de Skalling lo ejecuta primero.
-    for hook in pre-commit post-merge pre-push; do
+    for hook in pre-commit post-merge post-rewrite pre-push; do
         [[ -f "$hooks_src/$hook" ]] || continue
         if [[ "$DRY_RUN" == true ]]; then
             echo "    [dry-run] instalar hook $hook (conservando uno previo)"

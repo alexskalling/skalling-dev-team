@@ -4,6 +4,68 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+### Seguridad y uso en equipo (auditoría de preparación para producción, 27-09-2026)
+
+#### Security
+- **Permisos en lista blanca.** La regla base de bash era `"*": "allow"` para
+  Alex, Teo, Pau y la config de proyecto: `gh repo delete`, `terraform
+  destroy`, `kubectl delete`, `aws s3 rm`, `npm install <url>`, `git config
+  --global` o leer `~/.aws/credentials` corrían sin preguntar. Ahora `"*"` es
+  `ask` en todos los roles; instalar paquetes pide permiso; cualquier comando
+  que nombre rutas de credenciales (`.ssh`, `.aws`, `.netrc`, `.npmrc`,
+  `.kube`, `.docker/config.json`, `gh`, `.gnupg`, claves `id_*`) pide
+  permiso; la herramienta de lectura las niega; editar archivos de arranque
+  del shell, `.gitconfig` o LaunchAgents pide permiso. OpenCode evalúa cada
+  subcomando de una cadena por separado, así que `echo ok && terraform
+  destroy` también pregunta. Test: `memory-permissions.test.py`.
+- **Detector de secretos del gate actualizado.** No detectaba claves de
+  Anthropic (`sk-ant-`), OpenAI (`sk-proj-`), PATs fine-grained de GitHub,
+  GitLab, Slack, Stripe, npm, JWT, secretos de AWS ni URLs con contraseña.
+  Sin falsos positivos nuevos sobre las ~115k líneas del repo.
+- **`update.sh` instala releases, no `main`.** Por defecto solo ofrece el
+  último tag `vX.Y.Z`; `--channel main` queda para mantenedores; con
+  `SKALLING_REQUIRE_SIGNED_TAGS=1` exige firma; si la instalación falla
+  vuelve a la versión anterior. Test: `update-release-channel.test.sh`.
+- **Dashboard: rechaza Host ajenos** (DNS rebinding).
+
+#### Fixed
+- **La memoria multilínea nunca se sincronizaba.** `teamdb-merge.sh` leía el
+  dump línea por línea y descartaba en silencio todo INSERT con saltos de
+  línea: en el dump del propio repo, 0/1 conceptos, 0/2 propuestas y 0/2
+  planes eran sincronizables. Ahora el dump escribe una fila por línea
+  (`'a'||char(10)||'b'`, SQL válido para `teamdb-restore`) y el merge lee
+  sentencias completas evaluadas por SQLite en una base en memoria de solo
+  lectura (acepta dumps viejos).
+- **Ids que chocan entre máquinas.** Dos personas creando el concepto `id=1`
+  hacía que uno pisara al otro. El merge empareja por clave natural (slug,
+  name, plan+slug…), traduce los ids remotos a locales y reescribe las FKs de
+  los hijos (tareas, dependencias, tags, links, cápsulas). Errores de fila ya
+  no se silencian. Test: `teamdb-merge-multiline.test.py`.
+- **Ninguna regla de `.gitattributes` se aplicaba.** El template se instala en
+  `.opencode/.gitattributes` pero sus rutas empezaban con `.opencode/`
+  (Git las interpreta relativas a ese directorio). Rutas corregidas; el dump
+  (`db/teamdb/team.dump.sql merge=union`) va en un bloque marcado del
+  `.gitattributes` raíz. `merge=lock` (no existe) pasa a `merge=binary` y se
+  quita `merge=union` de `project.yaml` (duplicaba claves YAML).
+- **`team.db` se versionaba.** `setup.sh` no ignoraba la DB local ni sus
+  respaldos: con un `git add .` normal, cada pull pisaba la base local de
+  otra persona. Ahora escribe un bloque marcado en `.gitignore` y avisa si
+  ya estaba versionada.
+- **`git pull --rebase` no sincronizaba memoria.** Nuevo hook `post-rewrite`.
+- **El gate pre-push bloqueaba flujos normales de equipo.** Un merge sin
+  conflictos o un rebase de trabajo ya verificado exigían un receipt nuevo,
+  lo que empujaba a `--no-verify`. Ahora se acepta un merge cuyo árbol es
+  exactamente el de `git merge-tree` (sin código escrito a mano) si cada
+  commit del otro lado pasa el gate, y un commit con el mismo `patch-id
+  --verbatim` que un candidato aprobado. Siguen bloqueados la resolución
+  manual de conflictos, el contenido nuevo y los commits sin receipt. Test:
+  `git-gate-team-flows.test.py`.
+- **El instalador fallaba si existía `scripts/hooks/__pycache__`.**
+- **CI decía "1 failed" sin decir cuál.** `run-all.sh` muestra primero los
+  bloques ✗ de las suites agregadas.
+- Lint SQLi en rojo en `main`: dos `rm -f` sobre hooks propios, ya guardados
+  por `skalling_is_skalling_hook`, quedan anotados con `# lens:ok`.
+
 Respuesta a la auditoría externa de v0.12.0 (27-09-2026): se ajusta lo que
 se promete a lo que se verificó, y se cierran dos puntos ciegos.
 

@@ -457,8 +457,13 @@ install_teamdb_hooks() {
   if [ -d "$SCRIPT_DIR/scripts/hooks" ]; then
     run mkdir -p "$OPENCODE_DIR/hooks"
     # FIX INV-WRITE-2: NO usar `2>/dev/null || true`. Si cp falla, falla el install.
-    # shellcheck disable=SC2086
-    run cp "$SCRIPT_DIR/scripts/hooks/"* "$OPENCODE_DIR/hooks/"
+    # Solo archivos: un __pycache__ (lo crea cualquier test que importe
+    # git-gate.py) hacía fallar la instalación completa con "is a directory".
+    local src
+    for src in "$SCRIPT_DIR/scripts/hooks/"*; do
+      [ -f "$src" ] || continue
+      run cp "$src" "$OPENCODE_DIR/hooks/"
+    done
     local hook
     for hook in "$OPENCODE_DIR/hooks/"*; do
       [ -f "$hook" ] || continue
@@ -759,7 +764,7 @@ do_uninstall() {
     # cerrado ("git-gate.py no encontrado"); se avisa para desinstalarlos
     # también por proyecto (setup.sh --uninstall --target <proyecto>).
     if [ -d "$OPENCODE_DIR/hooks" ]; then
-        for f in pre-commit pre-push post-merge git-gate.py; do
+        for f in pre-commit pre-push post-merge post-rewrite git-gate.py; do
             if [ -f "$OPENCODE_DIR/hooks/$f" ]; then run rm -f "$OPENCODE_DIR/hooks/$f"; fi
         done
         rmdir "$OPENCODE_DIR/hooks" 2>/dev/null || true

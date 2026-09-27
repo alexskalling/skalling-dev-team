@@ -102,6 +102,27 @@ class GitClose(unittest.TestCase):
         self.assertNotEqual(self.hook('pre-commit').returncode, 0)
         self.assertEqual(before, self.db.read_bytes())
 
+    def test_current_provider_secret_formats_block_commit(self):
+        # Auditoría 2026-09-27: el regex original no detectaba ninguno de
+        # estos formatos. Se arman por concatenación para no disparar el gate
+        # sobre este mismo archivo.
+        samples = ['sk-' + 'ant-api03-' + 'A1b2C3d4' * 4, 'sk-' + 'proj-' + 'A1b2C3d4' * 4,
+                   'github_' + 'pat_' + '11AB' * 8, 'glpat' + '-' + 'A1b2C3d4' * 3,
+                   'xox' + 'b-1234567890-' + 'abcdefghijkl', 'sk_' + 'live_' + 'A1b2C3d4' * 3,
+                   'aws_secret_' + 'access_key = ' + 'A1b2C3d4/+' * 4,
+                   'postgres://' + 'admin:' + 'Pr0dS3cret' + '@db.internal/app']
+        for sample in samples:
+            with self.subTest(sample=sample[:12]):
+                (self.project / 'config.py').write_text(f'VALUE = "{sample}"\n')
+                self.git('add', 'config.py')
+                result = self.hook('pre-commit')
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('posible secreto', result.stderr)
+        (self.project / 'config.py').write_text('URL = "postgres://user:${DB_PASSWORD}@localhost/app"\n'
+                                                'NAME = "task-context-capsule-builder-name"\n')
+        self.git('add', 'config.py')
+        self.assertNotIn('posible secreto', self.hook('pre-commit').stderr)
+
     def test_new_branch_checks_changes_not_already_on_remote(self):
         self.git('update-ref', 'refs/remotes/origin/main', self.base)
         self.change(2)

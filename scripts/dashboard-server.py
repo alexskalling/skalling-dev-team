@@ -224,7 +224,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self._headers(status, "application/json; charset=utf-8", len(body))
         self.wfile.write(body)
 
+    def host_allowed(self):
+        # DNS rebinding: una web externa puede resolver su dominio a 127.0.0.1
+        # y leer la memoria del proyecto desde el navegador. El Host de esas
+        # peticiones es el dominio ajeno; solo se atiende el propio.
+        host = (self.headers.get("Host") or "").strip().lower()
+        return host in {f"127.0.0.1:{PORT}", f"localhost:{PORT}", f"[::1]:{PORT}"}
+
     def do_GET(self):
+        if not self.host_allowed():
+            self.send_json({"error": "Host no permitido."}, 403)
+            return
         parsed = urllib.parse.urlsplit(self.path)
         path = parsed.path
         params = urllib.parse.parse_qs(parsed.query)

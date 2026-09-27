@@ -352,7 +352,7 @@ step_install_scripts() {
 # declare el comando (pensado para la CLI humana).
 SKALLING_PLUGINS=(skalling-goal.js skalling-data-safety.js skalling-workflow.js skalling-git-guard.js)
 SKALLING_PLUGIN_LIBS=(data-safety.mjs workflow.mjs git-guard.mjs)
-SKALLING_GIT_HOOKS=(pre-commit pre-push post-merge)
+SKALLING_GIT_HOOKS=(pre-commit pre-push post-merge post-rewrite)
 
 step_install_hooks() {
     run mkdir -p "$TARGET_DIR/.opencode/plugins/lib" "$TARGET_DIR/.opencode/command"
@@ -380,8 +380,9 @@ step_install_hooks() {
     run cp "$HOOKS_SRC_DIR"/pre-commit "$HOOKS_DEST_DIR/"
     run cp "$HOOKS_SRC_DIR"/pre-push "$HOOKS_DEST_DIR/"
     run cp "$HOOKS_SRC_DIR"/post-merge "$HOOKS_DEST_DIR/"
+    run cp "$HOOKS_SRC_DIR"/post-rewrite "$HOOKS_DEST_DIR/"
     run cp "$HOOKS_SRC_DIR"/git-gate.py "$HOOKS_DEST_DIR/"
-    run chmod +x "$HOOKS_DEST_DIR"/pre-commit "$HOOKS_DEST_DIR"/pre-push "$HOOKS_DEST_DIR"/post-merge
+    run chmod +x "$HOOKS_DEST_DIR"/pre-commit "$HOOKS_DEST_DIR"/pre-push "$HOOKS_DEST_DIR"/post-merge "$HOOKS_DEST_DIR"/post-rewrite
 
     # Repo, worktree o GIT_DIR: lo decide Git, no la existencia de .git/.
     if ! git -C "$TARGET_DIR" rev-parse --git-dir >/dev/null 2>&1; then
@@ -457,6 +458,72 @@ step_install_gitattributes() {
         run cp "$GITATTRIBUTES_TEMPLATE" "$dest"
         log OK ".gitattributes instalado"
     fi
+    install_root_gitattributes_block
+    install_root_gitignore_block
+}
+
+SKALLING_BLOCK_END="# --- fin Skalling (setup) ---"
+SKALLING_ATTR_START="# --- Skalling: merge de memoria (gestionado por setup.sh, no editar a mano) ---"
+SKALLING_IGNORE_START="# --- Skalling: artefactos locales (gestionado por setup.sh, no editar a mano) ---"
+
+# upsert_managed_block <archivo> <marca-inicio> <línea>...: escribe (o
+# reemplaza) un bloque marcado que solo toca Skalling. Idempotente; nunca
+# modifica líneas del proyecto fuera del bloque.
+upsert_managed_block() {
+    local file="$1" start="$2"
+    shift 2
+    local block
+    block="$(printf '%s\n' "$start" "$@" "$SKALLING_BLOCK_END")"
+    if [[ -f "$file" ]] && grep -qxF "$start" "$file"; then
+        local current
+        current="$(awk -v s="$start" -v e="$SKALLING_BLOCK_END" '$0==s{on=1} on{print} $0==e{on=0}' "$file")"
+        [[ "$current" == "$block" ]] && return 0
+    fi
+    if [[ "$DRY_RUN" == true ]]; then
+        echo "    [dry-run] escribir bloque Skalling en $file"
+        return 0
+    fi
+    local tmp
+    tmp="$(mktemp)"
+    if [[ -f "$file" ]]; then
+        awk -v s="$start" -v e="$SKALLING_BLOCK_END" '$0==s{skip=1} !skip{print} $0==e{skip=0}' "$file" > "$tmp"
+    fi
+    printf '%s\n' "$block" >> "$tmp"
+    mv "$tmp" "$file"
+}
+
+remove_managed_block() {
+    local file="$1" start="$2"
+    [[ -f "$file" ]] && grep -qxF "$start" "$file" || return 0
+    [[ "$DRY_RUN" == true ]] && { echo "    [dry-run] quitar bloque Skalling de $file"; return 0; }
+    local tmp
+    tmp="$(mktemp)"
+    awk -v s="$start" -v e="$SKALLING_BLOCK_END" '$0==s{skip=1} !skip{print} $0==e{skip=0}' "$file" > "$tmp"
+    mv "$tmp" "$file"
+}
+
+# El dump de TeamDB vive fuera de .opencode/, así que su estrategia de merge
+# va en el .gitattributes raíz. El dump escribe una fila por línea: union
+# conserva las filas de ambas ramas y teamdb-merge elige la más reciente.
+install_root_gitattributes_block() {
+    upsert_managed_block "$TARGET_DIR/.gitattributes" "$SKALLING_ATTR_START" \
+        "db/teamdb/team.dump.sql merge=union" "/AGENTS.md merge=union"
+    log OK ".gitattributes raíz: merge por fila del dump de TeamDB"
+}
+
+# La DB cruda es local: git guarda su fotografía (db/teamdb/team.dump.sql).
+# Sin esto, un "git add ." versionaba team.db y sus backups, y el checkout de
+# un pull/rebase pisaba la base local de cada persona con la de otra.
+install_root_gitignore_block() {
+    upsert_managed_block "$TARGET_DIR/.gitignore" "$SKALLING_IGNORE_START" \
+        ".opencode/context/team.db" ".opencode/context/team.db-*" ".opencode/context/team.db.pre-migration-*" \
+        ".opencode/context/.pre-migration-*" ".opencode/context/.backup-*" ".opencode/context/.backups/" \
+        ".opencode/context/.legacy-backup-*" ".opencode/context/.locks/" ".opencode/context/*.lock" \
+        ".opencode/context/teamdb/" ".opencode/context/review/" ".skalling-backups/" ".codegraph/"
+    log OK ".gitignore raíz: la DB local y sus respaldos no se versionan"
+    if git -C "$TARGET_DIR" ls-files --error-unmatch .opencode/context/team.db >/dev/null 2>&1; then
+        warn "team.db ya está versionado: cada pull pisa la base local de otra persona. Sacarlo del índice (conserva el archivo): git rm --cached .opencode/context/team.db && git commit"
+    fi
 }
 
 step_install_agents_md() {
@@ -527,7 +594,7 @@ step_summary() {
       │   ├── agents/      (8 agentes, commiteable)
       │   ├── skills/      (skills core)
       │   ├── scripts/     (teamdb + skalling scripts)
-      │   ├── hooks/       (pre-commit, pre-push, post-merge)
+      │   ├── hooks/       (pre-commit, pre-push, post-merge, post-rewrite)
       │   ├── changes/     (SDD artifacts)
       │   └── context/     (bundle OKF + team.db, listo para usar)
       ├── git hooks (los previos se conservan como <hook>.skalling-prev)
@@ -578,6 +645,9 @@ do_uninstall() {
 
     # Remover .gitattributes
     [[ -f "$OPENCODE_DIR/.gitattributes" ]] && run rm -f "$OPENCODE_DIR/.gitattributes"
+    # Quitar solo los bloques de Skalling de los archivos raíz.
+    remove_managed_block "$TARGET_DIR/.gitattributes" "$SKALLING_ATTR_START"
+    remove_managed_block "$TARGET_DIR/.gitignore" "$SKALLING_IGNORE_START"
 
     # Hooks de Git: quitar los de Skalling y restaurar los que había antes.
     # Sin esto quedaban activos exigiendo una base que se acaba de borrar.

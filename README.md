@@ -142,6 +142,24 @@ seguridad frente a quien controla el checkout. Las decisiones críticas requiere
 permisos del runtime y la integración confiable requiere CI y ramas protegidas.
 Ver el [modelo de seguridad](docs/security-model.md).
 
+### Uso en equipo
+
+- **Permisos en lista blanca:** todo comando no listado pide autorización,
+  incluido instalar paquetes, `gh`, herramientas de nube e infraestructura y
+  cualquier comando que nombre rutas de credenciales.
+- **Instalar solo releases:** `/skalling-update` ofrece el último tag `vX.Y.Z`,
+  nunca `main`. Publicar un release solo desde un commit con CI en verde.
+- **En cada repositorio del equipo:** rama principal protegida y revisión
+  obligatoria de `.opencode/**` y `db/teamdb/**`. Los hooks y plugins de
+  Skalling ejecutan código de esas rutas en la máquina de cada integrante.
+- **Memoria compartida:** `setup.sh` ignora la DB local (`team.db`) y
+  configura el merge por fila del dump. `git pull` y `git pull --rebase`
+  fusionan la memoria de los demás. Las entidades se emparejan por slug, así
+  que dos personas pueden crear memoria a la vez sin pisarse.
+- **Merges y rebases:** el gate de push acepta un merge automático o un rebase
+  de trabajo ya verificado. Un merge con conflictos resueltos a mano necesita
+  su propia verificación.
+
 ### Drift detection
 
 Drift detection contrasta los claims `archivo`, `count` y `contiene` declarados bajo `## Verificación` en las specs de un plan archivado con el estado actual del repositorio. Es una comprobación manual y de solo lectura: ejecutá `bash scripts/skalling-drift.sh <plan-archivado>` desde cualquier directorio para obtener el detalle de aprobados y fallidos; el doctor solo informa que la herramienta está disponible y no la ejecuta automáticamente.

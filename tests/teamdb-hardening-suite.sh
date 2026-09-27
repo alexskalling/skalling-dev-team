@@ -42,6 +42,8 @@ TESTS=(
   tests/teamdb-task-groups.test.sh
   tests/skalling-models.test.sh
   tests/git-gate-failclosed.test.sh
+  tests/update-release-channel.test.sh
+  tests/teamdb-merge-multiline.test.py
   tests/skalling-verify-gate.test.sh
   tests/teamdb-plan-parallel-groups.test.sh
   tests/mirror-parity.test.sh

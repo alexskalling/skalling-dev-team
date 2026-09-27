@@ -381,7 +381,7 @@ skalling_install_git_hook() {
       mv "$dst" "$prev"
       echo "INFO: hook previo conservado como $prev (Skalling lo ejecuta primero)" >&2
     else
-      rm -f "$dst"
+      rm -f "$dst"  # lens:ok: dst es .git/hooks/<hook> y skalling_is_skalling_hook confirmó que es nuestro
     fi
   fi
   if [ "$mode" = "--copy" ]; then
@@ -399,7 +399,7 @@ skalling_uninstall_git_hook() {
   dst="$dir/$hook"
   prev="$dst.skalling-prev"
   if { [ -e "$dst" ] || [ -L "$dst" ]; } && { skalling_is_skalling_hook "$dst" || { [ -L "$dst" ] && [ ! -e "$dst" ] && case "$(readlink "$dst")" in *opencode*/hooks/"$hook") true ;; *) false ;; esac; }; }; then
-    rm -f "$dst"
+    rm -f "$dst"  # lens:ok: dst es .git/hooks/<hook>; la condición de arriba exige que sea hook de Skalling
   fi
   if { [ -e "$prev" ] || [ -L "$prev" ]; } && [ ! -e "$dst" ] && [ ! -L "$dst" ]; then
     mv "$prev" "$dst"

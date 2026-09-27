@@ -50,6 +50,7 @@ COMMANDS=(
   "bash tests/bootstrap-readiness.test.sh"
   "bash tests/audit-regressions.test.sh"
   "python3 tests/git-close.test.py"
+  "python3 tests/git-gate-team-flows.test.py"
   "bash tests/teamdb-hardening-suite.sh"
   "bash tests/opencode-compat.test.sh"
   "bash tests/scripts-parity.test.sh"
@@ -64,6 +65,13 @@ for cmd in "${COMMANDS[@]}"; do
     echo "✓ $cmd ($((SECONDS - start))s)"
   else
     echo "✗ $cmd ($((SECONDS - start))s)"
+    # Las suites agregadas (hardening) imprimen cada ✗ con su log al
+    # principio; el final son solo ✓. Sin esto CI mostraba "1 failed" sin
+    # decir cuál (auditoría 2026-09-27).
+    if grep -qE '^✗ ' "$LOG"; then
+      awk '/^✗ /{on=1; print; next} on && /^    │/{print; next} {on=0}' "$LOG" | sed 's/^/    │ /'
+      echo "    │ ..."
+    fi
     tail -n 30 "$LOG" | sed 's/^/    │ /'
     FAIL=$((FAIL + 1))
   fi

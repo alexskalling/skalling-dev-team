@@ -215,5 +215,30 @@ class DashboardHtmlContractTest(unittest.TestCase):
         self.assertIn('src="teamdb-dashboard.js"', html)
 
 
+class DashboardHostTest(unittest.TestCase):
+    def test_foreign_host_header_is_rejected(self):
+        # DNS rebinding: evil.example resuelto a 127.0.0.1 no lee la memoria.
+        import http.client
+        import threading
+        server = dashboard.DashboardServer(("127.0.0.1", 0), dashboard.Handler)
+        self.addCleanup(server.server_close)
+        original = dashboard.PORT
+        dashboard.PORT = server.server_address[1]
+        self.addCleanup(setattr, dashboard, "PORT", original)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.shutdown)
+
+        def status(host):
+            conn = http.client.HTTPConnection("127.0.0.1", dashboard.PORT, timeout=5)
+            conn.request("GET", "/api/health", headers={"Host": host})
+            code = conn.getresponse().status
+            conn.close()
+            return code
+
+        self.assertEqual(status(f"127.0.0.1:{dashboard.PORT}"), 200)
+        self.assertEqual(status(f"localhost:{dashboard.PORT}"), 200)
+        self.assertEqual(status(f"evil.example:{dashboard.PORT}"), 403)
+
+
 if __name__ == "__main__":
     unittest.main()

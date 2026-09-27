@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# skalling-hook: marca para que el instalador reconozca este hook como propio.
+# post-rewrite hook: tras un rebase (incluido `git pull --rebase`) Git no corre
+# post-merge, así que el dump que llegó de otra máquina no se fusionaba en la
+# DB local hasta el siguiente merge. Mismo merge por fila que post-merge.
+set -euo pipefail
+
+PROJECT="$(git rev-parse --show-toplevel)"
+
+# Hook previo del proyecto: se encadena con la misma entrada (lista de commits
+# reescritos) y corre primero; si falla, se detiene igual que antes.
+INPUT="$(cat)"
+HOOKS_PATH="$(git rev-parse --git-path hooks)"
+PREV_HOOK="${HOOKS_PATH:+$HOOKS_PATH/post-rewrite.skalling-prev}"
+if [ -n "$PREV_HOOK" ] && [ -x "$PREV_HOOK" ]; then
+  printf '%s\n' "$INPUT" | "$PREV_HOOK" "$@"
+fi
+
+# "amend" no trae datos de otra máquina.
+[ "${1:-}" = "rebase" ] || exit 0
+[ -f "$PROJECT/db/teamdb/team.dump.sql" ] || exit 0
+
+for script in "$PROJECT/.opencode/scripts/teamdb-merge.sh" \
+              "${SKALLING_ROOT:-$HOME/.config/opencode}/scripts/teamdb-merge.sh" \
+              "$PROJECT/scripts/teamdb-merge.sh"; do
+  if [ -x "$script" ]; then
+    bash "$script" "$PROJECT" || {
+      echo "[ERROR] teamdb-merge.sh falló tras el rebase; teamdb puede estar desincronizado." >&2
+      exit 1
+    }
+    echo "teamdb: dump mergeado hacia la DB local (rebase)"
+    exit 0
+  fi
+done
+echo "[WARN] teamdb-merge.sh no encontrado" >&2

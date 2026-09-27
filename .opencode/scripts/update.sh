@@ -6,14 +6,20 @@
 #   bash scripts/update.sh --repo /path       # actualiza desde repo específico
 #   bash scripts/update.sh --check-only       # solo verificar, no instalar
 #   bash scripts/update.sh --dry-run          # ver qué haría sin tocar
+#   bash scripts/update.sh --channel main     # mantenedores: seguir main
 #
 # Comportamiento:
 #   1. Busca el repo de Skalling (skalling-dev-team).
-#   2. Hace git fetch para ver cambios.
-#   3. Compara HEAD con origin/main.
+#   2. Hace git fetch de los tags publicados.
+#   3. Compara HEAD con el último release vX.Y.Z (canal por defecto).
+#      Con SKALLING_REQUIRE_SIGNED_TAGS=1 exige que el tag esté firmado.
 #   4. Si hay cambios, muestra el changelog.
 #   5. Espera confirmación del usuario (stdin) para instalar.
-#   6. Hace pull + re-ejecuta install-global.sh con backup.
+#   6. Cambia al release + re-ejecuta install-global.sh con backup; si la
+#      instalación falla vuelve a la versión anterior.
+#
+# Por qué releases y no main: main recibe trabajo en curso. Un equipo debe
+# instalar solo versiones publicadas y verificadas por CI, no el último push.
 
 set -euo pipefail
 
@@ -22,6 +28,8 @@ REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 CHECK_ONLY=false
 DRY_RUN=false
 SKALLING_REPO=""
+CHANNEL="${SKALLING_UPDATE_CHANNEL:-release}"
+TARGET=""
 
 c_green='\033[32m'
 c_yellow='\033[33m'
@@ -43,8 +51,9 @@ while [[ $# -gt 0 ]]; do
         --repo) SKALLING_REPO="$2"; shift 2 ;;
         --check-only) CHECK_ONLY=true; shift ;;
         --dry-run) DRY_RUN=true; shift ;;
+        --channel) CHANNEL="$2"; shift 2 ;;
         --help|-h)
-            sed -n '3,12p' "${BASH_SOURCE[0]}"
+            sed -n '3,21p' "${BASH_SOURCE[0]}"
             exit 0 ;;
         *) echo "Argumento desconocido: $1"; exit 1 ;;
     esac
@@ -93,33 +102,58 @@ locate_repo() {
 # ──────────────────────────────────────────────────────────────────────────────
 
 check_updates() {
-    info "Verificando actualizaciones en $REPO_DIR..."
+    info "Verificando actualizaciones en $REPO_DIR (canal: $CHANNEL)..."
 
     cd "$REPO_DIR"
 
-    if ! git fetch origin 2>/dev/null; then
-        err "No se pudo conectar con origin. Sin internet?"
-        return 1
-    fi
+    case "$CHANNEL" in
+        release)
+            if ! git fetch --tags origin 2>/dev/null; then
+                err "No se pudo conectar con origin. Sin internet?"
+                return 1
+            fi
+            TARGET="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1)"
+            if [[ -z "$TARGET" ]]; then
+                err "No hay releases publicados (tags vX.Y.Z). Pedí al mantenedor que publique uno."
+                return 1
+            fi
+            if [[ "${SKALLING_REQUIRE_SIGNED_TAGS:-0}" == "1" ]] && ! git verify-tag "$TARGET" >/dev/null 2>&1; then
+                err "El release $TARGET no tiene una firma válida; no se instala."
+                return 1
+            fi
+            ;;
+        main)
+            warn "Canal main: incluye trabajo sin publicar. Solo para mantenedores."
+            if ! git fetch origin 2>/dev/null; then
+                err "No se pudo conectar con origin. Sin internet?"
+                return 1
+            fi
+            TARGET="origin/main"
+            ;;
+        *)
+            err "Canal desconocido: $CHANNEL (usá release o main)"
+            return 1
+            ;;
+    esac
 
-    local behind
-    behind="$(git rev-list --count HEAD..origin/main 2>/dev/null || echo "0")"
-
-    if [[ "$behind" == "0" ]]; then
+    if git merge-base --is-ancestor "$TARGET" HEAD 2>/dev/null; then
         echo ""
-        ok "Ya estás en la última versión."
+        ok "Ya estás en la última versión ($TARGET)."
         return 0
     fi
 
+    local behind
+    behind="$(git rev-list --count "HEAD..$TARGET" 2>/dev/null || echo "0")"
+
     echo ""
-    info "Hay $behind commits nuevos:"
+    info "$TARGET trae $behind commits nuevos:"
     echo ""
-    git log HEAD..origin/main --oneline --no-decorate 2>/dev/null | head -20
+    git log "HEAD..$TARGET" --oneline --no-decorate 2>/dev/null | head -20
 
     echo ""
     info "Cambios en CHANGELOG:"
     echo ""
-    git diff HEAD..origin/main -- CHANGELOG.md 2>/dev/null | grep "^+" | grep -v "^\+\+\+" | head -15 | sed 's/^+/  /'
+    git diff "HEAD..$TARGET" -- CHANGELOG.md 2>/dev/null | grep "^+" | grep -v "^\+\+\+" | head -15 | sed 's/^+/  /'
 
     return 2  # código especial: hay cambios
 }
@@ -130,7 +164,7 @@ check_updates() {
 
 do_update() {
     if [[ "$DRY_RUN" == true ]]; then
-        info "[dry-run] git pull origin main"
+        info "[dry-run] git checkout $TARGET"
         info "[dry-run] bash install-global.sh"
         ok "Dry-run completo. No se modificó nada."
         return 0
@@ -143,22 +177,31 @@ do_update() {
         return 1
     fi
 
-    info "Descargando cambios..."
-    if ! git pull origin main; then
-        err "Error al hacer pull. Revisá conflictos."
+    local previous
+    previous="$(git rev-parse HEAD)"
+
+    info "Cambiando a $TARGET..."
+    if [[ "$CHANNEL" == "main" ]]; then
+        if ! git merge --ff-only "$TARGET"; then
+            err "No se pudo avanzar a $TARGET sin merge. Revisá la rama local."
+            return 1
+        fi
+    elif ! git -c advice.detachedHead=false checkout --quiet "$TARGET"; then
+        err "No se pudo cambiar a $TARGET."
         return 1
     fi
 
     info "Reinstalando Skalling en ~/.config/opencode/..."
     if ! bash install-global.sh; then
-        err "Error al instalar. Revisá el output."
+        err "Error al instalar $TARGET. Volviendo a la versión anterior (${previous:0:7})..."
+        git -c advice.detachedHead=false checkout --quiet "$previous" && bash install-global.sh >/dev/null 2>&1 \
+            && warn "Se restauró la versión anterior." \
+            || err "No se pudo restaurar automáticamente; el backup del instalador está en ~/.config/opencode/.skalling-backups/"
         return 1
     fi
 
-    local new_head
-    new_head="$(git rev-parse --short HEAD 2>/dev/null || echo "desconocido")"
     echo ""
-    ok "Skalling actualizado a $new_head"
+    ok "Skalling actualizado a $TARGET ($(git rev-parse --short HEAD))"
     info "Corré /skalling-doctor para verificar."
 }
 

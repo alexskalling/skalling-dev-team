@@ -10,6 +10,16 @@ permission:
     "*.env.example": allow
     "*.pem": deny
     "*id_rsa*": deny
+    "*/.ssh/*": deny
+    "*/.aws/*": deny
+    "*.netrc": deny
+    "*.npmrc": ask
+    "*/.kube/*": deny
+    "*/.docker/config.json": deny
+    "*.git-credentials": deny
+    "*/.gnupg/*": deny
+    "*id_ed25519*": deny
+    "*id_ecdsa*": deny
   glob: allow
   grep: allow
   list: allow
@@ -29,7 +39,28 @@ permission:
   task:
     "*": allow
   bash:
-    "*": allow
+    "*": ask
+    "cut *": allow
+    "tr *": allow
+    "jq *": allow
+    tree: allow
+    "tree *": allow
+    "du *": allow
+    "git branch": allow
+    "git branch --list*": allow
+    "git branch -a*": allow
+    "git branch -v*": allow
+    "git branch --show-current": allow
+    "git remote -v": allow
+    "git blame *": allow
+    "git worktree list": allow
+    "git worktree list *": allow
+    "git config --get *": allow
+    "git fetch": allow
+    "git fetch *": allow
+    "node --version": allow
+    "python3 --version": allow
+    "npm --version": allow
     "python *": ask
     "python3 *": ask
     "bash *": ask
@@ -452,15 +483,15 @@ permission:
     "tail *id_rsa*": ask
     sudo: deny
     "sudo *": deny
-    "npm install": allow
-    "npm install *": allow
-    "npm i *": allow
-    "pnpm add *": allow
-    "pnpm install": allow
-    "pnpm install *": allow
-    "pnpm remove *": allow
-    "yarn add *": allow
-    "yarn remove *": allow
+    "npm install": ask
+    "npm install *": ask
+    "npm i *": ask
+    "pnpm add *": ask
+    "pnpm install": ask
+    "pnpm install *": ask
+    "pnpm remove *": ask
+    "yarn add *": ask
+    "yarn remove *": ask
     "rm *.db*": deny
     "rm *.sqlite*": deny
     export: deny
@@ -503,6 +534,19 @@ permission:
     "git -C * worktree prune*": ask
     "cd * && git worktree remove*": ask
     "cd * && git worktree prune*": ask
+    "*/.ssh/*": ask
+    "*/.aws/*": ask
+    "*.netrc*": ask
+    "*.npmrc*": ask
+    "*/.kube/*": ask
+    "*/.docker/config.json*": ask
+    "*/.config/gh/*": ask
+    "*.pypirc*": ask
+    "*.git-credentials*": ask
+    "*/.gnupg/*": ask
+    "*id_rsa*": ask
+    "*id_ed25519*": ask
+    "*id_ecdsa*": ask
 ---
 
 # Alex — Orquestador

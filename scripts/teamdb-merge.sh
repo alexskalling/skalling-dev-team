@@ -11,16 +11,22 @@
 #   máquina con filas nuevas o actualizadas. La DB local no se puede borrar
 #   ni sobreescribir a ciegas: puede tener trabajo sin committear.
 #
-# LA SOLUCIÓN — merge por fila, último-write-gana:
-#   1. Filas del dump que NO existen en la DB local (por PK)  → INSERT.
-#   2. Filas que existen en ambos pero el dump tiene updated_at MÁS RECIENTE
-#      → UPDATE (último write gana). Filas locales más recientes → se respetan.
+# LA SOLUCIÓN — merge por entidad, último-write-gana:
+#   0. Cada máquina asigna ids propios, así que las filas se emparejan por
+#      clave natural (slug, name, plan+slug...) y no por id. Los ids remotos
+#      se traducen a ids locales y las FKs de los hijos (tasks.plan_id,
+#      memory_tags.memory_id...) se reescriben con esa traducción.
+#   1. Entidades del dump que NO existen localmente → INSERT (conserva el id
+#      remoto si está libre; si no, SQLite asigna uno nuevo).
+#   2. Entidades en ambos lados con updated_at del dump MÁS RECIENTE
+#      → UPDATE (último write gana). Locales más recientes → se respetan.
 #   3. Filas que existen SOLO en la DB local (trabajo no committeado)
 #      → NUNCA se tocan. El merge es aditivo hacia la DB.
 #   4. NUNCA hace DELETE: la DB local manda sobre lo que no está en git.
 #
-#   Tablas sin updated_at: solo se insertan filas nuevas; nunca se pisan las
-#   locales (evita destruir datos locales sin forma de comparar antigüedad).
+#   Tablas sin updated_at: solo se insertan entidades nuevas; nunca se pisan
+#   las locales. Los registros de eventos sin clave natural (plan_history,
+#   routing_decisions...) se comparan por fila completa para no duplicarlos.
 #
 # USO
 #   bash scripts/teamdb-merge.sh [<project>] [--dry-run]
@@ -75,132 +81,227 @@ fi
 
 MERGE_PY="$(cat <<'PY'
 import sqlite3, sys, re
-
 db_path, dump_path, dry_run = sys.argv[1], sys.argv[2], sys.argv[3] == "1"
 
-INSERT_RE = re.compile(r'^INSERT INTO "([^"]+)" \((.*)\) VALUES \((.*)\);$')
+# Cada máquina asigna ids autoincrementales por su cuenta: el id de una fila
+# remota NO identifica la misma entidad en la DB local (Alice y Bob crean
+# ambos el concepto id=1). Las entidades se emparejan por clave natural, los
+# ids remotos se traducen a ids locales y las claves foráneas de los hijos se
+# reescriben con esa traducción. Orden: padres antes que hijos.
+#   tabla: (clave natural, {columna FK: tabla padre})
+# Una clave None = registro de eventos sin clave natural: se compara la fila
+# completa (sin id) para no duplicarla.
+SPECS = [
+    ("concepts", ("slug",), {}),
+    ("decisions", ("slug",), {}),
+    ("preferences", ("slug",), {}),
+    ("known_problems", ("slug",), {}),
+    ("work_in_progress", ("slug",), {"parent_id": "work_in_progress"}),
+    ("tags", ("name",), {}),
+    ("proposals", ("slug",), {}),
+    ("plans", ("slug",), {"proposal_id": "proposals"}),
+    ("specs", ("plan_id", "slug"), {"plan_id": "plans"}),
+    ("design_notes", ("plan_id", "slug"), {"plan_id": "plans"}),
+    ("tasks", ("plan_id", "slug"), {"plan_id": "plans"}),
+    ("task_dependencies", ("task_id", "depends_on_task_id"), {"task_id": "tasks", "depends_on_task_id": "tasks"}),
+    ("task_claims", ("task_id",), {"task_id": "tasks"}),
+    ("plan_history", None, {"plan_id": "plans"}),
+    ("task_context_capsules", ("task_id", "memory_table", "memory_id"), {"task_id": "tasks", "memory_id": ("memory_table",)}),
+    ("task_lock_history", None, {"task_id": "tasks"}),
+    ("memory_tags", ("memory_table", "memory_id", "tag_id"), {"memory_id": ("memory_table",), "tag_id": "tags"}),
+    ("memory_links", ("from_table", "from_id", "to_table", "to_id", "link_type"),
+     {"from_id": ("from_table",), "to_id": ("to_table",)}),
+    ("skills_registry", ("name",), {}),
+    ("routing_decisions", None, {}),
+    ("receipts", ("id",), {}),
+    ("attempts", ("token",), {}),
+    ("agent_workflows", ("id",), {}),
+]
 
-# parsear el dump → {tabla: {pk_tuple: {col: val}}}
-tables = {}
-order = []
-with open(dump_path, encoding="utf-8") as f:
-    for line in f:
-        m = INSERT_RE.match(line.strip())
-        if not m:
-            continue
-        table, col_part, val_part = m.group(1), m.group(2), m.group(3)
-        cols = [c.strip().strip('"') for c in col_part.split(",")]
-        # parsear valores SQL literales simples: NULL, números, '...' escapado
-        vals = []
-        i = 0
-        s = val_part
-        n = len(s)
-        while i < n:
-            c = s[i]
-            if c == "'":
-                j = i + 1
-                buf = []
-                while j < n:
-                    if s[j] == "'":
-                        if j + 1 < n and s[j+1] == "'":
-                            buf.append("'"); j += 2; continue
-                        break
-                    buf.append(s[j]); j += 1
-                vals.append("".join(buf)); i = j + 1
-            else:
-                j = i
-                while j < n and s[j] != ",":
-                    j += 1
-                tok = s[i:j].strip()
-                vals.append(None if tok == "NULL" else tok)
-                i = j
-            if i < n and s[i] == ",":
-                i += 1
-        if len(cols) != len(vals):
-            continue
-        row = dict(zip(cols, vals))
-        tables.setdefault(table, {})
-        # PK: primera columna (todas las tablas del schema tienen id o PK simple
-        # salvo memory_tags/plan_history compuestas; usamos la columna 1 como
-        # clave estable de fila, que en el schema es id salvo skills_registry).
-        key = str(row.get(cols[0]))
-        tables[table][key] = row
-        if table not in order:
-            order.append(table)
+INSERT_RE = re.compile(r'^INSERT INTO "([^"]+)" \((.*?)\) VALUES \((.*)\);$', re.S)
+
+# Los valores los evalúa SQLite (comillas, NULL, números, 'a'||char(10)||'b'),
+# no un tokenizador propio: el anterior leía línea por línea y descartaba en
+# silencio toda fila con saltos de línea (conceptos, decisiones, planes).
+# El dump viene de git (otra máquina): solo se permite SELECT de literales.
+literal_db = sqlite3.connect(":memory:")
+literal_db.text_factory = str
+ALLOWED = {sqlite3.SQLITE_SELECT, sqlite3.SQLITE_FUNCTION}
+literal_db.set_authorizer(lambda action, *_: sqlite3.SQLITE_OK if action in ALLOWED else sqlite3.SQLITE_DENY)
+
+
+def statements(path):
+    # Acumula hasta una sentencia completa: acepta dumps nuevos (una línea por
+    # fila) y los viejos con strings multilínea.
+    buf = ""
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            if not buf and (line.startswith("--") or not line.strip()):
+                continue
+            buf += line
+            if sqlite3.complete_statement(buf):
+                yield buf.strip()
+                buf = ""
+
+
+remote = {}
+unparsed = 0
+for stmt in statements(dump_path):
+    m = INSERT_RE.match(stmt)
+    if not m:
+        unparsed += 1
+        continue
+    table, col_part, val_part = m.group(1), m.group(2), m.group(3)
+    cols = [c.strip().strip('"') for c in col_part.split(",")]
+    try:
+        vals = literal_db.execute("SELECT " + val_part).fetchone()
+    except sqlite3.Error:
+        unparsed += 1
+        continue
+    if len(cols) != len(vals):
+        unparsed += 1
+        continue
+    remote.setdefault(table, []).append(dict(zip(cols, vals)))
 
 con = sqlite3.connect(db_path)
 con.text_factory = str
 con.execute("PRAGMA busy_timeout=5000")
-inserted = 0
-updated = 0
-skipped_local_newer = 0
-skipped_no_ts = 0
 
-for table in order:
-    rows = tables[table]
+# idmap[tabla][id remoto] = [ids locales candidatos]. Normalmente uno; más de
+# uno solo si un merge=union dejó en el dump dos entidades distintas con el
+# mismo id remoto (una por rama).
+idmap = {}
+stats = {"inserted": 0, "updated": 0, "local_newer": 0, "unchanged": 0, "remapped": 0}
+errors = []
+
+
+def local_columns(table):
+    return [r[1] for r in con.execute(f"PRAGMA table_info('{table}')").fetchall()]
+
+
+def surrogate_id(table, cols):
+    # id entero autoincremental (no los ids de texto de receipts/agent_workflows).
+    info = {r[1]: (r[2] or "").upper() for r in con.execute(f"PRAGMA table_info('{table}')")}
+    return "id" in cols and info.get("id") == "INTEGER"
+
+
+def find_local(table, key, row):
+    where = " AND ".join(f'"{c}" IS ?' for c in key)
+    return con.execute(f'SELECT * FROM "{table}" WHERE {where}', [row.get(c) for c in key]).fetchone()
+
+
+def candidates(parent, rid):
+    if rid is None:
+        return [None]
+    mapped = idmap.get(parent, {}).get(str(rid))
+    if mapped:
+        return mapped
+    # El padre no vino en este dump: si existe localmente con ese id, es el
+    # mismo registro (dump parcial o ya fusionado antes).
+    return [rid]
+
+
+def translations(row, fks):
+    # Todas las combinaciones de FKs traducidas (casi siempre una sola).
+    options = [dict(row)]
+    for col, parent in fks.items():
+        if col not in row:
+            continue
+        parent_table = row.get(parent[0]) if isinstance(parent, tuple) else parent
+        expanded = []
+        for option in options:
+            for local_id in candidates(parent_table, row[col]):
+                new = dict(option)
+                new[col] = local_id
+                expanded.append(new)
+        options = expanded
+    return options
+
+
+for table, key, fks in SPECS:
+    rows = remote.get(table)
     if not rows:
         continue
-    # ¿existe la tabla localmente?
-    exists = con.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
-    ).fetchone()
-    if not exists:
-        continue
-    cols = [r[1] for r in con.execute(f"PRAGMA table_info('{table}')").fetchall()]
+    cols = local_columns(table)
     if not cols:
         continue
     has_updated_at = "updated_at" in cols
-    first_col = cols[0]
-
-    for key, row in rows.items():
-        cur = con.execute(
-            f'SELECT * FROM "{table}" WHERE "{first_col}" = ?', (key,)
-        ).fetchone()
-        if cur is None:
-            # INSERT fila nueva del dump
-            col_sql = ",".join(f'"{c}"' for c in cols)
-            placeholders = ",".join("?" for _ in cols)
-            params = []
-            for c in cols:
-                v = row.get(c)
-                params.append(v)
-            sql = f'INSERT INTO "{table}" ({col_sql}) VALUES ({placeholders})'
-            if dry_run:
-                inserted += 1
-            else:
+    surrogate = surrogate_id(table, cols)
+    match_cols = key or tuple(c for c in cols if c != "id")
+    # Si una rama duplicó la misma entidad (merge=union), gana la más reciente.
+    rows = sorted(rows, key=lambda r: (str(r.get("updated_at") or ""), str(r.get("id") or "")))
+    deferred_parent = []
+    for row in rows:
+        options = translations(row, fks)
+        chosen = next((o for o in options if find_local(table, match_cols, o)), options[-1])
+        local = find_local(table, match_cols, chosen)
+        values = {c: chosen.get(c) for c in cols if c in chosen}
+        if local is not None:
+            local_row = dict(zip(cols, local))
+            if surrogate:
+                idmap.setdefault(table, {}).setdefault(str(row.get("id")), [])
+                if local_row["id"] not in idmap[table][str(row.get("id"))]:
+                    idmap[table][str(row.get("id"))].append(local_row["id"])
+                if local_row["id"] != row.get("id"):
+                    stats["remapped"] += 1
+            if not has_updated_at or not row.get("updated_at"):
+                stats["unchanged"] += 1
+                continue
+            remote_ts, local_ts = str(row.get("updated_at")), str(local_row.get("updated_at") or "")
+            if remote_ts <= local_ts:
+                stats["unchanged" if remote_ts == local_ts else "local_newer"] += 1
+                continue
+            changes = {c: v for c, v in values.items() if c != "id"}
+            if not dry_run:
+                sets = ",".join(f'"{c}"=?' for c in changes)
+                where = " AND ".join(f'"{c}" IS ?' for c in match_cols)
                 try:
-                    con.execute(sql, params)
-                    inserted += 1
-                except sqlite3.Error:
-                    skipped_no_ts += 1
+                    con.execute(f'UPDATE "{table}" SET {sets} WHERE {where}',
+                                list(changes.values()) + [local_row[c] for c in match_cols])
+                except sqlite3.Error as exc:
+                    errors.append(f"{table} {[chosen.get(c) for c in match_cols]}: {exc}")
+                    continue
+            stats["updated"] += 1
             continue
-        # existe: ¿el dump es más nuevo (updated_at)?
-        if not has_updated_at:
-            skipped_no_ts += 1
+        # Fila nueva: conserva el id remoto si está libre; si no, SQLite asigna uno.
+        insert = dict(values)
+        if surrogate:
+            taken = con.execute(f'SELECT 1 FROM "{table}" WHERE id=?', (row.get("id"),)).fetchone()
+            if taken:
+                insert.pop("id", None)
+                stats["remapped"] += 1
+        if dry_run:
+            stats["inserted"] += 1
             continue
-        dump_ts = row.get("updated_at") or ""
-        cur_ts = cur[cols.index("updated_at")] or ""
-        if not dump_ts:
-            skipped_no_ts += 1
+        names = ",".join(f'"{c}"' for c in insert)
+        try:
+            cursor = con.execute(f'INSERT INTO "{table}" ({names}) VALUES ({",".join("?" for _ in insert)})',
+                                 list(insert.values()))
+        except sqlite3.Error as exc:
+            errors.append(f"{table} {[chosen.get(c) for c in match_cols]}: {exc}")
             continue
-        if dump_ts > cur_ts:
-            # UPDATE último-write-gana
-            set_sql = ",".join(f'"{c}" = ?' for c in cols if c != first_col)
-            params = [row.get(c) for c in cols if c != first_col] + [key]
-            sql = f'UPDATE "{table}" SET {set_sql} WHERE "{first_col}" = ?'
-            if dry_run:
-                updated += 1
-            else:
-                try:
-                    con.execute(sql, params)
-                    updated += 1
-                except sqlite3.Error:
-                    skipped_local_newer += 1
-        else:
-            skipped_local_newer += 1
+        stats["inserted"] += 1
+        if surrogate:
+            new_id = insert.get("id", cursor.lastrowid)
+            idmap.setdefault(table, {}).setdefault(str(row.get("id")), []).append(new_id)
+            if table == "work_in_progress" and row.get("parent_id") is not None:
+                deferred_parent.append((new_id, row.get("parent_id")))
+    # Autorreferencia: el padre pudo llegar después que el hijo.
+    for child_id, remote_parent in deferred_parent:
+        parents = candidates("work_in_progress", remote_parent)
+        if len(parents) == 1 and not dry_run:
+            con.execute('UPDATE work_in_progress SET parent_id=? WHERE id=?', (parents[0], child_id))
 
 con.commit()
-print(f"merge: {inserted} insertadas, {updated} actualizadas, {skipped_local_newer} locales más nuevas, {skipped_no_ts} sin updated_at (intactas)")
+print(f"merge: {stats['inserted']} insertadas, {stats['updated']} actualizadas, "
+      f"{stats['local_newer']} locales más nuevas, {stats['unchanged']} sin cambios, "
+      f"{stats['remapped']} ids traducidos")
+for e in errors:
+    print(f"ERROR fila no aplicada: {e}", file=sys.stderr)
+if unparsed:
+    print(f"ERROR: {unparsed} sentencias del dump no se pudieron leer", file=sys.stderr)
+if errors or unparsed:
+    sys.exit(2)
 PY
 )"
 

@@ -1,73 +1,57 @@
 # Git Attributes para Skalling — collaborative memory
 #
-# Este archivo define cómo git maneja conflictos en `.opencode/`.
-# Vive en `.opencode/.gitattributes` para aplicarse solo a archivos de Skalling.
-
-# Workflow state now lives in DB (workflow_state table) — not in filesystem.
-# The DB enforces singleton constraint (CHECK id=1) and lock_token for concurrency.
+# Este archivo se instala como `.opencode/.gitattributes`. Git interpreta los
+# patrones con "/" RELATIVOS a este directorio: por eso se escribe
+# `context/log.md` y no `.opencode/context/log.md` (esa forma nunca matcheaba
+# y ninguna regla se aplicaba; auditoría 2026-09-27). Lo que vive fuera de
+# `.opencode/` (el dump db/teamdb/team.dump.sql, AGENTS.md raíz) lo gestiona
+# setup.sh en un bloque marcado del `.gitattributes` raíz.
+#
+# Workflow state vive en la DB (tabla workflow_state), no en archivos: la DB
+# impone el singleton (CHECK id=1) y lock_token para concurrencia.
 
 # ────────────────────────────────────────────────────────────────────────────
 # BUNDLE OKF — append-friendly y regeneración trivial
 # ────────────────────────────────────────────────────────────────────────────
 
 # log.md: append-only. union = conserva ambas líneas.
-.opencode/context/log.md merge=union
+context/log.md merge=union
 
-# index.md: regenerable. union = concatena ambos índices (Pau puede deduplicar después).
-.opencode/context/index.md merge=union
-
-# README.md del bundle: regenerable, mismo tratamiento.
-.opencode/context/README.md merge=union
+# index.md y README.md del bundle: regenerables. union concatena; Pau deduplica.
+context/index.md merge=union
+context/README.md merge=union
 
 # ────────────────────────────────────────────────────────────────────────────
 # CONCEPT DOCS — mismo nombre = conflicto a resolver
 # ────────────────────────────────────────────────────────────────────────────
 
-# Si dos devs crean `<mismo-nombre>.md` con distinto contenido,
-# git NO puede auto-merge. Resolución: leer ambos, quedarse con el más completo,
-# o renombrar uno (supersedes).
-
-# Para los subdirectorios de concept docs, usar text normal pero con tip explícito:
-.opencode/context/**/*.md text eol=lf
-.opencode/context/**/*.md whitespace=-trailing-space
+# Si dos devs crean `<mismo-nombre>.md` con distinto contenido, git no puede
+# auto-mergear. Resolución: leer ambos, quedarse con el más completo, o
+# renombrar uno (supersedes).
+context/**/*.md text eol=lf
+context/**/*.md whitespace=-trailing-space
 
 # ────────────────────────────────────────────────────────────────────────────
 # CHANGES (SDD) — aislado por feature, conflicto solo si mismo slug
 # ────────────────────────────────────────────────────────────────────────────
 
-.opencode/changes/**/*.md text eol=lf
-.opencode/changes/**/*.md whitespace=-trailing-space
+changes/**/*.md text eol=lf
+changes/**/*.md whitespace=-trailing-space
 
-# Si dos devs trabajan en el MISMO feature-slug, los archivos
-# proposal/spec/design/tasks van a entrar en conflicto.
-# Resolución: serializar el trabajo en ese feature (uno espera al otro).
+# Si dos devs trabajan en el MISMO feature-slug, proposal/spec/design/tasks
+# van a entrar en conflicto. Resolución: serializar el trabajo en ese feature.
 
 # ────────────────────────────────────────────────────────────────────────────
 # PROJECT.YAML — regenerable desde stack detection
 # ────────────────────────────────────────────────────────────────────────────
 
-# project.yaml es data auto-generada. union = combinación simple.
-# Si hay conflicto, regenerar con `/skalling-refresh`.
-.opencode/project.yaml merge=union
+# Sin merge=union: en YAML duplica claves en silencio. Ante un conflicto,
+# regenerar con `/skalling-refresh`.
 
 # ────────────────────────────────────────────────────────────────────────────
-# OTROS ARCHIVOS
+# CONSTITUCIÓN (override per-project) — nunca se auto-mergea
 # ────────────────────────────────────────────────────────────────────────────
 
-# constitution.md (si hay override per-project): proteger contra cambios accidentales
-.opencode/context/constitucion.md merge=lock
-
-# AGENTS.md raíz: regenerable, union está bien
-/AGENTS.md merge=union
-
-# Doc pública: manual merge si hay conflicto (es código, no se auto-mergea)
-/docs/**/*.md text eol=lf
-
-# ────────────────────────────────────────────────────────────────────────────
-# TEAMDB SQL DUMPS — append-friendly
-# ────────────────────────────────────────────────────────────────────────────
-
-# data_*.sql: dumps de sqlite (conceptos/decisiones/etc). Cada INSERT es
-# idempotente, así que union = "conservar ambas líneas de INSERT".
-# El import filtra duplicados y maneja conflictos con warnings.
-.opencode/context/teamdb/data_*.sql merge=union
+# merge=binary: ante cambios de ambos lados Git conserva la versión local y
+# marca conflicto; alguien decide a mano. ("merge=lock" no existe en Git.)
+context/constitucion.md merge=binary

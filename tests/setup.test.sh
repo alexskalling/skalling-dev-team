@@ -294,7 +294,7 @@ test_collaborative_memory() {
 
     # Tiene estrategias clave
     assert_file_contains "$REPO_ROOT/templates/gitattributes.template" "merge=union" "merge=union presente"
-    assert_file_contains "$REPO_ROOT/templates/gitattributes.template" "merge=lock" "merge=lock presente"
+    assert_file_contains "$REPO_ROOT/templates/gitattributes.template" "merge=binary" "constitución no se auto-mergea"
 
     # Protege archivos críticos
     assert_file_contains "$REPO_ROOT/templates/gitattributes.template" "workflow_state" "workflow_state (DB) referenciado"

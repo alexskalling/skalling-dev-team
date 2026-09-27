@@ -47,14 +47,86 @@ def needs_review(name):
 # Alex o de Teo (el que orquesta o el que implementó) no prueba nada: así un
 # cambio que se saltó a Jhon no llega al repositorio aunque exista evidencia.
 VERIFIERS = ('jhon', 'luz')
-SECRET = re.compile(r'(ghp_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{20,}|AKIA[0-9A-Z]{16}|Bearer [A-Za-z0-9._-]{20,}|BEGIN [A-Z ]*PRIVATE KEY)', re.I)
+# Formatos de credenciales de proveedores. El lookbehind evita que "sk-"
+# dentro de una palabra ("task-context-...") dispare; los formatos con
+# guiones (sk-ant-..., sk-proj-...) se nombran explícitamente. La URL con
+# contraseña ignora marcadores obvios (${VAR}, <pass>, password, changeme).
+SECRET = re.compile('|'.join((
+    r'gh[pousr]_[A-Za-z0-9]{20,}',
+    r'github_pat_[A-Za-z0-9_]{22,}',
+    r'glpat-[A-Za-z0-9_-]{20,}',
+    r'(?<![A-Za-z0-9])sk-(?:ant-[a-z]+\d*-|proj-|svcacct-|admin-)[A-Za-z0-9_-]{20,}',
+    r'(?<![A-Za-z0-9_-])sk-[A-Za-z0-9]{20,}',
+    r'(?:sk|rk)_live_[A-Za-z0-9]{16,}',
+    r'xox[abposr]-[A-Za-z0-9-]{10,}',
+    r'hooks\.slack\.com/services/T[A-Za-z0-9_/]{20,}',
+    r'npm_[A-Za-z0-9]{36}',
+    r'AIza[0-9A-Za-z_-]{20,}',
+    r'(?:AKIA|ASIA)[0-9A-Z]{16}',
+    r'aws_secret_access_key\s*[=:]\s*["\']?[A-Za-z0-9/+=]{40}',
+    r'eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}',
+    r'Bearer [A-Za-z0-9._-]{20,}',
+    r'BEGIN [A-Z ]*PRIVATE KEY',
+    r'[a-z][a-z0-9+.-]*://[^/\s:@\'"]+:(?!\$\{|<|password\b|pass\b|changeme\b|secret\b|xxx)[^/\s:@\'"]{6,}@',
+)), re.I)
 
 
 def git(*args):
     return subprocess.check_output(['git', *args], input=b'')
 
 
-def check(diff_args, db, label):
+EMPTY_TREE = None
+
+
+def empty_tree():
+    global EMPTY_TREE
+    if EMPTY_TREE is None:
+        EMPTY_TREE = git('hash-object', '-t', 'tree', '--stdin').decode().strip()
+    return EMPTY_TREE
+
+
+def receipt_verdict(db, digest):
+    # Decide el receipt más reciente que registra un resultado. Un "not_run"
+    # (Jhon sin tests configurados) no es aprobación ni rechazo: no cuenta.
+    rows = db.execute('SELECT exit_code, command FROM receipts WHERE tree_hash=? AND lower(agent) IN (?, ?) '
+                      'ORDER BY ts DESC, rowid DESC', (digest, *VERIFIERS)).fetchall()
+    not_run = [r for r in rows if str(r[1] or '').startswith('not_run:')]
+    decisive = [r for r in rows if not str(r[1] or '').startswith('not_run:')]
+    return decisive, not_run
+
+
+def commit_digest(commit):
+    parents = git('rev-list', '--parents', '-n', '1', commit).decode().split()
+    parent = parents[1] if len(parents) > 1 else empty_tree()
+    return hashlib.sha256(git('diff', parent, commit, *PATHSPEC).rstrip(b'\n')).hexdigest()[:16]
+
+
+def patch_id(patch):
+    out = subprocess.run(['git', 'patch-id', '--verbatim'], input=patch, capture_output=True, check=True).stdout
+    return out.split()[0].decode() if out.strip() else None
+
+
+def equivalent_digests(commit):
+    # Un rebase o cherry-pick cambia el contexto del diff (números de línea,
+    # blobs de "index"), así que su digest exacto ya no coincide con el
+    # receipt aunque el cambio sea el mismo. Se buscan commits locales
+    # (ramas y reflog, donde queda el original pre-rebase) con el mismo
+    # patch-id --verbatim (no ignora espacios) y se devuelven SUS digests
+    # exactos: la aprobación sigue anclada a un receipt real de Jhon/Luz.
+    parents = git('rev-list', '--parents', '-n', '1', commit).decode().split()
+    parent = parents[1] if len(parents) > 1 else empty_tree()
+    target = patch_id(git('diff', parent, commit, *PATHSPEC))
+    if not target:
+        return []
+    log = git('log', '--all', '--reflog', '--no-merges', '--max-count=2000', '-p',
+              '--format=commit %H', *PATHSPEC)
+    ids = subprocess.run(['git', 'patch-id', '--verbatim'], input=log, capture_output=True, check=True).stdout
+    same = [line.split()[1].decode() for line in ids.splitlines()
+            if len(line.split()) == 2 and line.split()[0].decode() == target]
+    return [commit_digest(other) for other in same if not other.startswith(commit)]
+
+
+def check(diff_args, db, label, equivalents=None, require_receipt=True):
     # Inspect the actual candidate, not mutable live memory. No git add/export.
     full_patch = git('diff', *diff_args, '--', '.')
     for line in full_patch.splitlines():
@@ -75,7 +147,7 @@ def check(diff_args, db, label):
                     table = target
             if table and not db.execute(f'SELECT 1 FROM {table} WHERE slug=? LIMIT 1', (slug,)).fetchone():
                 raise ValueError(f'{label}: {name} no tiene registro en TeamDB; no crear memoria paralela.')
-    if not any(needs_review(name) for name in names):
+    if not require_receipt or not any(needs_review(name) for name in names):
         return
     if not db:
         raise ValueError(f'{label}: team.db no existe; no se puede validar la revisión aprobada '
@@ -84,12 +156,14 @@ def check(diff_args, db, label):
                           'diseño: sin base no hay forma de saber si esto ya se revisó.')
     patch = git('diff', *diff_args, *PATHSPEC).rstrip(b'\n')
     digest = hashlib.sha256(patch).hexdigest()[:16]
-    # Decide el receipt más reciente que registra un resultado. Un "not_run"
-    # (Jhon sin tests configurados) no es aprobación ni rechazo: no cuenta.
-    rows = db.execute('SELECT exit_code, command FROM receipts WHERE tree_hash=? AND lower(agent) IN (?, ?) '
-                      'ORDER BY ts DESC, rowid DESC', (digest, *VERIFIERS)).fetchall()
-    not_run = [r for r in rows if str(r[1] or '').startswith('not_run:')]
-    decisive = [r for r in rows if not str(r[1] or '').startswith('not_run:')]
+    decisive, not_run = receipt_verdict(db, digest)
+    if (not decisive or decisive[0][0] != 0) and equivalents:
+        for alternative in equivalents():
+            alt_decisive, _ = receipt_verdict(db, alternative)
+            if alt_decisive and alt_decisive[0][0] == 0:
+                print(f'OK: {label} es el mismo cambio que un candidato aprobado ({alternative}); '
+                      f'reubicado por rebase/cherry-pick ({digest})')
+                return
     if not decisive or decisive[0][0] != 0:
         hint = (' Jhon no pudo correr tests (no hay testing.unit.command): configurarlo, pedir revisión de Luz '
                 '(skalling-review.sh) o que un humano selle con SKALLING_VERIFY_WAIVER="motivo".') if not_run and not decisive else ''
@@ -118,6 +192,41 @@ def project_root():
     return common_dir.resolve().parent
 
 
+def clean_automerge(commit, parents):
+    # Un merge sin resolución manual no agrega código propio: su árbol es
+    # exactamente el que Git calcula al fusionar los dos padres. Si hubo
+    # conflictos o ediciones en el merge, merge-tree da otro árbol (o falla)
+    # y el merge necesita su propio receipt. Git < 2.38 no tiene
+    # --write-tree: se cae al comportamiento estricto.
+    if len(parents) != 2:
+        return False
+    try:
+        merged = subprocess.run(['git', 'merge-tree', '--write-tree', *parents],
+                                capture_output=True, check=True).stdout.split()[0].decode()
+    except (subprocess.CalledProcessError, IndexError):
+        return False
+    return merged == git('rev-parse', commit + '^{tree}').decode().strip()
+
+
+def check_commit(commit, db, seen):
+    if commit in seen:
+        return
+    seen.add(commit)
+    parents = git('rev-list', '--parents', '-n', '1', commit).decode().split()[1:]
+    label = 'commit ' + commit[:12]
+    if clean_automerge(commit, parents):
+        # Secretos y memoria se revisan igual sobre lo que entra con el merge;
+        # la aprobación se exige a cada commit del otro lado, uno por uno.
+        check([parents[0], commit], db, label, require_receipt=False)
+        side = git('rev-list', '--reverse', parents[1], '^' + parents[0], '--not', '--remotes').decode().split()
+        for other in side:
+            check_commit(other, db, seen)
+        print(f'OK: {label} es un merge automático de cambios verificados')
+        return
+    parent = parents[0] if parents else empty_tree()
+    check([parent, commit], db, label, equivalents=lambda: equivalent_digests(commit))
+
+
 def main():
     root = project_root()
     path = root / '.opencode/context/team.db'
@@ -141,10 +250,9 @@ def main():
                     args += ['^' + remote]
                 else:
                     args += ['--not', '--remotes']
+                seen = set()
                 for commit in git(*args).decode().splitlines():
-                    parents = git('rev-list', '--parents', '-n', '1', commit).decode().split()
-                    parent = parents[1] if len(parents) > 1 else git('hash-object', '-t', 'tree', '--stdin').decode().strip()
-                    check([parent, commit], db, 'commit ' + commit[:12])
+                    check_commit(commit, db, seen)
         else:
             raise ValueError('Modo de hook inválido')
     finally:

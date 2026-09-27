@@ -85,6 +85,12 @@ echo "==> Test 5: merge último-write-gana por updated_at"
 sqlite3 "$WORK/.opencode/context/team.db" "UPDATE concepts SET body_md='local mas nueva', updated_at='2026-08-09 00:00:00' WHERE slug='c1';"
 # c2: dump más nuevo → debe pisar.
 sqlite3 "$WORK/.opencode/context/team.db" "UPDATE concepts SET body_md='local vieja', updated_at='2026-08-06 00:00:00' WHERE slug='c2';"
+# El dump remoto trae UNA versión de c1 y c2 (la que se prueba): se quitan las
+# que dejó el refresh del Test 4 (fechadas hoy, más nuevas que ambas), si no
+# el merge -- que decide por updated_at y no por orden en el archivo -- las
+# elegiría a ellas.
+grep -vE "'c[12]','Concepto [12]'" "$WORK/db/teamdb/team.dump.sql" > "$WORK/dump.tmp" || true
+mv "$WORK/dump.tmp" "$WORK/db/teamdb/team.dump.sql"
 echo "INSERT INTO \"concepts\" (\"id\",\"slug\",\"title\",\"body_md\",\"category\",\"has_ui\",\"updated_at\") VALUES (1,'c1','Concepto 1','dump viejo','core',0,'2026-08-06 00:00:00');" >> "$WORK/db/teamdb/team.dump.sql"
 # El id de c2: lo resolvemos desde la DB local (mismo id en el dump original).
 C2_ID=$(sqlite3 "$WORK/.opencode/context/team.db" "SELECT id FROM concepts WHERE slug='c2';")

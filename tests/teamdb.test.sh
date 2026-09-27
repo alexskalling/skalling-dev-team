@@ -233,8 +233,10 @@ assert "install-global.sh sin version hardcoded" "! grep -q 'SKALLING_VERSION=\"
 # FIX M9 — .gitattributes para .sql merge
 # ────────────────────────────────────────────────────────────────────────────
 
-assert ".gitattributes tiene data_*.sql" "grep -q 'data_\\*.sql' '$SKALLING_ROOT/templates/gitattributes.template'"
-assert ".gitattributes usa merge=union para sql" "grep -q 'data_\\*.sql merge=union' '$SKALLING_ROOT/templates/gitattributes.template'"
+# El dump real es db/teamdb/team.dump.sql (fuera de .opencode/): su regla va en
+# el .gitattributes raíz que gestiona setup.sh, no en el template.
+assert "setup declara merge=union para el dump" "grep -q 'db/teamdb/team.dump.sql merge=union' '$SKALLING_ROOT/setup.sh'"
+assert "template sin la ruta muerta data_*.sql" "! grep -q 'data_\\*.sql' '$SKALLING_ROOT/templates/gitattributes.template'"
 
 # Test routing_decisions
 TEST_R=$(mktemp -d)

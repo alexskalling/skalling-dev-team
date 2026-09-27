@@ -72,6 +72,22 @@ SENSITIVE_VALUE_RE = re.compile(r'(?i)(ghp_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}|
 con = sqlite3.connect(db)
 con.text_factory = str
 
+
+def sql_text(s):
+    # Una fila = una línea, de verdad: los saltos de línea del valor van como
+    # char(10)/char(13), así git mergea por fila y teamdb-merge nunca ve un
+    # INSERT partido. Sigue siendo SQL válido para sqlite3 (teamdb-restore).
+    parts = []
+    for piece in re.split(r'(\r\n|\n|\r)', s):
+        if piece == '\r\n':
+            parts.append('char(13,10)')
+        elif piece in ('\n', '\r'):
+            parts.append('char(%d)' % ord(piece))
+        elif piece:
+            parts.append("'" + piece.replace("'", "''") + "'")
+    return '||'.join(parts) or "''"
+
+
 out = []
 secret_hits = []
 
@@ -111,7 +127,7 @@ for t in tables:
                 s = str(v)
                 if SENSITIVE_VALUE_RE.search(s):
                     secret_hits.append(f'{t} valor con formato de secreto')
-                vals.append("'" + s.replace("'", "''") + "'")
+                vals.append(sql_text(s))
         out.append(f'INSERT INTO "{t}" ({col_sql}) VALUES ({",".join(vals)});')
 
 if secret_hits:
