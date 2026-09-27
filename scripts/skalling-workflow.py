@@ -98,14 +98,37 @@ def require(condition, message):
         raise ValueError(message)
 
 
-def seal_receipt(db, root, identifier, files, verifier):
+def staged_paths(root):
+    out = subprocess.run(['git', 'diff', '--cached', '--name-only', '-z', '--no-renames', '--', '.', DUMP_PATHSPEC],
+                         cwd=root, capture_output=True, timeout=30)
+    if out.returncode != 0:
+        raise ValueError('No se pudo leer el índice de Git; no se sella una aprobación a ciegas')
+    return {p for p in out.stdout.decode('utf-8', 'replace').split('\0') if p}
+
+
+def require_index_in_scope(root, files):
+    """The receipt covers the WHOLE staged diff, so everything staged must be
+    what was reviewed. require_scope() ignores .opencode (memory writes during
+    the flow), but a staged .opencode/plugin.js or script is code nobody
+    verified here: refuse instead of approving it by accident."""
+    extra = staged_paths(root) - set(files)
+    require(not extra, f'Staged files outside the reviewed scope: {sorted(extra)}. '
+                       'Unstage them (git restore --staged) or review them in their own flow before completing')
+
+
+def seal_receipt(db, root, identifier, files, verifier, digest):
     """Bridge to the Git-facing approval: stage exactly the reviewed files and
     seal a receipt with the same tree_hash algorithm scripts/hooks/git-gate.py
     checks at commit time. Best-effort: any Git failure here just means the
     receipt is not sealed, git-gate.py still requires manual evidence."""
+    require_index_in_scope(root, files)
     try:
         if subprocess.run(['git', 'add', '--'] + list(files), cwd=root, capture_output=True, timeout=30).returncode != 0:
             return
+        require_index_in_scope(root, files)
+        # What got staged has to be what was verified (no edit slipped in
+        # between the last fingerprint and git add).
+        require(fingerprint(root, files) == digest, 'Candidate changed while staging; approval denied')
         diff = subprocess.run(['git', 'diff', '--cached', '--', '.', DUMP_PATHSPEC],
                                cwd=root, capture_output=True, timeout=30)
         patch = diff.stdout.rstrip(b'\n')  # git-gate.py hashes the patch with the same rstrip
@@ -326,12 +349,13 @@ def operate(request):
                 expected = 'documented' if state['risk'] == 'high' else 'verified'
                 require(state['state'] == expected, f'Completion requires {expected}')
                 require_scope(root, state['files'])
+                require_index_in_scope(root, state['files'])
                 require(fingerprint(root, state['files']) == state['digest'], 'Candidate changed after verification')
                 state['state'] = 'completed'
                 state['completed_at'] = now
                 state['duration_ms'] = round((now - state['started_at']) * 1000)
                 verifier = state.get('verification', {}).get('agent', 'jhon')
-                seal_receipt(db, root, identifier, state['files'], verifier)
+                seal_receipt(db, root, identifier, state['files'], verifier, state['digest'])
             else:
                 raise ValueError('Unknown workflow action')
         state = save(db, identifier, actor, session, action, state, evidence, now)

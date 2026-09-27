@@ -346,28 +346,36 @@ step_install_scripts() {
     fi
 }
 
+# Plugins que forman el control del equipo. Van SIEMPRE juntos, en modo
+# global y en modo proyecto: sin skalling-git-guard no hay identidad del
+# runtime ni bloqueo de ediciones por rol, y los helpers caen al actor que
+# declare el comando (pensado para la CLI humana).
+SKALLING_PLUGINS=(skalling-goal.js skalling-data-safety.js skalling-workflow.js skalling-git-guard.js)
+SKALLING_PLUGIN_LIBS=(data-safety.mjs workflow.mjs git-guard.mjs)
+SKALLING_GIT_HOOKS=(pre-commit pre-push post-merge)
+
 step_install_hooks() {
-    run mkdir -p "$TARGET_DIR/.opencode/plugins" "$TARGET_DIR/.opencode/command"
-    run cp "$SCRIPT_DIR/plugins/skalling-goal.js" "$TARGET_DIR/.opencode/plugins/skalling-goal.js"
-    run mkdir -p "$TARGET_DIR/.opencode/plugins/lib"
-    run cp "$SCRIPT_DIR/plugins/skalling-data-safety.js" "$TARGET_DIR/.opencode/plugins/skalling-data-safety.js"
-    run cp "$SCRIPT_DIR/plugins/lib/data-safety.mjs" "$TARGET_DIR/.opencode/plugins/lib/data-safety.mjs"
-    run cp "$SCRIPT_DIR/plugins/skalling-workflow.js" "$TARGET_DIR/.opencode/plugins/skalling-workflow.js"
-    run cp "$SCRIPT_DIR/plugins/lib/workflow.mjs" "$TARGET_DIR/.opencode/plugins/lib/workflow.mjs"
+    run mkdir -p "$TARGET_DIR/.opencode/plugins/lib" "$TARGET_DIR/.opencode/command"
+    local plugin
+    for plugin in "${SKALLING_PLUGINS[@]}"; do
+        run cp "$SCRIPT_DIR/plugins/$plugin" "$TARGET_DIR/.opencode/plugins/$plugin"
+    done
+    for plugin in "${SKALLING_PLUGIN_LIBS[@]}"; do
+        run cp "$SCRIPT_DIR/plugins/lib/$plugin" "$TARGET_DIR/.opencode/plugins/lib/$plugin"
+    done
     run cp "$SCRIPT_DIR/scripts/skalling-workflow.py" "$TARGET_DIR/.opencode/scripts/skalling-workflow.py"
     run cp "$SCRIPT_DIR/command/skalling-goal.md" "$TARGET_DIR/.opencode/command/skalling-goal.md"
-    log INFO "Instalando git hooks en .git/hooks/"
-
-    if [[ ! -d "$TARGET_DIR/.git" ]]; then
-        log WARN "No hay repositorio git en $TARGET_DIR. Ejecutá git init primero o inicializá con skalling-init."
-        return 0
+    if [[ "$DRY_RUN" == false ]]; then
+        for plugin in "${SKALLING_PLUGINS[@]}"; do
+            [[ -f "$TARGET_DIR/.opencode/plugins/$plugin" ]] || { log ERROR "Falta plugin obligatorio: $plugin"; return 1; }
+        done
+        log OK "Plugins instalados: ${SKALLING_PLUGINS[*]}"
     fi
 
     if [[ ! -d "$HOOKS_SRC_DIR" ]]; then
         log WARN "No hay hooks en $HOOKS_SRC_DIR, skip"
         return 0
     fi
-
     run mkdir -p "$HOOKS_DEST_DIR"
     run cp "$HOOKS_SRC_DIR"/pre-commit "$HOOKS_DEST_DIR/"
     run cp "$HOOKS_SRC_DIR"/pre-push "$HOOKS_DEST_DIR/"
@@ -375,17 +383,28 @@ step_install_hooks() {
     run cp "$HOOKS_SRC_DIR"/git-gate.py "$HOOKS_DEST_DIR/"
     run chmod +x "$HOOKS_DEST_DIR"/pre-commit "$HOOKS_DEST_DIR"/pre-push "$HOOKS_DEST_DIR"/post-merge
 
-    local hook
-    for hook in pre-commit pre-push post-merge; do
-        local githook="$TARGET_DIR/.git/hooks/$hook"
-        local ourscript="$SCRIPTS_DEST_DIR/../hooks/$hook"
-        if [[ ! -L "$githook" || "$(readlink "$githook")" != "$ourscript" ]]; then
-            run rm -f "$githook"
-            run ln -sf "$ourscript" "$githook"
-            log OK "Hook $hook -> $ourscript"
-        else
-            log INFO "Hook $hook ya instalado"
+    # Repo, worktree o GIT_DIR: lo decide Git, no la existencia de .git/.
+    if ! git -C "$TARGET_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+        log WARN "No hay repositorio git en $TARGET_DIR. Ejecutá git init y volvé a correr setup para activar los hooks."
+        return 0
+    fi
+    log INFO "Activando git hooks (los hooks previos del proyecto se conservan y encadenan)"
+    local hook rc hooks_dir
+    hooks_dir="$(cd "$HOOKS_DEST_DIR" 2>/dev/null && pwd || echo "$HOOKS_DEST_DIR")"
+    for hook in "${SKALLING_GIT_HOOKS[@]}"; do
+        if [[ "$DRY_RUN" == true ]]; then
+            echo "    [dry-run] enlazar hook $hook -> $hooks_dir/$hook (conservando uno previo como $hook.skalling-prev)"
+            continue
         fi
+        rc=0
+        skalling_install_git_hook "$TARGET_DIR" "$hook" "$hooks_dir/$hook" || rc=$?
+        case "$rc" in
+            0) log OK "Hook $hook -> $hooks_dir/$hook" ;;
+            2) log WARN "core.hooksPath está configurado ($(git -C "$TARGET_DIR" config --get core.hooksPath)); no se toca esa carpeta."
+               log WARN "  Para activar el gate agregá al final de tu $hook: bash \"\$(git rev-parse --show-toplevel)/.opencode/hooks/$hook\" \"\$@\""
+               ;;
+            *) log ERROR "No se pudo instalar el hook $hook sin pisar uno existente"; return 1 ;;
+        esac
     done
 }
 
@@ -511,9 +530,9 @@ step_summary() {
       │   ├── hooks/       (pre-commit, pre-push, post-merge)
       │   ├── changes/     (SDD artifacts)
       │   └── context/     (bundle OKF + team.db, listo para usar)
-      ├── .git/hooks/
-      │   ├── pre-commit   (DB-first enforcement)
-      │   ├── pre-push     (receipt + tree_hash seal)
+      ├── git hooks (los previos se conservan como <hook>.skalling-prev)
+      │   ├── pre-commit   (receipt de Jhon/Luz sobre lo staged)
+      │   ├── pre-push     (receipt por commit publicado)
       │   └── post-merge   (DB sync from .sql)
       └── docs/            (documentación pública)
 
@@ -560,6 +579,42 @@ do_uninstall() {
     # Remover .gitattributes
     [[ -f "$OPENCODE_DIR/.gitattributes" ]] && run rm -f "$OPENCODE_DIR/.gitattributes"
 
+    # Hooks de Git: quitar los de Skalling y restaurar los que había antes.
+    # Sin esto quedaban activos exigiendo una base que se acaba de borrar.
+    local hook
+    for hook in "${SKALLING_GIT_HOOKS[@]}"; do
+        if [[ "$DRY_RUN" == true ]]; then
+            echo "    [dry-run] quitar hook $hook y restaurar $hook.skalling-prev si existe"
+        else
+            skalling_uninstall_git_hook "$TARGET_DIR" "$hook"
+        fi
+    done
+    log OK "Hooks de Git de Skalling retirados (hooks previos restaurados)"
+
+    # Plugins, comandos, hooks y scripts distribuidos por Skalling.
+    local plugin
+    for plugin in "${SKALLING_PLUGINS[@]}"; do
+        [[ -f "$OPENCODE_DIR/plugins/$plugin" ]] && run rm -f "$OPENCODE_DIR/plugins/$plugin"
+    done
+    for plugin in "${SKALLING_PLUGIN_LIBS[@]}"; do
+        [[ -f "$OPENCODE_DIR/plugins/lib/$plugin" ]] && run rm -f "$OPENCODE_DIR/plugins/lib/$plugin"
+    done
+    rmdir "$OPENCODE_DIR/plugins/lib" "$OPENCODE_DIR/plugins" 2>/dev/null || true
+    [[ -f "$OPENCODE_DIR/command/skalling-goal.md" ]] && run rm -f "$OPENCODE_DIR/command/skalling-goal.md"
+    rmdir "$OPENCODE_DIR/command" 2>/dev/null || true
+    [[ -d "$HOOKS_DEST_DIR" ]] && run rm -rf "$HOOKS_DEST_DIR"
+    [[ -d "$SCRIPTS_DEST_DIR" ]] && run rm -rf "$SCRIPTS_DEST_DIR"
+    if [[ -d "$SKILLS_DEST_DIR" ]]; then
+        local skill_dir
+        for skill_dir in "$SKILLS_BASE_DIR"/*/; do
+            [[ -d "$skill_dir" ]] || continue
+            [[ -d "$SKILLS_DEST_DIR/$(basename "$skill_dir")" ]] && run rm -rf "$SKILLS_DEST_DIR/$(basename "$skill_dir")"
+        done
+        rmdir "$SKILLS_DEST_DIR" 2>/dev/null || true
+    fi
+    rmdir "$AGENTS_DEST_DIR" 2>/dev/null || true
+    log OK "Plugins, hooks, scripts y skills de Skalling retirados"
+
     # Preguntar antes de borrar bundle OKF (memoria es valiosa)
     if [[ -d "$CONTEXT_DIR" ]]; then
         if [[ "$FORCE" == true ]] || ask_yes_no "    ¿Borrar bundle OKF (.opencode/context/)? Tiene memoria del proyecto." "n"; then
@@ -596,6 +651,13 @@ main() {
     echo ""
 
     skalling_require_dependencies
+    if command -v opencode >/dev/null 2>&1; then
+        local oc_version; oc_version="$(opencode --version 2>/dev/null || echo unknown)"
+        if [[ "$(skalling_opencode_support "$oc_version")" == unsupported ]]; then
+            log ERROR "opencode $oc_version no está soportado: mínimo $SKALLING_OPENCODE_MIN (antes no carga los plugins de control)."
+            exit 1
+        fi
+    fi
 
     if [[ "$DRY_RUN" == true ]]; then
         log WARN "Modo dry-run activo — no se modifica nada"

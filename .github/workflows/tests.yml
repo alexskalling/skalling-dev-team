@@ -28,29 +28,8 @@ jobs:
           node-version: '22'
 
       - name: Run tests
-        run: |
-          bash tests/setup.test.sh
-          python3 tests/dashboard-server.test.py
-          bash tests/dashboard-launcher.test.sh
-          bash tests/quality-priorities.test.sh
-          python3 tests/routing-safety.test.py
-          python3 tests/context-regressions.test.py
-          python3 tests/installed-workflow.test.py
-          python3 tests/memory-permissions.test.py
-          python3 tests/agent-autonomy-contract.test.py
-          python3 tests/agent-behavioral-evals.test.py
-          python3 tests/permission-generation.test.py
-          python3 tests/workflow-engine.test.py
-          python3 tests/data-safety.test.py
-          node --test tests/data-safety-plugin.test.mjs
-          node --test tests/data-safety-v2.test.mjs
-          node --test tests/workflow-plugin.test.mjs
-          node --test tests/git-guard-plugin.test.mjs
-          python3 tests/skalling-goal.test.py
-          node --test tests/skalling-goal-plugin.test.mjs
-          bash tests/bootstrap-readiness.test.sh
-          bash tests/teamdb-hardening-suite.sh
-          bash tests/scripts-parity.test.sh
+        # Misma lista que corre Jhon al sellar en este repo (tests/run-all.sh).
+        run: bash tests/run-all.sh
 
       - name: Run doctor strictly against a fresh installation
         run: |

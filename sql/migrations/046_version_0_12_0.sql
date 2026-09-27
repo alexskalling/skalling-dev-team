@@ -1,0 +1,12 @@
+-- v0.12.0: correcciones de la auditoría externa de v0.11.16 (27-09-2026).
+--
+-- Sin cambios de schema. Cambia el significado de los receipts, no su forma:
+--   - Jhon sin tests configurados sella exit_code=2 y command "not_run: ...";
+--     el gate NO lo acepta como aprobación. Un humano puede dispensarlo con
+--     SKALLING_VERIFY_WAIVER="motivo" (command "waived: ...", exit 0), y el
+--     gate lo anuncia.
+--   - El receipt de Jhon se sella solo si el candidato staged es el mismo
+--     antes y después de correr el test.
+--   - El gate exige revisión para todo cambio salvo documentación, imágenes
+--     y fuentes (antes: una lista corta de lenguajes).
+UPDATE schema_meta SET value = '0.12.0' WHERE key = 'version';

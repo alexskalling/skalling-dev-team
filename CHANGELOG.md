@@ -4,6 +4,98 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.12.0] — en preparación
+
+Correcciones de la auditoría externa de v0.11.16 (27-09-2026, checkout
+`82a6c96`). El problema de fondo: algunas aprobaciones técnicas no probaban
+lo que decían probar. Cada hallazgo tiene una reproducción en
+`tests/audit-regressions.test.sh` (27 de sus casos fallan contra v0.11.16).
+
+### Security
+- **A02 — sin tests no hay aprobación.** Si Jhon sella sin
+  `testing.unit.command`, el receipt queda `not_run` (exit 2) y el gate no
+  lo acepta. Antes quedaba exit 0 con una nota en el resumen. Salidas:
+  configurar el test, revisión de Luz, o `SKALLING_VERIFY_WAIVER="motivo"`
+  puesto por una persona (receipt `waived`, anunciado en cada commit; el
+  guard impide que un agente fije la variable).
+- **A03 — la aprobación no se transfiere a contenido nuevo.** El hash del
+  candidato staged se calcula antes y después del test, y el working tree
+  tiene que seguir igual al índice. Si algo cambió mientras corría el test,
+  no se sella. Un review con blockers ya no se "lava" con tests verdes.
+- **A04 — el workflow no aprueba archivos que nadie revisó.** `complete`
+  falla si hay algo staged fuera de los archivos declarados (incluido
+  `.opencode/`), antes y después de stagear el candidato.
+- **A05 — el gate cubre todo cambio funcional.** Antes solo miraba 12
+  extensiones de lenguaje (quedaban afuera `.sql`, `.mjs`, YAML,
+  Dockerfile, `package.json`, `.vue`, `.php`…). Ahora todo necesita
+  revisión salvo documentación, imágenes y fuentes; los `.md` que definen
+  conducta de agentes no se eximen.
+- **A01 — ejecutar un archivo pide lo mismo que ejecutar código inline.**
+  `python3 x.py`, `bash x.sh`, `node x.js`, `./x`, `npx`, `make`,
+  `npm run <x>` y `git stash` piden aprobación en todos los perfiles; los
+  helpers de Skalling y los test runners concretos siguen permitidos.
+  `cp`/`mv` sobre `*.db`/`*.sqlite` piden aprobación. Las 4 pruebas de
+  `memory-permissions.test.py`, que fallaban, pasan.
+- **A08 — identidad en OpenCode 2.** `shell create.before` no trae sesión:
+  la identidad se correlacionaba por texto del comando y dos sesiones con
+  el mismo comando podían intercambiarla. Ahora, si hay más de un agente
+  esperando el mismo texto, todos quedan `ambiguous` y los helpers de
+  TeamDB fallan cerrado; las entradas vencen a los 30 s.
+- **A09 — política efectiva en `skalling_workflow` v2.** Se evalúa como
+  OpenCode: config global → proyecto → agente, gana la última regla que
+  coincide (antes: el patrón más largo, solo del frontmatter).
+- `teamdb_destructive` v2: aplicar con la ruta del motor entre comillas
+  (carpetas con espacios) no coincidía con la regla y no preguntaba.
+
+### Fixed
+- **A06 — instalación por proyecto completa.** `setup.sh` instala
+  `skalling-git-guard` (identidad y bloqueo por rol) como la instalación
+  global; antes dependía de que existiera una copia global.
+- **A07 — no se destruyen hooks ajenos.** `setup.sh` y
+  `bootstrap-context.sh` conservan un hook previo como
+  `<hook>.skalling-prev` y lo encadenan (corre primero); la ruta la
+  resuelve Git (worktrees). Con `core.hooksPath` no se toca la carpeta del
+  equipo y se explica cómo integrar el gate.
+- **A11 — desinstalación reversible.** `setup.sh --uninstall` retira
+  plugins, hooks, scripts y skills y restaura los hooks previos; el
+  desinstalador global retira también el plugin de workflow y los hooks.
+- **A10 — `/skalling-goal` en OpenCode 2** se declara no disponible (la
+  API v2 no expone lo que usa); el comando ya no sugiere reiniciar como
+  arreglo.
+- `post-merge` encuentra `teamdb-merge.sh` en instalaciones por proyecto.
+- `skalling-review.sh`: sin semgrep el resultado es
+  `PASS (degradado: sin SAST)`; `SKALLING_REQUIRE_SAST=1` lo vuelve FAIL.
+
+### Added
+- Matriz de compatibilidad con OpenCode (README). Instalador y doctor
+  rechazan versiones < 1.18.29.
+- Doctor: sección "Controles activos" (plugins de control, hooks del gate
+  realmente instalados, versión de OpenCode). Antes daba "saludable" sin
+  mirar nada de eso.
+
+### Tests / CI
+- `tests/audit-regressions.test.sh` (35 casos) y un caso A04 en
+  `workflow-git-gate-bridge.test.py`; pruebas Node de A08, A09 y del
+  camino entre comillas. CI corre además `git-close.test.py`.
+- `teamdb-hardening-suite.sh`: una suite listada que no existe FALLA (antes
+  `teamdb-plan.test.sh` se salteaba en silencio) y al fallar muestra la
+  salida del hijo.
+- `install-hooks-paths.test.sh` ya no depende del `.git/hooks` del propio
+  checkout (usa un fixture); `skalling-goal.test.py` usa un verificador
+  válido (`jhon`).
+
+### Límites conocidos (no resueltos en esta versión)
+- El receipt sigue siendo un hash del diff staged (incluye blobs y modos
+  de lo cambiado), no del árbol completo: después de un rebase limpio el
+  mismo diff sigue aprobado sin re-verificar.
+- Los permisos y el guard son controles de proceso, no un sandbox: un
+  agente con permiso de edición puede escribir un script y pedir
+  ejecutarlo (ahora pide aprobación). La integración confiable sigue
+  requiriendo CI y ramas protegidas (docs/security-model.md).
+- Falta una matriz de CI con binarios reales de OpenCode 1.18.29 y 2.x, y
+  evaluaciones con sesiones LLM reales que midan si los 8 roles mejoran el
+  resultado frente a una alternativa simple.
+
 ## [0.11.16] — en preparación
 
 Agujeros vistos en una sesión real con v0.11.15 instalada (ucadigital,

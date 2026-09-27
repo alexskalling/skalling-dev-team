@@ -70,6 +70,30 @@ class WorkflowSealsGitGateReceipt(unittest.TestCase):
         self.addCleanup(db.close)
         self.gitgate.check(['--cached'], db, 'pre-commit')  # raises ValueError if git-gate would block
 
+    def test_staged_file_outside_reviewed_scope_is_not_approved(self):
+        """Auditoría A04: un .opencode/unreviewed.py staged antes del flujo
+        quedaba cubierto por el receipt aunque solo se revisó app.py."""
+        (self.root / '.opencode/unreviewed.py').write_text('def broken(:\n')
+        subprocess.run(['git', 'add', '--', '.opencode/unreviewed.py'], cwd=self.root, check=True)
+        self.call('alex', 'start', risk='low', files=['app.py', 'tests/check.test.sh'],
+                  acceptance='value remains one', scope='local', decision='none')
+        self.call('teo', 'deliver')
+        self.call('jhon', 'oracle', expected='one', negative='two', invariant='integer', refutation='test')
+        self.call('jhon', 'check', argv=['bash', 'tests/check.test.sh'], method='falsification', criterion='value stays 1')
+        self.call('jhon', 'approve', evidence='falsification covers the declared criterion')
+        with self.assertRaisesRegex(ValueError, 'outside the reviewed scope'):
+            self.call('alex', 'complete')
+        self.assertEqual(self.call('alex', 'status')['state'], 'verified')
+        db = sqlite3.connect((self.root / '.opencode/context/team.db').as_uri() + '?mode=ro', uri=True)
+        self.addCleanup(db.close)
+        self.assertEqual(db.execute('SELECT count(*) FROM receipts').fetchone()[0], 0)
+        subprocess.run(['git', 'add', '--', 'app.py', 'tests/check.test.sh'], cwd=self.root, check=True)
+        with self.assertRaises(ValueError):
+            self.gitgate.check(['--cached'], db, 'pre-commit')
+        # Sacado del índice lo no revisado, el mismo flujo sí completa.
+        subprocess.run(['git', 'rm', '-q', '--cached', '--', '.opencode/unreviewed.py'], cwd=self.root, check=True)
+        self.assertEqual(self.call('alex', 'complete')['state'], 'completed')
+
     def test_uncompleted_workflow_still_blocks_git_gate(self):
         self.call('alex', 'start', risk='low', files=['app.py', 'tests/check.test.sh'],
                   acceptance='value remains one', scope='local', decision='none')

@@ -102,19 +102,30 @@ else
   assert_fail "pre-commit funciona con SKALLING_ROOT" "rc=$RC"
 fi
 
-# 6b. Bug real (2026-09-25): un commit plano en el propio checkout de
-# skalling-dev-team, sin SKALLING_ROOT seteado, fallaba con "git-gate.py no
-# encontrado" -- HOOK_DIR resuelve al symlink en .git/hooks/, no a su destino
-# real en .opencode/hooks/, y el fallback "$HOOK_DIR/../hooks/git-gate.py" era
-# el mismo .git/hooks de vuelta. El test anterior (6) nunca lo agarró porque
-# siempre pasa SKALLING_ROOT explícito. Este SÍ lo saca del entorno.
-OUT6B="$(env -u SKALLING_ROOT bash -c "unset SKALLING_ROOT; cd '$ROOT' && bash .git/hooks/pre-commit" 2>&1)"
+# 6b. Bug real (2026-09-25): un commit plano en un checkout con los hooks
+# instalados como symlink a .opencode/hooks/, sin SKALLING_ROOT en el entorno,
+# fallaba con "git-gate.py no encontrado" -- HOOK_DIR resuelve al symlink en
+# .git/hooks/, no a su destino real, y el fallback "$HOOK_DIR/../hooks/" era el
+# mismo .git/hooks de vuelta. Fixture hermético: misma estructura que deja
+# setup.sh (antes este caso miraba el .git/hooks del propio checkout, que un
+# clon limpio de CI no tiene).
+TMP6B_RAW="$(mktemp -d)"
+TMP6B="$(cd "$TMP6B_RAW" && pwd -P)"
+git -C "$TMP6B" init -q
+mkdir -p "$TMP6B/.opencode/hooks" "$TMP6B/.opencode/scripts" "$TMP6B/.opencode/context"
+cp "$ROOT/scripts/hooks/pre-commit" "$ROOT/scripts/hooks/git-gate.py" "$TMP6B/.opencode/hooks/"
+chmod +x "$TMP6B/.opencode/hooks/pre-commit"
+ln -s "$TMP6B/.opencode/scripts/../hooks/pre-commit" "$TMP6B/.git/hooks/pre-commit"
+echo "notas" > "$TMP6B/README.md"
+git -C "$TMP6B" add README.md
+OUT6B="$(env -u SKALLING_ROOT HOME="$(mktemp -d)" bash -c "cd '$TMP6B' && bash .git/hooks/pre-commit" 2>&1)"
 RC6B=$?
 if [ "$RC6B" = "0" ] && ! grep -q "no encontrado" <<< "$OUT6B"; then
-  assert_pass "pre-commit funciona en el propio repo SIN SKALLING_ROOT en el entorno"
+  assert_pass "pre-commit instalado como symlink encuentra git-gate.py SIN SKALLING_ROOT"
 else
-  assert_fail "pre-commit funciona en el propio repo SIN SKALLING_ROOT en el entorno" "rc=$RC6B out=$OUT6B"
+  assert_fail "pre-commit instalado como symlink encuentra git-gate.py SIN SKALLING_ROOT" "rc=$RC6B out=$OUT6B"
 fi
+rm -rf "$TMP6B"
 
 # 7. post-merge no falla si no hay directorio teamdb
 TMP2_RAW="$(mktemp -d)"

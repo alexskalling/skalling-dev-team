@@ -6,7 +6,8 @@ pre-commit, commits publicados en pre-push):
   - Detección de secretos hardcodeados (regex SECRET).
   - Coherencia memoria ↔ repo (.md en .opencode/context/ ↔ fila en TeamDB).
   - Receipt sellado por un verificador (Jhon o Luz) para el candidato exacto
-    (tree_hash en receipts con exit_code=0).
+    (tree_hash en receipts con exit_code=0; "not_run" no aprueba) cuando el
+    cambio toca algo fuera de las excepciones de documentación (needs_review).
 
 FUERA DE SCOPE: el linter SQLi (`scripts/skalling-review.sh --lens risk`) NO se
 corre aquí. Es un escaneo completo de `scripts/**` que tarda segundos y mira
@@ -22,7 +23,26 @@ from pathlib import Path
 
 DUMP = 'db/teamdb/team.dump.sql'
 PATHSPEC = ['--', '.', ':(exclude)' + DUMP]
-CODE = re.compile(r'\.(ts|tsx|js|jsx|py|rs|go|java|cpp|c|sh|bash)$')
+# Alcance protegido: TODO cambio necesita revisión aprobada, salvo excepciones
+# acotadas que no cambian el comportamiento (documentación, imágenes, fuentes).
+# Antes era al revés -- una lista corta de lenguajes -- y quedaban afuera
+# migraciones .sql, módulos .mjs, YAML, Dockerfile, package.json, .vue, .php...
+# Un .md que define conducta de agentes (prompts, comandos, skills) SÍ es
+# código del proceso y no se exime.
+EXEMPT_SUFFIX = re.compile(r'\.(md|markdown|txt|rst|adoc|png|jpe?g|gif|webp|ico|bmp|avif|woff2?|ttf|otf|eot)$', re.I)
+EXEMPT_NAMES = {'LICENSE', 'LICENSE.txt', 'NOTICE', 'AUTHORS', 'CODEOWNERS', '.gitignore'}
+BEHAVIOR_DOCS = ('.opencode/agents/', '.opencode/command/', '.opencode/commands/', '.opencode/skills/',
+                 'agents-base/', 'skills-base/', 'command/', 'constitution/')
+
+
+def needs_review(name):
+    if not name:
+        return False
+    if name.startswith(BEHAVIOR_DOCS):
+        return True
+    return not (EXEMPT_SUFFIX.search(name) or Path(name).name in EXEMPT_NAMES)
+
+
 # Solo quien verifica puede habilitar un commit de código. Un receipt de
 # Alex o de Teo (el que orquesta o el que implementó) no prueba nada: así un
 # cambio que se saltó a Jhon no llega al repositorio aunque exista evidencia.
@@ -55,7 +75,7 @@ def check(diff_args, db, label):
                     table = target
             if table and not db.execute(f'SELECT 1 FROM {table} WHERE slug=? LIMIT 1', (slug,)).fetchone():
                 raise ValueError(f'{label}: {name} no tiene registro en TeamDB; no crear memoria paralela.')
-    if not any(CODE.search(name) for name in names):
+    if not any(needs_review(name) for name in names):
         return
     if not db:
         raise ValueError(f'{label}: team.db no existe; no se puede validar la revisión aprobada '
@@ -64,13 +84,22 @@ def check(diff_args, db, label):
                           'diseño: sin base no hay forma de saber si esto ya se revisó.')
     patch = git('diff', *diff_args, *PATHSPEC).rstrip(b'\n')
     digest = hashlib.sha256(patch).hexdigest()[:16]
-    row = db.execute('SELECT exit_code FROM receipts WHERE tree_hash=? AND lower(agent) IN (?, ?) '
-                     'ORDER BY ts DESC, rowid DESC LIMIT 1', (digest, *VERIFIERS)).fetchone()
-    if not row or row[0] != 0:
+    # Decide el receipt más reciente que registra un resultado. Un "not_run"
+    # (Jhon sin tests configurados) no es aprobación ni rechazo: no cuenta.
+    rows = db.execute('SELECT exit_code, command FROM receipts WHERE tree_hash=? AND lower(agent) IN (?, ?) '
+                      'ORDER BY ts DESC, rowid DESC', (digest, *VERIFIERS)).fetchall()
+    not_run = [r for r in rows if str(r[1] or '').startswith('not_run:')]
+    decisive = [r for r in rows if not str(r[1] or '').startswith('not_run:')]
+    if not decisive or decisive[0][0] != 0:
+        hint = (' Jhon no pudo correr tests (no hay testing.unit.command): configurarlo, pedir revisión de Luz '
+                '(skalling-review.sh) o que un humano selle con SKALLING_VERIFY_WAIVER="motivo".') if not_run and not decisive else ''
         raise ValueError(f'{label}: falta revisión aprobada para estos cambios ({digest}). '
                          'La aprobación tiene que ser de Jhon (verificación) o Luz (revisión) sobre el '
                          'candidato exacto staged; un comprobante de Alex o Teo no cuenta. '
-                         'No fabricar comprobantes ni limpiar memoria para desbloquear Git.')
+                         'No fabricar comprobantes ni limpiar memoria para desbloquear Git.' + hint)
+    command = str(decisive[0][1] or '')
+    if command.startswith('waived:'):
+        print(f'AVISO: {label} aprobado SIN tests por decisión humana ({command[7:].strip()}) ({digest})', file=sys.stderr)
     print(f'OK: {label} coincide con el receipt sellado ({digest})')
 
 

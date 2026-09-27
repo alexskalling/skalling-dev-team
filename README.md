@@ -2,7 +2,7 @@
 
 Skalling es un equipo de **8 agentes de IA** que trabajan juntos adentro de [OpenCode](https://opencode.ai). Cada agente tiene un rol específico y siguen un ciclo ordenado para construir software bien hecho.
 
-**Versión actual: 0.11.16**
+**Versión actual: 0.12.0**
 
 ---
 
@@ -60,8 +60,19 @@ Se protegen cambios anteriores y se bloquea el cierre si falta evidencia del can
 Después de instalar o actualizar, reiniciar OpenCode para cargar el plugin. No funciona con
 OpenCode cerrado ni garantiza completar tareas con bloqueos externos o decisiones pendientes.
 
-Integración verificada con OpenCode 1.18.29. Si hay varias instalaciones, comprobar
-`command -v opencode` y `opencode --version` en la terminal del proyecto que se va a usar.
+### Compatibilidad con OpenCode
+
+| Versión | Estado | Qué funciona |
+|---|---|---|
+| < 1.18.29 | **No soportada** | Los plugins exportan `{ server, setup }`, forma que OpenCode acepta desde 1.18.29. El instalador y el doctor lo rechazan. |
+| 1.18.29 – 1.x | Soportada (v1) | Todo: agentes, guard de identidad, `skalling_workflow`, `teamdb_destructive`, `/skalling-goal`. |
+| 2.x (probado con 2.0.18) | Soportada con límites | Agentes, guard, `skalling_workflow` y `teamdb_destructive`. **`/skalling-goal` no está disponible**: la API de plugins v2 no expone los hooks que usa (comando, sesión inactiva, continuación). En v2 un check de `skalling_workflow` solo corre si la política efectiva ya lo permite (un plugin v2 no puede pedir aprobación). Si dos sesiones corren exactamente el mismo comando a la vez, la identidad queda "ambigua" y los helpers de TeamDB se niegan a actuar hasta reintentar. |
+
+Cómo se verificó: pruebas unitarias de los adaptadores v1/v2 contra la API documentada.
+No hay todavía una matriz de CI con binarios reales de OpenCode ni evaluaciones con sesiones
+LLM reales; tratá los resultados en v2 como soporte supervisado. Si hay varias
+instalaciones, comprobar `command -v opencode` y `opencode --version` en la terminal del
+proyecto que se va a usar; `bash setup-team-doctor.sh` informa la versión detectada.
 
 Los ocho agentes tienen lecturas y helpers de TeamDB permitidos según su rol, también fuera
 de Goal. Usar rutas canónicas de los helpers; no envolverlos en `python -c`, `bash -c` o SQL libre.
@@ -447,8 +458,28 @@ bash scripts/teamdb-execute-plan.sh auth-jwt /path/to/project
 
 ### Hooks git
 
-- `pre-commit`: exporta DB → `.sql` antes de commitear y valida que el árbol staged coincida con el último receipt sellado (tree_hash, v0.8.3+)
-- `post-merge`: importa `.sql` → DB después de hacer pull
+- `pre-commit`: valida que lo staged coincida con un receipt aprobado de Jhon o Luz (tree_hash). Todo cambio lo necesita salvo documentación (`.md`, `.txt`…), imágenes y fuentes; los `.md` que definen conducta de agentes (`.opencode/agents`, comandos, skills) sí lo necesitan.
+- `pre-push`: la misma validación por cada commit que se publica.
+- `post-merge`: importa `.sql` → DB después de hacer pull.
+
+La instalación **no pisa hooks existentes**: un hook previo del proyecto queda como
+`<hook>.skalling-prev` y el de Skalling lo ejecuta primero; `setup.sh --uninstall` lo
+restaura. Si el proyecto usa `core.hooksPath` (husky, carpeta versionada), no se toca esa
+carpeta: el instalador avisa cómo agregar la llamada a `.opencode/hooks/<hook>` y el doctor
+marca el gate como inactivo hasta que se haga.
+
+**Estados de un receipt de Jhon.** Jhon corre el test real del proyecto
+(`testing.unit.command` en `project.yaml`) y sella solo si el candidato staged es el mismo
+antes y después del test. Sin test configurado el receipt queda `not_run` (exit 2) y **no
+aprueba**: hay que configurar el test, pedir revisión de Luz (`skalling-review.sh`) o que
+una persona apruebe sin tests en su terminal:
+
+```bash
+SKALLING_VERIFY_WAIVER="motivo concreto" bash .opencode/scripts/teamdb-seal-receipt.sh <task> jhon
+```
+
+El gate acepta ese receipt `waived` y lo anuncia en cada commit. Un agente no puede fijar
+esa variable (el guard lo bloquea).
 
 ### Review con lenses (v0.8.3+)
 
@@ -475,7 +506,7 @@ bash scripts/skalling-review.sh --cwd /path/to/project --diff HEAD~1
 SKALLING_REVIEW_MODE=off bash scripts/skalling-review.sh
 ```
 
-Cada finding se emite con severidad `BLOCKER` (falla el review), `WARNING` o `INFO`. Al final se sella un **receipt inmutable** (`scripts/teamdb-seal-receipt.sh`) con `tree_hash`: el hash SHA-256 (16 chars) de `git diff HEAD`. El `pre-commit` compara ese hash con el árbol staged: si alguien tocó una línea después de la revisión, el commit se bloquea hasta re-sellar o revertir.
+Cada finding se emite con severidad `BLOCKER` (falla el review), `WARNING` o `INFO`. Al final se sella un **receipt inmutable** (`scripts/teamdb-seal-receipt.sh`) con `tree_hash`: el hash SHA-256 (16 chars) del diff staged (`git diff --cached`, que incluye los blobs y modos de cada archivo cambiado). Si semgrep no está o no pudo correr, el resultado dice `PASS (degradado: sin SAST)`; con `SKALLING_REQUIRE_SAST=1` eso es `FAIL`. El `pre-commit` compara ese hash con el árbol staged: si alguien tocó una línea después de la revisión, el commit se bloquea hasta re-sellar o revertir.
 
 ### Tests
 

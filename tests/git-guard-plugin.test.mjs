@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   blocksChainedSensitiveGit, guardCommand, identityViolation, createGuard, setupGuardV2,
-  writeViolation, hookBypassViolation, createCore,
+  writeViolation, hookBypassViolation, createCore, createIdentityQueue,
 } from '../plugins/lib/git-guard.mjs';
 
 test('bloquea git push/reset/etc. encadenado detrás de un prefijo permitido', () => {
@@ -234,4 +234,34 @@ test('Alex no manda el trabajo de un rol a otro agente', () => {
   assert.match(blocked, /es de jhon, pero la estás mandando a teo/);
   assert.equal(core.decide({ tool: 'subagent', agent: 'Alex', sessionID: 's',
     input: { agent: 'Jhon', description: 'Jhon sella receipt', prompt: 'x' } }), null);
+});
+
+test('auditoría A08: v2 no transfiere identidad entre sesiones con el mismo comando', async () => {
+  const { hooks, ctx } = fakeV2();
+  await setupGuardV2(ctx);
+  const command = 'bash ~/.config/opencode/scripts/teamdb-seal-receipt.sh t jhon';
+  await hooks['tool:execute.before']({ tool: 'shell', agent: 'Jhon', sessionID: 'j', messageID: 'm', id: '1', input: { command } });
+  await hooks['tool:execute.before']({ tool: 'shell', agent: 'Teo', sessionID: 't', messageID: 'm', id: '2', input: { command } });
+  const first = { command, env: {} };
+  const second = { command, env: {} };
+  await hooks['shell:create.before'](first);
+  await hooks['shell:create.before'](second);
+  // Ninguno recibe la identidad del otro: ambos quedan "ambiguous" y los
+  // helpers de TeamDB fallan cerrado.
+  assert.equal(first.env.SKALLING_RUNTIME_AGENT, 'ambiguous');
+  assert.equal(second.env.SKALLING_RUNTIME_AGENT, 'ambiguous');
+});
+
+test('auditoría A08: la cola de identidad vence entradas viejas y respeta un solo agente', () => {
+  let now = 0;
+  const q = createIdentityQueue(() => now);
+  q.register('npm test', 'Jhon');
+  q.register('npm test', 'jhon');
+  assert.equal(q.take('npm test'), 'jhon');
+  assert.equal(q.take('npm test'), 'jhon');
+  assert.equal(q.take('npm test'), null);
+  q.register('ls', 'Teo');
+  now = 60000;                      // nunca se ejecutó (permiso denegado)
+  q.register('ls', 'Jhon');
+  assert.equal(q.take('ls'), 'jhon');
 });

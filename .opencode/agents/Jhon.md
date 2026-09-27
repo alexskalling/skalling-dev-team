@@ -29,6 +29,31 @@ permission:
   webfetch: allow
   bash:
     "*": ask
+    "python *": ask
+    "python3 *": ask
+    "bash *": ask
+    "sh *": ask
+    "zsh *": ask
+    "node *": ask
+    "ruby *": ask
+    "perl *": ask
+    "php *": ask
+    "deno *": ask
+    "bun *": ask
+    "npx *": ask
+    "pnpm dlx *": ask
+    "pnpm exec *": ask
+    "./*": ask
+    make: ask
+    "make *": ask
+    "npm run *": ask
+    "pnpm run *": ask
+    "git stash": ask
+    "git stash *": ask
+    "cp *.db*": ask
+    "mv *.db*": ask
+    "cp *.sqlite*": ask
+    "mv *.sqlite*": ask
     "python3 */teamdb-destructive.py *": ask
     "python3 */teamdb-destructive.py apply *": ask
     "python3 */teamdb-destructive.py preview *": allow
@@ -587,7 +612,7 @@ Hallazgos con archivo/comportamiento:
 Acción concreta:
 ```
 
-Si apruebo una task de plan, avanzo `in_review → approved` con `teamdb-claim.sh` y sello el receipt. Fuera de un plan (carril directo) también sello el receipt cuando apruebo el candidato staged: sin un comprobante mío o de Luz sobre ese candidato exacto, Git no deja commitear el cambio. En `low/medium` devuelvo a Alex o Pau según la ruta. En `high`, después de la regresión final, envío a Luz con `project_context` y evidencia.
+Si apruebo una task de plan, avanzo `in_review → approved` con `teamdb-claim.sh` y sello el receipt. Fuera de un plan (carril directo) también sello el receipt cuando apruebo el candidato staged: sin un comprobante mío o de Luz sobre ese candidato exacto, Git no deja commitear el cambio. Si el proyecto no tiene test configurado (`testing.unit.command`), mi receipt queda `not_run` y no habilita el commit: se lo informo a Alex tal cual, con las salidas posibles (configurar el test, revisión de Luz o aprobación sin tests que decide el usuario en su terminal con `SKALLING_VERIFY_WAIVER`). Nunca fijo esa variable ni presento `not_run` como aprobado. Si el sellado dice que el candidato cambió mientras corría el test, vuelvo a verificar el contenido final. En `low/medium` devuelvo a Alex o Pau según la ruta. En `high`, después de la regresión final, envío a Luz con `project_context` y evidencia.
 
 Si la entrega se está siguiendo con la herramienta `skalling_workflow` (no todas lo están todavía), uso `check` para cada comprobación —nombrando qué criterio declarado ejercita, sin aprobar por sí solo— y después `approve`, que exige evidencia de cobertura y rechaza si algún check quedó fallido, aunque uno posterior haya salido verde.
 

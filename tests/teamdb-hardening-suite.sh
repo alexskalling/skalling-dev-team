@@ -59,7 +59,6 @@ TESTS=(
   tests/install-orphan-cleanup.test.sh
   tests/install-hooks-paths.test.sh
   tests/audit-log-actor.test.sh
-  tests/teamdb-plan.test.sh
   tests/teamdb-status.test.sh
   tests/teamdb-resume.test.sh
   tests/teamdb-export-audit.test.sh
@@ -111,28 +110,43 @@ TESTS=(
   tests/attempts.test.sh
 )
 
+# Una suite listada que no existe es un FALLO, no un salto silencioso (antes
+# tests/teamdb-plan.test.sh figuraba acá sin existir y la corrida daba verde).
+LOG_DIR="$(mktemp -d)"
+trap 'rm -rf "$LOG_DIR"' EXIT
+export LOG_DIR
+# El nombre del test va como argumento ($1), no dentro del script: el xargs
+# de macOS limita a 255 bytes cada argumento donde reemplaza {}.
 RESULTS="$(printf '%s\n' "${TESTS[@]}" | xargs -P "$JOBS" -I{} bash -c '
-  t="{}"
-  if [ -f "$t" ]; then
-    if { case "$t" in *.py) python3 "$t" ;; *) bash "$t" ;; esac; } >/dev/null 2>&1; then
-      echo "PASS:$t"
-    else
-      echo "FAIL:$t"
-    fi
+  t="$1"
+  log="$LOG_DIR/$(printf "%s" "$t" | tr "/" "_").log"
+  if [ ! -f "$t" ]; then
+    echo "MISSING:$t"
+  elif { case "$t" in *.py) python3 "$t" ;; *) bash "$t" ;; esac; } >"$log" 2>&1; then
+    echo "PASS:$t"
+  else
+    echo "FAIL:$t"
   fi
-')"
+' _ {})"
 
 PASS=0; FAIL=0
 while IFS= read -r line; do
   case "$line" in
     PASS:*) echo "✓ ${line#PASS:}"; PASS=$((PASS+1)) ;;
-    FAIL:*) echo "✗ ${line#FAIL:}"; FAIL=$((FAIL+1)) ;;
+    FAIL:*) echo "✗ ${line#FAIL:}"; FAIL=$((FAIL+1))
+            # La salida del hijo se muestra al fallar: sin esto había que
+            # repetir cada suite a mano para saber qué pasó.
+            tail -n 25 "$LOG_DIR/$(printf '%s' "${line#FAIL:}" | tr '/' '_').log" 2>/dev/null | sed 's/^/    │ /' ;;
+    MISSING:*) echo "✗ ${line#MISSING:} (NO EXISTE: sacarla de la lista o restaurarla)"; FAIL=$((FAIL+1)) ;;
   esac
 done <<< "$RESULTS"
 
 # Serial a proposito -- ver comentario arriba de TESTS.
 t="tests/dashboard-survives-group-kill.test.sh"
-if [ -f "$t" ]; then
+if [ ! -f "$t" ]; then
+  echo "✗ $t (NO EXISTE)"
+  FAIL=$((FAIL+1))
+else
   if bash "$t" >/dev/null 2>&1; then
     echo "✓ $t"
     PASS=$((PASS+1))

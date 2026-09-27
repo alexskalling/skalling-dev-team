@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# skalling-hook: marca para que el instalador reconozca este hook como propio.
 # Read-only gate: never repairs DB, creates receipts, or stages a dump.
 set -euo pipefail
 HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -7,6 +8,18 @@ HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # encontraba nada. git rev-parse --show-toplevel es la unica forma confiable
 # de llegar al repo real sin importar como bash resolvio BASH_SOURCE.
 TOPLEVEL="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+# Hook previo del proyecto: el instalador no lo borra, lo conserva como
+# <hook>.skalling-prev y acá se encadena. Corre primero; si falla, Git se
+# detiene igual que antes de instalar Skalling.
+HOOKS_PATH="$(git rev-parse --git-path hooks)"
+PREV_HOOK="${HOOKS_PATH:+$HOOKS_PATH/pre-push.skalling-prev}"
+# pre-push recibe las refs por stdin: se guardan para dárselas a los dos.
+STDIN_FILE="$(mktemp)"
+trap 'rm -f "$STDIN_FILE"' EXIT
+cat > "$STDIN_FILE"
+if [ -n "$PREV_HOOK" ] && [ -x "$PREV_HOOK" ]; then
+  "$PREV_HOOK" "$@" < "$STDIN_FILE"
+fi
 GATES=(
   "$HOOK_DIR/git-gate.py"
   "${TOPLEVEL:+$TOPLEVEL/.opencode/hooks/git-gate.py}"
@@ -15,7 +28,8 @@ GATES=(
 )
 for gate in "${GATES[@]}"; do
   if [ -n "$gate" ] && [ -f "$gate" ]; then
-    exec python3 "$gate" pre-push
+    python3 "$gate" pre-push < "$STDIN_FILE"
+    exit $?
   fi
 done
 echo "ERROR: git-gate.py no encontrado. Reinstalar hooks Skalling; no modificar TeamDB." >&2

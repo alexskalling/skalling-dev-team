@@ -1664,6 +1664,9 @@ test_release_y_doctor() {
     local instancia_global="$FIXTURE/doctor-global"
     local instancia_proyecto="$FIXTURE/doctor-proyecto"
     mkdir -p "$instancia_global/agents" "$instancia_global/skills" "$instancia_global/command" "$instancia_global/templates" "$instancia_global/skalling-data" "$instancia_proyecto/.opencode"
+    # Instalación real = incluye los plugins de control (el doctor los exige).
+    mkdir -p "$instancia_global/plugins"
+    cp "$ROOT/plugins/skalling-git-guard.js" "$ROOT/plugins/skalling-workflow.js" "$ROOT/plugins/skalling-data-safety.js" "$instancia_global/plugins/"
     printf '%s\n' '# Constitución' '' '## 🏛️ Reglas Base' '' 'R13 design-system.md' > "$instancia_global/constitucion.md"
     local agente
     for agente in Alex Pol Jes Sol Teo Jhon Luz Pau; do

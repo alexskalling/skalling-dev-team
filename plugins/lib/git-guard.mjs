@@ -68,7 +68,8 @@ const CANONICAL_OTHER = [
 // Identidad y evidencia las ponen el runtime y los scripts, nunca el agente.
 // TEAMDB_CLAIM_* fija el hash/exit code que sella un receipt: con eso se
 // "aprobaba" un candidato distinto al staged (caso real en ucadigital).
-const IDENTITY_VARS = /\b(?:SKALLING_RUNTIME_AGENT|TEAMDB_ACTOR|SKALLING_REVIEW_AGENT|TEAMDB_CLAIM_(?:TREE_HASH|EXIT_CODE|COMMAND|OUTPUT_SUMMARY))\b/;
+// SKALLING_VERIFY_WAIVER aprueba sin tests: es decisión humana, no del agente.
+const IDENTITY_VARS = /\b(?:SKALLING_RUNTIME_AGENT|TEAMDB_ACTOR|SKALLING_REVIEW_AGENT|SKALLING_VERIFY_WAIVER|TEAMDB_CLAIM_(?:TREE_HASH|EXIT_CODE|COMMAND|OUTPUT_SUMMARY))\b/;
 
 
 // Cuerpos de heredoc: con delimitador entre comillas (<<'EOF') son texto
@@ -382,7 +383,7 @@ export function hookBypassViolation(command) {
 export function identityViolation(command) {
   if (IDENTITY_VARS.test(command || '')) {
     return 'La identidad del agente la pone el runtime de OpenCode, no el comando: '
-      + 'no se puede fijar SKALLING_RUNTIME_AGENT, TEAMDB_ACTOR, SKALLING_REVIEW_AGENT ni TEAMDB_CLAIM_* '
+      + 'no se puede fijar SKALLING_RUNTIME_AGENT, TEAMDB_ACTOR, SKALLING_REVIEW_AGENT, SKALLING_VERIFY_WAIVER ni TEAMDB_CLAIM_* '
       + '(el hash y el resultado que sella un receipt los calcula el script sobre lo staged).';
   }
   return null;
@@ -481,10 +482,41 @@ function blockedShell(message) {
 // OpenCode v2: setup registra hooks en ctx. execute.before ya trae el agente.
 // Para bloquear, el comando se reemplaza por un echo con el motivo (lo ve el
 // agente como salida); una herramienta que no es shell se redirige a ese
-// mismo echo. La identidad se inyecta en create.before, que no trae agente:
-// se correlaciona por el texto exacto del comando aprobado un instante antes.
-export async function setupGuardV2(ctx, core = createCore()) {
-  const pendingAgent = new Map();
+// mismo echo.
+//
+// Identidad: shell create.before NO trae sesión, llamada ni agente (API
+// documentada de 2.0.x: command, cwd, timeout, shell, env). La única
+// correlación posible es el texto del comando aprobado un instante antes.
+// Eso es ambiguo cuando dos sesiones corren el mismo comando: en vez de
+// adivinar (y darle a Jhon la identidad de Teo), se marca "ambiguous" y los
+// helpers de TeamDB fallan cerrado (teamdb_runtime_actor lo rechaza). Las
+// entradas vencen a los PENDING_TTL_MS: un comando aprobado que nunca llegó a
+// ejecutarse (permiso denegado) no contamina uno posterior.
+const AMBIGUOUS_AGENT = 'ambiguous';
+const PENDING_TTL_MS = 30000;
+
+export function createIdentityQueue(now = () => Date.now()) {
+  const pending = new Map();
+  const live = (command) => (pending.get(command) || []).filter((e) => now() - e.at < PENDING_TTL_MS);
+  return {
+    register(command, agent) {
+      pending.set(command, [...live(command), { agent: normalizeAgent(agent), at: now() }]);
+    },
+    take(command) {
+      const entries = live(command);
+      if (entries.length === 0) { pending.delete(command); return null; }
+      const agents = new Set(entries.map((e) => e.agent));
+      // Con más de un agente esperando el mismo texto, el orden de ejecución
+      // no dice cuál es cuál: todas las entradas vivas quedan ambiguas.
+      const agent = agents.size === 1 ? [...agents][0] : AMBIGUOUS_AGENT;
+      const rest = entries.slice(1).map((e) => ({ ...e, agent: agents.size === 1 ? e.agent : AMBIGUOUS_AGENT }));
+      if (rest.length) pending.set(command, rest); else pending.delete(command);
+      return agent;
+    },
+  };
+}
+
+export async function setupGuardV2(ctx, core = createCore(), identities = createIdentityQueue()) {
   await ctx.tool.hook('execute.before', async (event) => {
     const blocked = core.decide({ tool: event.tool, agent: event.agent, sessionID: event.sessionID, input: event.input });
     if (blocked) {
@@ -493,7 +525,7 @@ export async function setupGuardV2(ctx, core = createCore()) {
       return;
     }
     if (SHELL_TOOLS.has(event.tool) && event.agent && typeof event.input?.command === 'string') {
-      pendingAgent.set(event.input.command, normalizeAgent(event.agent));
+      identities.register(event.input.command, event.agent);
     }
   });
   await ctx.tool.hook('execute.after', async (event) => {
@@ -501,9 +533,8 @@ export async function setupGuardV2(ctx, core = createCore()) {
       output: event.status === 'completed' ? event.result : '' });
   });
   await ctx.shell.hook('create.before', async (event) => {
-    const agent = pendingAgent.get(event.command);
+    const agent = identities.take(event.command);
     if (!agent) return;
-    pendingAgent.delete(event.command);
     event.env = { ...(event.env || {}), SKALLING_RUNTIME_AGENT: agent };
   });
 }

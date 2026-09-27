@@ -13,6 +13,17 @@
 #   TEAMDB_CLAIM_EXIT_CODE      exit code del comando (default: 0)
 #   TEAMDB_CLAIM_TREE_HASH      hash a sellar (override del cálculo automático)
 #   TEAMDB_CLAIM_OUTPUT_SUMMARY resumen JSON de findings (opcional)
+#   SKALLING_VERIFY_WAIVER      (solo humano, en terminal) motivo para aprobar
+#                               sin tests un proyecto que no los tiene
+#
+# Estados que deja un receipt (columna command + exit_code):
+#   verified  jhon corrió el test real del proyecto y pasó (exit 0)
+#   failed    el test real corrió y falló (exit != 0)
+#   not_run   no hay test configurado: exit 2, command "not_run: ..."; el gate
+#             NO lo acepta como aprobación
+#   waived    un humano aprobó sin tests: exit 0, command "waived: <motivo>";
+#             el gate lo acepta y lo anuncia
+#   reviewed  revisión (Luz / skalling-review.sh): exit del review
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -64,6 +75,20 @@ if ! has_tree_hash "$DB"; then
   done
 fi
 
+# Identidad del candidato: hash del diff staged (mismo algoritmo que
+# scripts/hooks/git-gate.py). Se calcula ANTES y DESPUÉS de verificar: una
+# aprobación no puede transferirse a contenido que cambió mientras corría el
+# test (otro agente o proceso stageando o editando en paralelo).
+staged_hash() {
+  local diff_text
+  diff_text="$(git -C "$PROJECT" diff --cached -- . ':(exclude)db/teamdb/team.dump.sql')"
+  [ -n "$diff_text" ] || return 1
+  printf '%s' "$diff_text" | shasum -a 256 | cut -c1-16
+}
+unstaged_tracked() {
+  git -C "$PROJECT" diff --name-only -- . ':(exclude)db/teamdb/team.dump.sql'
+}
+
 # Lock file para evitar race conditions entre agentes
 LOCK_DIR="$PROJECT/.opencode/context/.locks/team"
 mkdir -p "$(dirname "$LOCK_DIR")" 2>/dev/null || true
@@ -95,10 +120,20 @@ if [ "$AGENT" = "jhon" ]; then
   # sellado para código que nunca se probó. Ante la duda, bloquear: exigir
   # que el working tree coincida con el índice antes de correr la
   # verificación real.
-  UNSTAGED="$(git -C "$PROJECT" diff --name-only -- . ':(exclude)db/teamdb/team.dump.sql')"
+  UNSTAGED="$(unstaged_tracked)"
   if [ -n "$UNSTAGED" ]; then
     echo "ERROR: hay cambios sin stagear en archivos trackeados; el test real correría sobre contenido distinto al que queda staged. Hacer 'git add' de todo (o descartar lo suelto) antes de sellar un receipt de jhon:" >&2
     echo "$UNSTAGED" >&2
+    exit 1
+  fi
+  if ! CANDIDATE_BEFORE="$(staged_hash)"; then
+    echo "ERROR: nada que sellar — no hay cambios staged. No modificar historia para fabricar evidencia." >&2
+    exit 1
+  fi
+  # Un hash provisto por el caller (skalling-review.sh lo congela al empezar)
+  # tiene que ser el mismo candidato que jhon va a probar.
+  if [ -n "${TEAMDB_CLAIM_TREE_HASH:-}" ] && [ "$TEAMDB_CLAIM_TREE_HASH" != "$CANDIDATE_BEFORE" ]; then
+    echo "ERROR: el hash pedido ($TEAMDB_CLAIM_TREE_HASH) no es el candidato staged actual ($CANDIDATE_BEFORE); jhon solo sella lo que prueba." >&2
     exit 1
   fi
   VERIFY_OUT_FILE="$(mktemp)"
@@ -119,11 +154,38 @@ if [ "$AGENT" = "jhon" ]; then
   fi
   trap 'rm -f "$VERIFY_OUT_FILE"; teamdb_unlock "$LOCK_DIR"' EXIT  # lens:ok: VERIFY_OUT_FILE viene de mktemp, ruta propia, nunca input externo
   VERIFY_OUT="$(tail -c 4000 "$VERIFY_OUT_FILE")"  # lens:ok: output_summary no es una columna sin limite, evita filas gigantes
+  # El candidato tiene que ser el mismo antes y después del test: mismo diff
+  # staged y working tree todavía igual al índice. Si no, lo que pasó el test
+  # no es lo que se sellaría.
+  CANDIDATE_AFTER="$(staged_hash || true)"
+  UNSTAGED_AFTER="$(unstaged_tracked)"
+  if [ "$CANDIDATE_AFTER" != "$CANDIDATE_BEFORE" ] || [ -n "$UNSTAGED_AFTER" ]; then
+    echo "ERROR: el candidato cambió mientras corría la verificación (antes $CANDIDATE_BEFORE, después ${CANDIDATE_AFTER:-vacío}${UNSTAGED_AFTER:+, con cambios sin stagear}). No se sella: volver a verificar sobre el contenido final." >&2
+    exit 1
+  fi
+  TEAMDB_CLAIM_TREE_HASH="$CANDIDATE_BEFORE"
   if [ "$VERIFY_RC" = "2" ]; then
-    SUMMARY="SIN-CONFIGURAR: no hay testing.unit.command en project.yaml; jhon no pudo correr una verificación real. ${SUMMARY}"
+    # Sin test configurado no hay verificación: nunca el mismo estado que un
+    # test que corrió y pasó. Solo un humano puede dispensarlo, con motivo.
+    if [ -n "${SKALLING_VERIFY_WAIVER:-}" ]; then
+      COMMAND="waived: ${SKALLING_VERIFY_WAIVER}"
+      EXIT_CODE=0
+      SUMMARY="WAIVED: aprobado sin tests por decisión humana (${SKALLING_VERIFY_WAIVER}). $VERIFY_OUT"
+      echo "WARN: receipt waived — sin test ejecutado, aprobado por motivo explícito: $SKALLING_VERIFY_WAIVER" >&2
+    else
+      COMMAND="not_run: skalling-verify.sh sin comando de test configurado"
+      EXIT_CODE=2
+      SUMMARY="NOT_RUN: no hay testing.unit.command en project.yaml; jhon no pudo correr una verificación real. $VERIFY_OUT"
+      echo "WARN: receipt not_run — no hay tests configurados; el gate no lo acepta. Configurar testing.unit.command, pedir revisión de Luz, o que un humano defina SKALLING_VERIFY_WAIVER=\"motivo\" al sellar." >&2
+    fi
   else
     COMMAND="skalling-verify.sh (test real del proyecto)"
-    EXIT_CODE="$VERIFY_RC"
+    # Un review con blockers (exit del caller != 0) no se lava con tests verdes.
+    if [ "$VERIFY_RC" = "0" ] && [ "$EXIT_CODE" != "0" ]; then
+      COMMAND="${TEAMDB_CLAIM_COMMAND:-review-seal} + skalling-verify.sh"
+    else
+      EXIT_CODE="$VERIFY_RC"
+    fi
     SUMMARY="$VERIFY_OUT"
     if [ "$VERIFY_RC" != "0" ]; then
       echo "WARN: el test real del proyecto falló (exit $VERIFY_RC); el receipt queda sellado con esa falla — in_review->approved no va a encontrar un receipt exit_code=0 de jhon para esto." >&2
@@ -134,12 +196,10 @@ fi
 # Evidence refers to the staged candidate, not unstaged work or elapsed time.
 TREE_HASH="${TEAMDB_CLAIM_TREE_HASH:-}"
 if [ -z "$TREE_HASH" ]; then
-  DIFF_TEXT="$(git -C "$PROJECT" diff --cached -- . ':(exclude)db/teamdb/team.dump.sql')"
-  if [ -z "$DIFF_TEXT" ]; then
+  if ! TREE_HASH="$(staged_hash)"; then
     echo "ERROR: nada que sellar — no hay cambios staged. No modificar historia para fabricar evidencia." >&2
     exit 1
   fi
-  TREE_HASH="$(printf '%s' "$DIFF_TEXT" | shasum -a 256 | cut -c1-16)"
 fi
 
 RECEIPT_ID="rcpt_$(date +%s)_$$"

@@ -943,13 +943,27 @@ else
   RESULT="FAIL"
   RC=1
 fi
+# Sin SAST real (semgrep ausente o sin poder correr) la revisión es más débil:
+# se dice en el resultado, no solo en un INFO. Con SKALLING_REQUIRE_SAST=1
+# (cambios sensibles, CI) eso no puede terminar en PASS.
+SAST_STATE="ok"
+if [ "$RUN_SAST" = "1" ] && [ "$SAST_AVAILABLE" = "0" ]; then
+  SAST_STATE="degraded"
+  if [ "${SKALLING_REQUIRE_SAST:-0}" = "1" ]; then
+    RESULT="FAIL"
+    RC=1
+    echo "✗ [BLOCKER][sast] - — SKALLING_REQUIRE_SAST=1 y no hubo análisis estático real"
+  elif [ "$RESULT" = "PASS" ]; then
+    RESULT="PASS (degradado: sin SAST)"
+  fi
+fi
 
 SUMMARY="{\"risk\":{\"blocker\":$(count_for BLOCKER risk),\"warning\":$(count_for WARNING risk)},\
 \"resilience\":{\"blocker\":$(count_for BLOCKER resilience),\"warning\":$(count_for WARNING resilience)},\
 \"readability\":{\"blocker\":$(count_for BLOCKER readability),\"warning\":$(count_for WARNING readability)},\
 \"reliability\":{\"blocker\":$(count_for BLOCKER reliability),\"warning\":$(count_for WARNING reliability)},\
 \"sast\":{\"ran\":$RUN_SAST,\"available\":$SAST_AVAILABLE,\"blocker\":$(count_for BLOCKER sast),\"warning\":$(count_for WARNING sast)},\
-\"total\":$TOTAL,\"tree_hash\":\"$TREE_HASH\"}"
+\"sast_state\":\"$SAST_STATE\",\"total\":$TOTAL,\"tree_hash\":\"$TREE_HASH\"}"
 
 # Receipt sellado (best-effort; el exit code final lo definen los blockers)
 DB="$(teamdb_project_path "$PROJECT")"

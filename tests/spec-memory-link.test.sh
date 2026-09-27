@@ -988,6 +988,9 @@ test_doctor_info_spec_memory_link() {
     local instancia_global="$FIXTURE/doctor-global"
     local instancia_proyecto="$FIXTURE/doctor-proyecto"
     mkdir -p "$instancia_global/agents" "$instancia_global/skills" "$instancia_global/command" "$instancia_global/templates" "$instancia_global/skalling-data" "$instancia_global/scripts" "$instancia_proyecto/.opencode"
+    # Instalación real = incluye los plugins de control (el doctor los exige).
+    mkdir -p "$instancia_global/plugins"
+    cp "$ROOT/plugins/skalling-git-guard.js" "$ROOT/plugins/skalling-workflow.js" "$ROOT/plugins/skalling-data-safety.js" "$instancia_global/plugins/"
     cp "$ROOT/scripts/spec-memory-link.sh" "$instancia_global/scripts/spec-memory-link.sh"
 
     printf '%s\n' '# Constitución' '' '## 🏛️ Reglas Base' '' 'R13 design-system.md' > "$instancia_global/constitucion.md"

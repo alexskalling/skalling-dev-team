@@ -37,12 +37,12 @@ test('bash gate blocks the raw engine script but not the live plans/tasks approv
 });
 
 // OpenCode v2: sin context.ask; el check consulta la política compilada del agente.
-import { readFileSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { policyDecision, setupWorkflowV2 } from '../plugins/lib/workflow.mjs';
+import { policyDecision, setupWorkflowV2, decideRules, configBashRules } from '../plugins/lib/workflow.mjs';
 
-test('policyDecision lee el bloque bash compilado y gana el patrón más largo', () => {
+test('policyDecision lee el bloque bash compilado (última coincidencia gana)', () => {
   const jhon = readFileSync(new URL('../agents-base/Jhon.md', import.meta.url), 'utf8');
   assert.equal(policyDecision(jhon, 'npm test'), 'allow');
   assert.equal(policyDecision(jhon, 'bash tests/a.test.sh'), 'allow');
@@ -58,7 +58,7 @@ test('v2: check corre si la política del agente lo permite y se rechaza si pedi
   const calls = [];
   await setupWorkflowV2({ location: { directory: '/project' },
     tool: { transform: async (cb) => { cb({ add: (t) => tools.push(t) }); return { dispose: async () => {} }; } } },
-    async (request) => { calls.push(request); return { ok: true }; }, dir + '/');
+    async (request) => { calls.push(request); return { ok: true }; }, dir + '/', join(dir, 'no-global'));
   const [wf] = tools;
   const context = { agent: 'Jhon', sessionID: 'jhon-s', signal: new AbortController().signal };
   const ok = await wf.execute({ action: 'check', payload: JSON.stringify({ id: 'x', argv: ['npm', 'test'] }) }, context);
@@ -68,4 +68,43 @@ test('v2: check corre si la política del agente lo permite y se rechaza si pedi
   await assert.rejects(wf.execute({ action: 'check', payload: JSON.stringify({ id: 'x', argv: ['curl', 'https://x.com'] }) }, context),
     /necesita aprobación/);
   await assert.rejects(wf.execute({ action: 'complete', payload: JSON.stringify({ id: 'x', actor: 'jhon' }) }, context), /actor/);
+});
+
+test('auditoría A09: gana la ÚLTIMA regla que coincide, como en OpenCode', () => {
+  assert.equal(decideRules([['npm test', 'allow'], ['*', 'deny']], 'npm test'), 'deny');
+  assert.equal(decideRules([['*', 'deny'], ['npm test', 'allow']], 'npm test'), 'allow');
+  assert.equal(decideRules([], 'npm test'), 'ask');
+  assert.deepEqual(configBashRules('{"permission":{"bash":"deny"}}'), [['*', 'deny']]);
+  assert.deepEqual(configBashRules('no json'), []);
+  // opencode.jsonc con comentarios y coma final
+  assert.deepEqual(configBashRules('{ // global\n "$schema": "https://opencode.ai/config.json", /* x */ "permission": {"bash": {"rm *": "ask",}}}'),
+    [['rm *', 'ask']]);
+  // formato nativo v2
+  assert.deepEqual(configBashRules(JSON.stringify({ permissions: [
+    { action: 'edit', resource: '*', effect: 'deny' },
+    { action: 'shell', resource: '*', effect: 'allow' },
+    { action: 'shell', resource: 'git push *', effect: 'ask' }] })), [['*', 'allow'], ['git push *', 'ask']]);
+});
+
+test('auditoría A09: la política efectiva combina config global, del proyecto y del agente', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'effective-'));
+  const project = join(dir, 'project');
+  const global = join(dir, 'global');
+  mkdirSync(join(project, '.opencode', 'agents'), { recursive: true });
+  mkdirSync(global, { recursive: true });
+  // El agente permite npm test; la config global lo deniega ANTES: el agente
+  // va último y gana. Un agente que termina en "*: deny" gana sobre todo.
+  writeFileSync(join(global, 'opencode.json'), JSON.stringify({ permission: { bash: { 'npm test': 'deny' } } }));
+  writeFileSync(join(project, '.opencode', 'agents', 'Jhon.md'),
+    '---\nmode: subagent\npermission:\n  bash:\n    "npm test": allow\n    "*": deny\n---\nbody\n');
+  const tools = [];
+  const calls = [];
+  await setupWorkflowV2({ location: { directory: project },
+    tool: { transform: async (cb) => { cb({ add: (t) => tools.push(t) }); return { dispose: async () => {} }; } } },
+  async (request) => { calls.push(request); return { ok: true }; }, join(dir, 'none') + '/', global);
+  const [wf] = tools;
+  const context = { agent: 'Jhon', sessionID: 's', signal: new AbortController().signal };
+  await assert.rejects(wf.execute({ action: 'check', payload: JSON.stringify({ id: 'x', argv: ['npm', 'test'] }) }, context),
+    /necesita aprobación/);
+  assert.equal(calls.length, 0);
 });

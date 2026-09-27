@@ -36,6 +36,31 @@ permission:
   webfetch: ask
   bash:
     "*": allow
+    "python *": ask
+    "python3 *": ask
+    "bash *": ask
+    "sh *": ask
+    "zsh *": ask
+    "node *": ask
+    "ruby *": ask
+    "perl *": ask
+    "php *": ask
+    "deno *": ask
+    "bun *": ask
+    "npx *": ask
+    "pnpm dlx *": ask
+    "pnpm exec *": ask
+    "./*": ask
+    make: ask
+    "make *": ask
+    "npm run *": ask
+    "pnpm run *": ask
+    "git stash": ask
+    "git stash *": ask
+    "cp *.db*": ask
+    "mv *.db*": ask
+    "cp *.sqlite*": ask
+    "mv *.sqlite*": ask
     "python3 */teamdb-destructive.py *": ask
     "python3 */teamdb-destructive.py apply *": ask
     "python3 */teamdb-destructive.py preview *": allow

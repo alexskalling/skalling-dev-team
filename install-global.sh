@@ -130,7 +130,15 @@ check_opencode() {
         return 1
     fi
     local version; version="$(opencode --version 2>/dev/null || echo 'unknown')"
-    log OK "opencode $version"
+    case "$(skalling_opencode_support "$version")" in
+        v1) log OK "opencode $version (soportado: v1 completo)" ;;
+        v2) log OK "opencode $version (soportado: v2; /skalling-goal no disponible, ver README)" ;;
+        unsupported)
+            log ERROR "opencode $version no está soportado: Skalling necesita >= $SKALLING_OPENCODE_MIN (antes no carga sus plugins de control)."
+            log ERROR "  Actualizá OpenCode y volvé a instalar."
+            exit 1 ;;
+        *) log WARN "No se pudo leer la versión de opencode ($version); mínimo soportado $SKALLING_OPENCODE_MIN" ;;
+    esac
     return 0
 }
 
@@ -743,6 +751,20 @@ do_uninstall() {
     if [ -f "$OPENCODE_DIR/plugins/lib/data-safety.mjs" ]; then run rm -f "$OPENCODE_DIR/plugins/lib/data-safety.mjs"; fi
     if [ -f "$OPENCODE_DIR/plugins/skalling-git-guard.js" ]; then run rm -f "$OPENCODE_DIR/plugins/skalling-git-guard.js"; fi
     if [ -f "$OPENCODE_DIR/plugins/lib/git-guard.mjs" ]; then run rm -f "$OPENCODE_DIR/plugins/lib/git-guard.mjs"; fi
+    if [ -f "$OPENCODE_DIR/plugins/skalling-workflow.js" ]; then run rm -f "$OPENCODE_DIR/plugins/skalling-workflow.js"; fi
+    if [ -f "$OPENCODE_DIR/plugins/lib/workflow.mjs" ]; then run rm -f "$OPENCODE_DIR/plugins/lib/workflow.mjs"; fi
+    if [ -f "$OPENCODE_DIR/scripts/skalling-workflow.py" ]; then run rm -f "$OPENCODE_DIR/scripts/skalling-workflow.py"; fi
+    # Los hooks globales los usan proyectos con hooks copiados que buscan
+    # ~/.config/opencode/hooks/git-gate.py: al retirarlos, esos hooks fallan
+    # cerrado ("git-gate.py no encontrado"); se avisa para desinstalarlos
+    # también por proyecto (setup.sh --uninstall --target <proyecto>).
+    if [ -d "$OPENCODE_DIR/hooks" ]; then
+        for f in pre-commit pre-push post-merge git-gate.py; do
+            if [ -f "$OPENCODE_DIR/hooks/$f" ]; then run rm -f "$OPENCODE_DIR/hooks/$f"; fi
+        done
+        rmdir "$OPENCODE_DIR/hooks" 2>/dev/null || true
+        log WARN "Hooks globales retirados. En cada proyecto con Skalling: bash setup.sh --uninstall --target <proyecto> para restaurar sus hooks de Git."
+    fi
 
     for d in "$SKILLS_DIR"/*/; do
         [[ -d "$d" ]] || continue

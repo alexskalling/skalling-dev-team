@@ -121,7 +121,10 @@ const SkallingGoal = async ({ client, directory }) => {
   };
 };
 
-// v1: `server` (client, hooks de comando y compactación). v2: /skalling-goal
-// depende del cliente y de hooks de la v1 sin equivalente directo en la API
-// 2.0.18; no se registra (goal no concede autoridad extra si no corre).
+// v1: `server` (client, hooks de comando y compactación). v2: NO DISPONIBLE.
+// /skalling-goal necesita command.execute.before, session.idle y
+// promptAsync; la API de plugins 2.0.x no documenta equivalentes (shell y
+// tool no traen sesión, no hay evento de inactividad). No se simula: el
+// comando le dice al agente que en v2 no existe y que reiniciar no lo arregla
+// (command/skalling-goal.md). Goal no concede autoridad extra si no corre.
 export default { id: 'skalling-goal', server: SkallingGoal, setup: async () => {} };

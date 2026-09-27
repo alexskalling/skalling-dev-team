@@ -261,24 +261,29 @@ init_teamdb() {
 
 activate_teamdb_hooks() {
     local project="$1"
-    if [[ ! -d "$project/.git" ]]; then
-        return 0
-    fi
+    git -C "$project" rev-parse --git-dir >/dev/null 2>&1 || return 0
     local hooks_src="$SCRIPT_DIR/scripts/hooks"
     [[ -d "$hooks_src" ]] || hooks_src="$SCRIPT_DIR/hooks"
-    local hooks_dst="$project/.git/hooks"
     if [[ ! -d "$hooks_src" ]]; then
         return 0
     fi
-    local installed=0
-    # Loop explícito: pre-commit (seal+inmutabilidad), post-merge (import),
-    # pre-push (gate de push). Agregar un hook nuevo acá.
+    local installed=0 rc
+    # Loop explícito: pre-commit (receipt), post-merge (import), pre-push
+    # (gate de push). Un hook previo del proyecto no se pisa: queda como
+    # <hook>.skalling-prev y el de Skalling lo ejecuta primero.
     for hook in pre-commit post-merge pre-push; do
-        if [[ -f "$hooks_src/$hook" ]]; then
-            run cp "$hooks_src/$hook" "$hooks_dst/$hook"
-            run chmod +x "$hooks_dst/$hook"
-            installed=$((installed + 1))
+        [[ -f "$hooks_src/$hook" ]] || continue
+        if [[ "$DRY_RUN" == true ]]; then
+            echo "    [dry-run] instalar hook $hook (conservando uno previo)"
+            continue
         fi
+        rc=0
+        skalling_install_git_hook "$project" "$hook" "$hooks_src/$hook" --copy || rc=$?
+        case "$rc" in
+            0) installed=$((installed + 1)) ;;
+            2) warn "core.hooksPath configurado: agregá a tu $hook la línea bash \"\$(git rev-parse --show-toplevel)/.opencode/hooks/$hook\" \"\$@\"" ;;
+            *) warn "No se instaló el hook $hook: ya hay uno ajeno y un .skalling-prev; resolver a mano" ;;
+        esac
     done
     if [[ "$installed" -gt 0 ]]; then
         ok "teamdb hooks activados ($installed)"

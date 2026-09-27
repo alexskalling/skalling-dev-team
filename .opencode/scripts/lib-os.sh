@@ -330,3 +330,101 @@ skalling_count_concept_docs() {
 
     echo "${counts% }"
 }
+
+# ──────────────────────────────────────────────────────────────────────────────
+# GIT HOOKS: instalar sin destruir hooks ajenos
+# ──────────────────────────────────────────────────────────────────────────────
+# Un hook que ya existía (del equipo: lint, secretos, husky viejo) NO se borra:
+# se renombra a <hook>.skalling-prev y el hook de Skalling lo ejecuta primero.
+# La ruta la resuelve Git (worktrees, GIT_DIR, core.hooksPath), no "$p/.git".
+# Si el proyecto usa core.hooksPath (husky, carpeta versionada), no se toca esa
+# carpeta: se avisa y se devuelve 2 para que el instalador lo informe.
+
+skalling_git_hooks_dir() {
+  local project="$1" dir
+  dir="$(git -C "$project" rev-parse --git-path hooks 2>/dev/null)" || return 1
+  case "$dir" in
+    /*) printf '%s\n' "$dir" ;;
+    *) printf '%s\n' "$project/$dir" ;;
+  esac
+}
+
+# Devuelve 0 si el archivo es un hook de Skalling (actual o de versiones
+# anteriores, instalado como copia o como symlink).
+skalling_is_skalling_hook() {
+  local path="$1"
+  [ -e "$path" ] || return 1
+  grep -qE 'skalling-hook|Read-only gate: never repairs DB|post-merge hook: mergea el dump versionado' "$path" 2>/dev/null
+}
+
+# skalling_install_git_hook <project> <hook> <script_propio> [--copy]
+# 0 = instalado/ya estaba, 1 = error, 2 = omitido por core.hooksPath
+skalling_install_git_hook() {
+  local project="$1" hook="$2" ours="$3" mode="${4:-}" dir dst prev
+  git -C "$project" rev-parse --git-dir >/dev/null 2>&1 || return 1
+  if [ -n "$(git -C "$project" config --get core.hooksPath 2>/dev/null || true)" ]; then
+    return 2
+  fi
+  dir="$(skalling_git_hooks_dir "$project")" || return 1
+  mkdir -p "$dir"
+  dst="$dir/$hook"
+  prev="$dst.skalling-prev"
+  if [ -L "$dst" ] && [ "$(readlink "$dst")" = "$ours" ]; then
+    return 0
+  fi
+  if [ -e "$dst" ] || [ -L "$dst" ]; then
+    if ! skalling_is_skalling_hook "$dst"; then
+      if [ -e "$prev" ] || [ -L "$prev" ]; then
+        echo "ERROR: $dst no es de Skalling y ya existe $prev; no se sobrescribe ninguno. Resolver a mano." >&2
+        return 1
+      fi
+      mv "$dst" "$prev"
+      echo "INFO: hook previo conservado como $prev (Skalling lo ejecuta primero)" >&2
+    else
+      rm -f "$dst"
+    fi
+  fi
+  if [ "$mode" = "--copy" ]; then
+    cp "$ours" "$dst" && chmod +x "$dst"
+  else
+    ln -s "$ours" "$dst"
+  fi
+}
+
+# skalling_uninstall_git_hook <project> <hook>: quita el hook de Skalling y
+# restaura el que había antes de instalar.
+skalling_uninstall_git_hook() {
+  local project="$1" hook="$2" dir dst prev
+  dir="$(skalling_git_hooks_dir "$project")" || return 0
+  dst="$dir/$hook"
+  prev="$dst.skalling-prev"
+  if { [ -e "$dst" ] || [ -L "$dst" ]; } && { skalling_is_skalling_hook "$dst" || { [ -L "$dst" ] && [ ! -e "$dst" ] && case "$(readlink "$dst")" in *opencode*/hooks/"$hook") true ;; *) false ;; esac; }; }; then
+    rm -f "$dst"
+  fi
+  if { [ -e "$prev" ] || [ -L "$prev" ]; } && [ ! -e "$dst" ] && [ ! -L "$dst" ]; then
+    mv "$prev" "$dst"
+  fi
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+# COMPATIBILIDAD CON OPENCODE (matriz de soporte, ver README)
+# ──────────────────────────────────────────────────────────────────────────────
+# Los plugins exportan { server, setup }: esa forma la acepta OpenCode desde
+# 1.18.29. Antes no carga los plugins (guard, workflow, data-safety, goal).
+export SKALLING_OPENCODE_MIN="1.18.29"
+
+# skalling_opencode_support "<salida de opencode --version>" → imprime
+#   unsupported | v1 | v2 | unknown
+skalling_opencode_support() {
+  local raw="$1" ver major minor patch
+  ver="$(printf '%s' "$raw" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+  [ -n "$ver" ] || { echo unknown; return 0; }
+  IFS=. read -r major minor patch <<EOF_VER
+$ver
+EOF_VER
+  if [ "$major" -ge 2 ]; then echo v2; return 0; fi
+  if [ "$major" -eq 1 ] && { [ "$minor" -gt 18 ] || { [ "$minor" -eq 18 ] && [ "$patch" -ge 29 ]; }; }; then
+    echo v1; return 0
+  fi
+  echo unsupported
+}

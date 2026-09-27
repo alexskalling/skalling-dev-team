@@ -47,6 +47,12 @@ teamdb_runtime_actor() {
     printf '%s\n' "${1:-unknown}"
     return 0
   fi
+  # El plugin v2 no pudo atribuir el comando a una sola sesión (dos agentes
+  # corrieron el mismo texto a la vez): fallar cerrado, nunca adivinar.
+  if [ "$runtime" = "ambiguous" ]; then
+    echo "ERROR: identidad del agente ambigua (dos sesiones corrieron el mismo comando a la vez); reintentar el comando" >&2
+    return 1
+  fi
   if [ -n "$declared" ] && [ "$declared" != "unknown" ] && [ "$declared" != "$runtime" ]; then
     echo "ERROR: identidad declarada '$1' no coincide con el agente real '$runtime' (la pone OpenCode)" >&2
     return 1

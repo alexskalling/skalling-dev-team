@@ -680,7 +680,8 @@ test_tier3_fixes() {
 
     # FIX T3.3: GitHub Actions CI
     assert_file_exists "$REPO_ROOT/.github/workflows/tests.yml" "GitHub Actions workflow existe"
-    assert_file_contains "$REPO_ROOT/.github/workflows/tests.yml" "bash tests/setup.test.sh" "CI corre tests"
+    assert_file_contains "$REPO_ROOT/.github/workflows/tests.yml" "bash tests/run-all.sh" "CI corre la batería única"
+    assert_file_contains "$REPO_ROOT/tests/run-all.sh" "bash tests/setup.test.sh" "CI corre tests"
 
     # FIX T3.4: Attribution para skills externas
     assert_file_exists "$REPO_ROOT/skills-base/ATTRIBUTION.md" "ATTRIBUTION.md existe"

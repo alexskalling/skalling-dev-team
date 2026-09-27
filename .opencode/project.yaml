@@ -1,0 +1,7 @@
+# Configuración de Skalling para el propio repo de Skalling.
+# Jhon corre este comando al sellar un receipt (teamdb-seal-receipt.sh →
+# skalling-verify.sh); es la misma batería que CI (tests/run-all.sh).
+testing:
+  unit:
+    available: true
+    command: "bash tests/run-all.sh"

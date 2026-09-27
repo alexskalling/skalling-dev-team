@@ -10,8 +10,14 @@ Pedido del usuario: $ARGUMENTS
 El plugin registra el objetivo y el consentimiento para UN commit local en TeamDB.
 Esto NO concede permiso para eliminar datos: usar `teamdb_destructive` con aprobación
 humana cuando una operación SQLite implique pérdida de datos, también durante Goal.
-Si no aparece el estado verificado del plugin, no simules el modo autónomo: informa
-que falta cargar el plugin y que hay que reiniciar OpenCode.
+Si no aparece el estado verificado del plugin ("Estado verificado de Skalling Goal"),
+no simules el modo autónomo. Informá exactamente esto y no sigas en modo Goal:
+
+- En OpenCode 2.x, /skalling-goal NO está disponible (la API de plugins v2 no expone
+  los hooks que usa: comando, sesión inactiva y continuación). Reiniciar no lo arregla.
+  Ofrecé hacer el pedido con el flujo normal, sin continuación automática.
+- En OpenCode 1.x (≥ 1.18.29), falta cargar el plugin `skalling-goal`: verificar la
+  instalación con `bash setup-team-doctor.sh` y reiniciar OpenCode.
 
 - Sin argumentos o `status`: mostrar estado, sin continuar.
 - `pause`: pausar. `resume`: continuar el mismo objetivo. `cancel`: cancelar sin borrar trabajo.

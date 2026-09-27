@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyCommand, setupDataSafetyV2 } from '../plugins/lib/data-safety.mjs';
+import { applyCommand, setupDataSafetyV2, touchesDestructiveApply } from '../plugins/lib/data-safety.mjs';
 import { guardCommand } from '../plugins/lib/git-guard.mjs';
 
 function fakeV2() {
@@ -47,4 +47,11 @@ test('v2: el hook fuerza preguntar aunque exista un "permitir siempre"', async (
   const other = { action: 'shell', resources: ['git status'], effect: 'allow' };
   await state.hooks.evaluate(other);
   assert.equal(other.effect, 'allow');
+});
+
+test('auditoría: aplicar con la ruta del motor entre comillas (carpeta con espacios) también pregunta', () => {
+  assert.equal(touchesDestructiveApply("python3 '/Users/a b/.opencode/scripts/teamdb-destructive.py' apply --token x"), true);
+  assert.equal(touchesDestructiveApply('python3 "/a b/teamdb-destructive.py" "apply" t'), true);
+  assert.equal(touchesDestructiveApply('python3 /x/teamdb-destructive.py preview a'), false);
+  assert.equal(touchesDestructiveApply('ls -la'), false);
 });

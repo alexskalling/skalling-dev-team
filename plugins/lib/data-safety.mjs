@@ -54,6 +54,16 @@ function engineForShell() {
 // la terminal, y el hook de permisos lo fuerza a preguntar siempre, aunque el
 // usuario haya elegido "permitir siempre" antes. El respaldo y el rechazo si
 // la base cambió los sigue haciendo el motor.
+// Cualquier invocación del motor que no sea una vista previa pide aprobación.
+// Antes se buscaba `teamdb-destructive.py apply` literal: con la ruta entre
+// comillas (carpetas con espacios) quedaba `...destructive.py' apply` y no
+// coincidía, así que el comando pasaba con el permiso normal.
+export function touchesDestructiveApply(command) {
+  if (!/teamdb-destructive\.py/.test(command)) return false;
+  return !/teamdb-destructive\.py['"]?\s+['"]?preview['"]?(?:\s|$)/.test(command)
+    || /['"]?apply['"]?(?:\s|$)/.test(command.replace(/^[\s\S]*?teamdb-destructive\.py['"]?\s+['"]?preview['"]?/, ''));
+}
+
 export async function setupDataSafetyV2(ctx, run = call) {
   const directory = () => ctx.location?.directory || process.cwd();
   await ctx.tool.transform((tools) => {
@@ -82,7 +92,7 @@ export async function setupDataSafetyV2(ctx, run = call) {
   if (ctx.permission?.hook) {
     await ctx.permission.hook('evaluate', async (event) => {
       if (event.action !== 'shell' && event.action !== 'bash') return;
-      if (!(event.resources || []).some((r) => /teamdb-destructive\.py\s+apply\b/.test(String(r)))) return;
+      if (!(event.resources || []).some((r) => touchesDestructiveApply(String(r)))) return;
       if (event.effect === 'deny') return;
       event.effect = 'ask';
       event.message = 'Operación con pérdida de datos en TeamDB: revisá base, SQL y parámetros antes de aprobar.';

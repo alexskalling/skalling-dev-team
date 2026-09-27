@@ -409,6 +409,54 @@ check_project_install() {
     fi
 }
 
+# Controles efectivos, no solo presencia de archivos: sin el guard no hay
+# identidad del runtime; sin hooks, el gate de commits no corre; con una
+# versión de OpenCode fuera de soporte, los plugins no cargan.
+check_controls() {
+    section "Controles activos (plugins, hooks, versión de OpenCode)"
+
+    if command -v opencode >/dev/null 2>&1; then
+        local version; version="$(opencode --version 2>/dev/null || echo unknown)"
+        case "$(skalling_opencode_support "$version")" in
+            v1) ok "OpenCode $version: soportado (v1)" ;;
+            v2) ok "OpenCode $version: soportado (v2)"
+                info "En OpenCode 2 /skalling-goal no está disponible (sin API equivalente); el resto del flujo sí." ;;
+            unsupported) err "OpenCode $version no soportado: mínimo $SKALLING_OPENCODE_MIN (los plugins de control no cargan)" ;;
+            *) warn "No se pudo leer la versión de OpenCode ($version)" ;;
+        esac
+    else
+        info "opencode no está en PATH; no se verifica la versión"
+    fi
+
+    local plugin missing=()
+    for plugin in skalling-git-guard.js skalling-workflow.js skalling-data-safety.js; do
+        if [[ ! -f "$PROJECT_DIR/.opencode/plugins/$plugin" && ! -f "$OPENCODE_DIR/plugins/$plugin" ]]; then
+            missing+=("$plugin")
+        fi
+    done
+    if [[ ( "$GLOBAL_ONLY" == false && -d "$PROJECT_DIR/.opencode" ) || -d "$OPENCODE_DIR/agents" ]]; then
+        if [[ ${#missing[@]} -eq 0 ]]; then
+            ok "Plugins de control presentes (guard, workflow, data-safety)"
+        else
+            err "Faltan plugins de control: ${missing[*]} — sin skalling-git-guard no hay identidad del runtime ni bloqueo por rol. Reinstalar (setup.sh o install-global.sh)."
+        fi
+    fi
+
+    if [[ "$GLOBAL_ONLY" == false && -d "$PROJECT_DIR/.opencode" ]] && git -C "$PROJECT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+        local hooks_path hook dir
+        hooks_path="$(git -C "$PROJECT_DIR" config --get core.hooksPath 2>/dev/null || true)"
+        dir="$(skalling_git_hooks_dir "$PROJECT_DIR" 2>/dev/null || true)"
+        for hook in pre-commit pre-push; do
+            if [[ -n "$dir" && -e "$dir/$hook" ]] && { skalling_is_skalling_hook "$dir/$hook" || grep -q '\.opencode/hooks/'"$hook" "$dir/$hook" 2>/dev/null; }; then
+                ok "Hook $hook activo${hooks_path:+ (vía core.hooksPath=$hooks_path)}"
+                [[ -e "$dir/$hook.skalling-prev" ]] && info "  encadena el hook previo del proyecto ($hook.skalling-prev)"
+            else
+                err "Hook $hook de Skalling no activo${hooks_path:+ (core.hooksPath=$hooks_path: agregá la llamada a .opencode/hooks/$hook)}; el gate de commits no corre"
+            fi
+        done
+    fi
+}
+
 check_inteligencia_codigo() {
     section "Code Intelligence (opt-in)"
     if command -v codegraph >/dev/null 2>&1; then
@@ -605,6 +653,7 @@ main() {
     if [[ "$GLOBAL_ONLY" == false ]]; then
         check_project_install
     fi
+    check_controls
     check_inteligencia_codigo
     check_teamdb
     check_scripts_parity
