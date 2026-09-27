@@ -336,6 +336,7 @@ step_install_scripts() {
         run cp "$SCRIPTS_SRC_DIR"/teamdb_guard.py "$SCRIPTS_DEST_DIR/"
         run cp "$SCRIPTS_SRC_DIR"/skalling_classify.py "$SCRIPTS_DEST_DIR/"
         run cp "$SCRIPTS_SRC_DIR"/teamdb_dump.py "$SCRIPTS_DEST_DIR/"
+        run cp "$SCRIPTS_SRC_DIR"/skalling_config.py "$SCRIPTS_DEST_DIR/"
         run cp "$SCRIPTS_SRC_DIR"/teamdb-destructive.py "$SCRIPTS_DEST_DIR/"
         run chmod +x "$SCRIPTS_DEST_DIR/teamdb_exec.py"
         count=$((count+1))

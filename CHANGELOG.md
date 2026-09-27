@@ -4,6 +4,31 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-09-27
+
+### Tercera auditoría externa (sobre e95a388)
+
+#### Fixed
+- **Instalaciones existentes se actualizan de verdad.** La 047 se había
+  modificado después de publicarse en main: las bases que ya la tenían
+  registrada quedaban sin las columnas de consumo (`skalling-metrics.sh report`
+  fallaba) y con triggers de versión con DELETE, que `teamdb_guard` rechaza
+  (toda escritura de memoria fallaba). La nueva migración 048 los alinea de
+  forma idempotente. El runner de migraciones acepta `.py` (DDL condicional,
+  que SQLite no permite en SQL puro).
+- **Un clon nuevo recibe la memoria vigente.** El restore colapsa las filas
+  repetidas de un dump fusionado (una por rama) y se queda con la versión más
+  nueva de cada entidad; misma versión con contenido distinto se informa.
+- **El restore no pierde escrituras concurrentes.** `--force` sobre una base
+  sana aplica el dump dentro de una transacción de SQLite, con el backup tomado
+  bajo el mismo lock: quien escribe mientras tanto espera y escribe después.
+  Solo `--full-reset` (o una base ausente o corrupta) reemplaza el archivo.
+- **Un solo parser de `project.yaml`** (`scripts/skalling_config.py`) para el
+  motor, el verificador, la config del proyecto y el bootstrap: interpreta
+  comillas dobles con escapes (`"python3 -c \\"print(42)\\""`), simples y
+  valores planos, y descarta un escalar malformado en vez de cortarlo a medias
+  (cortar convertía `"bash -c "$(x)""` en un permiso `bash -c *`).
+
 ## [0.13.0] - 2026-09-27
 
 ### Cierre de la auditoría externa de v0.12.0 (una sola autoridad, evidencia calculada)

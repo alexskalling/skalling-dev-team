@@ -62,7 +62,7 @@ class ProjectTestCommand(unittest.TestCase):
         lines = ['testing:']
         for name, command in (('unit', unit), ('fast', fast)):
             if command is not None:
-                lines += [f'  {name}:', '    available: true', f'    command: "{command}"']
+                lines += [f'  {name}:', '    available: true', '    command: ' + json.dumps(command)]
         (self.project / '.opencode/project.yaml').write_text('\n'.join(lines) + '\n')
 
     def agent(self, name):
@@ -101,6 +101,14 @@ class ProjectTestCommand(unittest.TestCase):
                 self.yaml(unit=command)
                 config.apply_test_commands(self.project)
                 self.assertNotIn(config.BEGIN, self.agent('Teo'))
+
+    def test_malformed_yaml_never_allowlists_a_truncated_prefix(self):
+        # "bash -c "$(cat x)"" sin escapar: cortar en la primera comilla daba
+        # "bash -c ", sin caracteres peligrosos, y habilitaba "bash -c *".
+        (self.project / '.opencode/project.yaml').write_text(
+            'testing:\n  unit:\n    available: true\n    command: "bash -c "$(cat x)""\n')
+        config.apply_test_commands(self.project)
+        self.assertNotIn(config.BEGIN, self.agent('Teo'))
 
     def test_remove_strips_the_added_rules(self):
         self.yaml(unit='python3 test_app.py')

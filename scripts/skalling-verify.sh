@@ -26,27 +26,10 @@ if [ ! -f "$YAML" ]; then
   exit 2
 fi
 
-COMMAND="$(python3 -c '
-import re, sys
-text = open(sys.argv[1], encoding="utf-8").read()
-# Aisla el bloque de "unit:" (sus hijos, indentados MAS que "unit:" mismo)
-# y busca available:/command: DENTRO de ese bloque, sin asumir orden ni
-# adyacencia -- una version anterior exigia "available:" pegado justo antes
-# de "command:", y con las claves en el orden real que genera
-# bootstrap-context.py (o un comentario de por medio) el regex no matcheaba
-# nada y silenciosamente se trataba como "sin configurar".
-m = re.search(r"unit:[ \t]*\n((?:[ \t]{3,}\S.*\n?)*)", text)
-block = m.group(1) if m else ""
-avail_m = re.search(r"available:\s*(\w+)", block)
-cmd_m = re.search(r"command:\s*(.*)", block)
-available = bool(avail_m) and avail_m.group(1).strip().lower() == "true"
-command = cmd_m.group(1).strip() if cmd_m else ""
-# Solo el par de comillas externas del YAML (strip de ambas comillas se comía
-# la final de comandos como python3 -c '"'"'import app'"'"').
-if len(command) >= 2 and command[0] == command[-1] and command[0] in "\"'"'"'":
-    command = command[1:-1]
-print(command if (available and command) else "")
-' "$YAML")"
+# Parser único de project.yaml (skalling_config.py): escalares YAML con
+# comillas y escapes, igual que el motor y el bootstrap.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COMMAND="$(PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}" python3 -m skalling_config "$YAML" unit)"
 
 if [ -z "$COMMAND" ]; then
   echo "SIN-CONFIGURAR: no hay comando de test detectado en project.yaml (testing.unit.available es false, o testing.unit.command está vacío)." >&2

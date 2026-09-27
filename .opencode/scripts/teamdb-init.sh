@@ -43,7 +43,8 @@ teamdb_init_project "$PROJECT"
 _run_sql() {
   local mig_file="$1"
   local mig_name
-  mig_name=$(basename "$mig_file" .sql)
+  mig_name="$(basename "$mig_file")"
+  mig_name="${mig_name%.*}"
 
   if [ "$DRY_RUN" = true ]; then
     echo "    [dry-run] sqlite3 $DB < $mig_file"
@@ -74,7 +75,12 @@ _run_sql() {
 
   local migration_error
   migration_error="$(mktemp)"
-  if ! sqlite3 "$DB" < "$mig_file" 2>"$migration_error"; then
+  local migration_rc=0
+  case "$mig_file" in
+    *.py) python3 "$mig_file" "$DB" 2>"$migration_error" || migration_rc=$? ;;
+    *) sqlite3 "$DB" < "$mig_file" 2>"$migration_error" || migration_rc=$? ;;
+  esac
+  if [ "$migration_rc" -ne 0 ]; then
     echo "ERROR: falló migration $mig_name; no se registrará como aplicada" >&2
     sed -n '1,12p' "$migration_error" >&2
     rm -f "$migration_error"
@@ -125,10 +131,11 @@ fi
 
 MIG_DIR="$SKALLING_ROOT_DIR/sql/migrations"
 if [ -d "$MIG_DIR" ]; then
-  for mig in "$MIG_DIR"/*.sql; do
-    [ -f "$mig" ] || continue
-    _run_sql "$mig"
-  done
+  # .sql y .py en orden numérico (un .py es DDL condicional que SQL no puede).
+  while IFS= read -r mig_base; do
+    [ -n "$mig_base" ] || continue
+    _run_sql "$MIG_DIR/$mig_base"
+  done < <(find "$MIG_DIR" -maxdepth 1 -type f \( -name '*.sql' -o -name '*.py' \) -exec basename {} \; | sort)
 fi
 
 # FASE 0: si la DB no existía (clon fresco / nunca instalado) y el repo trae un
@@ -165,7 +172,7 @@ fi
 # Verificar que las migrations dejaron el schema correcto; si no, fallar en vez
 # de seguir con una DB degradada (los errores de migración idempotentes, como el
 # "duplicate column" de 004 sobre DBs nuevas, se toleran arriba).
-EXPECTED_VERSION="0.13.0"
+EXPECTED_VERSION="0.13.1"
 VERSION="$(sqlite3 "$DB" "SELECT value FROM schema_meta WHERE key='version'" 2>/dev/null || true)"
 if [ "$VERSION" != "$EXPECTED_VERSION" ]; then
   echo "ERROR: teamdb schema version=$VERSION, esperado $EXPECTED_VERSION (migrations incompletas)" >&2

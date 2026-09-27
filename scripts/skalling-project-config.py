@@ -26,6 +26,9 @@ from pathlib import Path
 import re
 import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from skalling_config import testing_config  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[1]
 DISABLED = ('build', 'plan', 'general')
 TEST_AGENTS = ('Teo', 'Jhon', 'Luz')
@@ -35,27 +38,18 @@ UNSAFE = re.compile(r'[;&|<>`$\n\r\\]|\b(?:rm|sudo|curl|wget|ssh|scp|chmod|chown
 
 
 def configured_commands(project):
-    """testing.unit/testing.fast disponibles de project.yaml (mismo parser que
-    skalling-verify.sh y el motor). {files} se convierte en comodín."""
-    path = project / '.opencode/project.yaml'
+    """testing.unit/testing.fast disponibles de project.yaml (parser único:
+    skalling_config). {files} se convierte en comodín."""
     # El repo fuente de Skalling genera sus .opencode/agents desde
     # agents-base (render-agent.sh): tocarlos rompería la paridad.
-    if not path.is_file() or (project / 'agents-base').is_dir():
+    if (project / 'agents-base').is_dir():
         return []
-    text = path.read_text(encoding='utf-8')
+    config = testing_config(project / '.opencode/project.yaml')
     commands = []
     for name in ('unit', 'fast'):
-        match = re.search(r'(?m)^[ \t]+' + name + r':[ \t]*\n((?:[ \t]{3,}\S.*\n?)*)', text)
-        block = match.group(1) if match else ''
-        available = re.search(r'available:\s*(\w+)', block)
-        command = re.search(r'command:\s*(.*)', block)
-        if available and available.group(1).lower() == 'true' and command:
-            value = command.group(1).strip()
-            if len(value) >= 2 and value[0] == value[-1] and value[0] in '"\'':
-                value = value[1:-1]  # solo el par externo del YAML
-            value = value.replace('{files}', '*').strip()
-            if value and not UNSAFE.search(value) and value not in commands:
-                commands.append(value)
+        value = config.get(name, '').replace('{files}', '*').strip()
+        if value and not UNSAFE.search(value) and value not in commands:
+            commands.append(value)
     return commands
 
 

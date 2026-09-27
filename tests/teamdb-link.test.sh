@@ -42,8 +42,10 @@ DB="$TEST_DIR/.opencode/context/team.db"
 # ─── C0: fixture con schema actual (última migración aplicada por init)
 SKALLING_ROOT="$ROOT" bash "$ROOT/scripts/teamdb-init.sh" "$TEST_DIR" >/dev/null 2>&1
 FIX_VER=$(sqlite3 "$DB" "SELECT value FROM schema_meta WHERE key='version'")
-LAST_MIG=$(ls "$ROOT/sql/migrations/"*.sql 2>/dev/null | sort | tail -1 | xargs -I{} basename {} .sql)
-EXPECTED_VER=$(grep -oE "0\.[0-9]+\.[0-9]+" "$ROOT/sql/migrations/$LAST_MIG.sql" | tail -1)
+# Migraciones .sql y .py (DDL condicional), en orden numérico.
+LAST_MIG_FILE=$(find "$ROOT/sql/migrations" -maxdepth 1 -type f \( -name '*.sql' -o -name '*.py' \) | sort | tail -1)
+LAST_MIG=$(basename "$LAST_MIG_FILE")
+EXPECTED_VER=$(grep -oE "value = '0\.[0-9]+\.[0-9]+'" "$LAST_MIG_FILE" | tail -1 | grep -oE "0\.[0-9]+\.[0-9]+")
 if [ -f "$ROOT/sql/migrations/006_link_graph.sql" ] && [ "$FIX_VER" = "$EXPECTED_VER" ] && [ "$FIX_VER" != "0.7.6" -o "$FIX_VER" = "0.7.6" ]; then
   assert_pass "última migración aplicada: $FIX_VER ($LAST_MIG)"
 else

@@ -18,6 +18,7 @@ import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from skalling_classify import ROUTES, memory_blockers, normalize, project_db, readiness  # noqa: E402
+from skalling_config import testing_config  # noqa: E402
 
 ROLES = {'alex', 'pol', 'sol', 'teo', 'jhon', 'luz', 'pau', 'jes'}
 # Verificador mecánico del carril trivial: no es un agente, es el comando de
@@ -196,33 +197,14 @@ def seal_receipt(db, root, identifier, files, verifier, digest):
 
 
 def configured_command(root, name):
-    """testing.<name>.command de .opencode/project.yaml, con el mismo parser
-    que skalling-verify.sh (sin PyYAML: el plugin corre con python3 del
-    sistema). Vacío si no está disponible."""
-    path = root / '.opencode/project.yaml'
-    if not path.is_file():
-        return ''
-    text = path.read_text(encoding='utf-8')
-    match = re.search(r'(?m)^[ \t]+' + re.escape(name) + r':[ \t]*\n((?:[ \t]{3,}\S.*\n?)*)', text)
-    block = match.group(1) if match else ''
-    available = re.search(r'available:\s*(\w+)', block)
-    command = re.search(r'command:\s*(.*)', block)
-    if not available or available.group(1).strip().lower() != 'true' or not command:
-        return ''
-    value = command.group(1).strip()
-    # Solo el par de comillas externas del YAML: strip('"\'') se comía la
-    # comilla final de comandos como python3 -c 'import app'.
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in '"\'':
-        value = value[1:-1]
-    return value
+    """testing.<name>.command disponible de .opencode/project.yaml (parser
+    único: skalling_config). Vacío si no está disponible."""
+    return testing_config(root / '.opencode/project.yaml').get(name, '')
 
 
 def verification_timeout(root):
-    path = root / '.opencode/project.yaml'
-    text = path.read_text(encoding='utf-8') if path.is_file() else ''
-    match = re.search(r'(?m)^[ \t]+timeout_seconds:\s*(\d+)', text)
-    value = int(match.group(1)) if match else DEFAULT_TIMEOUT
-    return max(1, min(value, MAX_TIMEOUT))
+    value = testing_config(root / '.opencode/project.yaml').get('timeout_seconds', DEFAULT_TIMEOUT)
+    return max(1, min(int(value), MAX_TIMEOUT))
 
 
 def run_bounded(argv, root, env, timeout):

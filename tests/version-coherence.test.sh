@@ -29,9 +29,9 @@ VERSION="$(extract_version "$ROOT/VERSION")"
 echo "VERSION declarada: $VERSION"
 
 assert "VERSION formato semver" "grep -qE '^[0-9]+\\.[0-9]+\\.[0-9]+$' <<< '$VERSION'"
-assert "release identificado como 0.13.0" "[ '$VERSION' = '0.13.0' ]"
+assert "release identificado como 0.13.1" "[ '$VERSION' = '0.13.1' ]"
 assert "CHANGELOG documenta release actual" \
-  "grep -q '^## \\[0.13.0\\]' '$ROOT/CHANGELOG.md'"
+  "grep -q '^## \\[0.13.1\\]' '$ROOT/CHANGELOG.md'"
 
 PROJ_SCHEMA="$ROOT/sql/project-schema.sql"
 GLOB_SCHEMA="$ROOT/sql/global-schema.sql"
@@ -63,7 +63,9 @@ INIT_VERSION="$(grep 'EXPECTED_VERSION=' "$ROOT/scripts/teamdb-init.sh" | grep -
 assert "teamdb-init.sh: EXPECTED_VERSION coincide con VERSION file" \
   "[ \"$INIT_VERSION\" = \"$VERSION\" ]"
 
-LATEST_MIGRATION_VERSION="$(grep -hE "^UPDATE schema_meta SET value = '[0-9.]+'.*key = 'version'" "$ROOT"/sql/migrations/*.sql | tail -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)"
+# Última migración por número (.sql o .py): la que deja la versión final.
+LATEST_MIGRATION_FILE="$(find "$ROOT/sql/migrations" -maxdepth 1 -type f \( -name '*.sql' -o -name '*.py' \) | sort | tail -1)"
+LATEST_MIGRATION_VERSION="$(grep -hoE "UPDATE schema_meta SET value = '[0-9.]+'.*key = 'version'" "$LATEST_MIGRATION_FILE" | tail -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)"
 assert "última migración lleva DB existente a VERSION" \
   "[ \"$LATEST_MIGRATION_VERSION\" = \"$VERSION\" ]"
 

@@ -13,6 +13,7 @@ import shutil
 import sqlite3
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -152,6 +153,34 @@ class RestoreSafety(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('--full-reset', result.stderr)
         self.assertEqual(self.db.read_bytes(), original)
+
+
+    def test_concurrent_write_during_restore_is_not_lost(self):
+        # Tercera auditoría: una escritura confirmada mientras el restore
+        # reemplazaba el archivo desaparecía. Ahora --force aplica el dump en
+        # una transacción: el escritor espera y escribe después.
+        self.init()
+        lines = ''.join('INSERT INTO "preferences" ("slug","scope","body_md") VALUES (\'p%d\',\'global\',\'%s\');\n'
+                        % (i, 'x' * 200) for i in range(40000))
+        self.dump.write_text(lines)
+        backups = self.db.parent / '.backups'
+        before = set(backups.glob('team.db.backup-*')) if backups.exists() else set()
+        restore = subprocess.Popen(['bash', str(ROOT / 'scripts/teamdb-restore.sh'), str(self.root), '--force'],
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                   env={**os.environ, 'SKALLING_ROOT': str(ROOT)})
+        for _ in range(300):                              # el backup se toma ya bajo el lock
+            if backups.exists() and set(backups.glob('team.db.backup-*')) - before:
+                break
+            time.sleep(0.02)
+        writer = sqlite3.connect(self.db, timeout=60)
+        writer.execute("INSERT INTO preferences (slug,scope,body_md) VALUES ('concurrente','global','confirmada')")
+        writer.commit()
+        writer.close()
+        out, err = restore.communicate(timeout=120)
+        self.assertEqual(restore.returncode, 0, out + err)
+        with sqlite3.connect(self.db) as conn:
+            self.assertEqual(conn.execute("SELECT body_md FROM preferences WHERE slug='concurrente'").fetchone()[0], 'confirmada')
+            self.assertEqual(conn.execute("SELECT count(*) FROM preferences WHERE slug LIKE 'p%'").fetchone()[0], 40000)
 
 
 if __name__ == '__main__':

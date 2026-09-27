@@ -569,6 +569,8 @@ install_teamdb() {
         run cp "$SCRIPT_DIR/scripts/skalling_classify.py" "$OPENCODE_DIR/scripts/skalling_classify.py"
         # Parser seguro del dump (restore/merge): solo filas de datos.
         run cp "$SCRIPT_DIR/scripts/teamdb_dump.py" "$OPENCODE_DIR/scripts/teamdb_dump.py"
+        # Parser único de project.yaml (motor, verificador, bootstrap).
+        run cp "$SCRIPT_DIR/scripts/skalling_config.py" "$OPENCODE_DIR/scripts/skalling_config.py"
         run cp "$SCRIPT_DIR/scripts/teamdb-destructive.py" "$OPENCODE_DIR/scripts/teamdb-destructive.py"
         run chmod +x "$OPENCODE_DIR/scripts/teamdb_exec.py"
     fi
@@ -597,6 +599,11 @@ install_teamdb() {
         if [ -d "$SCRIPT_DIR/sql/migrations" ]; then
             run mkdir -p "$OPENCODE_DIR/sql/migrations"
             run cp "$SCRIPT_DIR/sql/migrations/"*.sql "$OPENCODE_DIR/sql/migrations/"
+            # Migraciones en Python: DDL condicional (p. ej. columnas que una
+            # base puede tener o no), imposible en SQL puro de SQLite.
+            if compgen -G "$SCRIPT_DIR/sql/migrations/*.py" >/dev/null; then
+                run cp "$SCRIPT_DIR/sql/migrations/"*.py "$OPENCODE_DIR/sql/migrations/"
+            fi
         fi
     fi
 

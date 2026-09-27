@@ -111,6 +111,13 @@ if [ -f "$FAKE_HOME/.config/opencode/sql/global-schema.sql" ] \
 else
   assert_fail "sql/global-schema.sql instalado con actor_source"
 fi
+# Las migraciones .py (DDL condicional) también se instalan: sin la 048, una
+# base que aplicó la 047 original no recibe columnas ni triggers corregidos.
+if [ -f "$FAKE_HOME/.config/opencode/sql/migrations/048_version_0_13_1.py" ]; then
+  assert_pass "sql/migrations/048_version_0_13_1.py instalado"
+else
+  assert_fail "sql/migrations/048_version_0_13_1.py instalado"
+fi
 if [ -f "$FAKE_HOME/.config/opencode/sql/migrations/004_add_actor_source.sql" ]; then
   assert_pass "sql/migrations/004_add_actor_source.sql instalado"
 else

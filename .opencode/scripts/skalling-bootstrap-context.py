@@ -10,8 +10,12 @@ import json
 import os
 import re
 import sqlite3
+import sys
 import tempfile
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from skalling_config import testing_config  # noqa: E402
 
 
 IGNORED = {".git", ".next", ".open-next", ".opencode", "node_modules", "dist", "build", "coverage"}
@@ -112,25 +116,9 @@ def previous_testing(yaml_path: Path) -> dict:
     """Comandos de tests y timeout del project.yaml anterior a un --force.
     Antes, /skalling-init --force los reemplazaba por lo detectado (a menudo
     nada) y Jhon y la verificación automática quedaban sin comando."""
-    previous = yaml_path.with_name("project.yaml.previous")
-    if not previous.is_file():
-        return {}
-    text = previous.read_text(encoding="utf-8")
-    kept = {}
-    for kind in TESTING_KINDS:
-        match = re.search(r"(?m)^[ \t]+" + kind + r":[ \t]*\n((?:[ \t]{3,}\S.*\n?)*)", text)
-        block = match.group(1) if match else ""
-        available = re.search(r"available:\s*(\w+)", block)
-        command = re.search(r"command:\s*(.*)", block)
-        if available and available.group(1).lower() == "true" and command:
-            value = command.group(1).strip()
-            if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-                value = value[1:-1]
-            if value:
-                kept[kind] = value
-    timeout = re.search(r"(?m)^[ \t]+timeout_seconds:\s*(\d+)", text)
-    if timeout:
-        kept["timeout_seconds"] = timeout.group(1)
+    kept = testing_config(yaml_path.with_name("project.yaml.previous"))
+    if "timeout_seconds" in kept:
+        kept["timeout_seconds"] = str(kept["timeout_seconds"])
     return kept
 
 

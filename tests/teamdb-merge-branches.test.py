@@ -79,6 +79,7 @@ class MergeAcrossBranches(unittest.TestCase):
         self.git(self.bob, 'add', '-A')
         self.git(self.bob, 'commit', '-qm', 'cambio B')
         self.git(self.bob, 'pull', '-q', '--no-rebase', '--no-edit', 'origin', 'main')   # merge=union real
+        merge_commit = self.git(self.bob, 'rev-parse', 'HEAD').stdout.strip()
         dump = (self.bob / 'db/teamdb/team.dump.sql').read_text()
         self.assertIn('Cambio A', dump)
         self.assertIn('Cambio B', dump)
@@ -91,6 +92,13 @@ class MergeAcrossBranches(unittest.TestCase):
         self.git(self.alice, 'pull', '-q', '--no-rebase', '--no-edit', 'origin', 'main')
         self.script('teamdb-merge.sh', self.alice)
         self.assertEqual(self.state(self.alice), bob, 'las dos copias deben tener el mismo contenido y versión')
+        # Tercera auditoría: Carol clona desde cero el commit del merge (dump con
+        # las dos filas, la vieja al final) y debe recibir la memoria vigente.
+        carol = self.clone(Path(self.tmp.name) / 'carol')
+        self.git(carol, 'checkout', '-q', merge_commit)
+        self.assertIn('Cambio A', (carol / 'db/teamdb/team.dump.sql').read_text())
+        self.script('teamdb-init.sh', carol)
+        self.assertEqual(self.state(carol), bob, 'un clon nuevo debe restaurar la versión más nueva')
 
     def test_same_version_with_different_content_is_an_explicit_conflict(self):
         self.memory(self.alice, 'decision', 'api', 'API', 'Cambio A')

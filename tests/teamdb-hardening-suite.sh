@@ -50,6 +50,7 @@ TESTS=(
   tests/teamdb-merge-branches.test.py
   tests/workflow-worktree.test.py
   tests/bootstrap-preserves-testing.test.sh
+  tests/teamdb-upgrade-existing.test.sh
   tests/skalling-verify-gate.test.sh
   tests/teamdb-plan-parallel-groups.test.sh
   tests/mirror-parity.test.sh
