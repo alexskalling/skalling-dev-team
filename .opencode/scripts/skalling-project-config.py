@@ -38,7 +38,9 @@ def configured_commands(project):
     """testing.unit/testing.fast disponibles de project.yaml (mismo parser que
     skalling-verify.sh y el motor). {files} se convierte en comodín."""
     path = project / '.opencode/project.yaml'
-    if not path.is_file():
+    # El repo fuente de Skalling genera sus .opencode/agents desde
+    # agents-base (render-agent.sh): tocarlos rompería la paridad.
+    if not path.is_file() or (project / 'agents-base').is_dir():
         return []
     text = path.read_text(encoding='utf-8')
     commands = []

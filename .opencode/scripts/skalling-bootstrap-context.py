@@ -105,6 +105,35 @@ def update_project_yaml(path: Path, modules: list[str], has_ui: bool) -> str:
     return text
 
 
+TESTING_KINDS = ("unit", "fast", "integration", "e2e", "coverage")
+
+
+def previous_testing(yaml_path: Path) -> dict:
+    """Comandos de tests y timeout del project.yaml anterior a un --force.
+    Antes, /skalling-init --force los reemplazaba por lo detectado (a menudo
+    nada) y Jhon y la verificación automática quedaban sin comando."""
+    previous = yaml_path.with_name("project.yaml.previous")
+    if not previous.is_file():
+        return {}
+    text = previous.read_text(encoding="utf-8")
+    kept = {}
+    for kind in TESTING_KINDS:
+        match = re.search(r"(?m)^[ \t]+" + kind + r":[ \t]*\n((?:[ \t]{3,}\S.*\n?)*)", text)
+        block = match.group(1) if match else ""
+        available = re.search(r"available:\s*(\w+)", block)
+        command = re.search(r"command:\s*(.*)", block)
+        if available and available.group(1).lower() == "true" and command:
+            value = command.group(1).strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+                value = value[1:-1]
+            if value:
+                kept[kind] = value
+    timeout = re.search(r"(?m)^[ \t]+timeout_seconds:\s*(\d+)", text)
+    if timeout:
+        kept["timeout_seconds"] = timeout.group(1)
+    return kept
+
+
 def write_context(project: Path, context: Path, yaml_path: Path) -> dict:
     yaml_text = yaml_path.read_text(encoding="utf-8")
     framework = yaml_value(yaml_text, "framework")
@@ -124,15 +153,25 @@ def write_context(project: Path, context: Path, yaml_path: Path) -> dict:
     test_command = f"{manager} run test" if scripts.get("test") else ""
     coverage_name = next((key for key in ("test:coverage", "coverage") if scripts.get(key)), "")
     coverage_command = f"{manager} run {coverage_name}" if coverage_name else ""
-    testing = ("testing:\n  unit:\n    available: " + str(bool(test_command)).lower()
-               + "\n    command: " + json.dumps(test_command)
-               + "\n    note: " + json.dumps("Detectado en package.json" if test_command else "No detectado")
-               + "\n  integration:\n    available: false\n    command: \"\""
-               + "\n  e2e:\n    available: false\n    command: \"\""
-               + "\n  coverage:\n    available: " + str(bool(coverage_command)).lower()
-               + "\n    command: " + json.dumps(coverage_command) + "\n")
-    yaml_text = re.sub(r"testing:\n.*?(?=\n#|\n[a-zA-Z_]+:|\Z)", testing, yaml_text, count=1, flags=re.S)
+    # Lo que configuró una persona gana sobre lo detectado; lo detectado solo
+    # completa lo que estaba vacío.
+    kept = previous_testing(yaml_path)
+    detected = {"unit": test_command, "coverage": coverage_command}
+    testing = "testing:\n"
+    if kept.get("timeout_seconds"):
+        testing += "  timeout_seconds: " + kept["timeout_seconds"] + "\n"
+    for kind in TESTING_KINDS:
+        command = kept.get(kind) or detected.get(kind, "")
+        if kind == "fast" and not command:
+            continue
+        note = ("Configurado a mano (preservado)" if kept.get(kind)
+                else "Detectado en package.json" if command else "No detectado")
+        testing += ("  " + kind + ":\n    available: " + str(bool(command)).lower()
+                    + "\n    command: " + json.dumps(command))
+        testing += ("\n    note: " + json.dumps(note) + "\n") if kind == "unit" else "\n"
+    yaml_text = re.sub(r"testing:\n.*?(?=\n#|\n[a-zA-Z_]+:|\Z)", testing.rstrip("\n"), yaml_text, count=1, flags=re.S)
     atomic_write(yaml_path, yaml_text)
+    yaml_path.with_name("project.yaml.previous").unlink(missing_ok=True)
     now = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     about = f"""---
 type: Context

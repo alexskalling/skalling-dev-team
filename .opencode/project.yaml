@@ -1,7 +1,89 @@
-# Configuración de Skalling para el propio repo de Skalling.
-# Jhon corre este comando al sellar un receipt (teamdb-seal-receipt.sh →
-# skalling-verify.sh); es la misma batería que CI (tests/run-all.sh).
+# Project Configuration — Auto-generado por Skalling
+
+# Este archivo es generado por `/skalling-init` y actualizado por `/skalling-refresh`.
+# NO editar manualmente — Skalling lo regenera cuando cambia el stack.
+
+schema: skalling-project-v1
+detected_at: 2026-09-27T16:37:03-0300
+detected_by: alex-init
+
+# ────────────────────────────────────────────────────────────────────────────
+# STACK
+# ────────────────────────────────────────────────────────────────────────────
+stack:
+  language: 
+  runtime: 
+  framework: 
+  package_manager: 
+  test_runner: 
+  linter: 
+  formatter: 
+
+# ────────────────────────────────────────────────────────────────────────────
+# MÓDULOS TOP-LEVEL
+# ────────────────────────────────────────────────────────────────────────────
+modules:
+  - tests/
+  - docs/
+
+# ────────────────────────────────────────────────────────────────────────────
+# TESTING
+# ────────────────────────────────────────────────────────────────────────────
+strict_tdd: true
 testing:
   unit:
     available: true
     command: "bash tests/run-all.sh"
+    note: "Configurado a mano (preservado)"
+  integration:
+    available: false
+    command: ""
+  e2e:
+    available: false
+    command: ""
+  coverage:
+    available: false
+    command: ""
+# ────────────────────────────────────────────────────────────────────────────
+# FRONTEND (solo si aplica — activa REGLA #13)
+# ────────────────────────────────────────────────────────────────────────────
+frontend:
+  has_ui: false
+  ui_framework: 
+  design_system_required: false
+  design_concept: "design-system"
+
+# ────────────────────────────────────────────────────────────────────────────
+# MEMORIA OKF
+# ────────────────────────────────────────────────────────────────────────────
+okf:
+  bundle_path: .opencode/context
+  schema: okf-v0.1+skalling-extensions
+  types_in_use:
+    - Concept
+    - Decision
+    - Preference
+    - Workaround
+    - WorkInProgress
+    - Context
+
+# ────────────────────────────────────────────────────────────────────────────
+# SKILLS STACK-SPECIFIC INSTALADAS
+# ────────────────────────────────────────────────────────────────────────────
+skills_installed:
+  core:
+    - test-driven-development
+    - systematic-debugging
+    - verification-before-completion
+    - writing-plans
+    - code-review-excellence
+    - doc-coauthoring
+    - brainstorming
+    - find-skills
+  skalling_own:
+    - skalling-cycle
+    - skalling-handoff
+    - skalling-ponytail
+    - skalling-impeccable-bridge
+  stack_specific: []
+  external_premium: []

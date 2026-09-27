@@ -96,6 +96,10 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
     de la sesión y sus subagentes dentro de la ventana del pedido, más los
     reintentos, y los guarda en `workflow_metrics`
     (`skalling-metrics.sh report|summary` los muestra).
+  - `/skalling-init --force` conserva los comandos de tests y el timeout que
+    configuró una persona (antes los reemplazaba por lo detectado, a menudo
+    nada). El doctor informa v2 como soportada y no pide comandos de tests en
+    el repo fuente de Skalling (sus agentes se generan desde agents-base).
   - El parser de `project.yaml` le quitaba la comilla final a comandos como
     `python3 -c 'import app'`.
 - El doctor ya no aborta a mitad del diagnóstico (`[[ ]] && info` con `set -e`)

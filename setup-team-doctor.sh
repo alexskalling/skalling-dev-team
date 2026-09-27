@@ -419,7 +419,7 @@ check_controls() {
         local version; version="$(opencode --version 2>/dev/null || echo unknown)"
         case "$(skalling_opencode_support "$version")" in
             v1) ok "OpenCode $version: soporte completo (v1)" ;;
-            v2) warn_env "OpenCode $version: soporte parcial (v2)"
+            v2) info "OpenCode $version: soportada (v2, conducida: /skalling-goal no existe en v2)"
                 info "En OpenCode 2 /skalling-goal no existe (solo v1): sin continuación autónoma, el trabajo necesita supervisión." ;;
             unsupported) err "OpenCode $version no soportado: mínimo $SKALLING_OPENCODE_MIN (los plugins de control no cargan)" ;;
             *) warn "No se pudo leer la versión de OpenCode ($version)" ;;

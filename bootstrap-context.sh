@@ -137,6 +137,11 @@ generate_project_yaml() {
         return 0
     fi
 
+    # Con --force se regenera, pero la configuración de tests que puso una
+    # persona (comandos, timeout) se conserva: el generador la lee de acá.
+    if [[ -f "$yaml_path" ]]; then
+        run cp "$yaml_path" "$OPENCODE_DIR/project.yaml.previous"
+    fi
     run cp "$TEMPLATES_DIR/project.yaml.template" "$yaml_path"
 
     if [[ "$DRY_RUN" == false ]]; then
