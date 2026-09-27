@@ -100,7 +100,11 @@ for table, (title, body, guard) in tables.items():
                         " + " + score + ") AS rank FROM " + table + " WHERE " + where +
                         " ORDER BY rank DESC,slug LIMIT ?", score_params + params + [top_k + 1]).fetchall()
     if len(rows) > top_k:
+        # Hay más coincidencias que top_k: nunca se esconde. Quien recibe la
+        # cápsula amplía por needs_expansion/omitted (auditoría v0.12.0 #6).
         result["more_matches"] = True
+        result["needs_expansion"] = True
+        result["omitted"].append({"table": table, "slug": rows[top_k][0]})
     for slug, heading, body_text, rank in rows[:top_k]:
         candidates.append((rank, table, {"slug": slug, "title": heading, "body": body_text}))
 for _, table, item in sorted(candidates, key=lambda row: (-row[0], row[1], row[2]["slug"])):
@@ -231,36 +235,65 @@ if not task:
     print(json.dumps({'concepts': [], 'decisions': [], 'preferences': [], 'known_problems': [], 'task': None, 'plan': {'slug': plan['slug'], 'title': plan['title']}}, ensure_ascii=False))
     sys.exit(0)
 
-# Per-tabla: columnas de texto a buscar, filtro de status, campo body.
-# (tabla, col_slug, col_title, col_body, filtro_status_sql, status_ok_lambda)
+# Per-tabla: (tabla, col_slug, col_title, body, filtro de status). El cuerpo
+# de un problema conocido incluye el workaround: sin él la cápsula avisaba
+# del síntoma pero no de cómo evitarlo.
 TABLES = {
     'concepts': ('concepts', 'slug', 'title', 'body_md', None),
     'decisions': ('decisions', 'slug', 'title', 'body_md', "status = 'accepted'"),
     'preferences': ('preferences', 'slug', 'scope', 'body_md', None),
-    'known_problems': ('known_problems', 'slug', 'title', 'symptom_md', "status != 'wontfix'"),
+    'known_problems': ('known_problems', 'slug', 'title',
+                       "coalesce(symptom_md,'') || char(10) || coalesce(workaround_md,'')", "status != 'wontfix'"),
 }
 
-def table_entry(tbl_key, mid, relevance, provenance):
+# Contrato común con for-request (auditoría v0.12.0 #6): el presupuesto mide
+# la SALIDA COMPLETA (task y plan incluidos) y nada se recorta en silencio.
+# Una memoria que no entra va entera a `omitted` con needs_expansion=true.
+output = {
+    'task': {
+        'slug': task['slug'],
+        'title': task['title'],
+        'status': task['status'],
+        'description_md': task['description_md'],
+        'acceptance_md': task['acceptance_md'],
+    },
+    'plan': {'slug': plan['slug'], 'title': plan['title']},
+    'concepts': [], 'decisions': [], 'preferences': [], 'known_problems': [],
+    'omitted': [], 'needs_expansion': False, 'more_matches': False,
+}
+RESERVE = 160  # espacio para anotar al menos una omisión
+
+
+def encode():
+    return json.dumps(output, ensure_ascii=False, separators=(',', ':'), default=str)
+
+
+def place(tbl_key, obj):
+    if len(output[tbl_key]) >= top_k:
+        output['more_matches'] = True
+        output['needs_expansion'] = True
+        output['omitted'].append({'table': tbl_key, 'slug': obj['slug']})
+        return
+    output[tbl_key].append(obj)
+    if len(encode().encode()) > max_bytes - RESERVE:
+        output[tbl_key].pop()
+        output['needs_expansion'] = True
+        output['omitted'].append({'table': tbl_key, 'slug': obj['slug']})
+        if len(encode().encode()) > max_bytes:
+            output['omitted'].pop()
+            output['more_matches'] = True
+
+
+def entry(tbl_key, mid, relevance, provenance):
     t = TABLES[tbl_key]
     row = conn.execute("SELECT %s, %s, %s FROM %s WHERE id = ?" % (t[1], t[2], t[3], t[0]), (mid,)).fetchone()
     if not row:
         return None
     obj = {'slug': row[0], 'title': row[1] if row[1] is not None else '', 'relevance': relevance, 'provenance': provenance}
-    body = row[2]
-    if body:
-        obj['body_md'] = body[:500]
+    if row[2]:
+        obj['body_md'] = row[2]
     return obj
 
-budget = {'bytes': 0}
-
-def fits_size(obj):
-    size = len(json.dumps(obj, ensure_ascii=False))
-    if budget['bytes'] + size > max_bytes:
-        return False
-    budget['bytes'] += size
-    return True
-
-result = {'concepts': [], 'decisions': [], 'preferences': [], 'known_problems': []}
 
 # 1. Capsules linkeadas (provenance='linked'), ordenadas por relevance DESC
 linked = conn.execute("""
@@ -274,16 +307,14 @@ for row in linked:
     tbl_key = row['memory_table']
     if tbl_key not in TABLES:
         continue
-    if len(result[tbl_key]) >= top_k:
-        continue
     t = TABLES[tbl_key]
     if t[4]:
         ok = conn.execute("SELECT 1 FROM %s WHERE id = ? AND %s" % (t[0], t[4]), (row['memory_id'],)).fetchone()
         if not ok:
             continue
-    obj = table_entry(tbl_key, row['memory_id'], row['relevance'], row['provenance'] or 'linked')
-    if obj and fits_size(obj):
-        result[tbl_key].append(obj)
+    obj = entry(tbl_key, row['memory_id'], row['relevance'], row['provenance'] or 'linked')
+    if obj:
+        place(tbl_key, obj)
 
 # 2. Auto-discovery opcional: términos del title+description de la task
 #    Busquedas LIKE con bound params (sin cargar tablas completas).
@@ -291,7 +322,8 @@ if discover:
     haystack = ((task['title'] or '') + ' ' + (task['description_md'] or '')).lower()
     terms = [t for t in re.findall(r"[a-z0-9]{3,}", haystack)]
     if terms:
-        seen = {k: set(e['slug'] for e in v) for k, v in result.items()}
+        seen = {k: set(e['slug'] for e in output[k]) | {o['slug'] for o in output['omitted'] if o['table'] == k}
+                for k in TABLES}
         for tbl_key, t in TABLES.items():
             like_clauses = []
             params = []
@@ -299,7 +331,7 @@ if discover:
                 like_clauses.append("(LOWER(%s) LIKE ? OR LOWER(%s) LIKE ?)" % (t[2], t[3]))
                 params.append('%' + term + '%')
                 params.append('%' + term + '%')
-            sql = "SELECT id, %s, %s, %s FROM %s WHERE %s" % (t[1], t[2], t[3], t[0], ' OR '.join(like_clauses))
+            sql = "SELECT id, %s, %s, %s FROM %s WHERE (%s)" % (t[1], t[2], t[3], t[0], ' OR '.join(like_clauses))
             if t[4]:
                 sql += " AND " + t[4]
             hits = conn.execute(sql, params).fetchall()
@@ -313,30 +345,19 @@ if discover:
                     scored.append((rel, h[0], h[1], h[2], h[3]))
             scored.sort(key=lambda x: (-x[0], x[2]))
             for rel, mid, tslug, title_col, body_col in scored:
-                if len(result[tbl_key]) >= top_k:
-                    break
-                obj = {'slug': tslug, 'relevance': rel, 'provenance': 'discovered'}
-                if t[2] == 'scope':
-                    obj['title'] = tslug
-                else:
-                    obj['title'] = title_col or tslug
+                obj = {'slug': tslug, 'relevance': rel, 'provenance': 'discovered',
+                       'title': tslug if t[2] == 'scope' else (title_col or tslug)}
                 if body_col:
-                    obj['body_md'] = body_col[:500]
-                if fits_size(obj):
-                    result[tbl_key].append(obj)
+                    obj['body_md'] = body_col
+                place(tbl_key, obj)
 
-output = {
-    'task': {
-        'slug': task['slug'],
-        'title': task['title'],
-        'status': task['status'],
-        'description_md': task['description_md'],
-        'acceptance_md': task['acceptance_md'],
-    },
-    'plan': {'slug': plan['slug'], 'title': plan['title']},
-}
-output.update(result)
-print(json.dumps(output, indent=2, default=str))
+text = encode()
+if len(text.encode()) > max_bytes:
+    # La task sola ya excede el presupuesto: se entrega igual (no se puede
+    # omitir la task) pero se dice explícitamente.
+    output['over_budget'] = True
+    text = encode()
+print(text)
 PYEOF
     ;;
 

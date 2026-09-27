@@ -49,6 +49,9 @@ class WorkflowSealsGitGateReceipt(unittest.TestCase):
         # come from here), not a hand-rolled partial schema.
         subprocess.run(['bash', str(ROOT / 'scripts/teamdb-init.sh'), str(self.root)],
                         capture_output=True, check=True)
+        with sqlite3.connect(self.root / '.opencode/context/team.db') as db:
+            db.execute("INSERT OR REPLACE INTO schema_meta(key,value) VALUES('project_readiness','initialized')")
+            db.execute("INSERT INTO concepts(slug,title,body_md,updated_at) VALUES('project-summary','R','App',datetime('now'))")
         self.cwd = os.getcwd()
         os.chdir(self.root)
         self.addCleanup(os.chdir, self.cwd)
@@ -59,7 +62,7 @@ class WorkflowSealsGitGateReceipt(unittest.TestCase):
 
     def test_completed_workflow_satisfies_real_git_gate_pre_commit(self):
         self.call('alex', 'start', risk='low', files=['app.py', 'tests/check.test.sh'],
-                  acceptance='value remains one', scope='local', decision='none')
+                  acceptance='value remains one', scope='local', decision='none', reuse='app.py')
         self.call('teo', 'deliver')
         self.call('jhon', 'oracle', expected='one', negative='two', invariant='integer', refutation='test')
         self.call('jhon', 'check', argv=['bash', 'tests/check.test.sh'], method='falsification', criterion='value stays 1')
@@ -76,7 +79,7 @@ class WorkflowSealsGitGateReceipt(unittest.TestCase):
         (self.root / '.opencode/unreviewed.py').write_text('def broken(:\n')
         subprocess.run(['git', 'add', '--', '.opencode/unreviewed.py'], cwd=self.root, check=True)
         self.call('alex', 'start', risk='low', files=['app.py', 'tests/check.test.sh'],
-                  acceptance='value remains one', scope='local', decision='none')
+                  acceptance='value remains one', scope='local', decision='none', reuse='app.py')
         self.call('teo', 'deliver')
         self.call('jhon', 'oracle', expected='one', negative='two', invariant='integer', refutation='test')
         self.call('jhon', 'check', argv=['bash', 'tests/check.test.sh'], method='falsification', criterion='value stays 1')
@@ -96,10 +99,41 @@ class WorkflowSealsGitGateReceipt(unittest.TestCase):
 
     def test_uncompleted_workflow_still_blocks_git_gate(self):
         self.call('alex', 'start', risk='low', files=['app.py', 'tests/check.test.sh'],
-                  acceptance='value remains one', scope='local', decision='none')
+                  acceptance='value remains one', scope='local', decision='none', reuse='app.py')
         self.call('teo', 'deliver')
         subprocess.run(['git', 'add', '--', 'app.py', 'tests/check.test.sh'], cwd=self.root, check=True)
 
+        db = sqlite3.connect((self.root / '.opencode/context/team.db').as_uri() + '?mode=ro', uri=True)
+        self.addCleanup(db.close)
+        with self.assertRaises(ValueError):
+            self.gitgate.check(['--cached'], db, 'pre-commit')
+
+    def test_trivial_route_auto_verification_satisfies_git_gate(self):
+        (self.root / '.opencode/project.yaml').write_text(
+            'testing:\n  fast:\n    available: true\n    command: "bash tests/check.test.sh"\n')
+        self.call('alex', 'start', risk='low', files=['app.py', 'tests/check.test.sh'],
+                  acceptance='value remains one', scope='local', decision='none', reuse='app.py')
+        (self.root / 'tests/check.test.sh').write_text('test "$(cat app.py)" = "value = 1"  # revisado\n')
+        self.assertEqual(self.call('teo', 'deliver')['state'], 'verified')
+        self.assertEqual(self.call('alex', 'complete')['state'], 'completed')
+        db = sqlite3.connect((self.root / '.opencode/context/team.db').as_uri() + '?mode=ro', uri=True)
+        self.addCleanup(db.close)
+        self.gitgate.check(['--cached'], db, 'pre-commit')
+
+    def test_hand_made_receipts_without_evidence_do_not_open_the_gate(self):
+        # Auditoría externa v0.12.0 #2: un receipt de Luz 'review-seal' con
+        # resumen vacío abría el commit. Solo cuenta evidencia calculada.
+        (self.root / 'app.py').write_text('def broken(:\n')
+        subprocess.run(['git', 'add', '--', 'app.py'], cwd=self.root, check=True)
+        diff = subprocess.run(['git', 'diff', '--cached', '--', '.', ':(exclude)db/teamdb/team.dump.sql'],
+                              cwd=self.root, capture_output=True, check=True).stdout.rstrip(b'\n')
+        import hashlib
+        digest = hashlib.sha256(diff).hexdigest()[:16]
+        with sqlite3.connect(self.root / '.opencode/context/team.db') as db:
+            for agent, command in (('luz', 'review-seal'), ('jhon', 'manual'), ('auto', 'review --lens risk'),
+                                   ('teo', 'skalling_workflow:complete')):
+                db.execute("INSERT INTO receipts(id,task_id,agent,command,exit_code,output_summary,ts,tree_hash) "
+                           "VALUES(?,?,?,?,0,'',datetime('now'),?)", (agent + command, 't', agent, command, digest))
         db = sqlite3.connect((self.root / '.opencode/context/team.db').as_uri() + '?mode=ro', uri=True)
         self.addCleanup(db.close)
         with self.assertRaises(ValueError):

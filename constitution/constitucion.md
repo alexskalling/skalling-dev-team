@@ -50,8 +50,9 @@ esto no sea técnicamente viable, una explicación explícita y una verificació
 
 ### R5 — Calidad Total
 Ningún código está terminado sin verificación independiente proporcional al riesgo.
-Las rutas pequeñas pueden usar Teo → Jhon; seguridad, datos y cambios de alto riesgo
-añaden Luz. Pau participa cuando existe conocimiento durable que conservar.
+Las rutas pequeñas usan Teo más la verificación configurada del proyecto que ejecuta
+el motor (Jhon si no hay comando); riesgo medio suma a Sol y a Jhon; seguridad, datos y
+cambios de alto riesgo añaden Luz. Pau participa cuando existe conocimiento durable que conservar.
 
 ### R6 — SDD Formal
 Features nuevas de alcance medio, alto o ambiguo siguen Spec-Driven Development:
@@ -533,7 +534,9 @@ puede descubrir y recomendar; sólo el dueño ejecuta o aprueba la decisión.
 | Luz | riesgo, seguridad y calidad | parche de producción |
 | Pau | memoria durable y documentación | producto y arquitectura |
 
-El orden mínimo es Teo → Jhon; en riesgo alto se añade Luz y Pau cuando corresponde.
+El orden mínimo es Teo y una verificación independiente del candidato (la configurada
+del proyecto en riesgo bajo, la de Jhon desde riesgo medio); en riesgo alto se añaden
+Luz y Pau. `skalling_workflow` es la única autoridad de esas transiciones.
 TeamDB rechaza transiciones no autorizadas: Teo no se aprueba, Jhon no cierra ni
 documenta, y Pau sólo resuelve tras aprobación. Un inconveniente incidental se
 puede corregir sólo si es local, reversible, necesario para el rol, no altera el

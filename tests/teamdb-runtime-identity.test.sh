@@ -51,6 +51,24 @@ else
 fi
 CLAIM_ID="$(teamdb_exec_value "$DB" "SELECT id FROM task_claims WHERE status='active'")"
 
+# 2b. Auditoría externa v0.12.0 #7: la identidad del claim es rol + sesión.
+#     Otra sesión de Teo no recibe el mismo claim como "idempotente".
+set +e
+OTHER="$(SKALLING_RUNTIME_AGENT=teo SKALLING_RUNTIME_SESSION=otra bash "$ROOT/scripts/teamdb-claim.sh" p t --input-hash=h "$TEST_DIR" 2>&1)"
+RC=$?
+set -e
+if [ "$RC" -ne 0 ] && printf '%s' "$OTHER" | grep -q 'another session'; then
+  assert_pass "otra sesión del mismo rol no comparte el claim"
+else
+  assert_fail "otra sesión del mismo rol no comparte el claim" "rc=$RC out=$OTHER"
+fi
+SAME="$(SKALLING_RUNTIME_AGENT=teo bash "$ROOT/scripts/teamdb-claim.sh" p t --input-hash=h "$TEST_DIR")"
+if printf '%s' "$SAME" | grep -q '"idempotent": true' && printf '%s' "$SAME" | grep -q "\"claim_id\": $CLAIM_ID"; then
+  assert_pass "la misma sesión reintenta de forma idempotente"
+else
+  assert_fail "la misma sesión reintenta de forma idempotente" "$SAME"
+fi
+
 # 3. Release con --by falso: rechazado, el claim sigue activo.
 set +e
 SKALLING_RUNTIME_AGENT=jhon bash "$ROOT/scripts/teamdb-claim.sh" --release "$CLAIM_ID" --status=done --by=teo "$TEST_DIR" >/dev/null 2>&1
@@ -106,12 +124,17 @@ else
   assert_fail "teo no puede sellar un receipt a nombre de luz" "rc=$RC"
 fi
 
-SKALLING_RUNTIME_AGENT=luz TEAMDB_CLAIM_TREE_HASH=abc bash "$ROOT/scripts/teamdb-seal-receipt.sh" review "" "$TEST_DIR" >/dev/null 2>&1 || true
-AGENT="$(teamdb_exec_value "$DB" "SELECT agent FROM receipts WHERE tree_hash='abc' ORDER BY id DESC LIMIT 1")"
-if [ "$AGENT" = "luz" ]; then
-  assert_pass "receipt queda sellado a nombre del agente real"
+set +e
+SKALLING_RUNTIME_AGENT=luz TEAMDB_CLAIM_TREE_HASH=abc bash "$ROOT/scripts/teamdb-seal-receipt.sh" review "" "$TEST_DIR" >/dev/null 2>&1
+RC=$?
+set -e
+ROWS="$(teamdb_exec_value "$DB" "SELECT count(*) FROM receipts WHERE tree_hash='abc'")"
+# Dentro de OpenCode la aprobación la registra skalling_workflow (identidad
+# del runtime); el sellador de shell se niega para cualquier agente.
+if [ "$RC" -eq 2 ] && [ "$ROWS" = "0" ]; then
+  assert_pass "dentro de OpenCode ningún agente sella por shell"
 else
-  assert_fail "receipt queda sellado a nombre del agente real" "agent=$AGENT"
+  assert_fail "dentro de OpenCode ningún agente sella por shell" "rc=$RC rows=$ROWS"
 fi
 
 # 6. Sin runtime (humano en la CLI, CI), vale lo declarado como siempre.

@@ -13,12 +13,11 @@ async function run(request, signal) {
   });
 }
 
-// Only the engine script itself is gated: its actor/session come from
-// ToolContext, not argv, so calling it raw would forge identity. Do NOT add
-// teamdb-claim.sh/teamdb-seal-receipt.sh here -- those are the plans/tasks
-// system's real, live approval path; nothing currently calls
-// skalling_workflow.start, so blocking them has no replacement and strands
-// Jhon/Pau's actually-used flow.
+// El motor es la única autoridad del flujo de código dentro de OpenCode:
+// su actor/sesión vienen de ToolContext, no de argv, así que correr el
+// script crudo falsificaría identidad. teamdb-seal-receipt.sh se niega solo
+// cuando lo invoca un agente (SKALLING_RUNTIME_AGENT presente); queda como
+// camino humano de terminal.
 export function blocksDirectWorkflowScript(command) {
   return /skalling-workflow\.py/.test(command);
 }
@@ -29,18 +28,26 @@ const quote = x => /^[a-zA-Z0-9_./:-]+$/.test(x) ? x : "'" + x.replaceAll("'", "
 // decide si el argv de un check puede correr (v1: permiso nativo; v2: la
 // política compilada del agente, porque un plugin v2 no puede preguntar).
 async function handle(args, runtime, execute) {
-  const payload = JSON.parse(args.payload);
+  // En v2 (code mode) los modelos pasan el payload como objeto; en v1 llega
+  // como string JSON. Se aceptan ambos (prueba real con OpenCode 2.0.18).
+  const payload = typeof args.payload === 'string' ? JSON.parse(args.payload) : args.payload;
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('payload debe ser un objeto JSON con id');
   for (const key of ['actor','session','project','model','exit_code','digest']) {
     if (key in payload) throw new Error('Runtime owns ' + key);
   }
   if (!runtime.agent || !runtime.sessionID) throw new Error('Runtime identity unavailable');
   runtime.signal?.throwIfAborted?.();
-  if (args.action === 'check') {
+  // check {configured: true}: el motor corre el comando que declara el
+  // proyecto, congelado en start; no lo elige el modelo, así que no pide
+  // permiso (en v2 el plugin no puede pedirlo y Jhon quedaba sin evidencia).
+  const configured = args.action === 'check' && (payload.configured === true || payload.configured === 'true');
+  if (args.action === 'check' && !configured) {
     if (!Array.isArray(payload.argv) || !payload.argv.length || !payload.argv.every(x => typeof x === 'string' && !/[\n\r\0]/.test(x))) {
-      throw new Error('Exact argv required');
+      throw new Error('Exact argv required (lista de strings), o configured: true para el comando de verificación del proyecto');
     }
     await runtime.approve(payload.argv.map(quote).join(' '), payload.argv);
   }
+  if (configured) delete payload.argv;
   runtime.signal?.throwIfAborted?.();
   return JSON.stringify(await execute({project:runtime.directory, actor:String(runtime.agent).toLowerCase(),
     session:runtime.sessionID, action:args.action, payload}, runtime.signal));
@@ -48,7 +55,7 @@ async function handle(args, runtime, execute) {
 
 export function workflowTool(tool, execute = run) {
   return tool({
-    description: 'Flujo por rol con evidencia ejecutada: start, clarify, plan, ready, deliver, oracle, check, reject, document, complete, status. Payload JSON incluye id; nunca actor. FAST mantiene Teo→Jhon; alto exige Luz y Pau.',
+    description: 'Única autoridad del flujo de código, con evidencia ejecutada: start (Alex clasifica), clarify (Pol), plan/ready (Sol, plan aprobado), deliver/rescope (Teo), oracle/check/approve/reject (Jhon; Luz en alto), document (Pau), complete (Alex sella), status. Payload JSON con id; nunca actor. Bajo: Teo + verificación automática del proyecto; medio: Sol → Teo → Jhon; alto: Pol → Sol → Teo → Jhon → Luz → Pau.',
     args: {action:tool.schema.string(), payload:tool.schema.string()},
     async execute(args, context) {
       return handle(args, {agent:context.agent, sessionID:context.sessionID, directory:context.directory,
@@ -137,6 +144,26 @@ export function policyDecision(agentMarkdown, command) {
   return decideRules(agentBashRules(agentMarkdown), command);
 }
 
+const WORKFLOW_ACTIONS = ['start', 'status', 'clarify', 'plan', 'ready', 'deliver', 'rescope', 'oracle', 'check',
+  'approve', 'reject', 'document', 'complete'];
+const text = { type: 'string' };
+const PAYLOAD_SCHEMA = {
+  type: 'object',
+  properties: {
+    id: text, risk: { type: 'string', enum: ['low', 'medium', 'high'] },
+    scope: { type: 'string', enum: ['local', 'module', 'cross-cutting'] },
+    clarity: { type: 'string', enum: ['clear', 'ambiguous'] },
+    decision: { type: 'string', enum: ['none', 'pending', 'resolved'] },
+    sensitive: { type: 'boolean' }, visual: { type: 'boolean' },
+    files: { type: 'array', items: text }, argv: { type: 'array', items: text },
+    acceptance: text, reuse: text, intent: text, task: text, supersedes: text, evidence: text,
+    plan_id: { type: 'integer' }, method: text, criterion: text, expected: text, negative: text,
+    invariant: text, refutation: text, findings: text, configured: { type: 'boolean' },
+  },
+  required: ['id'],
+  additionalProperties: true,
+};
+
 export async function setupWorkflowV2(ctx, execute = run, agentsDir = fileURLToPath(new URL('../../agents/', import.meta.url)),
   globalConfigDir = process.env.OPENCODE_CONFIG_DIR || ((process.env.XDG_CONFIG_HOME || ((process.env.HOME || '') + '/.config')) + '/opencode')) {
   const { readFile } = await import('node:fs/promises');
@@ -158,8 +185,15 @@ export async function setupWorkflowV2(ctx, execute = run, agentsDir = fileURLToP
   await ctx.tool.transform((tools) => {
     tools.add({
       name: 'skalling_workflow',
-      description: 'Flujo por rol con evidencia ejecutada: start, clarify, plan, ready, deliver, oracle, check, reject, document, complete, status. Payload JSON incluye id; nunca actor. FAST mantiene Teo→Jhon; alto exige Luz y Pau.',
-      input: { type: 'object', properties: { action: { type: 'string' }, payload: { type: 'string' } },
+      // Herramienta directa, fuera del "code mode" de 2.0.x: dentro de
+      // `execute` los modelos no la encontraban (prueba real: varios intentos
+      // fallidos antes del primer start).
+      options: { codemode: false },
+      description: 'Única autoridad del flujo de código, con evidencia ejecutada: start (Alex clasifica), clarify (Pol), plan/ready (Sol, plan aprobado), deliver/rescope (Teo), oracle/check/approve/reject (Jhon; Luz en alto), document (Pau), complete (Alex sella), status. Payload JSON con id; nunca actor. Bajo: Teo + verificación automática del proyecto; medio: Sol → Teo → Jhon; alto: Pol → Sol → Teo → Jhon → Luz → Pau.',
+      // Esquema completo: OpenCode 2.x repara los tipos antes de llamar
+      // ("false" → false, string JSON → objeto). Sin él, un modelo mandó
+      // "visual": "false" y el motor lo leyó como visual (prueba real).
+      input: { type: 'object', properties: { action: { type: 'string', enum: WORKFLOW_ACTIONS }, payload: PAYLOAD_SCHEMA },
         required: ['action', 'payload'], additionalProperties: false },
       execute: async (input, context) => {
         const directory = ctx.location?.directory || process.cwd();
@@ -169,8 +203,9 @@ export async function setupWorkflowV2(ctx, execute = run, agentsDir = fileURLToP
               // Un plugin v2 no puede abrir un pedido de permiso: solo corre
               // lo que la política efectiva ya permite; todo lo demás, fuera.
               if (decideRules(await effectiveRules(context.agent, directory), pattern) !== 'allow') {
-                throw new Error('Este check necesita aprobación humana y en OpenCode v2 un plugin no puede pedirla: '
-                  + 'corré el comando con la terminal (el permiso te pregunta) y registrá el resultado. Comando: ' + pattern);
+                throw new Error('En OpenCode v2 un check solo corre comandos que tu política ya permite (un plugin no '
+                  + 'puede pedir aprobación). Para el comando de verificación del proyecto usá check con configured: true; '
+                  + 'si hace falta otro comando, informalo a Alex. Comando rechazado: ' + pattern);
               }
             }}, execute),
         };

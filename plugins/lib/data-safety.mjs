@@ -69,6 +69,7 @@ export async function setupDataSafetyV2(ctx, run = call) {
   await ctx.tool.transform((tools) => {
     tools.add({
       name: 'teamdb_destructive',
+      options: { codemode: false },  // herramienta directa en 2.0.x (ver workflow.mjs)
       description: 'Operación SQLite con pérdida de datos: muestra SQL y base exactos y devuelve el comando '
         + 'de aplicar, que OpenCode siempre pide aprobar; respalda antes de ejecutar. Nunca concedida por Goal.',
       input: {

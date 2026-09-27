@@ -47,11 +47,14 @@ class AgentAutonomyContract(unittest.TestCase):
             for command in policy["shared_safe_bash"]:
                 self.assertEqual(bash.get(command), "allow", f"{name}: {command}")
 
-    def test_alex_has_a_direct_lane_that_preserves_teo_then_jhon(self):
+    def test_alex_trivial_route_is_teo_with_engine_verification(self):
+        # Pedido trivial: Alex → Teo; verifica el motor con el comando del
+        # proyecto (Jhon si no hay). La autorización es skalling_workflow.
         source = (ROOT / "agents-base" / "Alex.md").read_text(encoding="utf-8")
-        self.assertIn("## Carril directo", source)
-        self.assertIn("Teo → Jhon", source)
-        self.assertIn("sin cargar cápsula ni crear plan", source)
+        self.assertIn("## Una sola autoridad: `skalling_workflow`", source)
+        self.assertIn("**Alex → Teo**", source)
+        self.assertIn('action: "start"', source)
+        self.assertIn("id del workflow", source)
         bash = frontmatter(ROOT / "agents-base" / "Alex.md")["permission"]["bash"]
         self.assertEqual(bash.get("git -C * diff *"), "allow")
 

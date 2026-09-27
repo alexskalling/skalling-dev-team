@@ -7,11 +7,19 @@ PROJECT="${PROJECT:-$(pwd)}"
 if [ "${1:-}" = "--project" ]; then
   PROJECT="${2:?Falta project}"
   shift 2
+elif [ "$#" -ge 2 ] && [ -d "${1:-}" ] && printf '%s' "${2:-}" | grep -qiE '^[[:space:]]*(select|explain)\b'; then
+  # Prueba real con OpenCode 2.0.18: los agentes pasaban el proyecto primero
+  # ("teamdb-read.sh . 'SELECT ...'") y perdían vueltas con el error.
+  PROJECT="$1"
+  shift
 fi
 
 SQL="${1:-}"
 [ -n "$SQL" ] || {
-  echo "Uso: teamdb-read.sh [--project <path>] <SELECT> [params...]" >&2
+  echo "Uso: teamdb-read.sh [--project <path> | <path>] \"SELECT ...\" [params...] [path]" >&2
+  echo "  Ej.: teamdb-read.sh \"\$PWD\" \"SELECT slug,title FROM decisions WHERE status=?\" accepted" >&2
+  echo "  Tablas de memoria: concepts(slug,title,body_md), decisions(slug,title,body_md,status)," >&2
+  echo "  preferences(slug,scope,body_md), known_problems(slug,title,symptom_md,workaround_md,status)" >&2
   exit 2
 }
 shift

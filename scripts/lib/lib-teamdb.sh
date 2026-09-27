@@ -53,6 +53,13 @@ teamdb_runtime_actor() {
     echo "ERROR: identidad del agente ambigua (dos sesiones corrieron el mismo comando a la vez); reintentar el comando" >&2
     return 1
   fi
+  # El plugin no pudo atribuir el comando a un agente (no pasó por la
+  # herramienta de shell de un agente, o su registro venció): fallar cerrado.
+  # Un humano corre estos scripts desde una terminal, fuera de OpenCode.
+  if [ "$runtime" = "unattributed" ]; then
+    echo "ERROR: comando sin agente atribuible dentro de OpenCode; reintentar desde el agente (o, si sos humano, desde una terminal aparte)" >&2
+    return 1
+  fi
   if [ -n "$declared" ] && [ "$declared" != "unknown" ] && [ "$declared" != "$runtime" ]; then
     echo "ERROR: identidad declarada '$1' no coincide con el agente real '$runtime' (la pone OpenCode)" >&2
     return 1
@@ -426,6 +433,39 @@ _actor_or_unknown() {
 #   mkdir -p "$(dirname "$LOCK_DIR")" 2>/dev/null || true
 #   teamdb_lock "$LOCK_DIR" 10 || exit 1
 #   trap 'teamdb_unlock "$LOCK_DIR"' EXIT
+# Respaldo CONSISTENTE y verificado de una TeamDB. Usa la API backup de SQLite
+# (incluye lo confirmado que sigue en el WAL: `cp team.db` lo perdía,
+# auditoría externa v0.12.0 #4) y exige integrity_check=ok. Devuelve 0 solo
+# si el respaldo quedó escrito e íntegro; quien vaya a destruir o reemplazar
+# datos debe abortar si falla.
+# Uso: teamdb_backup_db <db> <destino>
+teamdb_backup_db() {
+  local db="$1" dest="$2"
+  python3 - "$db" "$dest" <<'PY'
+import os, sqlite3, sys
+source, dest = sys.argv[1:3]
+tmp = dest + '.partial'
+try:
+    if os.path.exists(tmp):
+        os.remove(tmp)
+    src = sqlite3.connect('file:' + source + '?mode=ro', uri=True, timeout=10)
+    out = sqlite3.connect(tmp)
+    src.backup(out)
+    ok = out.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
+    out.close()
+    src.close()
+    if not ok:
+        raise sqlite3.DatabaseError('integrity_check del respaldo no dio ok')
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, dest)
+except (sqlite3.Error, OSError) as error:
+    if os.path.exists(tmp):
+        os.remove(tmp)
+    print('ERROR: respaldo de TeamDB falló: ' + str(error), file=sys.stderr)
+    sys.exit(1)
+PY
+}
+
 teamdb_lock() {
   local lock_dir="$1"
   local max_wait="${2:-10}"

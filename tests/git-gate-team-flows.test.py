@@ -50,7 +50,7 @@ class GitGateTeamFlows(unittest.TestCase):
         with sqlite3.connect(self.db) as conn:
             conn.execute("INSERT INTO receipts(id,task_id,agent,command,exit_code,ts,tree_hash) "
                          "VALUES(?,?,?,?,?,'2020-01-01 00:00:00',?)",
-                         (digest + '-jhon', 'fixture', 'jhon', 'synthetic fixture verification', 0, digest))
+                         (digest + '-jhon', 'fixture', 'jhon', 'skalling-verify.sh (test real del proyecto)', 0, digest))
 
     def commit_verified(self, message, *paths):
         self.git('add', *paths)

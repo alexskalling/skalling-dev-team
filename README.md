@@ -2,30 +2,23 @@
 
 Skalling es un equipo de **8 agentes de IA** que trabajan juntos adentro de [OpenCode](https://opencode.ai). Cada agente tiene un rol específico y siguen un ciclo ordenado para construir software bien hecho.
 
-**Versión actual: 0.12.0**
+**Versión actual: 0.13.0**
 
 ---
 
 ## Los 8 agentes
 
-**Alex** — Orquestador. Es tu punto de entrada. Detecta tu intención y delega directamente al agente correcto según su rol, sin pedir permiso previo cuando el destino está claro.
+**Alex** — Orquestador. Es tu punto de entrada (el agente por defecto del proyecto). Lee los archivos pertinentes, decide la ruta con evidencia y delega; no escribe código.
 
-Usa una **tabla de despacho intención → agente → permiso** junto con un **Decision Tree** de 6 rutas:
-- **INLINE** (1-3 archivos, scope claro) → Teo directo
-- **INTERVENTION** (bug aislado) → Teo surgical
-- **FAST-TRACK** (UI trivial, typo, config) → Teo sin plan
-- **SDD** (4+ archivos, scope ambiguo) → Pol → Sol → Teo
-- **DIRECT** (auditoría/seguridad) → Luz directo
-- **RESEARCH** (aprendizaje) → Jes
+Toda implementación pasa por la herramienta `skalling_workflow`, que es la **única autoridad** del flujo. Clasifica (`start`), registra la evidencia de cada rol y sella la aprobación que Git exige al commitear. La ruta depende del riesgo, no de la cantidad de archivos:
 
-Si la intención es ambigua, pregunta qué querés lograr; nunca te pide elegir qué agente usar.
+| Pedido | Ejemplo | Ruta |
+|---|---|---|
+| Trivial (`low`): local, claro, reversible | cambiar una mayúscula o un texto | **Alex → Teo**, más la verificación configurada del proyecto que corre el motor (Jhon si no hay comando) |
+| Mediano (`medium`): módulo o contrato conocido | cambiar un componente | **Alex → Sol → Teo → Jhon** |
+| Complejo o sensible (`high`) | feature transversal, auth, datos, CI/CD | **Alex → Pol → Sol → Teo → Jhon → Luz → Pau** (Jes si hace falta investigar) |
 
-Esta tabla es la primera aproximación de Alex, no la última palabra: la
-cantidad de archivos orienta, pero no decide el riesgo. Al iniciar el flujo
-formal (`skalling_workflow start`), el riesgo se recalcula por alcance —
-tocar un archivo sensible o un scope cross-cutting sube el riesgo a `high`
-sin importar cuántos archivos haya, y eso exige el ciclo completo con
-verificación independiente de Jhon y Luz.
+Investigación → Jes. Auditoría → Luz. Con una decisión tuya pendiente o un pedido ambiguo, el motor no deja implementar: Alex te pregunta primero.
 
 Carga memorias relevantes al inicio de sesión (`skalling-memory`).
 
@@ -37,7 +30,7 @@ Carga memorias relevantes al inicio de sesión (`skalling-memory`).
 
 **Teo** — Principal Engineer. Escribe código aplicando TDD: primero escribe el test, después el código mínimo para que pase, después refactoriza. No codea lógica sin un test que falle antes.
 
-**Jhon** — Test Verifier. Después de cada tarea de Teo verifica que los tests pasen. Al final corre la suite completa de regresión. Sin su aprobación no se avanza a la siguiente fase.
+**Jhon** — Test Verifier. En riesgo medio y alto arma un oráculo independiente, ejecuta comprobaciones proporcionales al riesgo (el motor las corre y registra) y aprueba o rechaza. La suite completa, solo en riesgo alto o impacto transversal. Sin su aprobación no se avanza.
 
 **Luz** — QA & Security Auditor. Revisa el código terminado: calidad, seguridad, rendimiento, duplicación, complejidad. Si encuentra problemas lo devuelve a Teo.
 
@@ -66,16 +59,30 @@ OpenCode cerrado ni garantiza completar tareas con bloqueos externos o decisione
 |---|---|---|
 | < 1.18.29 | **No soportada** | Los plugins exportan `{ server, setup }`, forma que OpenCode acepta desde 1.18.29. El instalador y el doctor lo rechazan. |
 | 1.18.29 – 1.x | **Completa** (v1) | Todo: agentes, guard de identidad, `skalling_workflow`, `teamdb_destructive`, `/skalling-goal`. |
-| 2.x (usado a mano con 2.0.18) | **Parcial / supervisada** | Agentes, guard, `skalling_workflow` y `teamdb_destructive`. **`/skalling-goal` no existe en v2** (es solo v1): la API de plugins v2 no expone los hooks que usa (comando, sesión inactiva, continuación). En v2 un check de `skalling_workflow` solo corre si la política efectiva ya lo permite (un plugin v2 no puede pedir aprobación). Si dos sesiones corren exactamente el mismo comando a la vez, la identidad queda "ambigua" y los helpers de TeamDB se niegan a actuar hasta reintentar. La API de plugins v2 sigue en beta. |
+| 2.x (verificado con 2.0.18) | **Soportada, conducida** | Agentes, guard, `skalling_workflow` (herramienta directa) y `teamdb_destructive`. Rutas trivial, mediana y alta, decisión pendiente y restricción en memoria probadas con sesiones reales (ver abajo). **`/skalling-goal` no existe en v2**: la API de plugins v2 no expone los hooks que usa. Un plugin v2 no puede pedir aprobación: el `check` de Jhon/Luz corre el comando declarado por el proyecto (`configured: true`) o comandos que su política ya permite. Un comando sin agente atribuible recibe identidad `unattributed` y los helpers de TeamDB se niegan. |
 
 v2 no es el mismo producto que v1: sin `/skalling-goal` no hay continuación autónoma, así
 que el trabajo en v2 necesita que alguien lo conduzca.
 
-Cómo se verificó: pruebas unitarias de los adaptadores v1/v2 contra la API documentada.
-No hay todavía una matriz de CI con binarios reales de OpenCode ni evaluaciones con sesiones
-LLM reales; ninguna fila de esta tabla está garantizada contra regresiones del binario. Si hay varias
-instalaciones, comprobar `command -v opencode` y `opencode --version` en la terminal del
-proyecto que se va a usar; `bash setup-team-doctor.sh` informa la versión detectada.
+**Cómo se verificó (27-09-2026).** Pruebas unitarias de los adaptadores v1/v2 y, además,
+sesiones reales con el binario de OpenCode 2.0.18 y modelos MiniMax (M3 para Alex, M2.7
+para el resto), en un proyecto de prueba aislado:
+
+| Escenario | Resultado observado |
+|---|---|
+| Trivial (mayúscula) | Alex → Teo; verificación automática del proyecto; `complete` selló y Git aceptó el commit. 30 s, 1 handoff, 1 pedido de permiso. |
+| Decisión pendiente | Alex presentó opciones antes de crear el workflow; no tocó código. |
+| Restricción en memoria (sesión nueva) | Alex recuperó la decisión guardada, detectó la contradicción y preguntó; no tocó código. |
+| Mediano (módulo nuevo) | Alex → Sol (plan aprobado) → Teo (`rescope`, `deliver`) → Jhon (oráculo, check, aprobación) → `complete`; Git aceptó el commit. 3 min 26 s, 3 handoffs. |
+| Complejo y sensible (datos personales) | Ruta completa: Pol (`clarify`) → Sol (plan y `ready`) → Teo → Jhon → Luz (veredicto de riesgo) → Pau (`document`) → `complete`; 17 tests del candidato verdes y Git aceptó el commit. 10 min 46 s, 6 handoffs. Pol detectó una decisión de producto faltante y se preguntó antes de seguir. |
+| Memoria del equipo | Una decisión y un problema conocido quedaron guardados y versionados para el merge. |
+
+Esas corridas destaparon y corrigieron defectos que ningún test unitario veía (plugins que
+2.0.x no cargaba, herramienta escondida en code mode, booleanos como texto, Jhon sin forma de
+registrar evidencia, triggers de versión que bloqueaban toda escritura de memoria). No hay todavía una matriz de CI con binarios reales de OpenCode: una
+versión nueva del binario puede romper algo. Si hay varias instalaciones, comprobar
+`command -v opencode` y `opencode --version` en la terminal del proyecto;
+`bash setup-team-doctor.sh` informa la versión detectada.
 
 Los ocho agentes tienen lecturas y helpers de TeamDB permitidos según su rol, también fuera
 de Goal. Usar rutas canónicas de los helpers; no envolverlos en `python -c`, `bash -c` o SQL libre.
@@ -103,33 +110,47 @@ que OpenCode instala en su configuración; si falta, no usar el backend Python p
 
 Requisitos esenciales: **SQLite 3** y **Python 3**. El instalador los valida antes de escribir archivos y muestra el comando adecuado si falta alguno. OpenCode y Git también son recomendados para usar el equipo completo.
 
-### Mac / Linux
+### Instalar, actualizar y reiniciar (receta única)
+
+Instalar **siempre un release publicado** (`vX.Y.Z`), nunca `main`. La lista está en
+[releases](https://github.com/alexskalling/skalling-dev-team/releases).
+
+**1. Instalar (una vez por máquina)**
 
 ```bash
-git clone https://github.com/alexskalling/skalling-dev-team.git ~/skalling-dev-team
+VERSION=v0.13.0   # último release publicado
+git clone --branch "$VERSION" --depth 1 https://github.com/alexskalling/skalling-dev-team.git ~/skalling-dev-team
 bash ~/skalling-dev-team/install-global.sh
 ```
 
-### Windows
+**2. Preparar cada proyecto** (una vez por proyecto, y de nuevo después de cada actualización)
+
+```bash
+cd ~/Proyectos/mi-proyecto
+bash ~/skalling-dev-team/setup.sh
+```
+
+Esto instala hooks, plugins y la config de OpenCode del proyecto: Alex queda como agente
+por defecto y se deshabilitan `build`, `plan` y `general`, que editarían sin pasar por el flujo.
+`/skalling-init`, dentro de OpenCode, aplica la misma config y además crea la memoria.
+
+**3. Reiniciar OpenCode** para cargar agentes y plugins. Después: `bash ~/skalling-dev-team/setup-team-doctor.sh`.
+
+**Actualizar:** `/skalling-update` (o `bash ~/skalling-dev-team/scripts/update.sh`). Cambia al
+último release e instala; luego repetir el paso 2 en cada proyecto (actualiza agentes y
+config locales, que reemplazan a los globales) y el paso 3.
+
+**Windows** (Git Bash o WSL2, no nativo; en CI solo tiene smoke test):
 
 ```powershell
-git clone https://github.com/alexskalling/skalling-dev-team.git $HOME\skalling-dev-team
+git clone --branch v0.13.0 --depth 1 https://github.com/alexskalling/skalling-dev-team.git $HOME\skalling-dev-team
 .\skalling-dev-team\install-global.ps1
 ```
 
-Requiere Windows 10+ y Git Bash o WSL2. No es una instalación nativa: los scripts corren
-dentro de Git Bash o WSL2, y en CI Windows solo tiene un smoke test (macOS y Linux corren la
-batería completa).
-
 - `-Runtime GitBash` instala para herramientas ejecutadas desde Windows/Git Bash.
 - `-Runtime WSL` instala dentro del `HOME` de Linux; en ese caso ejecutá también **OpenCode dentro de WSL**.
-- Sin `-Runtime`, se elige Git Bash si está disponible y, en caso contrario, WSL2. El instalador siempre informa el entorno elegido antes de modificar archivos.
-
-Podés indicar una ubicación no estándar del repositorio:
-
-```powershell
-.\install-global.ps1 -SkallingDir "C:\ruta con espacios\skalling-dev-team"
-```
+- Sin `-Runtime`, se elige Git Bash si está disponible y, en caso contrario, WSL2.
+- Ubicación no estándar: `.\install-global.ps1 -SkallingDir "C:\ruta con espacios\skalling-dev-team"`.
 
 ### Code Intelligence (opt-in, v0.4.0+)
 
@@ -223,28 +244,28 @@ Los antiguos `/skalling-forget`, `/skalling-graph` y
 
 ## Ciclo de trabajo
 
-Para construir algo nuevo, los agentes siguen este orden:
+El ciclo completo (riesgo alto) sigue este orden, cada paso registrado en `skalling_workflow`:
 
 ```
-FASE 0: Alex recibe tu pedido y clasifica la intención
-FASE 1: Pol te pregunta hasta entender bien qué y por qué
-FASE 2: Sol arma un plan con tareas precisas
-FASE 3: Teo implementa cada tarea (con TDD) → Jhon verifica tests
-        (se repite hasta terminar todas las tareas)
-FASE 4: Jhon corre todos los tests de nuevo (regresión)
-FASE 5: Luz revisa calidad y seguridad del código completo
-FASE 6: Pau documenta los cambios
+start     Alex clasifica con evidencia (archivos, aceptación, reutilización)
+clarify   Pol acuerda alcance y criterios con vos
+plan      Sol arma y aprueba el plan; ready habilita a Teo
+deliver   Teo implementa (TDD) y entrega el candidato
+check     Jhon verifica con un oráculo independiente; approve / reject
+check     Luz revisa calidad y seguridad; approve con veredicto de riesgo
+document  Pau guarda decisiones y memoria durable
+complete  Alex cierra: prepara en Git lo revisado y sella la aprobación
 ```
 
-Para cosas chicas (un typo, un color, un texto) Alex puede mandarte directo a Teo sin todo el ciclo. Para auditorías puede mandar a Luz directo.
+Para cosas chicas (un typo, un color, un texto) la ruta es Alex → Teo y la verificación la corre el motor con el comando del proyecto (`testing.fast` en `.opencode/project.yaml`, o `testing.unit`). Para auditorías, Alex manda a Luz directo.
 
 ### Flujo adaptativo y contexto económico
 
 Alex clasifica cada pedido por riesgo, no solo por cantidad de archivos:
 
-- Bajo: Alex → Teo → Jhon, con prueba focalizada.
+- Bajo: Alex → Teo; la verificación la corre el motor con el comando configurado (una corrida, sin repetir la suite completa para sellar).
 - Medio: Alex → Sol → Teo → Jhon, con pruebas del módulo.
-- Alto o ambiguo: ciclo completo con Pol, Luz y Pau.
+- Alto: ciclo completo con Pol, Luz y Pau. Ambiguo o con decisión pendiente: primero se pregunta.
 
 Antes del primer handoff se crea una cápsula de hasta 8 KB: resumen general, memoria relacionada y ubicaciones obtenidas con Code Intelligence. Esa cápsula se reutiliza; los agentes amplían contexto solo bajo demanda. Pau revisa todos los cierres, pero escribe memoria únicamente cuando hay conocimiento duradero. Markdown sigue siendo documentación o export explícito, nunca transporte entre agentes.
 
@@ -491,11 +512,12 @@ restaura. Si el proyecto usa `core.hooksPath` (husky, carpeta versionada), no se
 carpeta: el instalador avisa cómo agregar la llamada a `.opencode/hooks/<hook>` y el doctor
 marca el gate como inactivo hasta que se haga.
 
-**Estados de un receipt de Jhon.** Jhon corre el test real del proyecto
-(`testing.unit.command` en `project.yaml`) y sella solo si el candidato staged es el mismo
-antes y después del test. Sin test configurado el receipt queda `not_run` (exit 2) y **no
-aprueba**: hay que configurar el test, pedir revisión de Luz (`skalling-review.sh`) o que
-una persona apruebe sin tests en su terminal:
+**Qué aprueba un commit.** Dentro de OpenCode, solo la aprobación que sella
+`skalling_workflow complete`. Fuera de OpenCode (una persona en su terminal),
+`teamdb-seal-receipt.sh <task> jhon` corre el test real del proyecto
+(`testing.unit.command`) y sella solo si el candidato staged es el mismo antes y después.
+Sin test configurado el receipt queda `not_run` (exit 2) y **no aprueba**: hay que
+configurar el test o que la persona apruebe sin tests:
 
 ```bash
 SKALLING_VERIFY_WAIVER="motivo concreto" bash .opencode/scripts/teamdb-seal-receipt.sh <task> jhon
@@ -529,7 +551,7 @@ bash scripts/skalling-review.sh --cwd /path/to/project --diff HEAD~1
 SKALLING_REVIEW_MODE=off bash scripts/skalling-review.sh
 ```
 
-Cada finding se emite con severidad `BLOCKER` (falla el review), `WARNING` o `INFO`. Al final se sella un **receipt inmutable** (`scripts/teamdb-seal-receipt.sh`) con `tree_hash`: el hash SHA-256 (16 chars) del diff staged (`git diff --cached`, que incluye los blobs y modos de cada archivo cambiado). Si semgrep no está o no pudo correr, el resultado dice `PASS (degradado: sin SAST)`; con `SKALLING_REQUIRE_SAST=1` eso es `FAIL`. El `pre-commit` compara ese hash con el árbol staged: si alguien tocó una línea después de la revisión, el commit se bloquea hasta re-sellar o revertir.
+Cada finding se emite con severidad `BLOCKER` (falla el review), `WARNING` o `INFO`. Corrida por una persona en su terminal, al final sella un **receipt inmutable** (`scripts/teamdb-seal-receipt.sh`) con `tree_hash`: el hash SHA-256 (16 chars) del diff staged (`git diff --cached`, que incluye los blobs y modos de cada archivo cambiado). Si semgrep no está o no pudo correr, el resultado dice `PASS (degradado: sin SAST)`; con `SKALLING_REQUIRE_SAST=1` eso es `FAIL`. El `pre-commit` compara ese hash con el árbol staged: si alguien tocó una línea después de la revisión, el commit se bloquea hasta re-sellar o revertir. Dentro de OpenCode la revisión no sella por su cuenta: Luz la corre como `check` de `skalling_workflow`.
 
 ### Tests
 

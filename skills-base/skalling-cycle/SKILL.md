@@ -32,7 +32,8 @@ para transportar trabajo; las exportaciones se solicitan explícitamente.
 
 Teo recibe archivos relevantes leídos, aceptación, reutilización, contexto completo
 y el resultado de routing. Para medium/high se exige plan aprobado.
-Usa teamdb-claim.sh para reclamar y liberar tareas; Jhon revisa y aprueba; Pau
+Usa teamdb-claim.sh para reclamar y liberar tareas y skalling_workflow para entregar
+y aprobar (deliver; oracle/check/approve de Jhon); Pau
 resuelve tareas cuando corresponde. Consultar --help de los helpers antes de inventar flags.
 
 Si cambia el alcance o aparece una decisión crítica, devolver la evidencia a Alex.

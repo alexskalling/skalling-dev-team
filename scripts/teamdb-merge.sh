@@ -24,7 +24,14 @@
 #      → NUNCA se tocan. El merge es aditivo hacia la DB.
 #   4. NUNCA hace DELETE: la DB local manda sobre lo que no está en git.
 #
-#   Tablas sin updated_at: solo se insertan entidades nuevas; nunca se pisan
+#   decisions, preferences y known_problems no tienen updated_at propio: su
+#   versión vive en memory_versions (la mantienen triggers). Sin eso, un
+#   cambio de contenido o de estado (accepted → superseded) nunca llegaba al
+#   otro clon y el merge salía con éxito (auditoría externa v0.12.0 #5).
+#   Conflicto = ambos lados distintos: gana la versión más reciente y se
+#   informa cuál se conservó.
+#
+#   Tablas sin versión: solo se insertan entidades nuevas; nunca se pisan
 #   las locales. Los registros de eventos sin clave natural (plan_history,
 #   routing_decisions...) se comparan por fila completa para no duplicarlos.
 #
@@ -80,8 +87,10 @@ else
 fi
 
 MERGE_PY="$(cat <<'PY'
-import sqlite3, sys, re
-db_path, dump_path, dry_run = sys.argv[1], sys.argv[2], sys.argv[3] == "1"
+import sqlite3, sys
+db_path, dump_path, dry_run, script_dir = sys.argv[1], sys.argv[2], sys.argv[3] == "1", sys.argv[4]
+sys.path.insert(0, script_dir)
+from teamdb_dump import parse
 
 # Cada máquina asigna ids autoincrementales por su cuenta: el id de una fila
 # remota NO identifica la misma entidad en la DB local (Alice y Bob crean
@@ -118,50 +127,16 @@ SPECS = [
     ("agent_workflows", ("id",), {}),
 ]
 
-INSERT_RE = re.compile(r'^INSERT INTO "([^"]+)" \((.*?)\) VALUES \((.*)\);$', re.S)
+VERSIONED = ("decisions", "preferences", "known_problems")
 
-# Los valores los evalúa SQLite (comillas, NULL, números, 'a'||char(10)||'b'),
-# no un tokenizador propio: el anterior leía línea por línea y descartaba en
-# silencio toda fila con saltos de línea (conceptos, decisiones, planes).
-# El dump viene de git (otra máquina): solo se permite SELECT de literales.
-literal_db = sqlite3.connect(":memory:")
-literal_db.text_factory = str
-ALLOWED = {sqlite3.SQLITE_SELECT, sqlite3.SQLITE_FUNCTION}
-literal_db.set_authorizer(lambda action, *_: sqlite3.SQLITE_OK if action in ALLOWED else sqlite3.SQLITE_DENY)
-
-
-def statements(path):
-    # Acumula hasta una sentencia completa: acepta dumps nuevos (una línea por
-    # fila) y los viejos con strings multilínea.
-    buf = ""
-    with open(path, encoding="utf-8") as f:
-        for line in f:
-            if not buf and (line.startswith("--") or not line.strip()):
-                continue
-            buf += line
-            if sqlite3.complete_statement(buf):
-                yield buf.strip()
-                buf = ""
-
-
-remote = {}
-unparsed = 0
-for stmt in statements(dump_path):
-    m = INSERT_RE.match(stmt)
-    if not m:
-        unparsed += 1
-        continue
-    table, col_part, val_part = m.group(1), m.group(2), m.group(3)
-    cols = [c.strip().strip('"') for c in col_part.split(",")]
-    try:
-        vals = literal_db.execute("SELECT " + val_part).fetchone()
-    except sqlite3.Error:
-        unparsed += 1
-        continue
-    if len(cols) != len(vals):
-        unparsed += 1
-        continue
-    remote.setdefault(table, []).append(dict(zip(cols, vals)))
+# Parser compartido con teamdb-restore.sh: solo INSERTs de datos, valores
+# evaluados como literales. Lo que no lo es se informa y no se aplica.
+remote, problems = parse(dump_path, tuple(spec[0] for spec in SPECS) + ("memory_versions",))
+unparsed = len(problems)
+for problem in problems[:20]:
+    print("ERROR dump: " + problem, file=sys.stderr)
+remote_versions = {(r.get("table_name"), r.get("slug")): str(r.get("updated_at") or "")
+                   for r in remote.get("memory_versions", [])}
 
 con = sqlite3.connect(db_path)
 con.text_factory = str
@@ -173,6 +148,23 @@ con.execute("PRAGMA busy_timeout=5000")
 idmap = {}
 stats = {"inserted": 0, "updated": 0, "local_newer": 0, "unchanged": 0, "remapped": 0}
 errors = []
+conflicts = []
+has_versions = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='memory_versions'").fetchone() is not None
+
+
+def local_version(table, slug):
+    if not has_versions:
+        return ""
+    row = con.execute("SELECT updated_at FROM memory_versions WHERE table_name=? AND slug=?", (table, slug)).fetchone()
+    return str(row[0]) if row else ""
+
+
+def set_version(table, slug, ts):
+    # Tras aplicar la fila remota, la versión local queda IGUAL a la remota
+    # (el trigger puso "ahora"): si no, el próximo merge la vería más nueva.
+    if has_versions and ts and not dry_run:
+        con.execute("INSERT INTO memory_versions(table_name, slug, updated_at) VALUES (?,?,?) "
+                    "ON CONFLICT(table_name, slug) DO UPDATE SET updated_at=excluded.updated_at", (table, slug, ts))
 
 
 def local_columns(table):
@@ -225,7 +217,10 @@ for table, key, fks in SPECS:
     cols = local_columns(table)
     if not cols:
         continue
-    has_updated_at = "updated_at" in cols
+    versioned = table in VERSIONED and has_versions
+    if versioned:
+        rows = [{**r, "updated_at": remote_versions.get((table, r.get("slug")), "")} for r in rows]
+    has_updated_at = "updated_at" in cols or versioned
     surrogate = surrogate_id(table, cols)
     match_cols = key or tuple(c for c in cols if c != "id")
     # Si una rama duplicó la misma entidad (merge=union), gana la más reciente.
@@ -238,6 +233,8 @@ for table, key, fks in SPECS:
         values = {c: chosen.get(c) for c in cols if c in chosen}
         if local is not None:
             local_row = dict(zip(cols, local))
+            if versioned:
+                local_row["updated_at"] = local_version(table, local_row.get("slug"))
             if surrogate:
                 idmap.setdefault(table, {}).setdefault(str(row.get("id")), [])
                 if local_row["id"] not in idmap[table][str(row.get("id"))]:
@@ -248,9 +245,14 @@ for table, key, fks in SPECS:
                 stats["unchanged"] += 1
                 continue
             remote_ts, local_ts = str(row.get("updated_at")), str(local_row.get("updated_at") or "")
+            differs = any(values.get(c) != local_row.get(c) for c in values if c != "id")
             if remote_ts <= local_ts:
                 stats["unchanged" if remote_ts == local_ts else "local_newer"] += 1
+                if differs and remote_ts < local_ts:
+                    conflicts.append(f"{table}/{local_row.get('slug', local_row.get('id'))}: se conserva la versión local ({local_ts} > {remote_ts})")
                 continue
+            if differs and local_ts:
+                conflicts.append(f"{table}/{local_row.get('slug', local_row.get('id'))}: gana la versión remota ({remote_ts} > {local_ts})")
             changes = {c: v for c, v in values.items() if c != "id"}
             if not dry_run:
                 sets = ",".join(f'"{c}"=?' for c in changes)
@@ -261,6 +263,8 @@ for table, key, fks in SPECS:
                 except sqlite3.Error as exc:
                     errors.append(f"{table} {[chosen.get(c) for c in match_cols]}: {exc}")
                     continue
+                if versioned:
+                    set_version(table, local_row.get("slug"), remote_ts)
             stats["updated"] += 1
             continue
         # Fila nueva: conserva el id remoto si está libre; si no, SQLite asigna uno.
@@ -281,6 +285,8 @@ for table, key, fks in SPECS:
             errors.append(f"{table} {[chosen.get(c) for c in match_cols]}: {exc}")
             continue
         stats["inserted"] += 1
+        if versioned:
+            set_version(table, insert.get("slug"), str(row.get("updated_at") or ""))
         if surrogate:
             new_id = insert.get("id", cursor.lastrowid)
             idmap.setdefault(table, {}).setdefault(str(row.get("id")), []).append(new_id)
@@ -296,6 +302,8 @@ con.commit()
 print(f"merge: {stats['inserted']} insertadas, {stats['updated']} actualizadas, "
       f"{stats['local_newer']} locales más nuevas, {stats['unchanged']} sin cambios, "
       f"{stats['remapped']} ids traducidos")
+for conflict in conflicts:
+    print(f"CONFLICTO resuelto por versión: {conflict}")
 for e in errors:
     print(f"ERROR fila no aplicada: {e}", file=sys.stderr)
 if unparsed:
@@ -306,9 +314,9 @@ PY
 )"
 
 if [ "$DRY_RUN" = true ]; then
-  python3 -c "$MERGE_PY" "$DB" "$DUMP" 1
+  python3 -c "$MERGE_PY" "$DB" "$DUMP" 1 "$SCRIPT_DIR"
 else
-  python3 -c "$MERGE_PY" "$DB" "$DUMP" 0
+  python3 -c "$MERGE_PY" "$DB" "$DUMP" 0 "$SCRIPT_DIR"
   # FASE 1: dump fresco post-escritura (la DB es la fuente, el dump la fotografía)
   teamdb_refresh_dump "$PROJECT" >/dev/null 2>&1 || true
 fi

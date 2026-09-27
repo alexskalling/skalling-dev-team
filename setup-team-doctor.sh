@@ -289,7 +289,7 @@ check_memory_health() {
     fi
     if [[ -n "$superseded_in_index" ]]; then
         while IFS= read -r file; do
-            [[ -n "$file" ]] && warn "Concept doc superseded pero vigente en index.md: $file"
+            if [[ -n "$file" ]]; then warn "Concept doc superseded pero vigente en index.md: $file"; fi
         done <<< "$superseded_in_index"
     else
         ok "Sin concept docs superseded vigentes en index.md"
@@ -463,11 +463,30 @@ check_controls() {
         for hook in pre-commit pre-push; do
             if [[ -n "$dir" && -e "$dir/$hook" ]] && { skalling_is_skalling_hook "$dir/$hook" || grep -q '\.opencode/hooks/'"$hook" "$dir/$hook" 2>/dev/null; }; then
                 ok "Hook $hook activo${hooks_path:+ (vía core.hooksPath=$hooks_path)}"
-                [[ -e "$dir/$hook.skalling-prev" ]] && info "  encadena el hook previo del proyecto ($hook.skalling-prev)"
+                # `[[ ]] && info` devolvía 1 cuando no hay hook previo y, con
+                # set -e, cortaba el diagnóstico entero (auditoría v0.12.0).
+                if [[ -e "$dir/$hook.skalling-prev" ]]; then info "  encadena el hook previo del proyecto ($hook.skalling-prev)"; fi
             else
                 err "Hook $hook de Skalling no activo${hooks_path:+ (core.hooksPath=$hooks_path: agregá la llamada a .opencode/hooks/$hook)}; el gate de commits no corre"
             fi
         done
+    fi
+
+    # Config de OpenCode del proyecto: sin ella, `build` (el agente por
+    # defecto de OpenCode) o `general` editan sin clasificación ni Teo.
+    if [[ "$GLOBAL_ONLY" == false && -d "$PROJECT_DIR/.opencode/agents" ]]; then
+        local config_tool=""
+        for config_tool in "$SCRIPT_DIR/scripts/skalling-project-config.py" "$OPENCODE_DIR/scripts/skalling-project-config.py"; do
+            [[ -f "$config_tool" ]] && break
+        done
+        if [[ -f "$config_tool" ]]; then
+            local drift
+            if drift="$(python3 "$config_tool" "$PROJECT_DIR" --check 2>&1)"; then
+                ok "Config del proyecto: Alex por defecto; build/plan/general deshabilitados"
+            else
+                warn "Config de OpenCode del proyecto desactualizada ($drift): correr setup.sh en el proyecto"
+            fi
+        fi
     fi
 }
 
@@ -699,7 +718,7 @@ main() {
     fi
 
     echo ""
-    ok "Doctor completo. Skalling está ${c_green}saludable${c_reset}."
+    ok "Doctor completo. Skalling está saludable."
     exit 0
 }
 

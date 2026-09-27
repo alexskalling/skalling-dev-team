@@ -334,9 +334,12 @@ PYEOF
 
   # Sellar el receipt con el tree_hash del bundle (misma senda best-effort).
   DB="$(teamdb_project_path "$PROJECT")"
-  if [ -f "$DB" ]; then
+  if [ -n "${SKALLING_RUNTIME_AGENT:-}${SKALLING_WORKFLOW_CHECK:-}" ]; then
+    # Dentro de OpenCode la evidencia la registra skalling_workflow (check).
+    echo "INFO: revisión dentro de OpenCode: registrar el resultado con skalling_workflow check; no se sella aparte" >&2
+  elif [ -f "$DB" ]; then
     TASK_ID="${SKALLING_TASK_ID:-review}"
-    AGENT="${SKALLING_RUNTIME_AGENT:-${SKALLING_REVIEW_AGENT:-luz}}"
+    AGENT="${SKALLING_REVIEW_AGENT:-luz}"
     SEAL_CMD="review --collect $(basename "$COLLECT_DIR") --lens $LENS"
     if ! TEAMDB_CLAIM_COMMAND="$SEAL_CMD" \
           TEAMDB_CLAIM_EXIT_CODE="$RC" \
@@ -967,9 +970,12 @@ SUMMARY="{\"risk\":{\"blocker\":$(count_for BLOCKER risk),\"warning\":$(count_fo
 
 # Receipt sellado (best-effort; el exit code final lo definen los blockers)
 DB="$(teamdb_project_path "$PROJECT")"
-if [ -f "$DB" ]; then
+if [ -n "${SKALLING_RUNTIME_AGENT:-}${SKALLING_WORKFLOW_CHECK:-}" ]; then
+  # Dentro de OpenCode la evidencia la registra skalling_workflow (check).
+  echo "INFO: revisión dentro de OpenCode: registrar el resultado con skalling_workflow check; no se sella aparte" >&2
+elif [ -f "$DB" ]; then
   TASK_ID="${SKALLING_TASK_ID:-review}"
-  AGENT="${SKALLING_RUNTIME_AGENT:-${SKALLING_REVIEW_AGENT:-luz}}"
+  AGENT="${SKALLING_REVIEW_AGENT:-luz}"
   SEAL_CMD="review --lens $LENS${DIFF_RANGE:+ --diff $DIFF_RANGE}"
   if ! TEAMDB_CLAIM_COMMAND="$SEAL_CMD" \
         TEAMDB_CLAIM_EXIT_CODE="$RC" \

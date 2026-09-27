@@ -46,7 +46,7 @@ def needs_review(name):
 # Solo quien verifica puede habilitar un commit de código. Un receipt de
 # Alex o de Teo (el que orquesta o el que implementó) no prueba nada: así un
 # cambio que se saltó a Jhon no llega al repositorio aunque exista evidencia.
-VERIFIERS = ('jhon', 'luz')
+VERIFIERS = ('jhon', 'luz', 'auto')  # auto: verificación configurada que corrió el motor (carril trivial)
 # Formatos de credenciales de proveedores. El lookbehind evita que "sk-"
 # dentro de una palabra ("task-context-...") dispare; los formatos con
 # guiones (sk-ant-..., sk-proj-...) se nombran explícitamente. La URL con
@@ -85,11 +85,29 @@ def empty_tree():
     return EMPTY_TREE
 
 
+def evidence_backed(agent, command):
+    """Un receipt vale solo si lo produjo algo que CALCULÓ el resultado: la
+    verificación real de Jhon (skalling-verify.sh), la revisión real de Luz
+    (skalling-review.sh), el motor skalling_workflow o una dispensa humana.
+    Auditoría externa v0.12.0 #2: un 'review-seal' de Luz con resumen vacío
+    (valores por defecto del sellador) abría el commit sin revisión."""
+    command = str(command or '')
+    if command.startswith('skalling_workflow:'):
+        return True
+    if agent == 'jhon':
+        return command.startswith(('skalling-verify.sh', 'waived:', 'not_run:')) or '+ skalling-verify.sh' in command
+    if agent == 'luz':
+        return command.startswith('review --')
+    return False
+
+
 def receipt_verdict(db, digest):
     # Decide el receipt más reciente que registra un resultado. Un "not_run"
     # (Jhon sin tests configurados) no es aprobación ni rechazo: no cuenta.
-    rows = db.execute('SELECT exit_code, command FROM receipts WHERE tree_hash=? AND lower(agent) IN (?, ?) '
-                      'ORDER BY ts DESC, rowid DESC', (digest, *VERIFIERS)).fetchall()
+    rows = db.execute('SELECT exit_code, command, lower(agent) FROM receipts WHERE tree_hash=? '
+                      'AND lower(agent) IN (%s) ORDER BY ts DESC, rowid DESC' % ','.join('?' * len(VERIFIERS)),
+                      (digest, *VERIFIERS)).fetchall()
+    rows = [r[:2] for r in rows if evidence_backed(r[2], r[1])]
     not_run = [r for r in rows if str(r[1] or '').startswith('not_run:')]
     decisive = [r for r in rows if not str(r[1] or '').startswith('not_run:')]
     return decisive, not_run

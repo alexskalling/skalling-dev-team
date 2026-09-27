@@ -35,12 +35,15 @@ class GitClose(unittest.TestCase):
         (self.project / 'app.py').write_text(f'value = {number}\n')
         self.git('add', 'app.py')
 
-    def receipt(self, success=0, agent='jhon'):
+    def receipt(self, success=0, agent='jhon', command=None):
+        # Comando con la forma que deja cada productor real de evidencia; el
+        # gate rechaza receipts hechos a mano (auditoría externa v0.12.0 #2).
+        command = command or {'luz': 'review --lens risk'}.get(agent, 'skalling-verify.sh (test real del proyecto)')
         patch = self.git('diff', '--cached', '--', '.', ':(exclude)db/teamdb/team.dump.sql').stdout.rstrip('\n')
         digest = hashlib.sha256(patch.encode()).hexdigest()[:16]
         with sqlite3.connect(self.db) as conn:
             conn.execute("INSERT INTO receipts(id,task_id,agent,command,exit_code,ts,tree_hash) VALUES(?,?,?,?,?,'2020-01-01 00:00:00',?)",
-                         (digest + str(success) + agent, 'fixture', agent, 'synthetic fixture verification', success, digest))
+                         (digest + str(success) + agent + command, 'fixture', agent, command, success, digest))
 
     def hook(self, name, input=None):
         return subprocess.run(['bash', str(ROOT / 'scripts/hooks' / name)], cwd=self.project,
@@ -65,6 +68,9 @@ class GitClose(unittest.TestCase):
             result = self.hook('pre-commit')
             self.assertNotEqual(result.returncode, 0)
             self.assertIn('Jhon', result.stderr)
+        # Un 'review-seal' de Luz sin revisión (valores por defecto) tampoco.
+        self.receipt(agent='luz', command='review-seal')
+        self.assertNotEqual(self.hook('pre-commit').returncode, 0)
         self.receipt(agent='luz')
         self.assertEqual(self.hook('pre-commit').returncode, 0)
 
@@ -137,8 +143,16 @@ class GitClose(unittest.TestCase):
         patch = self.git('diff', '--cached', '--', '.', ':(exclude)db/teamdb/team.dump.sql').stdout.rstrip('\n')
         expected = hashlib.sha256(patch.encode()).hexdigest()[:16]
         (self.project / 'app.py').write_text('value = 999\n')
+        # Luz con la evidencia que deja skalling-review.sh (el único sello de
+        # luz aceptado); un agente inventado ('fixture') ya no sella.
+        env = {**os.environ, 'TEAMDB_CLAIM_COMMAND': 'review --lens all', 'TEAMDB_CLAIM_EXIT_CODE': '0',
+               'TEAMDB_CLAIM_OUTPUT_SUMMARY': '{"total":0}'}
+        env.pop('SKALLING_RUNTIME_AGENT', None)
+        bogus = subprocess.run(['bash', str(ROOT / 'scripts/teamdb-seal-receipt.sh'),
+                                'fixture', 'fixture', str(self.project)], capture_output=True, text=True, env=env)
+        self.assertEqual(bogus.returncode, 2)
         result = subprocess.run(['bash', str(ROOT / 'scripts/teamdb-seal-receipt.sh'),
-                                 'fixture', 'fixture', str(self.project)], capture_output=True, text=True)
+                                 'fixture', 'luz', str(self.project)], capture_output=True, text=True, env=env)
         self.assertEqual(result.returncode, 0, result.stderr)
         with sqlite3.connect(self.db) as conn:
             self.assertEqual(conn.execute('SELECT tree_hash FROM receipts').fetchone()[0], expected)

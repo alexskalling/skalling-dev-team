@@ -438,6 +438,11 @@ install_data_files() {
             fi
         fi
     done
+    # La política de permisos se actualiza siempre (no solo si falta): la usa
+    # skalling-project-config.py para reescribir la config de cada proyecto.
+    if [[ -f "$SCRIPT_DIR/data/permission-policy.json" ]]; then
+        run cp "$SCRIPT_DIR/data/permission-policy.json" "$DATA_DIR/permission-policy.json"
+    fi
     log OK "Data files listos"
 }
 
@@ -560,6 +565,10 @@ install_teamdb() {
     if [ -f "$SCRIPT_DIR/scripts/teamdb_exec.py" ]; then
         run cp "$SCRIPT_DIR/scripts/teamdb_exec.py" "$OPENCODE_DIR/scripts/teamdb_exec.py"
         run cp "$SCRIPT_DIR/scripts/teamdb_guard.py" "$OPENCODE_DIR/scripts/teamdb_guard.py"
+        # Reglas de clasificación compartidas por skalling-route.sh y el motor.
+        run cp "$SCRIPT_DIR/scripts/skalling_classify.py" "$OPENCODE_DIR/scripts/skalling_classify.py"
+        # Parser seguro del dump (restore/merge): solo filas de datos.
+        run cp "$SCRIPT_DIR/scripts/teamdb_dump.py" "$OPENCODE_DIR/scripts/teamdb_dump.py"
         run cp "$SCRIPT_DIR/scripts/teamdb-destructive.py" "$OPENCODE_DIR/scripts/teamdb-destructive.py"
         run chmod +x "$OPENCODE_DIR/scripts/teamdb_exec.py"
     fi

@@ -1,5 +1,8 @@
 import importlib.util
+import os
+import shutil
 from pathlib import Path
+import sqlite3
 import tempfile
 import threading
 import time
@@ -10,6 +13,18 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class Workflow(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # teamdb-init tarda ~2 s: se inicializa una vez y cada test copia la DB.
+        cls.template = tempfile.TemporaryDirectory()
+        subprocess.run(['bash', str(ROOT / 'scripts/teamdb-init.sh'), cls.template.name], check=True,
+                       capture_output=True, env={**os.environ, 'SKALLING_ROOT': str(ROOT)})
+        cls.template_db = Path(cls.template.name) / '.opencode/context/team.db'
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.template.cleanup()
+
     def setUp(self):
         spec = importlib.util.spec_from_file_location('workflow', ROOT / 'scripts/skalling-workflow.py')
         self.engine = importlib.util.module_from_spec(spec)
@@ -26,6 +41,19 @@ class Workflow(unittest.TestCase):
         subprocess.run(['git', '-C', str(self.root), 'config', 'user.name', 'Test'], check=True)
         subprocess.run(['git', '-C', str(self.root), 'add', '-A'], check=True)
         subprocess.run(['git', '-C', str(self.root), 'commit', '-q', '-m', 'init'], check=True)
+        self.db_path = self.root / '.opencode/context/team.db'
+        shutil.copyfile(self.template_db, self.db_path)
+        with sqlite3.connect(self.db_path) as db:
+            db.execute("INSERT OR REPLACE INTO schema_meta(key,value) VALUES('project_readiness','initialized')")
+            db.execute("INSERT INTO concepts(slug,title,body_md,updated_at) VALUES('project-summary','Resumen','App de prueba',datetime('now'))")
+            db.execute("INSERT INTO plans(slug,title,design_md,status) VALUES('plan','Plan','# diseño','approved')")
+            self.plan_id = db.execute("SELECT id FROM plans WHERE slug='plan'").fetchone()[0]
+
+    def configure(self, **commands):
+        lines = ['testing:']
+        for name, command in commands.items():
+            lines += [f'  {name}:', '    available: true', f'    command: "{command}"']
+        (self.root / '.opencode/project.yaml').write_text('\n'.join(lines) + '\n')
 
     def call(self, actor, action, **payload):
         return self.engine.operate({'project': str(self.root), 'actor': actor, 'session': actor+'-session',
@@ -33,7 +61,7 @@ class Workflow(unittest.TestCase):
 
     def start(self, risk='low'):
         return self.call('alex', 'start', risk=risk, files=['app.py', 'tests/check.test.sh'],
-                         acceptance='value remains one', scope='local', decision='none')
+                         acceptance='value remains one', scope='local', decision='none', reuse='app.py existente')
 
     def verify(self):
         self.call('teo', 'deliver')
@@ -108,7 +136,9 @@ class Workflow(unittest.TestCase):
         self.start('high')
         self.call('pol', 'clarify', evidence='approved scope')
         self.call('sol', 'plan', evidence='design and rollback')
-        self.call('sol', 'ready', evidence='dependencies ready')
+        with self.assertRaises(ValueError):
+            self.call('sol', 'ready', evidence='dependencies ready')
+        self.call('sol', 'ready', evidence='dependencies ready', plan_id=self.plan_id)
         self.verify()
         with self.assertRaises(ValueError): self.call('alex', 'complete')
         with self.assertRaises(ValueError): self.call('pau', 'document', evidence='notes')
@@ -140,7 +170,7 @@ class Workflow(unittest.TestCase):
 
     def test_scope_cannot_escape_project(self):
         with self.assertRaises(ValueError):
-            self.call('alex', 'start', risk='low', files=['../outside'], acceptance='x', scope='local', decision='none')
+            self.call('alex', 'start', risk='low', files=['../outside'], acceptance='x', scope='local', decision='none', reuse='x')
 
     def test_undeclared_change_is_scope_creep_until_rescoped(self):
         self.start()
@@ -162,7 +192,7 @@ class Workflow(unittest.TestCase):
         subprocess.run(['git', '-C', str(self.root), 'add', '-A'], check=True)
         subprocess.run(['git', '-C', str(self.root), 'commit', '-q', '-m', 'add old.py'], check=True)
         self.call('alex', 'start', risk='low', files=['app.py', 'tests/check.test.sh', 'tests/old.py', 'extra.py'],
-                  acceptance='x', scope='local', decision='none')
+                  acceptance='x', scope='local', decision='none', reuse='x')
         (self.root / 'app.py').write_text('value = 2\n')  # modified
         (self.root / 'extra.py').write_text('bonus = 1\n')  # added (new to git)
         (self.root / 'tests/old.py').unlink()  # deleted
@@ -215,11 +245,154 @@ class Workflow(unittest.TestCase):
         concurrent_start = time.monotonic()
         self.engine.operate({'project': str(self.root), 'actor': 'alex', 'session': 'other-session',
                              'action': 'start', 'payload': {'id': 'other-request', 'risk': 'low',
-                             'files': ['app.py'], 'acceptance': 'x', 'scope': 'local', 'decision': 'none'}})
+                             'files': ['app.py'], 'acceptance': 'x', 'scope': 'local', 'decision': 'none',
+                             'reuse': 'x'}})
         concurrent_duration = time.monotonic() - concurrent_start
         thread.join()
 
         self.assertLess(concurrent_duration, 0.5, 'a concurrent write waited behind the held lock')
+
+
+    # ── Auditoría externa v0.12.0: una sola autoridad y evidencia calculada ──
+
+    def test_pending_decision_or_ambiguity_never_starts(self):
+        for extra in ({'decision': 'pending'}, {'clarity': 'ambiguous'}):
+            with self.assertRaises(ValueError) as caught:
+                self.call('alex', 'start', risk='low', files=['app.py'], acceptance='x', scope='local',
+                          reuse='x', **{'decision': 'none', **extra})
+            self.assertIn('Pending decisions', str(caught.exception))
+        with self.assertRaises(ValueError):
+            self.call('alex', 'status')
+
+    def test_unready_project_or_missing_reuse_never_starts(self):
+        with self.assertRaises(ValueError):
+            self.call('alex', 'start', risk='low', files=['app.py'], acceptance='x', scope='local', decision='none')
+        with sqlite3.connect(self.db_path) as db:
+            db.execute("UPDATE schema_meta SET value='missing' WHERE key='project_readiness'")
+        with self.assertRaises(ValueError) as caught:
+            self.start()
+        self.assertIn('DISCOVERY', str(caught.exception))
+
+    def test_visual_needs_design_system_but_stays_trivial(self):
+        with self.assertRaises(ValueError) as caught:
+            self.call('alex', 'start', risk='low', files=['app.py'], acceptance='x', scope='local',
+                      decision='none', reuse='x', visual=True)
+        self.assertIn('sistema de diseño', str(caught.exception))
+        with sqlite3.connect(self.db_path) as db:
+            db.execute("INSERT INTO concepts(slug,title,body_md,updated_at) VALUES('design-system','DS','tokens',datetime('now'))")
+        started = self.call('alex', 'start', risk='low', files=['app.py'], acceptance='x', scope='local',
+                            decision='none', reuse='x', visual=True)
+        self.assertEqual((started['risk'], started['route']), ('low', 'FAST-TRACK'))
+
+    def test_trivial_route_is_alex_teo_with_configured_verification(self):
+        self.configure(fast='ls {files}')
+        started = self.start()
+        self.assertEqual(started['auto_verify'], ['bash', '-c', 'ls app.py tests/check.test.sh'])
+        (self.root / 'app.py').write_text('value = 1  # mayúscula corregida\n')
+        delivered = self.call('teo', 'deliver')
+        self.assertEqual(delivered['state'], 'verified')
+        self.assertEqual(delivered['verification']['agent'], 'auto')
+        completed = self.call('alex', 'complete')
+        self.assertEqual(completed['state'], 'completed')
+        with sqlite3.connect(self.db_path) as db:
+            row = db.execute("SELECT agent, command, exit_code, tree_hash FROM receipts WHERE task_id='request'").fetchone()
+            metric = db.execute("SELECT outcome FROM workflow_metrics WHERE request_id='request'").fetchone()
+        self.assertEqual(row[:3], ('auto', 'skalling_workflow:complete', 0))
+        self.assertEqual(row[3], completed['receipt_tree_hash'])
+        self.assertEqual(metric[0], 'success')
+
+    def test_trivial_route_failure_returns_to_teo(self):
+        self.configure(fast='bash tests/check.test.sh')
+        self.start()
+        (self.root / 'app.py').write_text('value = 2\n')
+        delivered = self.call('teo', 'deliver')
+        self.assertEqual(delivered['state'], 'implementation_ready')
+        self.assertEqual(delivered['verification']['exit_code'], 1)
+        with self.assertRaises(ValueError):
+            self.call('alex', 'complete')
+
+    def test_verification_command_is_frozen_at_start(self):
+        self.configure(fast='bash tests/check.test.sh')
+        self.start()
+        (self.root / 'app.py').write_text('value = 2\n')
+        self.configure(fast='true')   # quien implementa no cambia qué se verifica
+        self.assertEqual(self.call('teo', 'deliver')['state'], 'implementation_ready')
+
+    def test_without_configured_command_trivial_goes_to_jhon(self):
+        self.start()
+        self.assertEqual(self.call('teo', 'deliver')['state'], 'verification_ready')
+
+    def test_reclassification_supersedes_only_what_it_names(self):
+        self.start()
+        other = self.engine.operate({'project': str(self.root), 'actor': 'alex', 'session': 'b', 'action': 'start',
+                                     'payload': {'id': 'other', 'risk': 'low', 'files': ['app.py'], 'acceptance': 'x',
+                                                 'scope': 'local', 'decision': 'none', 'reuse': 'x'}})
+        self.assertEqual(other['state'], 'implementation_ready')
+        self.assertEqual(self.call('alex', 'status')['state'], 'implementation_ready')
+        self.engine.operate({'project': str(self.root), 'actor': 'alex', 'session': 'a', 'action': 'start',
+                             'payload': {'id': 'request-2', 'risk': 'medium', 'files': ['app.py'], 'acceptance': 'x',
+                                         'scope': 'local', 'decision': 'none', 'reuse': 'x', 'supersedes': 'request'}})
+        self.assertEqual(self.call('alex', 'status')['state'], 'superseded')
+        with self.assertRaises(ValueError):
+            self.call('teo', 'deliver')
+        with sqlite3.connect(self.db_path) as db:
+            outcomes = dict(db.execute("SELECT request_id, coalesce(outcome,'open') FROM workflow_metrics"))
+        self.assertEqual(outcomes['request'], 'superseded')
+        self.assertNotEqual(outcomes['other'], 'superseded')
+
+
+    def test_plan_task_is_approved_with_the_verification_the_engine_recorded(self):
+        with sqlite3.connect(self.db_path) as db:
+            db.execute("INSERT INTO tasks(plan_id,slug,title,status) VALUES(?,'t1','Tarea','in_review')", (self.plan_id,))
+        advance = lambda: subprocess.run(
+            ['bash', str(ROOT / 'scripts/teamdb-claim.sh'), '--advance', 'plan', 't1', '--to=approved', str(self.root)],
+            capture_output=True, text=True, env={**os.environ, 'SKALLING_RUNTIME_AGENT': 'jhon'})
+        blocked = advance()
+        self.assertNotEqual(blocked.returncode, 0)
+        self.assertIn('skalling_workflow', blocked.stdout)
+        self.call('alex', 'start', risk='medium', files=['app.py', 'tests/check.test.sh'], acceptance='value remains one',
+                  scope='local', decision='none', reuse='app.py', task='plan/t1')
+        self.call('sol', 'plan', evidence='diseño')
+        self.call('sol', 'ready', evidence='listo', plan_id=self.plan_id)
+        self.verify()
+        approved = advance()
+        self.assertEqual(approved.returncode, 0, approved.stdout + approved.stderr)
+        with sqlite3.connect(self.db_path) as db:
+            self.assertEqual(db.execute("SELECT status FROM tasks WHERE slug='t1'").fetchone()[0], 'approved')
+
+
+    def test_booleans_and_files_are_parsed_strictly(self):
+        # Prueba real con 2.0.18: un modelo mandó "visual": "false" (texto) y
+        # bool("false") es True -> se exigía un sistema de diseño innecesario.
+        started = self.call('alex', 'start', risk='low', files=['app.py'], acceptance='x', scope='local',
+                            decision='none', reuse='x', visual='false', sensitive='false')
+        self.assertEqual((started['risk'], started['visual']), ('low', False))
+        with self.assertRaises(ValueError) as caught:
+            self.engine.operate({'project': str(self.root), 'actor': 'alex', 'session': 's', 'action': 'start',
+                                 'payload': {'id': 'x2', 'risk': 'low', 'files': {'item': ['app.py']}, 'acceptance': 'x',
+                                             'scope': 'local', 'decision': 'none', 'reuse': 'x'}})
+        self.assertIn('lista JSON de rutas', str(caught.exception))
+        with self.assertRaises(ValueError):
+            self.engine.operate({'project': str(self.root), 'actor': 'alex', 'session': 's', 'action': 'start',
+                                 'payload': {'id': 'x3', 'risk': 'low', 'files': ['app.py'], 'acceptance': 'x',
+                                             'scope': 'local', 'decision': 'none', 'reuse': 'x', 'visual': 'quizás'}})
+
+
+    def test_jhon_can_run_the_projects_configured_verification(self):
+        # Prueba real con 2.0.18: Jhon no podía registrar ningún check porque el
+        # comando del proyecto no estaba en su política y un plugin v2 no puede
+        # pedir permiso. El comando declarado, congelado en start, sí corre.
+        self.configure(unit='bash tests/check.test.sh')
+        self.start('medium')
+        self.call('sol', 'plan', evidence='d')
+        self.call('sol', 'ready', evidence='r', plan_id=self.plan_id)
+        self.call('teo', 'deliver')
+        self.call('jhon', 'oracle', expected='one', negative='two', invariant='int', refutation='t')
+        self.configure(unit='true')  # editar project.yaml después no cambia qué se corre
+        checked = self.call('jhon', 'check', configured=True, method='regresión', criterion='value stays 1')
+        self.assertEqual(checked['verification']['argv'], ['bash', '-c', 'bash tests/check.test.sh'])
+        self.assertEqual(checked['verification']['exit_code'], 0)
+        self.assertEqual(self.call('jhon', 'approve', evidence='comando del proyecto cubre el criterio')['state'], 'verified')
 
 
 if __name__ == '__main__': unittest.main()

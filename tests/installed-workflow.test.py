@@ -84,6 +84,10 @@ class InstalledWorkflow(unittest.TestCase):
                 self.assertFalse(json.loads(run(route, *common, '--kind', kind).stdout)['implementation_allowed'])
             evidence = ['--kind', 'code', '--file', 'app/globals.css', '--acceptance',
                         'Ambos botones usan el color existente', '--reuse', 'Usar variable brand existente', '--visual']
+            # Un retoque visual local es trivial (no exige plan); unificar
+            # estilos entre componentes es de módulo y sí lo exige.
+            self.assertTrue(json.loads(run(route, *common, *evidence).stdout)['implementation_allowed'])
+            evidence += ['--scope', 'module']
             self.assertFalse(json.loads(run(route, *common, *evidence).stdout)['implementation_allowed'])
             capsule = json.loads(run(scripts / 'teamdb-context.sh', 'for-request', 'unificar estilos', '--visual', project).stdout)
             self.assertTrue(any(c['slug'] == 'design-system' for c in capsule['concepts']))

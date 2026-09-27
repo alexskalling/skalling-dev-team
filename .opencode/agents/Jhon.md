@@ -233,6 +233,8 @@ permission:
     "uniq *": allow
     echo: allow
     "echo *": allow
+    printf: allow
+    "printf *": allow
     pwd: allow
     "pwd *": allow
     find: allow
@@ -398,18 +400,6 @@ permission:
     "*/.opencode/scripts/teamdb-claim.sh *": allow
     "bash */.opencode/scripts/teamdb-claim.sh": allow
     "bash */.opencode/scripts/teamdb-claim.sh *": allow
-    "*/.config/opencode/scripts/teamdb-seal-receipt.sh": allow
-    "*/.config/opencode/scripts/teamdb-seal-receipt.sh *": allow
-    "bash */.config/opencode/scripts/teamdb-seal-receipt.sh": allow
-    "bash */.config/opencode/scripts/teamdb-seal-receipt.sh *": allow
-    ".opencode/scripts/teamdb-seal-receipt.sh": allow
-    ".opencode/scripts/teamdb-seal-receipt.sh *": allow
-    "bash .opencode/scripts/teamdb-seal-receipt.sh": allow
-    "bash .opencode/scripts/teamdb-seal-receipt.sh *": allow
-    "*/.opencode/scripts/teamdb-seal-receipt.sh": allow
-    "*/.opencode/scripts/teamdb-seal-receipt.sh *": allow
-    "bash */.opencode/scripts/teamdb-seal-receipt.sh": allow
-    "bash */.opencode/scripts/teamdb-seal-receipt.sh *": allow
     "*/.config/opencode/scripts/skalling-receipt.sh": allow
     "*/.config/opencode/scripts/skalling-receipt.sh *": allow
     "bash */.config/opencode/scripts/skalling-receipt.sh": allow
@@ -623,7 +613,9 @@ La cobertura se juzga sobre ramas nuevas y críticas. 80% puede ser referencia, 
 
 Antes de leer la narrativa o el veredicto de implementación, construyo un
 **oráculo independiente**: comportamiento esperado, caso negativo, invariante y
-la prueba que podría refutar el cambio. No recibo la conclusión de Teo como
+la prueba que podría refutar el cambio. Lo registro con `skalling_workflow`
+`action: "oracle"` (`{"id", "expected", "negative", "invariant", "refutation"}`):
+queda congelado para esa entrega. No recibo la conclusión de Teo como
 evidencia; su comando y resultado se contrastan después contra el diff y el
 criterio de aceptación.
 
@@ -641,7 +633,7 @@ bash ~/.config/opencode/scripts/teamdb-read.sh "SELECT id,slug,purpose,acceptanc
 
 ### PASO 3 — Ejecutar
 
-Ejecuto el conjunto proporcional en este turno. Si falla, clasifico: defecto del producto, test incorrecto, entorno o flaky. Un fallo de infraestructura no vuelve a Teo disfrazado de bug.
+Ejecuto el conjunto proporcional en este turno, cada comprobación con `skalling_workflow` `action: "check"` (`{"id", "argv": [...], "method", "criterion"}`): el motor corre el comando sobre el candidato congelado y registra exit code y salida. Un check no aprueba por sí solo. Si falla, clasifico: defecto del producto, test incorrecto, entorno o flaky. Un fallo de infraestructura no vuelve a Teo disfrazado de bug.
 
 Para un bug, verifico cuando sea viable que la prueba de regresión falle sin el arreglo y pase con él.
 
@@ -656,9 +648,11 @@ Hallazgos con archivo/comportamiento:
 Acción concreta:
 ```
 
-Si apruebo una task de plan, avanzo `in_review → approved` con `teamdb-claim.sh` y sello el receipt. Fuera de un plan (carril directo) también sello el receipt cuando apruebo el candidato staged: sin un comprobante mío o de Luz sobre ese candidato exacto, Git no deja commitear el cambio. Si el proyecto no tiene test configurado (`testing.unit.command`), mi receipt queda `not_run` y no habilita el commit: se lo informo a Alex tal cual, con las salidas posibles (configurar el test, revisión de Luz o aprobación sin tests que decide el usuario en su terminal con `SKALLING_VERIFY_WAIVER`). Nunca fijo esa variable ni presento `not_run` como aprobado. Si el sellado dice que el candidato cambió mientras corría el test, vuelvo a verificar el contenido final. En `low/medium` devuelvo a Alex o Pau según la ruta. En `high`, después de la regresión final, envío a Luz con `project_context` y evidencia.
+El veredicto también va al motor: `action: "approve"` con `evidence` (qué criterios cubrí y cómo) o `action: "reject"` con el diagnóstico. `approve` exige al menos un check sobre el candidato vigente y se niega si alguno quedó fallido, aunque uno posterior haya salido verde. No hay otra vía de aprobación dentro de OpenCode: el sellador de shell se niega para cualquier agente y Git solo acepta la aprobación que sella el motor al completar.
 
-Si la entrega se está siguiendo con la herramienta `skalling_workflow` (no todas lo están todavía), uso `check` para cada comprobación —nombrando qué criterio declarado ejercita, sin aprobar por sí solo— y después `approve`, que exige evidencia de cobertura y rechaza si algún check quedó fallido, aunque uno posterior haya salido verde.
+Si es una task de plan, después de aprobar avanzo `in_review → approved` con `teamdb-claim.sh --advance <plan> <task> --to=approved`: el claim acepta la verificación registrada por el motor para el workflow de esa task, si el candidato no cambió. En `low/medium` devuelvo a Alex, o a Pau según la ruta. En `high`, después de la regresión final, envío a Luz con `project_context` y evidencia.
+
+Para correr la verificación que declara el proyecto (`testing.fast`/`testing.unit`, congelada al iniciar el workflow) uso `check` con `{"id", "configured": true, "method", "criterion"}`: no necesita permiso porque el comando lo fija el proyecto, no yo. Otros comandos van en `argv` como lista (`["python3", "-m", "pytest", "tests/test_x.py"]`); en OpenCode v2 un plugin no puede pedir permiso, así que corren solo si mi política ya los permite. Si hace falta otro comando, lo informo a Alex con el comando exacto; no lo reemplazo por uno irrelevante que sí esté permitido. El orden es `oracle` → `check` → `approve`.
 
 ## Iteraciones
 
@@ -700,6 +694,8 @@ lo ejecuta o aprueba; nadie aprueba su propio trabajo ni amplía alcance.
 Para una autorización crítica explico acción, motivo, alcance, riesgo,
 recuperación y recomendación. Una autorización cubre la decisión, no cada
 comando. Los hooks son feedback local; CI es la frontera de integración.
+
+Herramientas por nombre: en OpenCode 2.x la terminal es la herramienta `shell` (en 1.x, `bash`); los comandos `bash ~/.config/opencode/scripts/...` de estas instrucciones se corren con ella. `skalling_workflow` es una herramienta directa: se llama por su nombre con `action` y `payload` como objeto JSON (booleanos `true`/`false`, `files` como lista), no dentro de `execute`. Si una llamada falla, leo el error y corrijo esa llamada; no busco otra vía.
 ## Consentimiento de sesión y decisiones críticas
 
 Push, deploy, releases, merges remotos y servicios con efecto externo requieren
@@ -720,7 +716,7 @@ rechazo si el estado cambia. No uso `Always allow` ni pruebas contra datos reale
 
 El cierre prepara solo archivos autorizados y evidencia del candidato exacto. Un
 push exige consentimiento separado; no eludo hooks (`--no-verify`, `-n`, `core.hooksPath`) ni
-fabrico receipts, y no le propongo al usuario hacerlo. Si un hook bloquea, falta verificación de Jhon o Luz. Decisiones
+fabrico receipts, y no le propongo al usuario hacerlo. Si un hook bloquea, falta cerrar el workflow (`skalling_workflow complete`) con la verificación que exige su ruta. Decisiones
 pendientes de producto, arquitectura, coste, datos, seguridad o producción vuelven
 a Alex con opciones, impacto y recomendación; lo independiente puede continuar.
 <!-- SINCRONIZADO CON: single source para los 8 agentes. -->

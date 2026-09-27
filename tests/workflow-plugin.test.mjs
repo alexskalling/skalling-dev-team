@@ -66,8 +66,16 @@ test('v2: check corre si la política del agente lo permite y se rechaza si pedi
   assert.equal(calls[0].actor, 'jhon');
   assert.equal(calls[0].project, '/project');
   await assert.rejects(wf.execute({ action: 'check', payload: JSON.stringify({ id: 'x', argv: ['curl', 'https://x.com'] }) }, context),
-    /necesita aprobación/);
+    /solo corre comandos que tu política ya permite/);
   await assert.rejects(wf.execute({ action: 'complete', payload: JSON.stringify({ id: 'x', actor: 'jhon' }) }, context), /actor/);
+  // El comando que declara el proyecto (configured) no pide permiso y el
+  // modelo no puede colar un argv propio por ese camino. El payload llega
+  // como objeto (forma real de 2.0.x) o como string.
+  const configured = await wf.execute({ action: 'check', payload: { id: 'x', configured: true, argv: ['curl', 'https://x.com'] } }, context);
+  assert.match(configured.content, /ok/);
+  assert.equal(calls.at(-1).payload.configured, true);
+  assert.equal(calls.at(-1).payload.argv, undefined);
+  assert.equal(wf.options?.codemode, false);
 });
 
 test('auditoría A09: gana la ÚLTIMA regla que coincide, como en OpenCode', () => {
@@ -105,6 +113,19 @@ test('auditoría A09: la política efectiva combina config global, del proyecto 
   const [wf] = tools;
   const context = { agent: 'Jhon', sessionID: 's', signal: new AbortController().signal };
   await assert.rejects(wf.execute({ action: 'check', payload: JSON.stringify({ id: 'x', argv: ['npm', 'test'] }) }, context),
-    /necesita aprobación/);
+    /solo corre comandos que tu política ya permite/);
   assert.equal(calls.length, 0);
+});
+
+test('ningún plugin importa el SDK al cargar (OpenCode 2.0.x lo descarta si falta)', async () => {
+  // Prueba real con 2.0.18: `import { tool } from '@opencode-ai/plugin'` arriba
+  // hacía fallar la carga de skalling-workflow y skalling-data-safety en un
+  // proyecto preparado con setup.sh, y la herramienta skalling_workflow no
+  // existía para los agentes. El SDK solo se importa dentro de la ruta v1.
+  const { readdir, readFile } = await import('node:fs/promises');
+  const dir = new URL('../plugins/', import.meta.url);
+  for (const name of (await readdir(dir)).filter((f) => f.endsWith('.js'))) {
+    const source = await readFile(new URL(name, dir), 'utf8');
+    assert.doesNotMatch(source, /^\s*import\s[^;]*['"]@opencode-ai\/plugin['"]/m, name);
+  }
 });

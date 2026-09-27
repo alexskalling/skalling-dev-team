@@ -334,6 +334,8 @@ step_install_scripts() {
     if [[ -f "$SCRIPTS_SRC_DIR"/teamdb_exec.py ]]; then
         run cp "$SCRIPTS_SRC_DIR"/teamdb_exec.py "$SCRIPTS_DEST_DIR/"
         run cp "$SCRIPTS_SRC_DIR"/teamdb_guard.py "$SCRIPTS_DEST_DIR/"
+        run cp "$SCRIPTS_SRC_DIR"/skalling_classify.py "$SCRIPTS_DEST_DIR/"
+        run cp "$SCRIPTS_SRC_DIR"/teamdb_dump.py "$SCRIPTS_DEST_DIR/"
         run cp "$SCRIPTS_SRC_DIR"/teamdb-destructive.py "$SCRIPTS_DEST_DIR/"
         run chmod +x "$SCRIPTS_DEST_DIR/teamdb_exec.py"
         count=$((count+1))
@@ -407,6 +409,21 @@ step_install_hooks() {
             *) log ERROR "No se pudo instalar el hook $hook sin pisar uno existente"; return 1 ;;
         esac
     done
+}
+
+step_install_project_config() {
+    # Config de OpenCode del proyecto: Alex por defecto, agentes nativos que
+    # editan sin flujo deshabilitados y la política de permisos vigente.
+    if [[ "$DRY_RUN" == true ]]; then
+        echo "    [dry-run] python3 scripts/skalling-project-config.py $TARGET_DIR"
+        return 0
+    fi
+    if python3 "$SCRIPT_DIR/scripts/skalling-project-config.py" "$TARGET_DIR" >/dev/null; then
+        log OK "Config de OpenCode del proyecto: Alex por defecto; build/plan/general deshabilitados"
+    else
+        log ERROR "No se pudo escribir .opencode/opencode.json del proyecto"
+        return 1
+    fi
 }
 
 step_init_teamdb() {
@@ -671,6 +688,11 @@ do_uninstall() {
     done
     rmdir "$OPENCODE_DIR/plugins/lib" "$OPENCODE_DIR/plugins" 2>/dev/null || true
     [[ -f "$OPENCODE_DIR/command/skalling-goal.md" ]] && run rm -f "$OPENCODE_DIR/command/skalling-goal.md"
+    # Devolver a OpenCode su agente por defecto y los agentes nativos: sin
+    # Alex instalado, default_agent=Alex dejaría el proyecto sin agente.
+    if [[ -f "$OPENCODE_DIR/opencode.json" ]]; then
+        run python3 "$SCRIPT_DIR/scripts/skalling-project-config.py" "$TARGET_DIR" --remove >/dev/null
+    fi
     rmdir "$OPENCODE_DIR/command" 2>/dev/null || true
     [[ -d "$HOOKS_DEST_DIR" ]] && run rm -rf "$HOOKS_DEST_DIR"
     [[ -d "$SCRIPTS_DEST_DIR" ]] && run rm -rf "$SCRIPTS_DEST_DIR"
@@ -740,6 +762,7 @@ main() {
     step_install_gitattributes
     step_install_scripts
     step_install_hooks
+    step_install_project_config
     step_init_teamdb
     step_install_agents_md
 

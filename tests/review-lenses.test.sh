@@ -124,6 +124,12 @@ else
 fi
 
 # ── 3. Receipt sellado con tree_hash ──
+# Luz sella solo con la evidencia que deja skalling-review.sh (auditoría
+# v0.12.0 #2): el helper la reproduce para probar la mecánica del sello.
+seal_luz() {
+  TEAMDB_CLAIM_COMMAND="review --lens all" TEAMDB_CLAIM_EXIT_CODE=0 TEAMDB_CLAIM_OUTPUT_SUMMARY='{"total":0}' \
+    bash "$ROOT/scripts/teamdb-seal-receipt.sh" "$1" luz "$2"
+}
 SEAL_REPO="$TMP/seal-repo"
 new_repo "$SEAL_REPO"
 printf '#!/usr/bin/env bash\nset -euo pipefail\necho ok\necho "segunda linea"\n' > "$SEAL_REPO/base.sh"
@@ -138,7 +144,7 @@ CREATE TABLE receipts (
 );
 SQL
 set +e
-SEAL_OUT="$(bash "$ROOT/scripts/teamdb-seal-receipt.sh" 42 luz "$SEAL_REPO" 2>&1)"
+SEAL_OUT="$(seal_luz 42 "$SEAL_REPO" 2>&1)"
 SEAL_RC=$?
 set -e
 if [ "$SEAL_RC" = "0" ]; then
@@ -208,7 +214,7 @@ bash "$ROOT/scripts/teamdb-init.sh" "$GATE_REPO" >/dev/null 2>&1 || true
 # con mensaje claro. Antes sellaba el hash de HEAD y el pre-push jamás lo
 # matcheaba con un diff de rango (push bloqueado con error confuso).
 set +e
-SEAL_CLEAN_OUT="$(bash "$ROOT/scripts/teamdb-seal-receipt.sh" 7 luz "$GATE_REPO" 2>&1)"
+SEAL_CLEAN_OUT="$(seal_luz 7 "$GATE_REPO" 2>&1)"
 SEAL_CLEAN_RC=$?
 set -e
 if [ "$SEAL_CLEAN_RC" = "1" ] && printf '%s' "$SEAL_CLEAN_OUT" | grep -q "nada que sellar"; then
@@ -221,7 +227,7 @@ fi
 printf '#!/usr/bin/env bash\nset -euo pipefail\nprintf "v1\\n"\n' > "$GATE_REPO/app.sh"
 git -C "$GATE_REPO" add app.sh
 set +e
-SEAL_STAGED_OUT="$(bash "$ROOT/scripts/teamdb-seal-receipt.sh" 7 luz "$GATE_REPO" 2>&1)"
+SEAL_STAGED_OUT="$(seal_luz 7 "$GATE_REPO" 2>&1)"
 SEAL_STAGED_RC=$?
 set -e
 if [ "$SEAL_STAGED_RC" = "0" ]; then
@@ -245,7 +251,7 @@ else
 fi
 
 # re-sellar el nuevo estado → el hook pasa (y exporta data_*.sql)
-bash "$ROOT/scripts/teamdb-seal-receipt.sh" 7 luz "$GATE_REPO" >/dev/null 2>&1
+seal_luz 7 "$GATE_REPO" >/dev/null 2>&1
 set +e
 HOOK_OUT2="$(cd "$GATE_REPO" && SKALLING_ROOT="$ROOT" bash "$ROOT/scripts/hooks/pre-commit" 2>&1)"
 HOOK_RC2=$?

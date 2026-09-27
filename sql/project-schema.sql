@@ -114,7 +114,7 @@ CREATE TABLE schema_meta (
   value TEXT NOT NULL
 );
 
-INSERT INTO schema_meta VALUES ('version', '0.12.0');
+INSERT INTO schema_meta VALUES ('version', '0.13.0');
 
 CREATE TABLE IF NOT EXISTS data_revisions (
   id INTEGER PRIMARY KEY,
@@ -398,6 +398,7 @@ CREATE TABLE task_claims (
   status TEXT DEFAULT 'active' CHECK (status IN ('active','done','failed','expired')),
   claimed_at TEXT NOT NULL,
   released_at TEXT,
+  session TEXT,
   FOREIGN KEY (task_id) REFERENCES tasks(id)
 );
 CREATE INDEX idx_task_claims_actor ON task_claims(actor, status);
@@ -574,3 +575,41 @@ CREATE TABLE IF NOT EXISTS agent_workflow_events(
   session TEXT NOT NULL, action TEXT NOT NULL, state TEXT NOT NULL,
   evidence TEXT NOT NULL, ts REAL NOT NULL
 );
+
+-- v0.13.0: versión de las entidades durables para el merge entre integrantes.
+CREATE TABLE IF NOT EXISTS memory_versions (
+  table_name TEXT NOT NULL CHECK (table_name IN ('decisions','preferences','known_problems')),
+  slug TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (table_name, slug)
+);
+CREATE TRIGGER IF NOT EXISTS decisions_version_ai AFTER INSERT ON decisions BEGIN
+  INSERT INTO memory_versions(table_name, slug, updated_at)
+  VALUES ('decisions', NEW.slug, strftime('%Y-%m-%d %H:%M:%f', 'now'))
+  ON CONFLICT(table_name, slug) DO UPDATE SET updated_at = excluded.updated_at;
+END;
+CREATE TRIGGER IF NOT EXISTS decisions_version_au AFTER UPDATE ON decisions BEGIN
+  INSERT INTO memory_versions(table_name, slug, updated_at)
+  VALUES ('decisions', NEW.slug, strftime('%Y-%m-%d %H:%M:%f', 'now'))
+  ON CONFLICT(table_name, slug) DO UPDATE SET updated_at = excluded.updated_at;
+END;
+CREATE TRIGGER IF NOT EXISTS preferences_version_ai AFTER INSERT ON preferences BEGIN
+  INSERT INTO memory_versions(table_name, slug, updated_at)
+  VALUES ('preferences', NEW.slug, strftime('%Y-%m-%d %H:%M:%f', 'now'))
+  ON CONFLICT(table_name, slug) DO UPDATE SET updated_at = excluded.updated_at;
+END;
+CREATE TRIGGER IF NOT EXISTS preferences_version_au AFTER UPDATE ON preferences BEGIN
+  INSERT INTO memory_versions(table_name, slug, updated_at)
+  VALUES ('preferences', NEW.slug, strftime('%Y-%m-%d %H:%M:%f', 'now'))
+  ON CONFLICT(table_name, slug) DO UPDATE SET updated_at = excluded.updated_at;
+END;
+CREATE TRIGGER IF NOT EXISTS known_problems_version_ai AFTER INSERT ON known_problems BEGIN
+  INSERT INTO memory_versions(table_name, slug, updated_at)
+  VALUES ('known_problems', NEW.slug, strftime('%Y-%m-%d %H:%M:%f', 'now'))
+  ON CONFLICT(table_name, slug) DO UPDATE SET updated_at = excluded.updated_at;
+END;
+CREATE TRIGGER IF NOT EXISTS known_problems_version_au AFTER UPDATE ON known_problems BEGIN
+  INSERT INTO memory_versions(table_name, slug, updated_at)
+  VALUES ('known_problems', NEW.slug, strftime('%Y-%m-%d %H:%M:%f', 'now'))
+  ON CONFLICT(table_name, slug) DO UPDATE SET updated_at = excluded.updated_at;
+END;

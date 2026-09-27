@@ -127,18 +127,38 @@ else
   assert_fail "sin testing.unit.command: seal no debería fallar (no hay para siempre un proyecto sin tests)"
 fi
 
-# ── 4. agente distinto de jhon (luz) no dispara ninguna corrida real; el
-#      comportamiento previo (caller-trusted) sigue intacto para el resto ──
+# ── 4. luz no sella "de confianza" (auditoría externa v0.12.0 #2): sin la
+#      evidencia de skalling-review.sh el sello se rechaza y no queda receipt ──
 TASK4="task-luz"
 write_project_yaml "exit 1"
 stage_something
 TASK_ID4="$(setup_ready_for_review "$TASK4")"
+set +e
 TEAMDB_CLAIM_EXIT_CODE=0 bash "$ROOT/scripts/teamdb-seal-receipt.sh" "$TASK_ID4" luz "$TEST_DIR" >/dev/null 2>&1
-LUZ_EXIT="$(teamdb_exec_value "$DB" "SELECT exit_code FROM receipts WHERE task_id=? AND agent='luz' ORDER BY id DESC LIMIT 1" "$TASK_ID4")"
-if [ "$LUZ_EXIT" = "0" ]; then
-  assert_pass "agente != jhon: sin cambios de comportamiento, sigue siendo caller-trusted"
+LUZ_RC=$?
+set -e
+LUZ_ROWS="$(teamdb_exec_value "$DB" "SELECT count(*) FROM receipts WHERE task_id=? AND agent='luz'" "$TASK_ID4")"
+if [ "$LUZ_RC" = "2" ] && [ "$LUZ_ROWS" = "0" ]; then
+  assert_pass "luz sin evidencia de revisión no sella nada"
 else
-  assert_fail "agente != jhon: sin cambios de comportamiento, sigue siendo caller-trusted" "exit_code=$LUZ_EXIT"
+  assert_fail "luz sin evidencia de revisión no sella nada" "rc=$LUZ_RC rows=$LUZ_ROWS"
+fi
+set +e
+bash "$ROOT/scripts/teamdb-seal-receipt.sh" "$TASK_ID4" "" "$TEST_DIR" >/dev/null 2>&1
+ANON_RC=$?
+set -e
+if [ "$ANON_RC" = "2" ]; then
+  assert_pass "sin agente no se asume luz"
+else
+  assert_fail "sin agente no se asume luz" "rc=$ANON_RC"
+fi
+TEAMDB_CLAIM_COMMAND="review --lens risk" TEAMDB_CLAIM_EXIT_CODE=0 TEAMDB_CLAIM_OUTPUT_SUMMARY='{"total":0}' \
+  bash "$ROOT/scripts/teamdb-seal-receipt.sh" "$TASK_ID4" luz "$TEST_DIR" >/dev/null 2>&1
+LUZ_CMD="$(teamdb_exec_value "$DB" "SELECT command FROM receipts WHERE task_id=? AND agent='luz' ORDER BY id DESC LIMIT 1" "$TASK_ID4")"
+if [ "$LUZ_CMD" = "review --lens risk" ]; then
+  assert_pass "luz sella con la evidencia que deja skalling-review.sh"
+else
+  assert_fail "luz sella con la evidencia que deja skalling-review.sh" "command=$LUZ_CMD"
 fi
 
 if command -v shellcheck >/dev/null 2>&1; then

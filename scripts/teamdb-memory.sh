@@ -42,7 +42,15 @@ case "$KIND" in
     run_write "INSERT INTO known_problems(slug,title,symptom_md,workaround_md,status,discovered_at) VALUES(?,?,?,?,?,datetime('now')) ON CONFLICT(slug) DO UPDATE SET title=excluded.title,symptom_md=excluded.symptom_md,workaround_md=excluded.workaround_md,status=excluded.status" "$SLUG" "$TITLE" "$SYMPTOM" "$WORKAROUND" "$STATUS"
     ;;
   *)
-    echo "Uso: teamdb-memory.sh [--project <path>] concept|decision|preference|problem <campos>" >&2
+    cat >&2 <<'USAGE'
+Uso: teamdb-memory.sh [--project <path>] <tipo> <campos>
+  concept    <slug> <título> <cuerpo> [categoría]
+  decision   <slug> <título> <cuerpo> [accepted|proposed|superseded|rejected]
+  preference <slug> <cuerpo> [scope]
+  problem    <slug> <título> <síntoma> [workaround] [open|monitoring|resolved|wontfix]
+Ej.: teamdb-memory.sh --project "$PWD" decision orm-drizzle "ORM" "Usamos Drizzle por X" accepted
+Mismo slug = actualización (queda versionada para el merge del equipo).
+USAGE
     exit 2
     ;;
 esac

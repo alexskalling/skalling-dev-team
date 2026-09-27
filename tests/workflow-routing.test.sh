@@ -24,7 +24,7 @@ assert_contains() {
 LOW="$(bash "$ROOT/scripts/skalling-route.sh" classify --project "$PROJECT" --risk low --scope local --clarity clear --kind code)"
 MEDIUM="$(bash "$ROOT/scripts/skalling-route.sh" classify --project "$PROJECT" --risk medium --scope module --clarity clear --kind code)"
 HIGH="$(bash "$ROOT/scripts/skalling-route.sh" classify --project "$PROJECT" --risk high --clarity ambiguous --kind code)"
-assert_contains "bajo riesgo usa equipo mínimo" "$LOW" 'Alex → Teo → Jhon'
+assert_contains "bajo riesgo usa equipo mínimo" "$LOW" 'Alex → Teo (verificación automática'
 assert_contains "riesgo medio evita ciclo completo" "$MEDIUM" 'Alex → Sol → Teo → Jhon'
 assert_contains "alto riesgo usa ciclo completo" "$HIGH" 'Alex → Pol → Sol → Teo → Jhon → Luz → Pau'
 

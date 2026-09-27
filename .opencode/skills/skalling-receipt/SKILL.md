@@ -9,6 +9,12 @@ metadata:
 
 # Skalling Receipt — Formal Verification Contract
 
+> **Qué evidencia abre Git.** Dentro de OpenCode, la única aprobación que
+> acepta el gate de commits es la que sella `skalling_workflow` al completar
+> un workflow (checks de Jhon/Luz, o la verificación automática del carril
+> low). El JSON de esta skill (`skalling-receipt.sh`) es una bitácora de
+> trabajo opcional: documenta, pero no aprueba ni desbloquea un commit.
+
 ## Activation Triggers
 
 Load when:
@@ -22,7 +28,7 @@ Load when:
 1. **No claim without command output.** Assertion without running command is fraud.
 2. **Receipt is immutable once issued.** Cannot retroactively edit.
 3. **Every route produces a receipt.** No exceptions.
-4. **Receipt gates delivery.** No commit without valid receipt.
+4. **Evidence gates delivery.** No commit without the approval sealed by `skalling_workflow complete`.
 
 ## Decision Gates
 

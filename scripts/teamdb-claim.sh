@@ -217,11 +217,37 @@ if [ "${1:-}" = "--advance" ]; then
   trap 'teamdb_unlock "$LOCK_DIR"' EXIT
   DB="$(teamdb_project_path "$PROJECT")"
   [ -f "$DB" ] || { echo "[ERROR] no DB" >&2; exit 1; }
-  python3 - "$DB" "$PLAN_SLUG" "$TASK_SLUG" "$TARGET_STATUS" "$ADVANCE_BY" "$PROJECT" <<'PYEOF'
-import hashlib, sqlite3, subprocess, sys, json, time
+  python3 - "$DB" "$PLAN_SLUG" "$TASK_SLUG" "$TARGET_STATUS" "$ADVANCE_BY" "$PROJECT" "$SCRIPT_DIR" <<'PYEOF'
+import hashlib, importlib.util, sqlite3, subprocess, sys, json, time
+from pathlib import Path
 from teamdb_guard import connect as protected_connect
 from teamdb_workflow_state import sync_workflow_state
-db, plan_slug, task_slug, target, actor, project = sys.argv[1:7]
+db, plan_slug, task_slug, target, actor, project, script_dir = sys.argv[1:8]
+
+
+def workflow_verified(conn):
+    """La verificación de Jhon registrada por skalling_workflow (la autoridad
+    dentro de OpenCode) para esta task, sobre el candidato que sigue igual."""
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='agent_workflows'").fetchone():
+        return None
+    spec = importlib.util.spec_from_file_location('skalling_workflow_engine', Path(script_dir) / 'skalling-workflow.py')
+    engine = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(engine)
+    for (body,) in conn.execute("SELECT body FROM agent_workflows"):
+        state = json.loads(body)
+        if state.get('task') != plan_slug + '/' + task_slug:
+            continue
+        if state.get('state') not in ('verified', 'quality_reviewed', 'documented', 'completed'):
+            continue
+        jhon = [c for c in state.get('checks', []) if c.get('agent') == 'jhon' and c.get('digest') == state.get('digest')]
+        if not jhon or any(c.get('exit_code') != 0 for c in jhon):
+            continue
+        try:
+            if engine.fingerprint(Path(project).resolve(), state['files']) == state['digest']:
+                return state['id']
+        except (OSError, ValueError):
+            continue
+    return None
 
 
 def current_tree_hash():
@@ -262,17 +288,19 @@ try:
         if implementation and implementation['actor'] == actor:
             json.dump({'error': 'in_review->approved requiere verificador distinto al implementador'}, sys.stdout)
             conn.rollback(); sys.exit(1)
-        verification = conn.execute("""
+        workflow = workflow_verified(conn)
+        verification = None if workflow else conn.execute("""
             SELECT id, tree_hash FROM receipts
             WHERE task_id=? AND agent='jhon' AND exit_code=0
               AND tree_hash IS NOT NULL AND tree_hash != ''
             ORDER BY ts DESC, rowid DESC LIMIT 1
         """, (t['id'],)).fetchone()
-        if not verification:
-            json.dump({'error': 'in_review->approved requiere receipt sellado exitoso de jhon para la task'}, sys.stdout)
+        if not workflow and not verification:
+            json.dump({'error': 'in_review->approved requiere la verificación de jhon: skalling_workflow '
+                                 '(workflow con task=plan/task verificado) o receipt sellado de jhon'}, sys.stdout)
             conn.rollback(); sys.exit(1)
-        staged_hash = current_tree_hash()
-        if not staged_hash or verification['tree_hash'] != staged_hash:
+        staged_hash = None if workflow else current_tree_hash()
+        if not workflow and (not staged_hash or verification['tree_hash'] != staged_hash):
             json.dump({'error': 'in_review->approved: el receipt sellado no coincide con el candidato staged '
                                  'actual (evidencia obsoleta); volver a revisar y sellar sobre el diff vigente'}, sys.stdout)
             conn.rollback(); sys.exit(1)
@@ -337,11 +365,15 @@ INPUT_HASH="${INPUT_HASH:-__AUTO__}"
 PLAN_ID="$(teamdb_exec_value "$DB" "SELECT id FROM plans WHERE slug = ?" "$PLAN_SLUG")"
 [ -n "$PLAN_ID" ] || { echo "[ERROR] plan no encontrado: $PLAN_SLUG" >&2; exit 1; }
 
-python3 - "$DB" "$PLAN_ID" "$PLAN_SLUG" "$TASK_SLUG" "$ACTOR" "$TTL" "$INPUT_HASH" <<'PYEOF'
+# Identidad del ejecutor = rol + sesión (el plugin la pone en el entorno; en
+# terminal es "terminal"). Dos sesiones de Teo no comparten un claim.
+SESSION="${SKALLING_RUNTIME_SESSION:-terminal}"
+
+python3 - "$DB" "$PLAN_ID" "$PLAN_SLUG" "$TASK_SLUG" "$ACTOR" "$TTL" "$INPUT_HASH" "$SESSION" <<'PYEOF'
 import sqlite3, sys, json, hashlib, time
 from teamdb_guard import connect as protected_connect
 from teamdb_workflow_state import sync_workflow_state
-db, plan_id, plan_slug, task_slug, actor, ttl, input_hash_in = sys.argv[1:8]
+db, plan_id, plan_slug, task_slug, actor, ttl, input_hash_in, session = sys.argv[1:9]
 ttl = int(ttl)
 now = int(time.time())
 lease_end = now + ttl
@@ -382,10 +414,20 @@ try:
     else:
         input_hash = input_hash_in
 
+    def insert_claim(task_id, attempt, claim_hash):
+        columns, values = "task_id, actor, attempt, input_hash, lease_until, status, claimed_at", \
+            [task_id, actor, attempt, claim_hash, lease_end, 'active', now]
+        if has_session:
+            columns += ", session"
+            values.append(session)
+        return conn.execute("INSERT INTO task_claims(%s) VALUES(%s)" % (columns, ",".join("?" * len(values))),
+                            values).lastrowid
+
     # Buscar claim activo existente
+    has_session = conn.execute("SELECT 1 FROM pragma_table_info('task_claims') WHERE name='session'").fetchone() is not None
     existing = conn.execute(
-        "SELECT id, actor, input_hash, lease_until, status, attempt FROM task_claims "
-        "WHERE task_id = ? AND status = 'active'",
+        "SELECT id, actor, input_hash, lease_until, status, attempt, %s AS session FROM task_claims "
+        "WHERE task_id = ? AND status = 'active'" % ('session' if has_session else 'NULL'),
         (task['id'],)
     ).fetchone()
 
@@ -397,7 +439,8 @@ try:
             except (TypeError, ValueError):
                 return 0
         lease_ok = lease_epoch(existing['lease_until']) > now
-        if lease_ok and existing['actor'] == actor and existing['input_hash'] == input_hash:
+        same_session = existing['session'] in (None, session)
+        if lease_ok and existing['actor'] == actor and existing['input_hash'] == input_hash and same_session:
             json.dump({
                 'claim_id': existing['id'],
                 'idempotent': True,
@@ -406,7 +449,8 @@ try:
             }, sys.stdout)
             conn.commit(); sys.exit(0)
         if lease_ok:
-            json.dump({'error': 'claimed by %s (lease until %s)' % (existing['actor'], existing['lease_until'])}, sys.stdout)
+            where = '' if same_session else ' in another session'
+            json.dump({'error': 'claimed by %s%s (lease until %s)' % (existing['actor'], where, existing['lease_until'])}, sys.stdout)
             conn.rollback(); sys.exit(2)
         # Lease expirado: nuevo attempt (Issue 6: historial)
         new_attempt = (conn.execute(
@@ -416,21 +460,13 @@ try:
         # Marcar el activo anterior como expired
         conn.execute("UPDATE task_claims SET status = 'expired', released_at = ? WHERE id = ?",
                      (now, existing['id']))
-        cur = conn.execute("""
-            INSERT INTO task_claims(task_id, actor, attempt, input_hash, lease_until, status, claimed_at)
-            VALUES(?, ?, ?, ?, ?, 'active', ?)
-        """, (task['id'], actor, new_attempt, input_hash, lease_end, now))
-        claim_id = cur.lastrowid
+        claim_id = insert_claim(task['id'], new_attempt, input_hash)
     else:
         new_attempt = (conn.execute(
             "SELECT COALESCE(MAX(attempt), 0) + 1 FROM task_claims WHERE task_id = ?",
             (task['id'],)
         ).fetchone()[0])
-        cur = conn.execute("""
-            INSERT INTO task_claims(task_id, actor, attempt, input_hash, lease_until, status, claimed_at)
-            VALUES(?, ?, ?, ?, ?, 'active', ?)
-        """, (task['id'], actor, new_attempt, input_hash, lease_end, now))
-        claim_id = cur.lastrowid
+        claim_id = insert_claim(task['id'], new_attempt, input_hash)
 
     conn.execute("UPDATE tasks SET status = 'in_progress', owner = ?, started_at = ?, updated_at = ? WHERE id = ?",
                  (actor, now, now, task['id']))

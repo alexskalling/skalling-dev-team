@@ -259,6 +259,20 @@ init_teamdb() {
     fi
 }
 
+apply_project_config() {
+    # Alex por defecto y build/plan/general deshabilitados en el proyecto:
+    # editan sin clasificación, sin Teo y sin verificación.
+    local project="$1" tool="$SCRIPT_DIR/scripts/skalling-project-config.py"
+    [[ "$DRY_RUN" == true ]] && { log "[dry-run] config de OpenCode del proyecto"; return 0; }
+    [[ -f "$tool" ]] || { err "scripts/skalling-project-config.py no encontrado"; return 1; }
+    if python3 "$tool" "$project" >/dev/null; then
+        ok "config de OpenCode del proyecto: Alex por defecto; build/plan/general deshabilitados"
+    else
+        err "no se pudo escribir .opencode/opencode.json del proyecto"
+        return 1
+    fi
+}
+
 activate_teamdb_hooks() {
     local project="$1"
     git -C "$project" rev-parse --git-dir >/dev/null 2>&1 || return 0
@@ -326,6 +340,7 @@ main() {
         fi
     fi
     activate_teamdb_hooks "$PROJECT_DIR"
+    apply_project_config "$PROJECT_DIR" || return 1
     check_design_md
 
     echo ""

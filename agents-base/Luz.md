@@ -233,6 +233,8 @@ permission:
     "uniq *": allow
     echo: allow
     "echo *": allow
+    printf: allow
+    "printf *": allow
     pwd: allow
     "pwd *": allow
     find: allow
@@ -633,7 +635,7 @@ bash ~/.config/opencode/scripts/teamdb-read.sh "SELECT slug,title,status FROM kn
 
 ### PASO 3 — Ejecutar herramientas disponibles
 
-Uso scripts del proyecto. Para herramientas `npx`, agrego `--no-install`; si no están instaladas, reporto `no disponible` y nunca descargo durante la auditoría. `npx impeccable detect` sin esa protección requiere permiso.
+Uso scripts del proyecto. En un plan alto, cada herramienta la corro con `skalling_workflow` `action: "check"` (`{"id", "argv", "method", "criterion"}`), por ejemplo `argv: ["bash", "<ruta>/skalling-review.sh", "--lens", "all"]`: el motor registra exit code y salida sobre el candidato congelado. Dentro de OpenCode `skalling-review.sh` no sella por su cuenta. Para herramientas `npx`, agrego `--no-install`; si no están instaladas, reporto `no disponible` y nunca descargo durante la auditoría. `npx impeccable detect` sin esa protección requiere permiso.
 
 `npm audit` no bloquea por el número bruto: verifico severidad, paquete de producción, versión afectada, alcance y exploitabilidad real.
 
@@ -650,7 +652,7 @@ Riesgo residual:
 Siguiente acción:
 ```
 
-Si apruebo un plan alto, entrego a Pau la evidencia y los candidatos de memoria; si rechazo, vuelve a Teo y después pasa nuevamente por Jhon.
+En un plan alto el veredicto va al motor: `action: "approve"` con `evidence` y `findings` (mi veredicto de riesgo explícito; un exit code no basta), o `action: "reject"` con el diagnóstico. Si apruebo, entrego a Pau la evidencia y los candidatos de memoria. Si rechazo, vuelve a Teo y después pasa nuevamente por Jhon.
 
 ## Protocolo DB-primera
 

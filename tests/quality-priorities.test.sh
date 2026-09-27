@@ -26,7 +26,7 @@ check "routing clasificado puede persistirse" grep -q -- '--record' "$ROOT/scrip
 check "schema marca work_in_progress como legacy" grep -q 'legacy_surface.*work_in_progress' "$ROOT/sql/project-schema.sql"
 check "política de retención es reutilizable" test -x "$ROOT/scripts/teamdb-prune-backups.sh"
 check "licencia del proyecto existe" test -f "$ROOT/LICENSE"
-check "versión fuente es 0.12.0" grep -q '0.12.0' "$ROOT/VERSION"
+check "versión fuente es 0.13.0" grep -q '0.13.0' "$ROOT/VERSION"
 check "migración 0.11.4 existe" test -f "$ROOT/sql/migrations/032_coverage_runs.sql"
 check "instalador global falla si TeamDB no puede actualizarse" grep -q 'teamdb global: upgrade aditivo no aplicado' "$ROOT/install-global.sh"
 
@@ -44,7 +44,7 @@ SQL
 bash "$ROOT/scripts/teamdb-claim.sh" secure task-1 "--actor=teo'; DROP TABLE tasks; --" "$FIXTURE" >/dev/null 2>&1 || true
 check "claim conserva la tabla ante entrada hostil" sqlite3 "$FIXTURE/.opencode/context/team.db" "SELECT 1 FROM tasks LIMIT 1"
 
-ROUTE_OUTPUT="$(bash "$ROOT/scripts/skalling-route.sh" classify --risk high --kind code --record --intent "auditar ' routing" --project "$FIXTURE")"
+ROUTE_OUTPUT="$(bash "$ROOT/scripts/skalling-route.sh" classify --risk high --kind audit --record --intent "auditar ' routing" --project "$FIXTURE")"
 check "routing devuelve request_id persistido" grep -q '"request_id"' <<< "$ROUTE_OUTPUT"
 ROUTE_COUNTS="$(sqlite3 "$FIXTURE/.opencode/context/team.db" "SELECT (SELECT COUNT(*) FROM routing_decisions) || ':' || (SELECT COUNT(*) FROM workflow_metrics)")"
 check "routing y métrica se guardan juntos" test "$ROUTE_COUNTS" = "1:1"

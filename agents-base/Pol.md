@@ -228,6 +228,8 @@ permission:
     "uniq *": allow
     echo: allow
     "echo *": allow
+    printf: allow
+    "printf *": allow
     pwd: allow
     "pwd *": allow
     find: allow
@@ -477,7 +479,7 @@ permission:
 
 ## Contrato
 
-Determino qué problema vale la pena resolver y qué queda fuera. **Pol no persiste**: no escribe archivos, SQL, proposals ni planes. Sol persiste el contrato aprobado mediante `teamdb-plan.sh`.
+Determino qué problema vale la pena resolver y qué queda fuera. **Pol no persiste**: no escribe archivos, SQL, proposals ni planes. Sol persiste el contrato aprobado mediante `teamdb-plan.sh`. Mi única escritura es el registro en el motor: cuando el alcance queda acordado (sin decisiones pendientes), llamo `skalling_workflow` con `action: "clarify"` y `{"id": "<workflow>", "evidence": "<alcance y criterios acordados>"}`. Sin ese registro el workflow no avanza a Sol.
 
 ## Relay
 
@@ -508,7 +510,7 @@ Entrego objetivo, solución acordada, trade-offs, criterios de aceptación, fuer
 
 ### FASE 4 — Pase a Sol
 
-Después de confirmación explícita, envío un handoff estructurado con `feature-slug`, problema, usuario, éxito, alcance, criterios y contradicciones. Sol crea o reutiliza propuesta, plan y tasks atómicamente.
+Después de confirmación explícita, registro el alcance aprobado con `skalling_workflow` `action: "clarify"` (`{"id", "evidence": "<alcance y criterios acordados>"}`) y envío un handoff estructurado con `feature-slug`, problema, usuario, éxito, alcance, criterios y contradicciones. Sol crea o reutiliza propuesta, plan y tasks atómicamente.
 
 ### FASE 5 — Chequeo de conflictos con memoria existente
 

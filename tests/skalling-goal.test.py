@@ -94,7 +94,7 @@ class GoalTests(unittest.TestCase):
         digest = hashlib.sha256(patch).hexdigest()[:16]
         with sqlite3.connect(self.root / '.opencode/context/team.db') as db:
             db.execute("INSERT INTO receipts(id,task_id,agent,command,exit_code,tree_hash,ts) VALUES(?,?,?,?,?,?,CURRENT_TIMESTAMP)",
-                       ('fixture', 'fixture', 'jhon', 'synthetic test evidence', 0, digest))
+                       ('fixture', 'fixture', 'jhon', 'skalling_workflow:complete', 0, digest))
         result = self.act('commit', message='test: cambia valor de fixture', files=['app.py'])
         self.assertEqual(result['status'], 'completed')
         self.assertEqual(result['commit_sha'], self.git('rev-parse', 'HEAD').decode().strip())

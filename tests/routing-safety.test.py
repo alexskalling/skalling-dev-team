@@ -44,10 +44,24 @@ class RoutingSafety(unittest.TestCase):
     def test_security_change_escalates_even_if_one_file(self):
         self.assertEqual(self.classify('--risk', 'low', '--scope', 'local', '--sensitive')['route'], 'SDD')
 
-    def test_visual_change_requires_planning_even_if_local(self):
+    def test_trivial_visual_change_stays_trivial(self):
+        # Auditoría externa: --visual subía cualquier retoque a medium (Sol +
+        # plan). Lo visual exige sistema de diseño, no más agentes.
         data = self.classify('--risk', 'low', '--scope', 'local', '--visual')
+        self.assertEqual(data['route'], 'FAST-TRACK')
+        self.assertEqual(data['risk'], 'low')
+
+    def test_visual_module_change_still_plans(self):
+        data = self.classify('--risk', 'low', '--scope', 'module', '--visual')
         self.assertEqual(data['route'], 'INLINE')
-        self.assertEqual(data['risk'], 'medium')
+
+    def test_code_classification_never_authorizes_by_itself(self):
+        self.assertFalse(self.classify('--risk', 'low', '--scope', 'local')['authorizes'])
+        result = subprocess.run(['bash', str(ROOT / 'scripts/skalling-route.sh'), 'classify', '--kind', 'code',
+                                 '--risk', 'low', '--scope', 'local', '--record', '--intent', 'x',
+                                 '--project', str(self.project)], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn('skalling_workflow start', result.stderr)
 
     def test_pending_human_decision_blocks_implementation(self):
         data = self.classify('--risk', 'low', '--scope', 'local', '--decision', 'pending')

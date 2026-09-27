@@ -53,7 +53,8 @@ DB="$(teamdb_project_path "$PROJECT")"
 # agent_workflows es estado durable (como tasks/plans); agent_workflow_events
 # se excluye a propósito por la misma razón que audit_log: es un log de
 # trazabilidad que crece sin límite, no estado a sincronizar entre máquinas.
-DUMP_TABLES=(concepts decisions preferences known_problems work_in_progress tags memory_tags memory_links proposals plans specs design_notes tasks task_dependencies task_claims plan_history task_context_capsules skills_registry routing_decisions receipts task_lock_history attempts agent_workflows)
+# Mismo orden que teamdb_dump.TABLES (restore/merge validan contra esa lista).
+DUMP_TABLES=(concepts decisions preferences known_problems memory_versions work_in_progress tags memory_tags memory_links proposals plans specs design_notes tasks task_dependencies task_claims plan_history task_context_capsules skills_registry routing_decisions receipts task_lock_history attempts agent_workflows)
 
 # Directorio de salida versionado (NO en .gitignore)
 OUT_DIR="$PROJECT/db/teamdb"

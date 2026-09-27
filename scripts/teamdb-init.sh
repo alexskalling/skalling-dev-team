@@ -109,14 +109,17 @@ DB="$(teamdb_project_path "$PROJECT")"
 # Backup automático antes de migrar (protege 6 meses de trabajo del usuario)
 if [ -f "$DB" ]; then
   BACKUP_DIR="$(dirname "$DB")/.backups"
-  mkdir -p "$BACKUP_DIR"
+  mkdir -p "$BACKUP_DIR" 2>/dev/null || true
   STAMP="$(date +%Y%m%d-%H%M%S)"
   BACKUP_FILE="$BACKUP_DIR/team.db.backup-$STAMP"
-  if cp "$DB" "$BACKUP_FILE" 2>/dev/null; then
+  # Consistente (API backup, incluye el WAL) y verificado; sin respaldo no se
+  # migra: una migración puede fallar a medias.
+  if teamdb_backup_db "$DB" "$BACKUP_FILE"; then
     echo "teamdb backup: $BACKUP_FILE"
     bash "$SCRIPT_DIR/teamdb-prune-backups.sh" "$PROJECT" --keep 5
   else
-    echo "WARN: backup de team.db falló (¿permisos?)" >&2
+    echo "ERROR: no se pudo respaldar $DB; no se aplican migraciones sin respaldo" >&2
+    exit 1
   fi
 fi
 
@@ -153,7 +156,7 @@ fi
 # Verificar que las migrations dejaron el schema correcto; si no, fallar en vez
 # de seguir con una DB degradada (los errores de migración idempotentes, como el
 # "duplicate column" de 004 sobre DBs nuevas, se toleran arriba).
-EXPECTED_VERSION="0.12.0"
+EXPECTED_VERSION="0.13.0"
 VERSION="$(sqlite3 "$DB" "SELECT value FROM schema_meta WHERE key='version'" 2>/dev/null || true)"
 if [ "$VERSION" != "$EXPECTED_VERSION" ]; then
   echo "ERROR: teamdb schema version=$VERSION, esperado $EXPECTED_VERSION (migrations incompletas)" >&2

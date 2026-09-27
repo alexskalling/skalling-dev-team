@@ -34,7 +34,7 @@ trap 'rm -rf "$WORK"' EXIT
 
 mkdir -p "$WORK/.opencode/context" "$WORK/db/teamdb" "$WORK/sql" "$WORK/scripts/lib"
 cp "$ROOT/sql/project-schema.sql" "$WORK/sql/"
-cp "$ROOT/scripts/teamdb-dump.sh" "$ROOT/scripts/teamdb-restore.sh" "$ROOT/scripts/teamdb-merge.sh" "$WORK/scripts/"
+cp "$ROOT/scripts/teamdb-dump.sh" "$ROOT/scripts/teamdb-restore.sh" "$ROOT/scripts/teamdb-merge.sh" "$ROOT/scripts/teamdb_dump.py" "$WORK/scripts/"
 cp "$ROOT/scripts/lib/lib-teamdb.sh" "$WORK/scripts/lib/"
 
 # DB de partida: creamos una con datos (2 filas) para poder comparar.
@@ -65,7 +65,7 @@ FRESH=$(mktemp -d /tmp/teamdb-fresh-XXXXXX)
 mkdir -p "$FRESH/.opencode/context" "$FRESH/db/teamdb" "$FRESH/sql" "$FRESH/scripts/lib"
 cp "$WORK/sql/project-schema.sql" "$FRESH/sql/"
 cp "$WORK/db/teamdb/team.dump.sql" "$FRESH/db/teamdb/"
-cp "$WORK/scripts/teamdb-restore.sh" "$FRESH/scripts/"
+cp "$WORK/scripts/teamdb-restore.sh" "$WORK/scripts/teamdb_dump.py" "$FRESH/scripts/"
 cp "$WORK/scripts/lib/lib-teamdb.sh" "$FRESH/scripts/lib/"
 assert "clon fresco crea DB desde dump" "bash '$FRESH/scripts/teamdb-restore.sh' '$FRESH'"
 N_FRESH=$(sqlite3 "$FRESH/.opencode/context/team.db" "SELECT COUNT(*) FROM concepts;" 2>/dev/null || echo 0)

@@ -113,5 +113,54 @@ class ContextRegression(unittest.TestCase):
             jsonschema.validate(example, schema)
 
 
+    # ── Auditoría externa v0.12.0 #6: un solo contrato de selección ──
+
+    def test_more_matches_than_top_k_always_asks_for_expansion(self):
+        with sqlite3.connect(self.db) as db:
+            for i in range(9):
+                db.execute("INSERT INTO decisions(slug,title,body_md,status) VALUES(?,?,?,'accepted')",
+                           (f'pagos-{i}', f'Pagos regla {i}', f'Restricción de pagos número {i}'))
+        data = json.loads(self.capsule('regla de pagos', '--top-k=8').stdout)
+        self.assertEqual(len(data['decisions']), 8)
+        self.assertTrue(data['more_matches'])
+        self.assertTrue(data['needs_expansion'], 'more_matches sin needs_expansion escondía la novena decisión')
+        self.assertTrue(any(o['table'] == 'decisions' for o in data['omitted']))
+
+    def for_task(self, *args):
+        return subprocess.run(['bash', str(ROOT / 'scripts/teamdb-context.sh'), 'for-task', 'plan', 'task',
+                               *args, str(self.project)], capture_output=True, text=True)
+
+    def seed_task(self, description='Implementar'):
+        with sqlite3.connect(self.db) as db:
+            db.execute("INSERT INTO plans(slug,title,design_md,status) VALUES('plan','Plan','d','approved')")
+            plan = db.execute("SELECT id FROM plans WHERE slug='plan'").fetchone()[0]
+            db.execute("INSERT INTO tasks(plan_id,slug,title,description_md,acceptance_md,status) VALUES(?,?,?,?,?,'pending')",
+                       (plan, 'task', 'Tarea', description, 'Aceptación'))
+            task = db.execute("SELECT id FROM tasks WHERE slug='task'").fetchone()[0]
+            body = 'Contexto largo. ' * 60 + 'RESTRICCIÓN: nunca guardar tokens en localStorage.'
+            db.execute("INSERT INTO decisions(slug,title,body_md,status) VALUES('tokens','Tokens',?,'accepted')", (body,))
+            dec = db.execute("SELECT id FROM decisions WHERE slug='tokens'").fetchone()[0]
+            db.execute("INSERT INTO task_context_capsules(task_id,memory_table,memory_id,relevance,provenance) "
+                       "VALUES(?,'decisions',?,1.0,'linked')", (task, dec))
+
+    def test_for_task_never_truncates_a_memory_silently(self):
+        self.seed_task()
+        data = json.loads(self.for_task('--max-bytes=8000').stdout)
+        body = data['decisions'][0]['body_md']
+        self.assertTrue(body.endswith('nunca guardar tokens en localStorage.'), 'la restricción se cortaba a 500 caracteres')
+
+    def test_for_task_budget_counts_the_whole_output(self):
+        self.seed_task(description='Descripción extensa. ' * 60)
+        result = self.for_task('--max-bytes=1900')
+        self.assertLessEqual(len(result.stdout.strip().encode()), 1900)
+        data = json.loads(result.stdout)
+        self.assertEqual(data['decisions'], [])
+        self.assertTrue(data['needs_expansion'])
+        self.assertEqual(data['omitted'], [{'table': 'decisions', 'slug': 'tokens'}])
+        # Sin lugar ni para la referencia: igual se avisa que hay que buscar.
+        tight = json.loads(self.for_task('--max-bytes=1500').stdout)
+        self.assertTrue(tight['needs_expansion'] and tight['more_matches'])
+
+
 if __name__ == '__main__':
     unittest.main()

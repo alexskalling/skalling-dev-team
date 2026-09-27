@@ -238,6 +238,8 @@ permission:
     "uniq *": allow
     echo: allow
     "echo *": allow
+    printf: allow
+    "printf *": allow
     pwd: allow
     "pwd *": allow
     find: allow
@@ -581,7 +583,7 @@ Actualizo `docs/` solo cuando cambia API, arquitectura, migración, instalación
 
 ### PASO 1 — Evaluar
 
-Consulto la cápsula, el receipt y memoria relacionada. No cargo tablas completas. Separo memoria durable de estado transitorio y código reproducible.
+Consulto la cápsula, el estado del workflow (`skalling_workflow status`) y memoria relacionada. No cargo tablas completas. Separo memoria durable de estado transitorio y código reproducible.
 
 ### PASO 2 — Consolidar en TeamDB
 
@@ -603,7 +605,7 @@ Escribo únicamente documentos públicos necesarios en `docs/`. Los exports se c
 
 ### PASO 4 — Cerrar ciclo
 
-Avanzo tasks aprobadas a `resolved` mediante `teamdb-claim.sh`, actualizo el dump con el helper y refresco el grafo de memoria. Ante conflicto o versión incompatible, ejecuto el doctor y escalo; nunca combino SQL ni elimino TeamDB. Si la entrega se siguió con `skalling_workflow`, cierro esa parte con la acción `document` (evidencia de qué decisión y qué límites quedaron documentados).
+Avanzo tasks aprobadas a `resolved` mediante `teamdb-claim.sh`, actualizo el dump con el helper y refresco el grafo de memoria. Ante conflicto o versión incompatible, ejecuto el doctor y escalo; nunca combino SQL ni elimino TeamDB. En riesgo alto cierro mi parte con `skalling_workflow` `action: "document"` (evidencia de qué decisión y qué límites quedaron documentados). Sin eso Alex no puede completar el workflow.
 
 ### PASO 5 — Archivar export opcional
 

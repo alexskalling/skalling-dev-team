@@ -4,6 +4,80 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-09-27
+
+### Cierre de la auditoría externa de v0.12.0 (una sola autoridad, evidencia calculada)
+
+#### Changed
+- **`skalling_workflow` es la única autoridad del flujo de código.** Alex inicia
+  cada pedido con `start`. El guard solo deja delegar a Teo cuando el workflow
+  vigente de esa sesión está en `implementation_ready` y el pedido cita su id.
+  Antes bastaba con que alguna vez apareciera `request_id` en la sesión,
+  aunque la clasificación prohibiera implementar (#1).
+- **Reglas de clasificación únicas** (`scripts/skalling_classify.py`), usadas
+  por `skalling-route.sh` y por el motor. `skalling-route.sh classify` es
+  vista previa para código; `--record` queda solo para research/audit.
+- **Carril trivial Alex → Teo.** Al entregar, el motor corre la verificación
+  configurada del proyecto (`testing.fast` con `{files}`, o `testing.unit`),
+  congelada en `start`. Sin comando configurado, verifica Jhon. `visual` ya no
+  sube el riesgo a medium: exige el sistema de diseño.
+- Sol marca `ready` solo con `plan_id` de un plan aprobado con diseño.
+- Una reclasificación reemplaza solo al pedido que nombra (`supersedes`).
+  Antes se cerraba cualquier métrica abierta de los últimos 30 minutos, de
+  cualquier sesión (#7).
+
+#### Security
+- **Sin aprobaciones por defecto.** `teamdb-seal-receipt.sh` ya no convierte un
+  actor desconocido en `luz` ni sella `exit_code=0` sin evidencia. Luz sella
+  solo con el resultado de `skalling-review.sh`. Dentro de OpenCode el script
+  se niega: la aprobación la registra el motor. El gate acepta únicamente
+  receipts de productores de evidencia (verificación real, revisión real,
+  motor, dispensa humana) (#2).
+- **Restaurar la memoria no ejecuta nada.** El dump se valida entero antes de
+  tocar la base: solo INSERTs de datos en tablas y columnas permitidas, con
+  valores literales (`scripts/teamdb_dump.py`, compartido con el merge). Antes,
+  una línea `.shell` del dump se ejecutaba al restaurar (#3).
+- **Backups consistentes y obligatorios.** `teamdb_backup_db` usa la API backup
+  de SQLite (incluye el WAL) y verifica integridad. Restore e init abortan si
+  no se pudo respaldar (#4).
+- **Agentes nativos deshabilitados por proyecto.** `setup.sh` y `/skalling-init`
+  escriben `.opencode/opencode.json` del proyecto: Alex por defecto y `build`,
+  `plan` y `general` deshabilitados (editaban sin pasar por el flujo). Alex solo
+  puede delegar a los 7 especialistas.
+- **Identidad que falla cerrado.** En OpenCode v2, un comando sin agente
+  atribuible recibe `unattributed` y los helpers de TeamDB lo rechazan. Antes
+  aceptaban la identidad declarada cuando la aprobación del permiso tardaba
+  más de 30 s. `env -i` queda bloqueado para los agentes.
+
+#### Fixed
+- **Memoria que converge entre integrantes.** `memory_versions` versiona
+  decisiones, preferencias y problemas conocidos. El merge propaga cambios de
+  contenido y de estado (accepted → superseded) y reporta los conflictos (#5).
+- **Contexto sin recortes silenciosos.** `for-request` marca `needs_expansion`
+  cuando hay más coincidencias que `top_k`. `for-task` ya no corta memorias a
+  500 caracteres, incluye el workaround de los problemas y mide el presupuesto
+  sobre la salida completa (#6).
+- **Claims por sesión.** La identidad de un claim es rol + sesión (#7).
+- **OpenCode v2 (prueba real con 2.0.18).** `skalling-workflow.js` y
+  `skalling-data-safety.js` importaban el SDK al cargarse y 2.0.x los
+  descartaba si el paquete no estaba al lado: la herramienta
+  `skalling_workflow` no existía para los agentes. Ahora el SDK se importa solo
+  en la ruta v1, las herramientas se exponen fuera del code mode y aceptan el
+  payload como objeto. `check {configured: true}` corre el comando de
+  verificación que declara el proyecto (congelado en `start`): en v2 un plugin
+  no puede pedir permiso y Jhon quedaba sin forma de registrar evidencia.
+- Los triggers de `memory_versions` hacen solo upsert: con `DELETE`,
+  `teamdb_guard` rechazaba toda escritura de memoria por los helpers (hallado
+  en la prueba real; `tests/teamdb-memory-writes.test.py`).
+- `teamdb-memory.sh` y `teamdb-read.sh` explican sus campos y aceptan el
+  proyecto como primer argumento; el guard avisa cuando un pedido dirigido a un
+  rol ("Jhon verifica…", "Sos Jhon…") se manda a otro agente.
+- El doctor ya no aborta a mitad del diagnóstico (`[[ ]] && info` con `set -e`)
+  y verifica la config del proyecto.
+- README, arquitectura y constitución describen el flujo vigente. Receta única
+  de instalación desde un release, más actualización y reinicio.
+
+
 ### Seguridad y uso en equipo (auditoría de preparación para producción, 27-09-2026)
 
 #### Security

@@ -69,7 +69,11 @@ const CANONICAL_OTHER = [
 // TEAMDB_CLAIM_* fija el hash/exit code que sella un receipt: con eso se
 // "aprobaba" un candidato distinto al staged (caso real en ucadigital).
 // SKALLING_VERIFY_WAIVER aprueba sin tests: es decisión humana, no del agente.
-const IDENTITY_VARS = /\b(?:SKALLING_RUNTIME_AGENT|TEAMDB_ACTOR|SKALLING_REVIEW_AGENT|SKALLING_VERIFY_WAIVER|TEAMDB_CLAIM_(?:TREE_HASH|EXIT_CODE|COMMAND|OUTPUT_SUMMARY))\b/;
+const IDENTITY_VARS = /\b(?:SKALLING_RUNTIME_AGENT|SKALLING_RUNTIME_SESSION|SKALLING_WORKFLOW_CHECK|TEAMDB_ACTOR|SKALLING_REVIEW_AGENT|SKALLING_VERIFY_WAIVER|TEAMDB_CLAIM_(?:TREE_HASH|EXIT_CODE|COMMAND|OUTPUT_SUMMARY))\b/;
+// `env -i` / `env --ignore-environment` borra la identidad que puso el
+// runtime sin nombrar ninguna variable (auditoría v0.12.0: el sello salía a
+// nombre de otro agente).
+const SCRUB_ENV = /(?:^|[\s;&|(`])env\s+(?:-[a-zA-Z]*i\b|--ignore-environment\b|-\s)/;
 
 
 // Cuerpos de heredoc: con delimitador entre comillas (<<'EOF') son texto
@@ -381,7 +385,7 @@ export function hookBypassViolation(command) {
 }
 
 export function identityViolation(command) {
-  if (IDENTITY_VARS.test(command || '')) {
+  if (IDENTITY_VARS.test(command || '') || SCRUB_ENV.test(maskInert(removeHeredocBodies(command || '')))) {
     return 'La identidad del agente la pone el runtime de OpenCode, no el comando: '
       + 'no se puede fijar SKALLING_RUNTIME_AGENT, TEAMDB_ACTOR, SKALLING_REVIEW_AGENT, SKALLING_VERIFY_WAIVER ni TEAMDB_CLAIM_* '
       + '(el hash y el resultado que sella un receipt los calcula el script sobre lo staged).';
@@ -397,13 +401,29 @@ export function identityViolation(command) {
 const SHELL_TOOLS = new Set(['bash', 'shell']);
 const SUBAGENT_TOOLS = new Set(['task', 'subagent']);
 const EDIT_TOOLS = new Set(['edit', 'write', 'patch', 'multiedit', 'apply_patch']);
-const CLASSIFY_RE = /skalling-route\.sh\b[^\n]*\bclassify\b/;
+const WORKFLOW_TOOL = 'skalling_workflow';
+// Alex delega solo al equipo. Los agentes nativos de OpenCode (general,
+// build, explore...) editan sin pasar por Teo ni por la clasificación.
+const TEAM = new Set(['pol', 'sol', 'teo', 'jhon', 'luz', 'pau', 'jes']);
+
+function parseState(output) {
+  // v1: string. v2: { output?, content } con content string o partes de texto.
+  const content = output?.content;
+  const text = typeof output === 'string' ? output
+    : (output?.output ?? output?.stdout ?? (typeof content === 'string' ? content : content?.[0]?.text)
+      ?? JSON.stringify(output ?? ''));
+  try {
+    const state = JSON.parse(typeof text === 'string' ? text : JSON.stringify(text));
+    return state && typeof state.id === 'string' && typeof state.state === 'string' ? state : null;
+  } catch { return null; }
+}
 
 export function createCore() {
-  // Sesiones donde Alex ya clasificó el pedido (skalling-route.sh classify
-  // devolvió un request_id). Sin eso, Alex no puede mandarle código a Teo:
-  // es el paso que se salteó en la sesión real que motivó esto.
-  const classified = new Set();
+  // Último workflow que vio cada sesión de Alex (start/status/complete de
+  // skalling_workflow). Delegar implementación exige que ESE workflow esté
+  // en implementation_ready: la autorización es del pedido vigente, no un
+  // "esta sesión clasificó alguna vez" (auditoría externa v0.12.0 #1).
+  const workflows = new Map();
 
   function decide({ tool, agent, sessionID, input }) {
     const who = normalizeAgent(agent);
@@ -423,31 +443,51 @@ export function createCore() {
     }
     if (SUBAGENT_TOOLS.has(tool) && who === 'alex') {
       const target = normalizeAgent(input?.agent || input?.subagent_type);
-      // Caso real: `agent: "Teo"` con descripción "Jhon sella receipt". La
-      // descripción nombra el rol que hace el trabajo; si nombra a otro
-      // agente del equipo, el trabajo de uno lo está haciendo otro.
-      const named = String(input?.description || '').toLowerCase().match(/\b(alex|pol|sol|teo|jhon|luz|pau|jes)\b/);
-      if (named && target && named[1] !== target) {
-        return `La tarea "${input.description}" es de ${named[1]}, pero la estás mandando a ${target}. `
-          + `Usá agent: "${named[1][0].toUpperCase() + named[1].slice(1)}" (cada rol hace su parte; Teo no verifica ni sella por Jhon).`;
+      if (!TEAM.has(target)) {
+        return `Alex delega solo al equipo (Pol, Sol, Teo, Jhon, Luz, Pau, Jes); "${target || '?'}" no es parte del flujo `
+          + 'y podría editar sin clasificación ni verificación.';
       }
-      if (target === 'teo' && !classified.has(sessionID)) {
-        return 'Clasificá primero: corré skalling-route.sh classify ... --record y usá su ruta '
-          + '(low: Teo → Jhon; medium: Sol → Teo → Jhon; high: Pol → Sol → Teo → Jhon → Luz → Pau). '
-          + 'Sin clasificación no se delega implementación.';
+      // Pedido DIRIGIDO a otro rol ("Jhon verifica...", "Sos Jhon...") pero
+      // enviado a otro agente: caso real en 2.0.18 (el trabajo de Jhon a Teo,
+      // dos veces). Solo cuenta el rol con que EMPIEZA el pedido; mencionarlo
+      // en medio ("Verificar los cambios de Teo" a Jhon) es legítimo. Los
+      // roles los impone skalling_workflow; esto evita la vuelta perdida.
+      const ROLE = '(alex|pol|sol|teo|jhon|luz|pau|jes)\\b';
+      const addressed = String(input?.description || '').trim().toLowerCase().match(new RegExp('^' + ROLE))
+        || String(input?.prompt || '').trim().toLowerCase()
+          .match(new RegExp('^(?:sos|eres|you are|actuá como|actua como)\\s+' + ROLE));
+      if (addressed && addressed[1] !== target) {
+        const role = addressed[1][0].toUpperCase() + addressed[1].slice(1);
+        return `El pedido está dirigido a ${role} pero lo mandás a ${target}: usá agent: "${role}" `
+          + '(cada rol registra su propia acción en skalling_workflow).';
+      }
+      if (target === 'teo') {
+        const current = workflows.get(sessionID);
+        if (!current) {
+          return 'Sin workflow no se delega implementación: skalling_workflow start (Alex) con riesgo, alcance, '
+            + 'archivos, aceptación y reutilización. Una decisión pendiente se resuelve con el usuario antes.';
+        }
+        if (current.state !== 'implementation_ready') {
+          return `El workflow ${current.id} está en ${current.state}, no en implementation_ready: Teo implementa `
+            + 'cuando la ruta lo habilita (low: ya; medium: tras Sol ready; high: Pol → Sol). '
+            + 'Si cambió (Jhon rechazó), consultá skalling_workflow status.';
+        }
+        const text = `${input?.prompt || ''} ${input?.description || ''}`;
+        if (!text.includes(current.id)) {
+          return `Incluí el id del workflow (${current.id}) en el pedido a Teo: la delegación queda atada a ese pedido.`;
+        }
       }
     }
     return null;
   }
 
-  function observe({ tool, agent, sessionID, input, output }) {
-    if (!SHELL_TOOLS.has(tool) || normalizeAgent(agent) !== 'alex') return;
-    if (!CLASSIFY_RE.test(String(input?.command || ''))) return;
-    const text = typeof output === 'string' ? output : JSON.stringify(output ?? '');
-    if (/request_id/.test(text)) classified.add(sessionID);
+  function observe({ tool, agent, sessionID, output }) {
+    if (tool !== WORKFLOW_TOOL || normalizeAgent(agent) !== 'alex') return;
+    const state = parseState(output);
+    if (state) workflows.set(sessionID, { id: state.id, state: state.state });
   }
 
-  return { decide, observe, classified };
+  return { decide, observe, workflows };
 }
 
 // OpenCode v1: hooks devueltos por la función `server`. El agente de cada
@@ -461,7 +501,10 @@ export function createGuard(agentBySession = new Map(), core = createCore()) {
     'chat.message': remember,
     'shell.env': async (input, output) => {
       const agent = agentBySession.get(input?.sessionID);
-      if (agent) output.env.SKALLING_RUNTIME_AGENT = agent;
+      // Sin agente conocido se falla cerrado: los helpers de TeamDB no
+      // aceptan una identidad declarada dentro de OpenCode.
+      output.env.SKALLING_RUNTIME_AGENT = agent || UNATTRIBUTED_AGENT;
+      if (input?.sessionID) output.env.SKALLING_RUNTIME_SESSION = String(input.sessionID);
     },
     'tool.execute.before': async (input, output) => {
       const agent = agentBySession.get(input.sessionID);
@@ -474,6 +517,8 @@ export function createGuard(agentBySession = new Map(), core = createCore()) {
     },
   };
 }
+
+const UNATTRIBUTED_AGENT = 'unattributed';
 
 function blockedShell(message) {
   return `echo '${`BLOQUEADO por Skalling: ${message}`.replace(/'/g, "'\\''")}'`;
@@ -493,25 +538,39 @@ function blockedShell(message) {
 // entradas vencen a los PENDING_TTL_MS: un comando aprobado que nunca llegó a
 // ejecutarse (permiso denegado) no contamina uno posterior.
 const AMBIGUOUS_AGENT = 'ambiguous';
-const PENDING_TTL_MS = 30000;
+// Entre execute.before (registro) y create.before (ejecución) puede estar el
+// prompt de permiso del usuario: con 30 s, una aprobación lenta dejaba el
+// comando SIN identidad y el script aceptaba la declarada (auditoría v0.12.0).
+// Ahora la ventana es amplia y lo no atribuible falla cerrado.
+const PENDING_TTL_MS = 15 * 60 * 1000;
 
 export function createIdentityQueue(now = () => Date.now()) {
   const pending = new Map();
   const live = (command) => (pending.get(command) || []).filter((e) => now() - e.at < PENDING_TTL_MS);
   return {
-    register(command, agent) {
-      pending.set(command, [...live(command), { agent: normalizeAgent(agent), at: now() }]);
+    register(command, agent, session = '') {
+      pending.set(command, [...live(command), { agent: normalizeAgent(agent), session: String(session || ''), at: now() }]);
+    },
+    // Un comando denegado nunca llega a create.before: execute.after retira
+    // su entrada para que no vuelva ambigua una ejecución posterior.
+    discard(command, agent, session = '') {
+      const entries = live(command);
+      const index = entries.findIndex((e) => e.agent === normalizeAgent(agent) && e.session === String(session || ''));
+      if (index >= 0) entries.splice(index, 1);
+      if (entries.length) pending.set(command, entries); else pending.delete(command);
     },
     take(command) {
       const entries = live(command);
       if (entries.length === 0) { pending.delete(command); return null; }
-      const agents = new Set(entries.map((e) => e.agent));
-      // Con más de un agente esperando el mismo texto, el orden de ejecución
-      // no dice cuál es cuál: todas las entradas vivas quedan ambiguas.
-      const agent = agents.size === 1 ? [...agents][0] : AMBIGUOUS_AGENT;
-      const rest = entries.slice(1).map((e) => ({ ...e, agent: agents.size === 1 ? e.agent : AMBIGUOUS_AGENT }));
+      const owners = new Set(entries.map((e) => `${e.agent}\u0000${e.session}`));
+      // Con más de un agente/sesión esperando el mismo texto, el orden de
+      // ejecución no dice cuál es cuál: todas las entradas vivas son ambiguas.
+      const single = owners.size === 1;
+      const first = single ? { agent: entries[0].agent, session: entries[0].session }
+        : { agent: AMBIGUOUS_AGENT, session: '' };
+      const rest = entries.slice(1).map((e) => (single ? e : { ...e, agent: AMBIGUOUS_AGENT, session: '' }));
       if (rest.length) pending.set(command, rest); else pending.delete(command);
-      return agent;
+      return first;
     },
   };
 }
@@ -525,16 +584,21 @@ export async function setupGuardV2(ctx, core = createCore(), identities = create
       return;
     }
     if (SHELL_TOOLS.has(event.tool) && event.agent && typeof event.input?.command === 'string') {
-      identities.register(event.input.command, event.agent);
+      identities.register(event.input.command, event.agent, event.sessionID);
     }
   });
   await ctx.tool.hook('execute.after', async (event) => {
+    if (SHELL_TOOLS.has(event.tool) && event.status !== 'completed' && typeof event.input?.command === 'string') {
+      identities.discard(event.input.command, event.agent, event.sessionID);
+    }
     core.observe({ tool: event.tool, agent: event.agent, sessionID: event.sessionID, input: event.input,
       output: event.status === 'completed' ? event.result : '' });
   });
   await ctx.shell.hook('create.before', async (event) => {
-    const agent = identities.take(event.command);
-    if (!agent) return;
-    event.env = { ...(event.env || {}), SKALLING_RUNTIME_AGENT: agent };
+    // Sin registro previo (TTL vencido, comando que no vino de un agente)
+    // se falla cerrado en vez de dejar que el script crea lo declarado.
+    const owner = identities.take(event.command) || { agent: UNATTRIBUTED_AGENT, session: '' };
+    event.env = { ...(event.env || {}), SKALLING_RUNTIME_AGENT: owner.agent };
+    if (owner.session) event.env.SKALLING_RUNTIME_SESSION = owner.session;
   });
 }

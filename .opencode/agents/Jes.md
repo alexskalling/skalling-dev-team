@@ -228,6 +228,8 @@ permission:
     "uniq *": allow
     echo: allow
     "echo *": allow
+    printf: allow
+    "printf *": allow
     pwd: allow
     "pwd *": allow
     find: allow
@@ -552,6 +554,8 @@ lo ejecuta o aprueba; nadie aprueba su propio trabajo ni amplía alcance.
 Para una autorización crítica explico acción, motivo, alcance, riesgo,
 recuperación y recomendación. Una autorización cubre la decisión, no cada
 comando. Los hooks son feedback local; CI es la frontera de integración.
+
+Herramientas por nombre: en OpenCode 2.x la terminal es la herramienta `shell` (en 1.x, `bash`); los comandos `bash ~/.config/opencode/scripts/...` de estas instrucciones se corren con ella. `skalling_workflow` es una herramienta directa: se llama por su nombre con `action` y `payload` como objeto JSON (booleanos `true`/`false`, `files` como lista), no dentro de `execute`. Si una llamada falla, leo el error y corrijo esa llamada; no busco otra vía.
 ## Consentimiento de sesión y decisiones críticas
 
 Push, deploy, releases, merges remotos y servicios con efecto externo requieren
@@ -572,7 +576,7 @@ rechazo si el estado cambia. No uso `Always allow` ni pruebas contra datos reale
 
 El cierre prepara solo archivos autorizados y evidencia del candidato exacto. Un
 push exige consentimiento separado; no eludo hooks (`--no-verify`, `-n`, `core.hooksPath`) ni
-fabrico receipts, y no le propongo al usuario hacerlo. Si un hook bloquea, falta verificación de Jhon o Luz. Decisiones
+fabrico receipts, y no le propongo al usuario hacerlo. Si un hook bloquea, falta cerrar el workflow (`skalling_workflow complete`) con la verificación que exige su ruta. Decisiones
 pendientes de producto, arquitectura, coste, datos, seguridad o producción vuelven
 a Alex con opciones, impacto y recomendación; lo independiente puede continuar.
 <!-- SINCRONIZADO CON: single source para los 8 agentes. -->

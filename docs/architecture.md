@@ -52,8 +52,13 @@ tabla `applied_migrations`.
 - **Planes**: `proposals`, `plans`, `specs`, `design_notes`, `tasks`,
   `task_dependencies`, `task_claims`, `plan_history`,
   `task_context_capsules`, `routing_decisions`, `task_lock_history`.
-- **Integridad y trazabilidad**: `receipts` (sellos de revisión, incluye
-  `tree_hash`), `attempts` (ledger de intentos, v0.9.0), `audit_log`.
+- **Flujo**: `agent_workflows` / `agent_workflow_events` (estado y eventos de
+  `skalling_workflow`, la única autoridad del flujo de código),
+  `workflow_metrics`.
+- **Integridad y trazabilidad**: `receipts` (aprobación sellada con
+  `tree_hash`), `attempts` (ledger de intentos), `audit_log`,
+  `memory_versions` (versión de decisiones, preferencias y problemas para el
+  merge entre integrantes, v0.13.0).
 - **Infraestructura**: `schema_meta` (versión y metadatos), `skills_registry`,
   `applied_migrations`.
 
@@ -68,9 +73,12 @@ Los scripts siguen el patrón `teamdb-<verbo>.sh`:
   `teamdb-status.sh`, `teamdb-graph.sh`.
 - **Import/export**: `teamdb-import.sh`, `teamdb-export.sh`,
   `teamdb-export-md.sh`, `migrate-plans-md-to-db.sh`, `teamdb-ingest-change.sh`.
-- **Revisión**: `skalling-review.sh` (lenses, `--deep`, `--collect`),
-  `teamdb-seal-receipt.sh` (sello con `tree_hash`), `teamdb-attempt.sh`
-  (presupuesto de reintentos por change).
+- **Flujo y revisión**: `skalling-workflow.py` (backend privado de la
+  herramienta `skalling_workflow`; identidad desde el runtime),
+  `skalling_classify.py` (reglas únicas de clasificación),
+  `skalling-review.sh` (lenses, `--deep`, `--collect`),
+  `teamdb-seal-receipt.sh` (camino humano de terminal; se niega dentro de
+  OpenCode), `teamdb-attempt.sh` (presupuesto de reintentos por change).
 - **Operación**: `teamdb-init.sh`, `teamdb-migrate.sh`, `teamdb-deps.sh`,
   `build-schema.sh`, `update.sh`, `merge-helper.sh`,
   `wip-tree.sh`, `skalling-drift.sh`, `spec-memory-link.sh`,
@@ -84,10 +92,10 @@ Todos comparten `scripts/lib/lib-teamdb.sh` (helpers: `teamdb_project_path`,
 ### 2.4 Los 8 agentes (`agents-base/`)
 
 Perfiles markdown que definen la personalidad, el rol y los límites de cada
-agente. Son 8: **Alex** (frontend), **Jes** (estrategia de marca/UX),
-**Jhon** (verificación y tests), **Luz** (QA y auditoría de seguridad),
-**Pau** (documentación y memoria), **Pol** (specs y scope), **Sol** (lógica de
-negocio) y **Teo** (implementación).
+agente. Son 8: **Alex** (orquestación y clasificación), **Jes**
+(investigación y explicación), **Pol** (producto, alcance y aceptación),
+**Sol** (plan técnico), **Teo** (implementación), **Jhon** (verificación),
+**Luz** (calidad y seguridad) y **Pau** (documentación y memoria).
 
 La ruta de ruteo concreta (rol → agente) se usa en `skalling-review.sh --deep`:
 
@@ -100,26 +108,36 @@ La ruta de ruteo concreta (rol → agente) se usa en `skalling-review.sh --deep`
 
 ## 3. Ciclo de trabajo (end-to-end)
 
-El ciclo es adaptativo. El recorrido completo se reserva para riesgo alto o intención ambigua; riesgo bajo usa Teo y Jhon, y riesgo medio incorpora a Sol. Alex construye una cápsula compartida con `teamdb-context.sh for-request`, usa Code Intelligence para localizar código y registra métricas operativas con `skalling-metrics.sh`.
+El ciclo es adaptativo y lo gobierna una sola autoridad: la herramienta
+`skalling_workflow` (plugin + `scripts/skalling-workflow.py`). La identidad de
+cada paso la entrega OpenCode (`context.agent`, `context.sessionID`), no una
+variable de shell. El guard (`plugins/lib/git-guard.mjs`) solo deja a Alex
+delegar a Teo cuando el workflow vigente de su sesión está en
+`implementation_ready`, y el pedido cita su id.
 
-```
-Usuario → Alex (frontend) → Pol (spec/scope) → Sol (negocio)
-       → Teo ↔ Jhon (implementación + verificación)
-       → Jhon (regresión) → Luz (QA/seguridad) → Pau (documentación)
-```
+| Riesgo | Ruta | Verificación |
+|---|---|---|
+| low | Alex → Teo | el motor corre el comando del proyecto (`testing.fast` con `{files}`, o `testing.unit`), congelado en `start`; sin comando, Jhon |
+| medium | Alex → Sol → Teo → Jhon | checks de Jhon registrados por el motor |
+| high | Alex → Pol → Sol → Teo → Jhon → Luz → Pau | Jhon, Luz (con veredicto de riesgo) y documentación de Pau |
 
-1. **Espec**: `Pol` convierte la intención en `proposals`/`specs` (tablas
-   `proposals`, `plans`, `specs`).
-2. **Planeo**: se crean `tasks` con dependencias y claims; `teamdb-claim.sh`
-   asigna el trabajo (claim con lease/epoch, input_hash y transiciones
-   verificadas por rol).
-3. **Implementación**: `Teo` ejecuta; `Jhon` verifica con tests.
-4. **Revisión**: `skalling-review.sh` corre los 4 lenses sobre el diff; si
-   pasa, `teamdb-seal-receipt.sh` sella el estado con el `tree_hash` (SHA-256 de
-   16 chars del texto del diff).
-5. **Gate**: los hooks `pre-commit` y `pre-push` comparan el hash actual contra
-   el último sello y bloquean si no coincide (fail-closed).
-6. **Cierre**: `Pau` documenta y consolida la memoria.
+Estados: `requested → clarified → planned → implementation_ready →
+verification_ready → verified → quality_reviewed → documented → completed`
+(además `superseded` cuando una reclasificación explícita reemplaza al pedido).
+
+1. **start** (Alex): reglas de `skalling_classify.py`; rechaza decisiones
+   pendientes, ambigüedad, alcance desconocido y proyectos sin contexto.
+2. **clarify** (Pol), **plan / ready** (Sol, con `plan_id` de un plan aprobado).
+3. **deliver** (Teo): congela el candidato (huella de los archivos declarados);
+   un cambio fuera del alcance exige `rescope`.
+4. **oracle / check / approve | reject** (Jhon; Luz en alto): cada check corre
+   el comando sobre el candidato congelado y registra exit code y salida; un
+   fallo registrado no se borra con un check verde posterior.
+5. **document** (Pau, alto) y **complete** (Alex): prepara en Git exactamente
+   los archivos revisados y sella un receipt con el `tree_hash` del diff. Si no
+   puede sellar, no completa.
+6. Las tasks de un plan (`teamdb-claim.sh`) avanzan a `approved` con la
+   verificación que registró el motor para el workflow de esa task.
 
 ## 4. Hooks de integridad
 
@@ -127,8 +145,11 @@ Instalados en `.git/hooks` por `bootstrap-context.sh` (loop que copia
 `pre-commit`, `post-merge` y `pre-push`) y por `install-global.sh` (copia todos
 los scripts de `scripts/hooks/` por glob).
 
-- **`pre-commit`**: fail-closed. Compara el hash del diff contra el último
-  `tree_hash` de `receipts`; además exporta los `data_*.sql` del contexto.
+- **`pre-commit`**: fail-closed. Compara el hash del diff staged contra
+  `receipts` y solo acepta evidencia calculada: `skalling_workflow:complete`,
+  la verificación real de Jhon (`skalling-verify.sh`), la revisión real de Luz
+  (`review --...`) o una dispensa humana (`waived:`). Un receipt hecho a mano
+  no cuenta.
 - **`post-merge`**: fail-open. Si el bundle `teamdb` no existe, no hace nada.
 - **`pre-push`** (v0.9.0): fail-closed. Lee el stdin de git pre-push (una línea
   por ref: `local_ref local_sha remote_ref remote_sha`), calcula el hash del

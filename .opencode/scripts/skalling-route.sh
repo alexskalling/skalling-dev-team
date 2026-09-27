@@ -4,21 +4,23 @@
 # Uso:
 #   bash skalling-route.sh classify --risk low|medium|high --clarity clear|ambiguous --kind code [--record ...]
 #
-# `classify` es el único subcomando real: lo usa Alex en cada pedido (ver
-# skills/skalling-routing). `--record` persiste la decisión en TeamDB.
+# Las reglas viven en skalling_classify.py (las mismas que aplica
+# skalling_workflow start). Para código este comando es solo VISTA PREVIA:
+# la única autorización para implementar es `skalling_workflow start`.
+# `--record` persiste research/audit en TeamDB.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}"
 
 persist_classification() {
-  local db="$1" request_id="$2" intent="$3" route="$4" agents="$5" risk="$6"
+  local db="$1" request_id="$2" intent="$3" route="$4" agents="$5" risk="$6" supersedes="$7"
   [ -f "$db" ] || { printf 'ERROR: TeamDB no existe: %s\n' "$db" >&2; return 1; }
-  python3 - "$db" "$request_id" "$intent" "$route" "$agents" "$risk" <<'PY'
+  python3 - "$db" "$request_id" "$intent" "$route" "$agents" "$risk" "$supersedes" <<'PY'
 import sqlite3
 from teamdb_guard import connect as protected_connect
 import sys
 
-db, request_id, intent, route, agents, risk = sys.argv[1:]
+db, request_id, intent, route, agents, risk, supersedes = sys.argv[1:]
 conn = protected_connect(db, timeout=5)
 try:
     conn.execute("BEGIN IMMEDIATE")
@@ -29,26 +31,17 @@ try:
         (intent, route, agents),
     )
     if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='workflow_metrics'").fetchone():
-        # Reclasificar (carril directo abandonado, alcance nuevo, etc.) abre
-        # un request_id nuevo sin que nadie cierre el anterior -- confirmado
-        # en un caso real (Survan, 2026-09-13): 3 de 4 filas quedaron en
-        # 'pending' para siempre porque nada mas que una instruccion en
-        # markdown le pedia a Alex cerrarlas, y no siempre lo hacia. Se
-        # cierra aca, en el codigo, en vez de depender de que el LLM se
-        # acuerde. Ventana de 30 min (mucho mas corta que el barrido de 2h
-        # de skalling-metrics.sh start, pensado para crashes/abandonos
-        # reales): una reclasificacion pasa en el mismo turno interactivo,
-        # segundos o minutos despues, nunca horas -- así no se pisa una
-        # sesion concurrente legitima que sigue trabajando en el proyecto.
-        conn.execute(
-            """UPDATE workflow_metrics
-               SET outcome='superseded', completed_at=datetime('now'),
-                   duration_ms=CAST((julianday('now')-julianday(started_at))*86400000 AS INTEGER)
-               WHERE completed_at IS NULL
-                 AND request_id != ?
-                 AND started_at > datetime('now','-30 minutes')""",
-            (request_id,),
-        )
+        # Una reclasificación reemplaza SOLO al pedido que nombra
+        # (--supersedes). Antes se cerraba cualquier métrica abierta de los
+        # últimos 30 min y el pedido de otra sesión quedaba 'superseded'.
+        if supersedes:
+            conn.execute(
+                """UPDATE workflow_metrics
+                   SET outcome='superseded', completed_at=datetime('now'),
+                       duration_ms=CAST((julianday('now')-julianday(started_at))*86400000 AS INTEGER)
+                   WHERE completed_at IS NULL AND request_id = ? AND request_id != ?""",
+                (supersedes, request_id),
+            )
         conn.execute(
             """INSERT INTO workflow_metrics
                (request_id, risk_level, route, agents_count, started_at)
@@ -63,8 +56,8 @@ PY
 }
 
 cmd_classify() {
-  local risk="" clarity="clear" kind="" record=false intent="" project request_id=""
-  local scope="unknown" decision="none" sensitive=false visual=false needs_user_decision=false implementation_allowed=false readiness="missing"
+  local risk="" clarity="clear" kind="" record=false intent="" project request_id="" supersedes=""
+  local scope="unknown" decision="none" sensitive=false visual=false
   local acceptance="" reuse="" plan_id=""
   local files=()
   project="$(pwd)"
@@ -85,42 +78,36 @@ cmd_classify() {
       --intent) intent="${2:-}"; shift 2 ;;
       --project) project="${2:-}"; shift 2 ;;
       --request-id) request_id="${2:-}"; shift 2 ;;
+      --supersedes) supersedes="${2:?Falta request_id reemplazado}"; shift 2 ;;
+      -h|--help) usage; return 0 ;;
       *) printf 'Argumento desconocido: %s\n' "$1" >&2; return 2 ;;
     esac
   done
-  case "$risk" in low|medium|high) ;; *) printf 'risk debe ser low, medium o high\n' >&2; return 2 ;; esac
-  case "$clarity" in clear|ambiguous) ;; *) printf 'clarity inválida\n' >&2; return 2 ;; esac
-  case "$kind" in code|research|audit) ;; *) printf 'kind requerido: code, research o audit\n' >&2; return 2 ;; esac
-  case "$scope" in local|module|cross-cutting|unknown) ;; *) printf 'scope inválido\n' >&2; return 2 ;; esac
-  case "$decision" in none|pending|resolved) ;; *) printf 'decision inválida\n' >&2; return 2 ;; esac
-  if [ "$sensitive" = true ] || [ "$scope" = cross-cutting ] || [ "$clarity" = ambiguous ] || [ "$decision" = pending ]; then
-    risk=high
-  elif [ "$scope" = module ] && [ "$risk" = low ]; then
-    risk=medium
+  # Para código registrar acá abriría un segundo request_id, paralelo al del
+  # workflow que sí autoriza: la clasificación de código la registra
+  # skalling_workflow start.
+  if [ "$record" = true ] && [ "$kind" = code ]; then
+    printf 'ERROR: para código la clasificación la registra skalling_workflow start (no skalling-route.sh --record)\n' >&2
+    return 2
   fi
-  if [ "$visual" = true ] && [ "$risk" = low ]; then
-    risk=medium
-  fi
-  if [ "$decision" = pending ] || [ "$clarity" = ambiguous ]; then needs_user_decision=true; fi
-  if [ "$kind" = code ] && [ "$scope" != unknown ] && [ "$needs_user_decision" = false ]; then implementation_allowed=true; fi
-  local route agents verification
-  case "$kind" in
-    research) route="RESEARCH"; agents="Alex → Jes"; verification="sources" ;;
-    audit) route="DIRECT"; agents="Alex → Luz"; verification="audit" ;;
-    *)
-      if [ "$risk" = "high" ] || [ "$scope" = unknown ]; then
-        route="SDD"; agents="Alex → Pol → Sol → Teo → Jhon → Luz → Pau"; verification="full"
-      elif [ "$risk" = "medium" ]; then
-        route="INLINE"; agents="Alex → Sol → Teo → Jhon"; verification="module"
-      else
-        route="FAST-TRACK"; agents="Alex → Teo → Jhon"; verification="focused"
-      fi
-      ;;
-  esac
+  local normalized
+  normalized="$(python3 -c '
+import sys
+from skalling_classify import normalize
+kind, risk, scope, clarity, decision, sensitive, visual = sys.argv[1:]
+try:
+    r = normalize(kind, risk, scope, clarity, decision, sensitive == "true", visual == "true")
+except ValueError as error:
+    print(error, file=sys.stderr)
+    sys.exit(2)
+print("\t".join([r["risk"], r["route"], r["agents"], r["verification"],
+                 str(r["needs_user_decision"]).lower(), str(r["implementation_allowed"]).lower()]))
+' "$kind" "$risk" "$scope" "$clarity" "$decision" "$sensitive" "$visual")" || return 2
+  local route agents verification needs_user_decision implementation_allowed readiness="missing"
+  IFS=$'\t' read -r risk route agents verification needs_user_decision implementation_allowed <<< "$normalized"
   local project_db="$project/.opencode/context/team.db"
-  if [ -f "$project_db" ] && command -v sqlite3 >/dev/null 2>&1; then
-    readiness="$(sqlite3 "$project_db" "SELECT value FROM schema_meta WHERE key='project_readiness' LIMIT 1" 2>/dev/null || true)"
-    [ -n "$readiness" ] || readiness="missing"
+  if [ -f "$project_db" ]; then
+    readiness="$(python3 -c 'import sys; from skalling_classify import readiness; print(readiness(sys.argv[1]))' "$project_db")"
   fi
   if [ "$kind" = code ] && [ "$readiness" != initialized ] && [ "$readiness" != ready ]; then
     implementation_allowed=false
@@ -131,11 +118,12 @@ cmd_classify() {
   if [ "$record" = true ]; then
     [ -n "$intent" ] || { printf 'ERROR: --record requiere --intent\n' >&2; return 2; }
     [ -n "$request_id" ] || request_id="req-$(date +%Y%m%d%H%M%S)-$$"
-    persist_classification "$project/.opencode/context/team.db" "$request_id" "$intent" "$route" "$agents" "$risk"
+    persist_classification "$project/.opencode/context/team.db" "$request_id" "$intent" "$route" "$agents" "$risk" "$supersedes"
   fi
   python3 - "$risk" "$route" "$agents" "$verification" "$request_id" "$needs_user_decision" "$implementation_allowed" "$readiness" "$project" "$kind" "$acceptance" "$reuse" "$plan_id" "$visual" ${files[@]+"${files[@]}"} <<'PY'
-import json, sys, sqlite3
+import json, sys
 from teamdb_guard import connect as protected_connect
+from skalling_classify import memory_blockers
 from pathlib import Path
 risk, route, agents, verification, request_id, decision, allowed, readiness = sys.argv[1:9]
 project, kind, acceptance, reuse, plan_id, visual = sys.argv[9:15]
@@ -153,32 +141,35 @@ if kind == "code" and allowed == "true":
         blockers.append("Falta --acceptance: resultado observable del pedido")
     if not reuse.strip():
         blockers.append("Falta --reuse: qué componente/patrón existente se reutiliza")
-    with protected_connect("file:" + str(root / ".opencode/context/team.db") + "?mode=ro", uri=True) as db:
-        if not db.execute("SELECT 1 FROM concepts WHERE slug='project-summary' AND length(body_md)>0").fetchone():
-            blockers.append("Falta resumen de proyecto en TeamDB")
-        if visual == "true" and not db.execute("SELECT 1 FROM concepts WHERE slug='design-system' AND length(body_md)>0").fetchone():
-            blockers.append("Falta sistema de diseño en TeamDB")
-        if risk in ("medium", "high"):
+    db_path = root / ".opencode/context/team.db"
+    blockers.extend(memory_blockers(db_path, visual == "true"))
+    if risk in ("medium", "high"):
+        with protected_connect("file:" + str(db_path) + "?mode=ro", uri=True) as db:
             plan = db.execute("SELECT 1 FROM plans WHERE id=? AND status IN ('approved','in_progress') AND length(design_md)>0", (plan_id,)).fetchone()
-            if not plan:
-                blockers.append("Sol debe preparar un plan aprobado: --plan-id")
+        if not plan:
+            blockers.append("Sol debe preparar un plan aprobado: --plan-id")
     if blockers:
         allowed = "false"
 result = dict(risk=risk, route=route, agents=agents, verification=verification,
               needs_user_decision=decision == 'true', implementation_allowed=allowed == 'true',
               readiness=readiness, blockers=blockers,
               request_context=dict(files=files, acceptance=acceptance, reuse=reuse))
+if kind == "code":
+    # Vista previa: lo que autoriza implementar es skalling_workflow start.
+    result["authorizes"] = False
 if request_id:
     result['request_id'] = request_id
 print(json.dumps(result, ensure_ascii=False, separators=(',', ':')))
 PY
 }
 
+usage() {
+    printf 'Uso:\n  %s classify --kind code|research|audit --risk low|medium|high --scope local|module|cross-cutting|unknown [--clarity clear|ambiguous] [--decision none|pending|resolved] [--sensitive] [--visual] [--file RUTA --acceptance TEXTO --reuse TEXTO --plan-id ID] [--record --intent TEXTO --project RUTA --supersedes REQUEST_ID]\n  --record solo para research/audit; para código la clasificación la registra skalling_workflow start.\n' "$0"
+}
+
 case "${1:-help}" in
   classify) shift; cmd_classify "$@" ;;
-  help|-h|--help)
-    printf 'Uso:\n  %s classify --kind code|research|audit --risk low|medium|high --scope local|module|cross-cutting|unknown [--clarity clear|ambiguous] [--decision none|pending|resolved] [--sensitive] [--visual] [--file RUTA --acceptance TEXTO --reuse TEXTO --plan-id ID] [--record --intent TEXTO --project RUTA]\n' "$0"
-    ;;
+  help|-h|--help) usage ;;
   *)
     printf 'Subcomando desconocido: %s\n' "$1" >&2
     exit 1

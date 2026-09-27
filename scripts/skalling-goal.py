@@ -138,7 +138,7 @@ def operate(root, session, action, payload):
             digest = hashlib.sha256(patch).hexdigest()[:16]
             receipt = db.execute('SELECT exit_code FROM receipts WHERE tree_hash=? ORDER BY ts DESC,rowid DESC LIMIT 1', (digest,)).fetchone()
             if not receipt or receipt[0] != 0:
-                raise ValueError('Revisar los archivos staged con skalling-review antes de crear el commit.')
+                raise ValueError('Falta la aprobación sellada de este candidato: cerrar el workflow con skalling_workflow complete (skalling-review en terminal humana) antes de crear el commit.')
             db.execute("UPDATE session_goals SET status='committing' WHERE session=?", (session,))
             db.commit()  # Never hold a SQLite writer lock while Git hooks read it.
             gate = Path(__file__).resolve().parents[1] / 'hooks/git-gate.py'

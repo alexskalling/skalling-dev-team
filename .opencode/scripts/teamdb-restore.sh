@@ -72,23 +72,41 @@ fi
 trap 'teamdb_unlock "$LOCK_DIR"' EXIT
 
 # ── Backup previo a sobreescritura (rotación 5) ──────────────────────────────
+# Consistente (API backup, incluye el WAL) y verificado. Si no se pudo
+# respaldar, no se toca nada: la restauración puede reemplazar filas y
+# --full-reset borra la base.
 if [ -f "$DB" ]; then
   BACKUP_DIR="$(dirname "$DB")/.backups"
-  mkdir -p "$BACKUP_DIR"
   STAMP="$(date +%Y%m%d-%H%M%S)"
   BACKUP_FILE="$BACKUP_DIR/team.db.backup-$STAMP"
-  if cp "$DB" "$BACKUP_FILE" 2>/dev/null; then
-    echo "backup: $BACKUP_FILE"
-    BACKUP_COUNT=$(find "$BACKUP_DIR" -maxdepth 1 -name 'team.db.backup-*' -type f 2>/dev/null | wc -l | tr -d ' ')
-    if [ "$BACKUP_COUNT" -gt 5 ]; then
-      TO_DELETE=$((BACKUP_COUNT - 5))
-      find "$BACKUP_DIR" -maxdepth 1 -name 'team.db.backup-*' -type f 2>/dev/null \
-        | sort | head -n "$TO_DELETE" \
-        | while IFS= read -r f; do rm -f -- "$f"; done  # lens:ok: f viene de find sobre BACKUP_DIR, nunca de input externo
-    fi
-  else
-    echo "WARN: backup falló (¿permisos?)" >&2
+  if ! mkdir -p "$BACKUP_DIR" 2>/dev/null || ! teamdb_backup_db "$DB" "$BACKUP_FILE"; then
+    echo "ERROR: no se pudo respaldar $DB; restauración abortada sin cambios" >&2
+    exit 1
   fi
+  echo "backup: $BACKUP_FILE"
+  BACKUP_COUNT=$(find "$BACKUP_DIR" -maxdepth 1 -name 'team.db.backup-*' -type f 2>/dev/null | wc -l | tr -d ' ')
+  if [ "$BACKUP_COUNT" -gt 5 ]; then
+    TO_DELETE=$((BACKUP_COUNT - 5))
+    find "$BACKUP_DIR" -maxdepth 1 -name 'team.db.backup-*' -type f 2>/dev/null \
+      | sort | head -n "$TO_DELETE" \
+      | while IFS= read -r f; do rm -f -- "$f"; done  # lens:ok: f viene de find sobre BACKUP_DIR, nunca de input externo
+  fi
+fi
+
+# ── Validar el dump ANTES de tocar la base ───────────────────────────────────
+# Solo INSERTs de datos en tablas permitidas; cualquier otra cosa (comandos
+# .shell, sentencias DDL/DELETE, tablas desconocidas) aborta sin cambios.
+if ! VALIDATION="$(PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}" python3 -c '
+import sys
+from teamdb_dump import parse
+rows, problems = parse(sys.argv[1])
+for problem in problems[:20]:
+    print(problem)
+sys.exit(1 if problems else 0)
+' "$DUMP" 2>&1)"; then
+  echo "ERROR: el dump contiene algo que no son datos; restauración abortada sin cambios:" >&2
+  printf '%s\n' "$VALIDATION" >&2
+  exit 1
 fi
 
 # ── Full reset: recrear desde schema (usa el mismo mecanismo de init) ────────
@@ -107,19 +125,51 @@ if [ ! -f "$DB" ]; then
   echo "db creada desde schema: $DB"
 fi
 
-# ── Aplicar el dump (INSERTs con PK explícita; OR REPLACE = idempotente) ─────
-# El dump no trae CREATE TABLE; la DB ya existe (nueva o previa con --force).
-# Se transforma INSERT INTO → INSERT OR REPLACE INTO para que re-restaurar
-# sobre una DB con datos no duplique ni falle por PK.
-INSERT_COUNT="$(grep -c "^INSERT INTO " "$DUMP" 2>/dev/null || true)"
-if [ "$INSERT_COUNT" -eq 0 ]; then
-  echo "restore: dump vacío (sin INSERTs)" >&2
-  exit 0
+# ── Aplicar el dump: filas validadas, parámetros vinculados, una transacción ─
+# Idempotente: una fila con la misma PK se reemplaza (DELETE + INSERT, para
+# que los triggers de FTS y versión se enteren; INSERT OR REPLACE no dispara
+# los de borrado y deja el índice FTS inconsistente).
+if ! APPLY_OUT="$(PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}" python3 -c '
+import sqlite3, sys
+from teamdb_dump import TABLES, parse
+db_path, dump_path = sys.argv[1:3]
+rows, problems = parse(dump_path)
+if problems:
+    sys.exit("\n".join(problems[:20]))
+con = sqlite3.connect(db_path, timeout=10)
+con.execute("PRAGMA busy_timeout=5000")
+count = 0
+try:
+    con.execute("BEGIN IMMEDIATE")
+    for table in TABLES:
+        if table not in rows:
+            continue
+        info = con.execute("PRAGMA table_info(\"%s\")" % table).fetchall()
+        if not info:
+            raise ValueError("tabla ausente en la base local: " + table)
+        local = {r[1] for r in info}
+        pk = [r[1] for r in sorted(info, key=lambda r: r[5]) if r[5] > 0]
+        for row in rows[table]:
+            unknown = set(row) - local
+            if unknown:
+                raise ValueError("%s: columnas desconocidas %s" % (table, sorted(unknown)))
+            if pk and all(c in row for c in pk):
+                con.execute("DELETE FROM \"%s\" WHERE %s" % (table, " AND ".join("\"%s\" IS ?" % c for c in pk)),
+                            [row[c] for c in pk])
+            names = ",".join("\"%s\"" % c for c in row)
+            con.execute("INSERT INTO \"%s\" (%s) VALUES (%s)" % (table, names, ",".join("?" * len(row))),
+                        list(row.values()))
+            count += 1
+    con.commit()
+except (sqlite3.Error, ValueError) as error:
+    con.rollback()
+    sys.exit("fila no aplicada: %s" % error)
+finally:
+    con.close()
+print(count)
+' "$DB" "$DUMP" 2>&1)"; then
+  echo "ERROR: restore falló aplicando el dump (sin cambios): $APPLY_OUT" >&2
+  exit 1
 fi
 
-sed 's/^INSERT INTO /INSERT OR REPLACE INTO /' "$DUMP" | sqlite3 "$DB" 2>&1 || {
-  echo "ERROR: restore falló aplicando el dump" >&2
-  exit 1
-}
-
-echo "restore: $INSERT_COUNT filas aplicadas desde $DUMP"
+echo "restore: $APPLY_OUT filas aplicadas desde $DUMP"

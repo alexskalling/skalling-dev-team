@@ -210,6 +210,8 @@
       "uniq *": "allow",
       "echo": "allow",
       "echo *": "allow",
+      "printf": "allow",
+      "printf *": "allow",
       "pwd": "allow",
       "pwd *": "allow",
       "find": "allow",
@@ -500,18 +502,6 @@
       "*/.opencode/scripts/teamdb-export-md.sh *": "allow",
       "bash */.opencode/scripts/teamdb-export-md.sh": "allow",
       "bash */.opencode/scripts/teamdb-export-md.sh *": "allow",
-      "*/.config/opencode/scripts/teamdb-seal-receipt.sh": "allow",
-      "*/.config/opencode/scripts/teamdb-seal-receipt.sh *": "allow",
-      "bash */.config/opencode/scripts/teamdb-seal-receipt.sh": "allow",
-      "bash */.config/opencode/scripts/teamdb-seal-receipt.sh *": "allow",
-      ".opencode/scripts/teamdb-seal-receipt.sh": "allow",
-      ".opencode/scripts/teamdb-seal-receipt.sh *": "allow",
-      "bash .opencode/scripts/teamdb-seal-receipt.sh": "allow",
-      "bash .opencode/scripts/teamdb-seal-receipt.sh *": "allow",
-      "*/.opencode/scripts/teamdb-seal-receipt.sh": "allow",
-      "*/.opencode/scripts/teamdb-seal-receipt.sh *": "allow",
-      "bash */.opencode/scripts/teamdb-seal-receipt.sh": "allow",
-      "bash */.opencode/scripts/teamdb-seal-receipt.sh *": "allow",
       "*/.config/opencode/scripts/teamdb-plan.sh": "allow",
       "*/.config/opencode/scripts/teamdb-plan.sh *": "allow",
       "bash */.config/opencode/scripts/teamdb-plan.sh": "allow",
@@ -671,6 +661,18 @@
       "*id_rsa*": "ask",
       "*id_ed25519*": "ask",
       "*id_ecdsa*": "ask"
+    }
+  },
+  "default_agent": "Alex",
+  "agent": {
+    "build": {
+      "disable": true
+    },
+    "plan": {
+      "disable": true
+    },
+    "general": {
+      "disable": true
     }
   }
 }

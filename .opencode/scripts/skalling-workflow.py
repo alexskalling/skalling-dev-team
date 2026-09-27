@@ -6,13 +6,26 @@ against the OS user who owns both the interpreter and database.
 """
 import hashlib
 import json
+import os
 from pathlib import Path
+import re
+import shlex
 import sqlite3
 import subprocess
 import sys
 import time
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from skalling_classify import memory_blockers, normalize, readiness  # noqa: E402
+
 ROLES = {'alex', 'pol', 'sol', 'teo', 'jhon', 'luz', 'pau', 'jes'}
+# Verificador mecánico del carril trivial: no es un agente, es el comando de
+# verificación del proyecto ejecutado por el motor sobre el candidato.
+AUTO_VERIFIER = 'auto'
+# El plugin corta el proceso a los 130 s: la verificación automática tiene
+# que terminar antes para registrar su resultado.
+AUTO_VERIFY_TIMEOUT = 110
+TERMINAL = {'completed', 'superseded'}
 TRANSITIONS = {
     'clarify': ('pol', 'requested', 'clarified'),
     'plan': ('sol', 'clarified', 'planned'),
@@ -98,6 +111,27 @@ def require(condition, message):
         raise ValueError(message)
 
 
+def flag(payload, name):
+    """Booleano estricto. bool("false") es True: un modelo que mandó
+    "visual": "false" pedía un sistema de diseño que no hacía falta (prueba
+    real con OpenCode 2.0.18)."""
+    value = payload.get(name, False)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.strip().lower() in {'true', 'false'}:
+        return value.strip().lower() == 'true'
+    if value in (None, 0, 1):
+        return bool(value)
+    raise ValueError(f'{name} debe ser true o false')
+
+
+def file_list(payload, name='files'):
+    files = payload.get(name, [])
+    require(isinstance(files, list) and files and all(isinstance(f, str) and f.strip() for f in files),
+            f'{name} debe ser una lista JSON de rutas, por ejemplo ["app.py", "test_app.py"]')
+    return files
+
+
 def staged_paths(root):
     out = subprocess.run(['git', 'diff', '--cached', '--name-only', '-z', '--no-renames', '--', '.', DUMP_PATHSPEC],
                          cwd=root, capture_output=True, timeout=30)
@@ -116,35 +150,101 @@ def require_index_in_scope(root, files):
                        'Unstage them (git restore --staged) or review them in their own flow before completing')
 
 
+def inside_git(root):
+    out = subprocess.run(['git', 'rev-parse', '--is-inside-work-tree'], cwd=root, capture_output=True, timeout=10)
+    return out.returncode == 0 and out.stdout.strip() == b'true'
+
+
 def seal_receipt(db, root, identifier, files, verifier, digest):
     """Bridge to the Git-facing approval: stage exactly the reviewed files and
     seal a receipt with the same tree_hash algorithm scripts/hooks/git-gate.py
-    checks at commit time. Best-effort: any Git failure here just means the
-    receipt is not sealed, git-gate.py still requires manual evidence."""
+    checks at commit time. Fails closed: a completed workflow always leaves a
+    receipt, or completion is refused (before, any Git failure silently left
+    the workflow 'completed' without the evidence Git asks for)."""
+    if not inside_git(root):
+        return None
     require_index_in_scope(root, files)
     try:
-        if subprocess.run(['git', 'add', '--'] + list(files), cwd=root, capture_output=True, timeout=30).returncode != 0:
-            return
+        added = subprocess.run(['git', 'add', '-A', '--'] + list(files), cwd=root, capture_output=True, timeout=30)
+        require(added.returncode == 0, 'git add falló al preparar el candidato: '
+                + added.stderr.decode('utf-8', 'replace').strip())
         require_index_in_scope(root, files)
         # What got staged has to be what was verified (no edit slipped in
         # between the last fingerprint and git add).
         require(fingerprint(root, files) == digest, 'Candidate changed while staging; approval denied')
         diff = subprocess.run(['git', 'diff', '--cached', '--', '.', DUMP_PATHSPEC],
                                cwd=root, capture_output=True, timeout=30)
-        patch = diff.stdout.rstrip(b'\n')  # git-gate.py hashes the patch with the same rstrip
-        if diff.returncode != 0 or not patch.strip():
-            return
-    except (OSError, subprocess.SubprocessError):
-        return
-    if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='receipts'").fetchone():
-        return
-    if not db.execute("SELECT 1 FROM pragma_table_info('receipts') WHERE name='tree_hash'").fetchone():
-        return
+    except (OSError, subprocess.SubprocessError) as error:
+        raise ValueError('No se pudo preparar el candidato en Git: ' + str(error))
+    patch = diff.stdout.rstrip(b'\n')  # git-gate.py hashes the patch with the same rstrip
+    require(diff.returncode == 0, 'No se pudo leer el diff preparado; no se sella a ciegas')
+    if not patch.strip():
+        return None  # nada que commitear: no hay candidato que sellar
+    require(db.execute("SELECT 1 FROM pragma_table_info('receipts') WHERE name='tree_hash'").fetchone() is not None,
+            'TeamDB sin receipts.tree_hash: correr bash scripts/teamdb-init.sh')
     tree_hash = hashlib.sha256(patch).hexdigest()[:16]
     db.execute("INSERT INTO receipts (id, task_id, agent, command, exit_code, output_summary, ts, tree_hash) "
                "VALUES (?,?,?,?,?,?,datetime('now'),?)",
                (f'rcpt_wf_{identifier}_{int(time.time())}', identifier, verifier, 'skalling_workflow:complete',
-                0, json.dumps({'source': 'skalling_workflow'}), tree_hash))
+                0, json.dumps({'source': 'skalling_workflow', 'verifier': verifier}), tree_hash))
+    return tree_hash
+
+
+def configured_command(root, name):
+    """testing.<name>.command de .opencode/project.yaml, con el mismo parser
+    que skalling-verify.sh (sin PyYAML: el plugin corre con python3 del
+    sistema). Vacío si no está disponible."""
+    path = root / '.opencode/project.yaml'
+    if not path.is_file():
+        return ''
+    text = path.read_text(encoding='utf-8')
+    match = re.search(r'(?m)^[ \t]+' + re.escape(name) + r':[ \t]*\n((?:[ \t]{3,}\S.*\n?)*)', text)
+    block = match.group(1) if match else ''
+    available = re.search(r'available:\s*(\w+)', block)
+    command = re.search(r'command:\s*(.*)', block)
+    if not available or available.group(1).strip().lower() != 'true' or not command:
+        return ''
+    return command.group(1).strip().strip('"\'')
+
+
+def auto_verification(root, files):
+    """Comando de verificación del carril trivial, congelado al iniciar el
+    workflow (lo lee Alex, antes de que Teo toque nada: editar project.yaml
+    después no cambia qué se ejecuta). testing.fast admite {files}."""
+    fast = configured_command(root, 'fast')
+    if fast:
+        return ['bash', '-c', fast.replace('{files}', shlex.join(sorted(files)))]
+    unit = configured_command(root, 'unit')
+    return ['bash', '-c', unit] if unit else None
+
+
+def record_start_metrics(db, identifier, classification, intent, supersedes):
+    tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if 'routing_decisions' in tables:
+        db.execute("INSERT INTO routing_decisions (ts, user_intent, chosen_route, route_reason, agents_involved) "
+                   "VALUES (datetime('now'), ?, ?, 'skalling_workflow start', ?)",
+                   (intent or identifier, classification['route'], classification['agents']))
+    if 'workflow_metrics' in tables:
+        if supersedes:
+            db.execute("UPDATE workflow_metrics SET outcome='superseded', completed_at=datetime('now') "
+                       "WHERE request_id=? AND completed_at IS NULL", (supersedes,))
+        db.execute("INSERT INTO workflow_metrics (request_id, risk_level, route, agents_count, started_at) "
+                   "VALUES (?, ?, ?, ?, datetime('now')) ON CONFLICT(request_id) DO NOTHING",
+                   (identifier, classification['risk'], classification['route'],
+                    classification['agents'].count('→') + 1))
+
+
+def record_finish_metrics(db, identifier, duration_ms, handoffs):
+    if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='workflow_metrics'").fetchone():
+        db.execute("UPDATE workflow_metrics SET outcome='success', completed_at=datetime('now'), duration_ms=?, "
+                   "handoffs=? WHERE request_id=? AND completed_at IS NULL", (duration_ms, handoffs, identifier))
+
+
+def require_approved_plan(db, plan_id):
+    require(plan_id not in (None, ''), 'Sol marca ready con el plan aprobado: payload.plan_id')
+    row = db.execute("SELECT 1 FROM plans WHERE id=? AND status IN ('approved','in_progress') "
+                     "AND length(design_md)>0", (plan_id,)).fetchone()
+    require(row is not None, f'El plan {plan_id} no existe o no está aprobado con diseño')
 
 
 def apply_pending_migrations(root):
@@ -174,8 +274,9 @@ def ensure_tables(root, path):
 
 
 def save(db, identifier, actor, session, action, state, evidence, now):
-    state['handoffs'] += int(state.get('actor', actor) != actor)
-    state['actor'] = actor
+    if actor != AUTO_VERIFIER:
+        state['handoffs'] += int(state.get('actor', actor) != actor)
+        state['actor'] = actor
     state['updated_at'] = now
     db.execute('INSERT INTO agent_workflows(id,body) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body',
                (identifier, json.dumps(state)))
@@ -203,22 +304,30 @@ def check(db, root, actor, session, identifier, payload, request):
     db.execute('BEGIN IMMEDIATE')
     state = read(db, identifier)
     require(state is not None, 'Unknown workflow')
-    require(state['state'] != 'completed', 'Completed workflows are immutable')
+    require(state['state'] not in TERMINAL, f"{state['state']} workflows are immutable")
     expected = 'verification_ready' if actor == 'jhon' else 'verified'
     require(actor in {'jhon', 'luz'} and state['state'] == expected, 'Check role/order invalid')
     require(bool(state['oracle']), 'Jhon must derive an oracle before checks')
     require(session != state['implementation_session'], 'Independent verifier session required')
     digest = state['digest']
     require(fingerprint(root, state['files']) == digest, 'Candidate changed; return to Teo')
-    argv = payload.get('argv')
-    require(isinstance(argv, list) and argv and all(isinstance(v, str) and '\0' not in v for v in argv), 'Command argv required')
+    if flag(payload, 'configured'):
+        argv = state.get('configured_verification')
+        require(bool(argv), 'El proyecto no declara testing.fast ni testing.unit: usar un argv que tu política permita')
+    else:
+        argv = payload.get('argv')
+        require(isinstance(argv, list) and argv and all(isinstance(v, str) and '\0' not in v for v in argv),
+                'Command argv required (lista: ["python3", "test_app.py"]), o configured: true para el comando del proyecto')
     require(bool(payload.get('method')), 'Verification method required')
     require(bool(str(payload.get('criterion', '')).strip()),
             'Each check must name which declared criterion it exercises, not just run a command')
     db.commit()  # release the write lock before the potentially slow command
 
     # Native tool wrapper obtains OpenCode permission for this exact command.
-    result = subprocess.run(argv, cwd=root, capture_output=True, timeout=120)
+    # El comando sabe quién lo corre y que la evidencia la registra el motor
+    # (skalling-review.sh no sella por su cuenta dentro de un check).
+    env = {**os.environ, 'SKALLING_RUNTIME_AGENT': actor, 'SKALLING_WORKFLOW_CHECK': '1'}
+    result = subprocess.run(argv, cwd=root, capture_output=True, timeout=120, env=env)
 
     db.execute('BEGIN IMMEDIATE')
     state = read(db, identifier)
@@ -232,6 +341,46 @@ def check(db, root, actor, session, identifier, payload, request):
     state['verification'] = verification
     now = time.time()
     state = save(db, identifier, actor, session, 'check', state, payload.get('evidence', ''), now)
+    db.commit()
+    return state
+
+
+def auto_verify(db, root, identifier, session):
+    """Carril trivial: tras la entrega de Teo, el motor ejecuta el comando de
+    verificación congelado al iniciar y registra el resultado como evidencia
+    de AUTO_VERIFIER. Pasa -> verified (Alex completa). Falla -> vuelve a
+    Teo con la salida. Sin veredicto (timeout) -> queda para Jhon."""
+    db.execute('BEGIN IMMEDIATE')
+    state = read(db, identifier)
+    require(state is not None and state['state'] == 'verification_ready' and state.get('auto_verify'),
+            'Auto verification not applicable')
+    digest, argv = state['digest'], state['auto_verify']
+    db.commit()
+    env = {**os.environ, 'SKALLING_RUNTIME_AGENT': AUTO_VERIFIER, 'SKALLING_WORKFLOW_CHECK': '1'}
+    try:
+        result = subprocess.run(argv, cwd=root, capture_output=True, timeout=AUTO_VERIFY_TIMEOUT, env=env)
+        exit_code, output = result.returncode, (result.stdout + result.stderr)[-16000:].decode('utf-8', 'replace')
+    except subprocess.TimeoutExpired:
+        exit_code, output = None, f'Sin veredicto: la verificación superó {AUTO_VERIFY_TIMEOUT}s'
+    db.execute('BEGIN IMMEDIATE')
+    state = read(db, identifier)
+    require(state is not None and state['state'] == 'verification_ready', 'Workflow changed during auto verification')
+    require(fingerprint(root, state['files']) == digest == state['digest'], 'Verification changed candidate; approval denied')
+    verification = {'agent': AUTO_VERIFIER, 'session': session, 'method': 'configured-verification', 'argv': argv,
+                    'criterion': state['acceptance'], 'exit_code': exit_code, 'digest': digest, 'output': output,
+                    'independence': 'comando del proyecto congelado al iniciar; no lo elige quien implementa'}
+    state['checks'].append(verification)
+    state['verification'] = verification
+    if exit_code == 0:
+        state['state'] = 'verified'
+        evidence = 'verificación configurada del proyecto pasó sobre el candidato entregado'
+    elif exit_code is None:
+        state['auto_verify'] = None  # que Jhon decida cómo verificar
+        evidence = output + '; queda para Jhon'
+    else:
+        state['state'] = 'implementation_ready'
+        evidence = 'verificación configurada falló; vuelve a Teo'
+    state = save(db, identifier, AUTO_VERIFIER, session, 'auto-verify', state, evidence, time.time())
     db.commit()
     return state
 
@@ -260,30 +409,58 @@ def operate(request):
         evidence = payload.get('evidence', '')
         if action == 'start':
             require(actor == 'alex' and state is None, 'Only Alex creates a new workflow; id cannot be reused')
-            risk = payload.get('risk')
-            require(risk in {'low', 'medium', 'high'}, 'Risk required')
-            require(payload.get('decision') == 'none', 'Pending decisions require explicit user resolution first')
-            require(payload.get('scope') in {'local', 'module', 'cross-cutting'}, 'Known scope required')
-            if payload.get('sensitive') or payload['scope'] == 'cross-cutting':
-                risk = 'high'
-            elif payload['scope'] == 'module' and risk == 'low':
-                risk = 'medium'
-            files = payload.get('files', [])
-            require(isinstance(files, list) and files and all(isinstance(f, str) for f in files), 'Enumerated files required')
-            require(bool(payload.get('acceptance', '').strip()), 'Observable acceptance required')
+            # Mismas reglas que skalling-route.sh (skalling_classify): una sola
+            # autoridad decide si se implementa y por qué ruta.
+            classification = normalize('code', payload.get('risk'), payload.get('scope', 'unknown'),
+                                       payload.get('clarity', 'clear'), payload.get('decision', 'none'),
+                                       flag(payload, 'sensitive'), flag(payload, 'visual'))
+            require(not classification['needs_user_decision'],
+                    'Pending decisions require explicit user resolution first')
+            require(classification['scope'] != 'unknown', 'Known scope required')
+            ready_state = readiness(path)
+            require(ready_state in {'initialized', 'ready'},
+                    f'Proyecto sin contexto inicial (readiness={ready_state}): ruta DISCOVERY (Jes → Pol) antes de implementar')
+            blockers = memory_blockers(path, classification['visual'])
+            require(not blockers, '; '.join(blockers))
+            files = file_list(payload)
+            require(bool(str(payload.get('acceptance', '')).strip()), 'Observable acceptance required')
+            require(bool(str(payload.get('reuse', '')).strip()),
+                    'Reuse strategy required: qué componente/patrón existente se reutiliza')
             fingerprint(root, files)
+            supersedes = payload.get('supersedes')
+            if supersedes:
+                previous = read(db, supersedes)
+                require(previous is not None and previous['state'] not in TERMINAL,
+                        'supersedes debe nombrar un workflow abierto')
+                previous['state'] = 'superseded'
+                previous['superseded_by'] = identifier
+                save(db, supersedes, actor, session, 'superseded', previous, f'reemplazado por {identifier}', now)
+            risk = classification['risk']
+            task = payload.get('task')
+            require(task is None or (isinstance(task, str) and task.count('/') == 1), 'task debe ser "plan-slug/task-slug"')
             state = {'id': identifier, 'risk': risk, 'files': files, 'acceptance': payload['acceptance'],
+                     'reuse': payload['reuse'], 'task': task, 'visual': classification['visual'],
                      'state': 'implementation_ready' if risk == 'low' else ('clarified' if risk == 'medium' else 'requested'),
-                     'route': {'low': 'FAST-TRACK', 'medium': 'INLINE', 'high': 'SDD'}[risk],
+                     'route': classification['route'], 'agents': classification['agents'],
                      'started_at': now, 'handoffs': 0, 'checks': [], 'oracle': None, 'digest': None,
-                     'base_head': base_head(root), 'delivery_number': 0, 'delivery': None}
+                     'base_head': base_head(root), 'delivery_number': 0, 'delivery': None,
+                     'auto_verify': auto_verification(root, files) if risk == 'low' else None,
+                     # Comando de verificación que declara el proyecto, congelado
+                     # acá: Jhon/Luz lo corren con check {configured: true} sin
+                     # pedir permiso (en OpenCode v2 un plugin no puede pedirlo).
+                     'configured_verification': auto_verification(root, files),
+                     'supersedes': supersedes}
+            record_start_metrics(db, identifier, classification, payload.get('intent'), supersedes)
         else:
             require(state is not None, 'Unknown workflow')
-            require(state['state'] != 'completed', 'Completed workflows are immutable')
+            require(state['state'] not in TERMINAL, f"{state['state']} workflows are immutable")
             if action in TRANSITIONS:
                 owner, previous, target = TRANSITIONS[action]
                 require(actor == owner and state['state'] == previous, f'{action} requires {owner} in {previous}')
                 require(action == 'deliver' or bool(str(evidence).strip()), 'Transition evidence required')
+                if action == 'ready':
+                    require_approved_plan(db, payload.get('plan_id'))
+                    state['plan_id'] = payload['plan_id']
                 if action == 'deliver':
                     require_scope(root, state['files'])
                     state['digest'] = fingerprint(root, state['files'])
@@ -354,12 +531,15 @@ def operate(request):
                 state['state'] = 'completed'
                 state['completed_at'] = now
                 state['duration_ms'] = round((now - state['started_at']) * 1000)
-                verifier = state.get('verification', {}).get('agent', 'jhon')
-                seal_receipt(db, root, identifier, state['files'], verifier, state['digest'])
+                verifier = (state.get('verification') or {}).get('agent', 'jhon')
+                state['receipt_tree_hash'] = seal_receipt(db, root, identifier, state['files'], verifier, state['digest'])
+                record_finish_metrics(db, identifier, state['duration_ms'], state['handoffs'])
             else:
                 raise ValueError('Unknown workflow action')
         state = save(db, identifier, actor, session, action, state, evidence, now)
         db.commit()
+        if action == 'deliver' and state['state'] == 'verification_ready' and state.get('auto_verify'):
+            state = auto_verify(db, root, identifier, session)
         return state
     finally:
         db.close()

@@ -7,12 +7,21 @@
 # `receipts` de TeamDB, y es lo que git-gate.py exige para permitir un commit
 # (prueba de review). skalling-receipt.sh es un archivo JSON suelto en disco,
 # bitácora de trabajo sin relación con el gate de commits.
-# Uso: bash teamdb-seal-receipt.sh <task_id> <agent> [project]
-# Entorno (patrón claim-task.sh):
-#   TEAMDB_CLAIM_COMMAND        comando registrado (default: review-seal)
-#   TEAMDB_CLAIM_EXIT_CODE      exit code del comando (default: 0)
-#   TEAMDB_CLAIM_TREE_HASH      hash a sellar (override del cálculo automático)
-#   TEAMDB_CLAIM_OUTPUT_SUMMARY resumen JSON de findings (opcional)
+# Uso: bash teamdb-seal-receipt.sh <task_id> <jhon|luz> [project]
+#
+# Camino HUMANO (terminal). Dentro de OpenCode la evidencia la registra el
+# motor skalling_workflow (identidad del runtime, no de variables de shell):
+# con SKALLING_RUNTIME_AGENT presente este script se niega.
+#
+# Nunca aprueba por defecto (auditoría externa v0.12.0 #2: sin variables,
+# un sello de "luz" quedaba exit 0 con resumen vacío y abría el commit):
+#   jhon  corre la verificación real del proyecto; su exit code manda.
+#   luz   solo con la evidencia que deja skalling-review.sh.
+# Entorno (lo pone skalling-review.sh, nunca el agente):
+#   TEAMDB_CLAIM_COMMAND        "review --..." (obligatorio para luz)
+#   TEAMDB_CLAIM_EXIT_CODE      exit code de la revisión (obligatorio para luz)
+#   TEAMDB_CLAIM_TREE_HASH      hash congelado al empezar la revisión
+#   TEAMDB_CLAIM_OUTPUT_SUMMARY resumen de findings (obligatorio para luz)
 #   SKALLING_VERIFY_WAIVER      (solo humano, en terminal) motivo para aprobar
 #                               sin tests un proyecto que no los tiene
 #
@@ -46,10 +55,25 @@ if [ -z "$TASK_ID" ]; then
   echo "Uso: bash teamdb-seal-receipt.sh <task_id> <agent> [project]" >&2
   exit 1
 fi
-# Con runtime de OpenCode, el que sella es el agente real de la sesión, no
-# el que dice el argumento (Teo no puede sellar a nombre de luz).
-AGENT="$(teamdb_runtime_actor "${2:-}")" || exit 2
-if [ "$AGENT" = "unknown" ]; then AGENT="luz"; fi
+if [ -n "${SKALLING_RUNTIME_AGENT:-}" ]; then
+  echo "ERROR: dentro de OpenCode la aprobación la registra skalling_workflow (check → approve → complete), no este script. Identidad del runtime: ${SKALLING_RUNTIME_AGENT}." >&2
+  exit 2
+fi
+AGENT="$(printf '%s' "${2:-}" | tr '[:upper:]' '[:lower:]')"
+case "$AGENT" in
+  jhon|luz) ;;
+  *) echo "ERROR: solo jhon (verificación real) o luz (revisión real) sellan; recibido: '${2:-}'" >&2; exit 2 ;;
+esac
+if [ "$AGENT" = "luz" ]; then
+  case "${TEAMDB_CLAIM_COMMAND:-}" in
+    "review --"*) ;;
+    *) echo "ERROR: luz sella solo la evidencia de skalling-review.sh; correr la revisión, no sellar a mano." >&2; exit 2 ;;
+  esac
+  if [ -z "${TEAMDB_CLAIM_EXIT_CODE:-}" ] || [ -z "${TEAMDB_CLAIM_OUTPUT_SUMMARY:-}" ]; then
+    echo "ERROR: sello de luz sin resultado ni resumen de la revisión; no se aprueba sin evidencia." >&2
+    exit 2
+  fi
+fi
 
 DB="$(teamdb_project_path "$PROJECT")"
 if [ ! -f "$DB" ]; then
@@ -97,8 +121,8 @@ if ! teamdb_lock "$LOCK_DIR" 10; then
 fi
 trap 'teamdb_unlock "$LOCK_DIR"' EXIT
 
-COMMAND="${TEAMDB_CLAIM_COMMAND:-review-seal}"
-EXIT_CODE="${TEAMDB_CLAIM_EXIT_CODE:-0}"
+COMMAND="${TEAMDB_CLAIM_COMMAND:-}"
+EXIT_CODE="${TEAMDB_CLAIM_EXIT_CODE:-}"
 SUMMARY="${TEAMDB_CLAIM_OUTPUT_SUMMARY:-}"
 
 # jhon es "test verifier": su trabajo es ejecutar comprobaciones
@@ -181,8 +205,8 @@ if [ "$AGENT" = "jhon" ]; then
   else
     COMMAND="skalling-verify.sh (test real del proyecto)"
     # Un review con blockers (exit del caller != 0) no se lava con tests verdes.
-    if [ "$VERIFY_RC" = "0" ] && [ "$EXIT_CODE" != "0" ]; then
-      COMMAND="${TEAMDB_CLAIM_COMMAND:-review-seal} + skalling-verify.sh"
+    if [ "$VERIFY_RC" = "0" ] && [ -n "$EXIT_CODE" ] && [ "$EXIT_CODE" != "0" ]; then
+      COMMAND="${TEAMDB_CLAIM_COMMAND} + skalling-verify.sh"
     else
       EXIT_CODE="$VERIFY_RC"
     fi

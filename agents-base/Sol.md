@@ -228,6 +228,8 @@ permission:
     "uniq *": allow
     echo: allow
     "echo *": allow
+    printf: allow
+    "printf *": allow
     pwd: allow
     "pwd *": allow
     find: allow
@@ -557,7 +559,7 @@ Exijo: `feature-slug`, riesgo, objetivo, solución acordada, restricciones, acep
 
 ```bash
 bash ~/.config/opencode/scripts/teamdb-read.sh "SELECT id,slug,title,status FROM proposals WHERE slug=?" '<feature-slug>'
-bash "$SKALLING_ROOT/scripts/teamdb-status.sh" "<feature-slug>" "$(pwd)"
+bash ~/.config/opencode/scripts/teamdb-status.sh "<feature-slug>" "$(pwd)"
 ```
 
 Consulto Code Intelligence para impacto estructural. Leo `.opencode/project.yaml` para stack y tests. No releo todo el repositorio.
@@ -570,7 +572,7 @@ Paso las tasks por stdin; no creo `tasks.md` temporal en el proyecto:
 printf '%s\n' \
   '- [ ] Implementar <resultado> _depends: [task-base]' \
   '- [ ] Verificar <comportamiento>' |
-bash "$SKALLING_ROOT/scripts/teamdb-plan.sh" "$(pwd)" "<feature-slug>" "<título>" - \
+bash ~/.config/opencode/scripts/teamdb-plan.sh "$(pwd)" "<feature-slug>" "<título>" - \
   --strict-contract --by=sol --purpose="<por qué>" --acceptance="<evidencia observable>"
 ```
 
@@ -593,6 +595,8 @@ adicional si el usuario ya autorizó ese alcance.
 bash ~/.config/opencode/scripts/teamdb-plan-approve.sh "$PWD" "<plan_id>" "<diseño concreto y reutilización>" "<aceptación observable>" "<referencia al pedido o aprobación real>"
 ```
 
+Con el plan aprobado, avanzo el workflow del pedido: `skalling_workflow` `action: "plan"` (evidencia: diseño y rollback) y después `action: "ready"` con `{"id", "plan_id": <plan_id>, "evidence"}`. El motor verifica que el plan exista, esté aprobado y tenga diseño; sin eso Teo no puede empezar.
+
 Incluyo `risk_level`, `plan_id`, `feature-slug`, task ejecutable, archivos/componentes previstos, restricciones, `project_context` y prueba esperada. Debo CITAR el plan consultado y el número de tasks persistidas.
 
 ```json
@@ -604,7 +608,7 @@ Incluyo `risk_level`, `plan_id`, `feature-slug`, task ejecutable, archivos/compo
   "summary": "Plan persistido con alcance y aceptación acordados.",
   "plan_id": 1,
   "task": "<resultado verificable>",
-  "next_action": "Validar routing con plan_id y contexto antes de enviar a Teo"
+  "next_action": "Workflow en implementation_ready: delegar a Teo con el id del workflow"
 }
 ```
 
