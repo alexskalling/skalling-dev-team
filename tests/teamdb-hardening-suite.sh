@@ -115,20 +115,18 @@ TESTS=(
 LOG_DIR="$(mktemp -d)"
 trap 'rm -rf "$LOG_DIR"' EXIT
 export LOG_DIR
+# Cada test tiene un plazo (SKALLING_TEST_TIMEOUT_EACH, default 300s): uno
+# colgado sale como TIMEOUT con su log, en vez de trabar la suite en silencio.
+TEST_TIMEOUT="${SKALLING_TEST_TIMEOUT_EACH:-300}"
+export TEST_TIMEOUT
+# shellcheck source=lib/with-timeout.sh
+source "$SKALLING_ROOT/tests/lib/with-timeout.sh"
+echo "Corriendo ${#TESTS[@]} tests en paralelo ($JOBS a la vez, ${TEST_TIMEOUT}s máx. c/u)..."
+
 # El nombre del test va como argumento ($1), no dentro del script: el xargs
 # de macOS limita a 255 bytes cada argumento donde reemplaza {}.
-RESULTS="$(printf '%s\n' "${TESTS[@]}" | xargs -P "$JOBS" -I{} bash -c '
-  t="$1"
-  log="$LOG_DIR/$(printf "%s" "$t" | tr "/" "_").log"
-  if [ ! -f "$t" ]; then
-    echo "MISSING:$t"
-  elif { case "$t" in *.py) python3 "$t" ;; *) bash "$t" ;; esac; } >"$log" 2>&1; then
-    echo "PASS:$t"
-  else
-    echo "FAIL:$t"
-  fi
-' _ {})"
-
+# Los resultados se leen a medida que llegan (process substitution) para que
+# se vea el progreso; antes no se imprimía nada hasta el final.
 PASS=0; FAIL=0
 while IFS= read -r line; do
   case "$line" in
@@ -139,7 +137,18 @@ while IFS= read -r line; do
             tail -n 25 "$LOG_DIR/$(printf '%s' "${line#FAIL:}" | tr '/' '_').log" 2>/dev/null | sed 's/^/    │ /' ;;
     MISSING:*) echo "✗ ${line#MISSING:} (NO EXISTE: sacarla de la lista o restaurarla)"; FAIL=$((FAIL+1)) ;;
   esac
-done <<< "$RESULTS"
+done < <(printf '%s\n' "${TESTS[@]}" | xargs -P "$JOBS" -I{} bash -c '
+  t="$1"
+  log="$LOG_DIR/$(printf "%s" "$t" | tr "/" "_").log"
+  source tests/lib/with-timeout.sh
+  if [ ! -f "$t" ]; then
+    echo "MISSING:$t"
+  elif { case "$t" in *.py) skalling_with_timeout "$TEST_TIMEOUT" python3 "$t" ;; *) skalling_with_timeout "$TEST_TIMEOUT" bash "$t" ;; esac; } >"$log" 2>&1 </dev/null; then
+    echo "PASS:$t"
+  else
+    echo "FAIL:$t"
+  fi
+' _ {})
 
 # Serial a proposito -- ver comentario arriba de TESTS.
 t="tests/dashboard-survives-group-kill.test.sh"
@@ -147,7 +156,7 @@ if [ ! -f "$t" ]; then
   echo "✗ $t (NO EXISTE)"
   FAIL=$((FAIL+1))
 else
-  if bash "$t" >/dev/null 2>&1; then
+  if skalling_with_timeout "$TEST_TIMEOUT" bash "$t" >/dev/null 2>&1 </dev/null; then
     echo "✓ $t"
     PASS=$((PASS+1))
   else

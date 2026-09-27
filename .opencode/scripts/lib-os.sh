@@ -428,3 +428,26 @@ EOF_VER
   fi
   echo unsupported
 }
+
+# skalling_plugin_pkg_status "<dir .opencode o config global>" → imprime
+#   "<estado>\t<versión>" con estado absent | ok | old | unknown.
+# Los plugins importan `tool` de @opencode-ai/plugin, que OpenCode resuelve
+# desde <dir>/node_modules. Ese package.json lo escribe OpenCode (está en
+# .gitignore), así que puede quedar viejo tras cambiar de versión de OpenCode.
+# Se lee la versión instalada; si no hay node_modules, la declarada.
+skalling_plugin_pkg_status() {
+  local dir="$1" ver=""
+  local installed="$dir/node_modules/@opencode-ai/plugin/package.json"
+  if [ -f "$installed" ]; then
+    ver="$(sed -n 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$installed" | head -1)"
+  elif [ -f "$dir/package.json" ]; then
+    ver="$(sed -n 's/.*"@opencode-ai\/plugin"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$dir/package.json" | head -1)"
+  else
+    printf 'absent\t\n'; return 0
+  fi
+  case "$(skalling_opencode_support "$ver")" in
+    v1|v2) printf 'ok\t%s\n' "$ver" ;;
+    unsupported) printf 'old\t%s\n' "$ver" ;;
+    *) printf 'unknown\t%s\n' "$ver" ;;
+  esac
+}

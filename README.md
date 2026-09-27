@@ -65,12 +65,15 @@ OpenCode cerrado ni garantiza completar tareas con bloqueos externos o decisione
 | Versión | Estado | Qué funciona |
 |---|---|---|
 | < 1.18.29 | **No soportada** | Los plugins exportan `{ server, setup }`, forma que OpenCode acepta desde 1.18.29. El instalador y el doctor lo rechazan. |
-| 1.18.29 – 1.x | Soportada (v1) | Todo: agentes, guard de identidad, `skalling_workflow`, `teamdb_destructive`, `/skalling-goal`. |
-| 2.x (probado con 2.0.18) | Soportada con límites | Agentes, guard, `skalling_workflow` y `teamdb_destructive`. **`/skalling-goal` no está disponible**: la API de plugins v2 no expone los hooks que usa (comando, sesión inactiva, continuación). En v2 un check de `skalling_workflow` solo corre si la política efectiva ya lo permite (un plugin v2 no puede pedir aprobación). Si dos sesiones corren exactamente el mismo comando a la vez, la identidad queda "ambigua" y los helpers de TeamDB se niegan a actuar hasta reintentar. |
+| 1.18.29 – 1.x | **Completa** (v1) | Todo: agentes, guard de identidad, `skalling_workflow`, `teamdb_destructive`, `/skalling-goal`. |
+| 2.x (usado a mano con 2.0.18) | **Parcial / supervisada** | Agentes, guard, `skalling_workflow` y `teamdb_destructive`. **`/skalling-goal` no existe en v2** (es solo v1): la API de plugins v2 no expone los hooks que usa (comando, sesión inactiva, continuación). En v2 un check de `skalling_workflow` solo corre si la política efectiva ya lo permite (un plugin v2 no puede pedir aprobación). Si dos sesiones corren exactamente el mismo comando a la vez, la identidad queda "ambigua" y los helpers de TeamDB se niegan a actuar hasta reintentar. La API de plugins v2 sigue en beta. |
+
+v2 no es el mismo producto que v1: sin `/skalling-goal` no hay continuación autónoma, así
+que el trabajo en v2 necesita que alguien lo conduzca.
 
 Cómo se verificó: pruebas unitarias de los adaptadores v1/v2 contra la API documentada.
 No hay todavía una matriz de CI con binarios reales de OpenCode ni evaluaciones con sesiones
-LLM reales; tratá los resultados en v2 como soporte supervisado. Si hay varias
+LLM reales; ninguna fila de esta tabla está garantizada contra regresiones del binario. Si hay varias
 instalaciones, comprobar `command -v opencode` y `opencode --version` en la terminal del
 proyecto que se va a usar; `bash setup-team-doctor.sh` informa la versión detectada.
 
@@ -114,7 +117,9 @@ git clone https://github.com/alexskalling/skalling-dev-team.git $HOME\skalling-d
 .\skalling-dev-team\install-global.ps1
 ```
 
-Requiere Windows 10+ y Git Bash o WSL2.
+Requiere Windows 10+ y Git Bash o WSL2. No es una instalación nativa: los scripts corren
+dentro de Git Bash o WSL2, y en CI Windows solo tiene un smoke test (macOS y Linux corren la
+batería completa).
 
 - `-Runtime GitBash` instala para herramientas ejecutadas desde Windows/Git Bash.
 - `-Runtime WSL` instala dentro del `HOME` de Linux; en ese caso ejecutá también **OpenCode dentro de WSL**.
@@ -321,9 +326,9 @@ tu-proyecto/.opencode/
 |---|---|
 | macOS | ✅ Completo |
 | Linux | ✅ Completo |
-| WSL2 | ✅ Soportado; OpenCode debe ejecutarse dentro del mismo WSL |
-| Git Bash | ✅ Soportado con SQLite 3 y Python 3 disponibles |
-| PowerShell | ✅ Wrapper con selección explícita Git Bash/WSL |
+| WSL2 | ⚠️ Capa de compatibilidad; OpenCode debe ejecutarse dentro del mismo WSL. Solo smoke test en CI |
+| Git Bash | ⚠️ Capa de compatibilidad; requiere SQLite 3 y Python 3. Solo smoke test en CI |
+| PowerShell | ⚠️ Solo wrapper: delega en Git Bash o WSL (no hay implementación nativa) |
 | cmd.exe | ❌ |
 
 ---

@@ -418,15 +418,29 @@ check_controls() {
     if command -v opencode >/dev/null 2>&1; then
         local version; version="$(opencode --version 2>/dev/null || echo unknown)"
         case "$(skalling_opencode_support "$version")" in
-            v1) ok "OpenCode $version: soportado (v1)" ;;
-            v2) ok "OpenCode $version: soportado (v2)"
-                info "En OpenCode 2 /skalling-goal no está disponible (sin API equivalente); el resto del flujo sí." ;;
+            v1) ok "OpenCode $version: soporte completo (v1)" ;;
+            v2) warn_env "OpenCode $version: soporte parcial (v2)"
+                info "En OpenCode 2 /skalling-goal no existe (solo v1): sin continuación autónoma, el trabajo necesita supervisión." ;;
             unsupported) err "OpenCode $version no soportado: mínimo $SKALLING_OPENCODE_MIN (los plugins de control no cargan)" ;;
             *) warn "No se pudo leer la versión de OpenCode ($version)" ;;
         esac
     else
         info "opencode no está en PATH; no se verifica la versión"
     fi
+
+    # El SDK de plugins que resuelve OpenCode no puede quedar por debajo del
+    # mínimo: los plugins importan `tool` de ahí.
+    local pkg_dir pkg_status pkg_ver
+    for pkg_dir in "$PROJECT_DIR/.opencode" "$OPENCODE_DIR"; do
+        [[ "$GLOBAL_ONLY" == true && "$pkg_dir" == "$PROJECT_DIR/.opencode" ]] && continue
+        IFS=$'\t' read -r pkg_status pkg_ver <<< "$(skalling_plugin_pkg_status "$pkg_dir")"
+        case "$pkg_status" in
+            ok) ok "@opencode-ai/plugin $pkg_ver en $pkg_dir" ;;
+            old) err "@opencode-ai/plugin $pkg_ver en $pkg_dir es menor que el mínimo $SKALLING_OPENCODE_MIN"
+                 info "  Lo escribe OpenCode (no Skalling): borrá $pkg_dir/{package.json,package-lock.json,node_modules} y reiniciá OpenCode, o instalá la versión de tu OpenCode: (cd \"$pkg_dir\" && npm install @opencode-ai/plugin@<versión>)" ;;
+            unknown) warn "No se pudo leer la versión de @opencode-ai/plugin en $pkg_dir (${pkg_ver:-vacía})" ;;
+        esac
+    done
 
     local plugin missing=()
     for plugin in skalling-git-guard.js skalling-workflow.js skalling-data-safety.js; do

@@ -4,6 +4,34 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+Respuesta a la auditoría externa de v0.12.0 (27-09-2026): se ajusta lo que
+se promete a lo que se verificó, y se cierran dos puntos ciegos.
+
+### Changed
+- **La compatibilidad con OpenCode 2 se declara parcial/supervisada, no
+  "soportada con límites".** `/skalling-goal` es solo v1, así que en v2 no
+  hay continuación autónoma. README, instalador y doctor lo dicen igual; el
+  doctor lo marca como aviso, no como OK.
+- **Windows se declara como capa de compatibilidad (Git Bash/WSL2).** No hay
+  instalación nativa y en CI Windows solo tiene un smoke test.
+
+### Added
+- **El doctor revisa el SDK de plugins que resuelve OpenCode.** Los plugins
+  importan `tool` de `@opencode-ai/plugin`; ese `package.json` lo escribe
+  OpenCode (está en `.gitignore`) y puede quedar por debajo del mínimo
+  1.18.29 tras cambiar de versión. Ahora es un error con el arreglo a mano.
+- **Timeouts en los corredores de tests.** `tests/run-all.sh` (900 s por
+  suite, `SKALLING_TEST_TIMEOUT`) y `tests/teamdb-hardening-suite.sh` (300 s
+  por test, `SKALLING_TEST_TIMEOUT_EACH`) cortan y reportan un test colgado
+  en vez de esperar para siempre. La suite de TeamDB muestra el progreso a
+  medida que llega (antes no imprimía nada hasta terminar, ~90 s).
+- `tests/opencode-compat.test.sh`: clasificación de versiones de OpenCode,
+  detección del SDK de plugins y timeout portable.
+
+### Pendiente
+- Matriz de CI con binarios reales de OpenCode 1.18.29 y 2.x.
+- El doctor todavía no distingue "OpenCode bloqueado" de "versión ilegible".
+
 ## [0.12.0] — en preparación
 
 Correcciones de la auditoría externa de v0.11.16 (27-09-2026, checkout

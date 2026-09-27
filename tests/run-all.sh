@@ -21,6 +21,12 @@ fi
 PATH="$(dirname "$PY"):$PATH"
 export PATH
 
+# Cada suite tiene un plazo: una trabada falla con TIMEOUT y la batería sigue,
+# en vez de quedarse esperando sin decir cuál era.
+# shellcheck source=lib/with-timeout.sh
+source "$ROOT/tests/lib/with-timeout.sh"
+SUITE_TIMEOUT="${SKALLING_TEST_TIMEOUT:-900}"
+
 COMMANDS=(
   "bash tests/setup.test.sh"
   "python3 tests/dashboard-server.test.py"
@@ -45,6 +51,7 @@ COMMANDS=(
   "bash tests/audit-regressions.test.sh"
   "python3 tests/git-close.test.py"
   "bash tests/teamdb-hardening-suite.sh"
+  "bash tests/opencode-compat.test.sh"
   "bash tests/scripts-parity.test.sh"
 )
 
@@ -52,10 +59,11 @@ LOG="$(mktemp)"
 trap 'rm -f "$LOG"' EXIT
 FAIL=0
 for cmd in "${COMMANDS[@]}"; do
-  if bash -c "$cmd" >"$LOG" 2>&1; then
-    echo "✓ $cmd"
+  start=$SECONDS
+  if skalling_with_timeout "$SUITE_TIMEOUT" bash -c "$cmd" >"$LOG" 2>&1 </dev/null; then
+    echo "✓ $cmd ($((SECONDS - start))s)"
   else
-    echo "✗ $cmd"
+    echo "✗ $cmd ($((SECONDS - start))s)"
     tail -n 30 "$LOG" | sed 's/^/    │ /'
     FAIL=$((FAIL + 1))
   fi

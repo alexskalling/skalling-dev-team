@@ -131,8 +131,8 @@ check_opencode() {
     fi
     local version; version="$(opencode --version 2>/dev/null || echo 'unknown')"
     case "$(skalling_opencode_support "$version")" in
-        v1) log OK "opencode $version (soportado: v1 completo)" ;;
-        v2) log OK "opencode $version (soportado: v2; /skalling-goal no disponible, ver README)" ;;
+        v1) log OK "opencode $version (soporte completo: v1)" ;;
+        v2) log WARN "opencode $version (soporte parcial: v2; /skalling-goal no existe, trabajo supervisado — ver README)" ;;
         unsupported)
             log ERROR "opencode $version no está soportado: Skalling necesita >= $SKALLING_OPENCODE_MIN (antes no carga sus plugins de control)."
             log ERROR "  Actualizá OpenCode y volvé a instalar."
