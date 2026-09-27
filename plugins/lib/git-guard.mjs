@@ -25,14 +25,20 @@
 const CANONICAL_GIT_SUBS = [
   'push', 'reset', 'clean', 'checkout', 'restore', 'commit', 'switch',
   'rebase', 'merge', 'revert', 'cherry-pick', 'update-ref', 'filter-branch',
-  'filter-repo', 'gc', 'branch -d', 'branch -D', 'worktree remove',
+  'filter-repo', 'gc', 'branch -d', 'branch -D', 'branch -m', 'branch -M',
+  'branch -c', 'branch -C', 'branch -f', 'worktree remove',
   'worktree prune', 'stash drop', 'stash clear', 'reflog expire',
   'reflog delete',
 ];
 
 // Opciones de git que pueden ir ANTES del subcomando (detección amplia).
 const GIT_OPT = String.raw`(?:\s+(?:-C\s+\S+|-c\s+\S+|--(?:git-dir|work-tree|namespace|exec-path)(?:=\S+|\s+\S+)|--[a-z][\w-]*))*`;
-const GIT_SUB_BROAD = String.raw`(?:push|reset|clean|checkout|restore|commit|switch|rebase|merge|revert|cherry-pick|update-ref|filter-branch|filter-repo|gc|branch\s+(?:-[a-zA-Z]*[dD]\b|--delete\b)|worktree\s+(?:remove|prune)|stash\s+(?:drop|clear)|reflog\s+(?:expire|delete))`;
+// `git branch` borra, renombra, copia o mueve con la opción en CUALQUIER
+// posición: `git branch -v -D x` borraba y coincidía con el allow de
+// "git branch -v*" (auditoría 2026-09-27). Solo la forma directa
+// (`git branch -D x`) llega a la regla ask.
+const BRANCH_MUTATION = String.raw`branch\b[^;&|\n]*\s(?:-[a-zA-Z]*[dDmMcCf]\b|--(?:delete|move|copy|force)\b)`;
+const GIT_SUB_BROAD = String.raw`(?:push|reset|clean|checkout|restore|commit|switch|rebase|merge|revert|cherry-pick|update-ref|filter-branch|filter-repo|gc|${BRANCH_MUTATION}|worktree\s+(?:remove|prune)|stash\s+(?:drop|clear)|reflog\s+(?:expire|delete))`;
 const GIT_SENSITIVE = new RegExp(String.raw`^git${GIT_OPT}\s+${GIT_SUB_BROAD}(?:\s|$)`);
 
 const GIT_CANONICAL = new RegExp(
@@ -74,6 +80,11 @@ const IDENTITY_VARS = /\b(?:SKALLING_RUNTIME_AGENT|SKALLING_RUNTIME_SESSION|SKAL
 // runtime sin nombrar ninguna variable (auditoría v0.12.0: el sello salía a
 // nombre de otro agente).
 const SCRUB_ENV = /(?:^|[\s;&|(`])env\s+(?:-[a-zA-Z]*i\b|--ignore-environment\b|-\s)/;
+// Nombres armados en tiempo de ejecución (`v=SKALLING_RUNTIME; export
+// ${v}_AGENT=...`) esquivaban IDENTITY_VARS. Un nombre de variable con `$`
+// en una declaración, un unset o printf -v no tiene uso legítimo acá; los
+// fragmentos del prefijo tampoco se mencionan sueltos.
+const DYNAMIC_NAME = /(?:^|[\s;&|(`])(?:export|declare|typeset|readonly|local|unset)(?:\s+-\S+)*\s+[^\s=;&|]*\$|(?:^|[\s;&|(`])printf\s+-v\s*\S*\$|\bSKALLING_RUNTIME|\bTEAMDB_CLAIM|\bTEAMDB_ACTOR/;
 
 
 // Cuerpos de heredoc: con delimitador entre comillas (<<'EOF') son texto
@@ -227,7 +238,156 @@ function classify(norm) {
   return null;
 }
 
+// Palabras de shell con comillas resueltas (el texto que recibe el programa).
+export function shellWords(text) {
+  const words = [];
+  let word = null;
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text[i];
+    if (/\s/.test(c)) { if (word !== null) { words.push(word); word = null; } continue; }
+    word ??= '';
+    if (c === '\\' && i + 1 < text.length) { word += text[i + 1]; i += 1; continue; }
+    if (c === "'" || c === '"') {
+      const j = text.indexOf(c, i + 1);
+      const end = j === -1 ? text.length : j;
+      word += text.slice(i + 1, end); i = end; continue;
+    }
+    word += c;
+  }
+  if (word !== null) words.push(word);
+  return words;
+}
+
+// Comandos de sed: `e` y la bandera `e` de `s` ejecutan un programa (GNU);
+// `w`/`W` y la bandera `w` escriben archivos. Devuelve 'exec', 'write' o null.
+// Un script que no se puede analizar cuenta como 'exec' (falla cerrado).
+function sedScriptRisk(script) {
+  let risk = null;
+  const note = (r) => { if (r === 'exec' || risk === null) risk = r; };
+  let i = 0;
+  const n = script.length;
+  const skipAddress = () => {
+    const one = () => {
+      if (/\d/.test(script[i] || '')) { while (/[\d~]/.test(script[i] || '')) i += 1; return; }
+      if (script[i] === '$') { i += 1; return; }
+      let d = null;
+      if (script[i] === '/') { d = '/'; i += 1; } else if (script[i] === '\\' && i + 1 < n) { d = script[i + 1]; i += 2; }
+      if (d === null) return;
+      while (i < n && script[i] !== d) i += script[i] === '\\' ? 2 : 1;
+      i += 1;
+      while (/[IM]/.test(script[i] || '')) i += 1;
+    };
+    one();
+    while (/\s/.test(script[i] || '')) i += 1;
+    if (script[i] === ',') { i += 1; while (/\s/.test(script[i] || '')) i += 1; if (/[+~]/.test(script[i] || '')) i += 1; one(); }
+    while (/[\s!]/.test(script[i] || '')) i += 1;
+  };
+  while (i < n) {
+    while (i < n && /[\s;{}]/.test(script[i])) i += 1;
+    if (i >= n) break;
+    skipAddress();
+    const cmd = script[i];
+    if (cmd === undefined) break;
+    i += 1;
+    if (cmd === 'e') note('exec');
+    else if (cmd === 'w' || cmd === 'W') note('write');
+    if (cmd === 's' || cmd === 'y') {
+      const d = script[i];
+      if (d === undefined || d === '\\' || d === '\n') return 'exec';
+      i += 1;
+      for (let parts = 0; parts < 2; parts += 1) {
+        while (i < n && script[i] !== d) i += script[i] === '\\' ? 2 : 1;
+        if (i >= n) return 'exec';
+        i += 1;
+      }
+      if (cmd === 's') {
+        const flags = /^[0-9gpiImMew]*/.exec(script.slice(i))[0];
+        if (flags.includes('e')) note('exec');
+        if (flags.includes('w')) { note('write'); return risk; }
+        i += flags.length;
+      }
+    } else if ('aicrRwWbtTvlqQL:'.includes(cmd)) {
+      // Llevan argumento hasta el fin de línea (o `;` en etiquetas y saltos).
+      while (i < n && script[i] !== '\n' && !('btTvlqQL:'.includes(cmd) && script[i] === ';')) i += 1;
+    }
+  }
+  return risk;
+}
+
+export function sedRisk(words) {
+  let risk = null;
+  const note = (r) => { if (r && (r === 'exec' || risk === null)) risk = r; };
+  let sawScript = false;
+  const operands = [];
+  for (let i = 1; i < words.length; i += 1) {
+    const w = words[i];
+    if (w === '--sandbox') return null;
+    if (w === '-e' || w === '--expression') { note(sedScriptRisk(words[i + 1] || '')); sawScript = true; i += 1; continue; }
+    if (w.startsWith('--expression=')) { note(sedScriptRisk(w.slice(13))); sawScript = true; continue; }
+    if (/^-[a-zA-Z]*e./.test(w) && !w.startsWith('--')) { note(sedScriptRisk(w.slice(w.indexOf('e') + 1))); sawScript = true; continue; }
+    if (w === '-f' || w.startsWith('--file') || /^-[a-zA-Z]*f/.test(w) && !w.startsWith('--')) return 'exec';
+    if (w.startsWith('-') && w !== '-') {
+      if (/^-[a-zA-Z]*i|^--in-place/.test(w)) note('write');
+      continue;
+    }
+    operands.push(w);
+  }
+  if (!sawScript && operands.length) note(sedScriptRisk(operands[0]));
+  return risk;
+}
+
+// Opciones que convierten una herramienta de lectura permitida en ejecución
+// de otro programa: el allow de "rg *" o "sort *" no las distingue.
+const ENV_EXEC_PREFIX = /^(?:GIT_(?:SSH|SSH_COMMAND|EXEC_PATH|PAGER|EDITOR|SEQUENCE_EDITOR|ASKPASS|EXTERNAL_DIFF|PROXY_COMMAND|CONFIG\w*|DIR|WORK_TREE|TEMPLATE_DIR)|LD_PRELOAD|LD_LIBRARY_PATH|DYLD_[A-Z_]+|PAGER|EDITOR|VISUAL|BASH_ENV|ENV|PROMPT_COMMAND|NODE_OPTIONS|PYTHONSTARTUP|PYTHONPATH|PERL5OPT|RUBYOPT)=/;
+const INTERPRETER = /^(?:bash|sh|zsh|dash|ksh|python[\d.]*|node|nodejs|ruby|perl|php|deno|bun)$/;
+
+export function riskyInvocation(raw, norm) {
+  const words = shellWords(raw);
+  if (words.some((w, i) => ENV_EXEC_PREFIX.test(w) && words.slice(0, i).every((p) => /^[A-Za-z_]\w*=/.test(p)))) {
+    return 'ejecucion';
+  }
+  const args = commandWords(raw);
+  const head = args[0] || '';
+  if ((head === 'rg' || head === 'ripgrep') && args.some((a) => a === '--pre' || a.startsWith('--pre='))) return 'ejecucion';
+  if (head === 'sort' && args.some((a) => a.startsWith('--compress-program'))) return 'ejecucion';
+  if (head === 'git' && args.some((a) => /^--(?:upload-pack|receive-pack|exec)(?:=|$)/.test(a))) return 'ejecucion';
+  if (head === 'sed' && sedRisk(args) === 'exec') return 'ejecucion';
+  // `bash tests/../../otra/x.test.sh` coincide con "bash tests/*.test.sh".
+  if (INTERPRETER.test(head)) {
+    const script = args.slice(1).find((a) => !a.startsWith('-'));
+    if (script && /(?:^|\/)\.\.(?:\/|$)/.test(script)) return 'ruta';
+  }
+  // Los permisos de helpers llevan `*` dentro de la ruta (el home de cada
+  // uno): `bash /Users/x.sh /Users/a/.config/opencode/scripts/teamdb-read.sh`
+  // coincidía con el allow del helper y corría x.sh. Una ruta de helper solo
+  // vale como el programa que se ejecuta, nunca como argumento de otro.
+  const program = executedPath(raw);
+  if (program !== null && !HELPER_PATH.test(program)) {
+    const rest = shellWords(raw).slice(shellWords(raw).indexOf(program) + 1);
+    if (rest.some((w) => HELPER_PATH.test(w) || /\.test\.sh$/.test(w))) return 'helper-arg';
+  }
+  return null;
+}
+
+const HELPER_PATH = /(?:^|\/)(?:\.opencode|\.config\/opencode)\/scripts\/|teamdb-destructive\.py/;
+
+// Lo que realmente se ejecuta: el script de un intérprete o un programa por
+// ruta. null si es un programa del PATH que no recibe un script.
+function executedPath(raw) {
+  const words = shellWords(raw);
+  let i = 0;
+  while (i < words.length && /^[A-Za-z_]\w*=/.test(words[i])) i += 1;
+  const head = words[i];
+  if (head === undefined) return null;
+  if (INTERPRETER.test(head.replace(/^.*\//, ''))) {
+    const script = words.slice(i + 1).find((a) => !a.startsWith('-'));
+    return script ?? null;
+  }
+  return head.includes('/') ? head : null;
+}
+
 function isCanonical(raw, kind) {
+  if (kind === 'ruta' || kind === 'helper-arg') return false;
   if (kind === 'git') return GIT_CANONICAL.test(raw);
   if (kind === 'indirecto') return false;
   if (kind === 'borrado-db') return /^python3 \S*teamdb-destructive\.py (?:preview|apply) /.test(raw);
@@ -241,7 +401,7 @@ export function guardCommand(command) {
   const { segments, operators, indirect } = splitSegments(cmd);
   const findings = segments
     .map((raw) => ({ raw, norm: normalize(raw) }))
-    .map((s) => ({ ...s, kind: classify(s.norm) }))
+    .map((s) => ({ ...s, kind: classify(s.norm) || riskyInvocation(s.raw, s.norm) }))
     .filter((s) => s.kind);
   if (indirect) return { kind: 'indirecto', segment: cmd.trim() };
   if (findings.length === 0) return null;
@@ -287,6 +447,15 @@ function onlyArgumentSubstitutions(operators) {
 }
 
 export function guardMessage(finding) {
+  if (finding.kind === 'helper-arg') {
+    return `Una ruta de helper de Skalling o de tests va como argumento de otro programa: \`${finding.segment}\`. `
+      + 'Los helpers (`.opencode/scripts/...`) y los tests se ejecutan directamente (`bash .opencode/scripts/x.sh ...`, '
+      + '`bash tests/x.test.sh`); pasarlos como argumento de otro script no lo cubre el permiso.';
+  }
+  if (finding.kind === 'ruta') {
+    return `Ruta con "..": \`${finding.segment}\`. Corré el script por su ruta directa dentro del proyecto `
+      + '(ej. `bash tests/x.test.sh`); una ruta que sale del directorio no la cubre el permiso de tests.';
+  }
   return `Comando sensible (${finding.kind}) disfrazado o encadenado: \`${finding.segment}\`. `
     + 'Correlo solo, en su forma directa (ej. `git push ...`, `rm ...`, `curl ...`, `bash -c ...`), '
     + 'para que el permiso lo pueda preguntar. Los argumentos normales están bien (`git push origin v2`, '
@@ -312,7 +481,116 @@ export function normalizeAgent(agent) {
 // igual por la terminal (el caso real: Alex con el editor bloqueado cambió 3
 // archivos con `sed -i` y `python3 <<PY open(path, 'w')`).
 const NO_EDIT_AGENTS = new Set(['alex', 'luz', 'jhon', 'pol', 'sol', 'jes']);
-const SCRATCH_TARGET = /^(?:\/dev\/(?:null|stdout|stderr|fd\/\d+)|\/tmp\/|\/private\/tmp\/|\/var\/folders\/|\$\{?TMPDIR\}?\/)/;
+// Sin /tmp: un archivo escrito ahí se podía ejecutar después con un comando
+// permitido (auditoría 2026-09-27). Los roles sin edición leen la salida
+// directamente; no necesitan dejar archivos en ningún lado.
+const SCRATCH_TARGET = /^\/dev\/(?:null|stdout|stderr|fd\/\d+)$/;
+// Opciones de herramientas permitidas que escriben archivos.
+function writesThroughOption(words) {
+  const [head, ...args] = words;
+  if (head === 'sort') return args.some((a) => /^-[a-zA-Z]*o|^--output/.test(a));
+  if (head === 'tree') return args.some((a) => /^-[a-zA-Z]*o$|^-o./.test(a));
+  if (head === 'find') return args.some((a) => /^-(?:fprint0?|fprintf|fls)$/.test(a));
+  if (head === 'git') return args.some((a) => /^--output(?:=|$)|^--output-directory|^-o$/.test(a));
+  if (head === 'sed') return sedRisk(words) !== null;
+  if (head === 'uniq') return args.filter((a) => !a.startsWith('-')).length > 1;
+  return false;
+}
+
+// ─── Credenciales ────────────────────────────────────────────────────────────
+// La herramienta read niega .env, claves y credenciales; por bash se leían
+// igual con `grep -r . .env` (allow de "grep *"). Se bloquea que un programa
+// que LEE contenido reciba una ruta de credenciales, un comodín que la
+// alcance o una búsqueda recursiva sobre todo el proyecto con grep.
+const ENV_OK = /^\.env\.(?:example|sample|template|dist|defaults)$/;
+const SECRET_SAMPLES = ['.env', '.env.local', '.env.production', 'id_rsa', 'id_ed25519', '.netrc', '.git-credentials',
+  'secrets.yml', 'credentials.json', 'server.key'];
+// Cualquier programa puede leer lo que recibe (un runner de tests ejecuta o
+// imprime el archivo que se le pasa; las reglas de tests del proyecto van al
+// final y pisarían un ask). Solo se exceptúan los que no leen contenido.
+const NON_READERS = new Set(['echo', 'printf', 'ls', 'test', '[', '[[', 'touch', 'stat', 'mkdir', 'which',
+  'basename', 'dirname', 'realpath', 'readlink']);
+const NON_READING_GIT = new Set(['add', 'check-ignore', 'status', 'rm', 'ls-files', 'restore']);
+
+// Palabras del comando real: sin asignaciones VAR=x ni envoltorios
+// (command, env, sudo, timeout N...) y con el nombre del programa sin ruta.
+function commandWords(seg) {
+  const words = shellWords(seg);
+  const WRAPPERS = ['command', 'builtin', 'exec', 'nohup', 'noglob', 'time', 'env', 'sudo', 'nice', 'stdbuf'];
+  for (;;) {
+    const w = words[0];
+    if (w === undefined) break;
+    if (/^[A-Za-z_]\w*=/.test(w)) { words.shift(); continue; }
+    if (WRAPPERS.includes(w)) {
+      words.shift();
+      while (words.length > 1 && /^-./.test(words[0])) words.shift();
+      continue;
+    }
+    if (w === 'timeout' || w === 'gtimeout') {
+      words.shift();
+      while (words.length > 1 && /^-./.test(words[0])) words.shift();
+      words.shift();
+      continue;
+    }
+    break;
+  }
+  if (words[0]) words[0] = words[0].replace(/^.*\//, '');
+  return words;
+}
+
+function isSecretPath(word) {
+  const value = word.includes('=') && !word.startsWith('-') ? word.slice(word.indexOf('=') + 1) : word;
+  const clean = value.replace(/^--?[\w-]+=/, '');
+  if (!clean) return false;
+  if (/(?:^|\/)\.(?:ssh|aws|gnupg|kube)(?:\/|$)|\.docker\/config\.json|\.config\/gh\//.test(clean)) return true;
+  const base = clean.split('/').filter(Boolean).pop() || '';
+  if (/^\.env(?:\..+)?$/.test(base)) return !ENV_OK.test(base);
+  if (/\.(?:pem|key|p12|pfx|jks|keystore)$|^id_(?:rsa|ed25519|ecdsa|dsa)$|^\.netrc$|^\.git-credentials$|^\.npmrc$|^\.pypirc$|^(?:secrets?|credentials)\.(?:ya?ml|json|toml|env)$|^service-account.*\.json$/i.test(base)) return true;
+  if (/[*?[{]/.test(base)) {
+    const re = new RegExp('^' + base.replace(/[.+^$()|\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.')
+      .replace(/\{([^}]*)\}/g, (_m, alt) => `(?:${alt.split(',').join('|')})`) + '$');
+    try { return SECRET_SAMPLES.some((s) => re.test(s)); } catch { return true; }
+  }
+  return false;
+}
+
+function wholeTreeGrep(words) {
+  const [head, ...args] = words;
+  if (head === 'rg') {
+    const unrestricted = args.some((a) => /^-u{2,}$/.test(a))
+      || (args.some((a) => a === '--hidden' || a === '-.') && args.some((a) => a === '-u' || a.startsWith('--no-ignore')));
+    return unrestricted;
+  }
+  if (!['grep', 'egrep', 'fgrep'].includes(head)) return false;
+  if (!args.some((a) => /^-[a-zA-Z]*[rR]|^--recursive$|^--dereference-recursive$|^-d$/.test(a))) return false;
+  if (args.some((a) => /^--exclude(?:-dir)?=/.test(a))) return false;
+  const operands = args.filter((a) => !a.startsWith('-'));
+  const paths = args.some((a) => a === '-e' || a.startsWith('--regexp') || a === '-f') ? operands : operands.slice(1);
+  return paths.length === 0 || paths.some((p) => /^(?:\.|\.\/|\*|\.\.|\/|~|\$HOME)\/?$/.test(p));
+}
+
+export function credentialViolation(command) {
+  const base = removeHeredocBodies(command || '');
+  const { segments } = splitSegments(base);
+  const assigned = segments.some((seg) => shellWords(seg).every((w) => /^[A-Za-z_]\w*=/.test(w))
+    && shellWords(seg).some(isSecretPath));
+  for (const seg of segments) {
+    const words = commandWords(seg);
+    const head = words[0] || '';
+    if (NON_READERS.has(head) || (head === 'git' && NON_READING_GIT.has(words[1]))) continue;
+    // --env-file carga variables en el proceso sin mostrarlas.
+    let sources = words.slice(1).filter((w) => !w.startsWith('--env-file'));
+    if (['cp', 'mv', 'rsync', 'scp'].includes(head)) sources = sources.filter((a) => !a.startsWith('-')).slice(0, -1);
+    const hit = sources.find((w) => isSecretPath(w) || /:\S*\.env(?:\.\w+)?$/.test(w));
+    if (hit || wholeTreeGrep(words) || (assigned && sources.some((w) => w.includes('$')))) {
+      return 'Skalling no lee credenciales desde los agentes (.env, claves, ~/.ssh, ~/.aws, tokens), '
+        + `ni con comodines o búsquedas recursivas sobre todo el proyecto: \`${seg.trim()}\`. `
+        + 'Acotá la búsqueda a un directorio de código (ej. `rg patrón src/`), usá `.env.example` para ver '
+        + 'qué variables existen, o pedile al usuario el dato que haga falta (sin el secreto).';
+    }
+  }
+  return null;
+}
 const IN_PLACE = /^(?:sed|gsed) (?:.* )?(?:-i|--in-place)|^(?:perl|ruby) (?:.* )?-[a-zA-Z]*i/;
 const FILE_WRITERS = /^(?:cp|mv|install|ln|rsync|touch|truncate|dd|patch|tee|mkdir|rmdir|chmod|chown)(?: |$)|^git (?:apply|am|mv|rm)(?: |$)/;
 const INLINE_CODE = /^(?:python3?|node|ruby|perl|php|deno|bun) (?:-c|-e|-p|--eval|-r) /;
@@ -339,8 +617,8 @@ function noEditMessage(agent, detail) {
       + 'Pasale el cambio a Teo con la herramienta de subagente (agent: teo) y después a Jhon para verificar. '
       + 'Si todavía no clasificaste el pedido, corré primero skalling-route.sh classify --record.';
   }
-  return `${agent} no edita archivos del proyecto (${detail}). Si necesitás guardar una salida, usá /tmp/...; `
-    + 'si hay que cambiar código, devolvé el hallazgo para que lo haga Teo.';
+  return `${agent} no escribe archivos (${detail}), tampoco en /tmp: leé la salida directamente `
+    + '(podés filtrarla con | tail, | grep). Si hay que cambiar código, devolvé el hallazgo para que lo haga Teo.';
 }
 
 export function writeViolation(command, agent) {
@@ -357,6 +635,7 @@ export function writeViolation(command, agent) {
   for (const seg of splitSegments(base).segments) {
     const norm = normalize(seg);
     if (IN_PLACE.test(norm)) return noEditMessage(who, `edición en el lugar: \`${norm}\``);
+    if (writesThroughOption(commandWords(seg))) return noEditMessage(who, `\`${norm}\` escribe archivos`);
     if (INLINE_CODE.test(norm) && WRITE_CALL.test(seg)) return noEditMessage(who, `código inline que escribe archivos: \`${norm}\``);
     if (FILE_WRITERS.test(norm)) {
       const args = norm.split(/\s+/).slice(1).filter((a) => a && !a.startsWith('-'));
@@ -385,7 +664,9 @@ export function hookBypassViolation(command) {
 }
 
 export function identityViolation(command) {
-  if (IDENTITY_VARS.test(command || '') || SCRUB_ENV.test(maskInert(removeHeredocBodies(command || '')))) {
+  const masked = maskInert(removeHeredocBodies(command || ''));
+  if (IDENTITY_VARS.test(command || '') || SCRUB_ENV.test(masked) || DYNAMIC_NAME.test(masked)
+      || /\bSKALLING_RUNTIME|\bTEAMDB_CLAIM|\bTEAMDB_ACTOR/.test(command || '')) {
     return 'La identidad del agente la pone el runtime de OpenCode, no el comando: '
       + 'no se puede fijar SKALLING_RUNTIME_AGENT, TEAMDB_ACTOR, SKALLING_REVIEW_AGENT, SKALLING_VERIFY_WAIVER ni TEAMDB_CLAIM_* '
       + '(el hash y el resultado que sella un receipt los calcula el script sobre lo staged).';
@@ -434,9 +715,13 @@ export function createCore() {
       if (/skalling-workflow\.py/.test(command)) {
         return 'Use skalling_workflow: identidad y evidencia provienen del runtime, no de --by ni de variables shell.';
       }
+      if (/skalling-approve\.sh|teamdb-seal-receipt\.sh/.test(command)) {
+        return 'La aprobación de un commit la registra skalling_workflow (Jhon o Luz). skalling-approve.sh y '
+          + 'teamdb-seal-receipt.sh son para una persona en su propia terminal; no se sugieren ni se corren desde un agente.';
+      }
       const finding = guardCommand(command);
       if (finding) return guardMessage(finding);
-      return writeViolation(command, who);
+      return credentialViolation(command) || writeViolation(command, who);
     }
     if (EDIT_TOOLS.has(tool) && NO_EDIT_AGENTS.has(who)) {
       return noEditMessage(who, `herramienta ${tool}`);

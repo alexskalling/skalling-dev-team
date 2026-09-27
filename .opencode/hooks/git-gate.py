@@ -46,7 +46,10 @@ def needs_review(name):
 # Solo quien verifica puede habilitar un commit de código. Un receipt de
 # Alex o de Teo (el que orquesta o el que implementó) no prueba nada: así un
 # cambio que se saltó a Jhon no llega al repositorio aunque exista evidencia.
-VERIFIERS = ('jhon', 'luz', 'auto')  # auto: verificación configurada que corrió el motor (carril trivial)
+# auto: verificación configurada que corrió el motor (carril trivial).
+# humano: una persona que corrió skalling-approve.sh en su terminal (el test
+# real del proyecto sobre lo staged, igual que Jhon).
+VERIFIERS = ('jhon', 'luz', 'auto', 'humano')
 # Formatos de credenciales de proveedores. El lookbehind evita que "sk-"
 # dentro de una palabra ("task-context-...") dispare; los formatos con
 # guiones (sk-ant-..., sk-proj-...) se nombran explícitamente. La URL con
@@ -94,7 +97,7 @@ def evidence_backed(agent, command):
     command = str(command or '')
     if command.startswith('skalling_workflow:'):
         return True
-    if agent == 'jhon':
+    if agent in ('jhon', 'humano'):
         return command.startswith(('skalling-verify.sh', 'waived:', 'not_run:')) or '+ skalling-verify.sh' in command
     if agent == 'luz':
         return command.startswith('review --')
@@ -188,7 +191,10 @@ def check(diff_args, db, label, equivalents=None, require_receipt=True):
         raise ValueError(f'{label}: falta revisión aprobada para estos cambios ({digest}). '
                          'La aprobación tiene que ser de Jhon (verificación) o Luz (revisión) sobre el '
                          'candidato exacto staged; un comprobante de Alex o Teo no cuenta. '
-                         'No fabricar comprobantes ni limpiar memoria para desbloquear Git.' + hint)
+                         'No fabricar comprobantes ni limpiar memoria para desbloquear Git.' + hint
+                         + ' Si sos una persona commiteando desde tu terminal (fuera de OpenCode): '
+                         '`bash .opencode/scripts/skalling-approve.sh` corre los tests del proyecto sobre '
+                         'lo staged y, si pasan, habilita este commit.')
     command = str(decisive[0][1] or '')
     if command.startswith('waived:'):
         print(f'AVISO: {label} aprobado SIN tests por decisión humana ({command[7:].strip()}) ({digest})', file=sys.stderr)

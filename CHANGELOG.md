@@ -4,6 +4,72 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-09-27
+
+### Auditoría de preparación para producción (sobre 78c862c)
+
+Las reglas de permisos se verificaron contra la semántica real de OpenCode
+2.0.18, sacada de su binario: gana la **última** regla que coincide y `*`
+acepta cualquier texto, espacios y `/` incluidos. Con eso, varios `allow`
+dejaban correr sin preguntar lo que debía preguntar.
+
+#### Security
+- **Sin comodín antes de la ruta de un helper.** Patrones como
+  `bash */.opencode/scripts/teamdb-read.sh *` aceptaban cualquier script que
+  recibiera esa ruta como argumento: todos los roles podían ejecutar código
+  sin que se les pidiera permiso. Ahora solo valen las rutas ancladas
+  (`bash .opencode/scripts/…`, `bash ~/.config/opencode/scripts/…`); una ruta
+  absoluta pide permiso.
+- **Las reglas críticas van al final de cada rol**, así ningún `allow` laxo
+  las pisa (`git -C x push --force origin diff` coincidía con
+  `git -C * diff`). Solo quedan antes los valores por defecto que se refinan
+  a propósito (`bash *`, `python3 *`, `npm run *`…).
+- **`git branch` con borrado, renombre, copia o `-f` en cualquier posición**
+  exige la forma directa: `git branch -v -D x` borraba sin preguntar.
+- **`git fetch` solo contra `origin`** (o `--all`/`--prune`/`--tags`); antes
+  aceptaba cualquier URL. `--upload-pack`, `--receive-pack` y `--exec` se
+  bloquean.
+- **Opciones que ejecutan programas dentro de herramientas permitidas**:
+  `rg --pre`, `sort --compress-program`, los comandos `e` y la bandera `e` de
+  `sed` (GNU), `sed -f` y variables como `GIT_SSH_COMMAND=` o `LD_PRELOAD=`
+  delante del comando.
+- **Credenciales por bash**: un programa que lee contenido ya no recibe
+  `.env*` (salvo `.env.example` y similares), claves, `~/.ssh`, `~/.aws`,
+  `.netrc`, `.npmrc`…, ni un comodín que las alcance (`cat .e*v`), ni un
+  `grep -r` sobre todo el proyecto. La herramienta read ya las negaba; por
+  bash se leían con `grep -r . .env`.
+- **Path traversal en el permiso de tests**: `bash tests/../../x.test.sh`
+  se bloquea.
+- **Roles sin edición (Alex, Jes, Pol, Sol, Jhon, Luz) no escriben archivos,
+  tampoco en `/tmp`**: un archivo dejado ahí se podía ejecutar después.
+  También se cierran las escrituras por opción (`sort -o`, `git diff --output`,
+  `find -fprint`, `tree -o`, `sed w`).
+- **Identidad armada en tiempo de ejecución** (`export ${v}_AGENT=…`, `unset`
+  o `printf -v` con nombre dinámico) se bloquea.
+- Test de regresión nuevo (`tests/permission-bypass.test.mjs`) con el matcher
+  de OpenCode copiado del binario: falla con la política y el guard de
+  0.13.1, pasa con esta versión.
+
+#### Added
+- **Camino humano para commitear**: `bash .opencode/scripts/skalling-approve.sh`
+  corre el test real del proyecto sobre lo staged y, si pasa, habilita el
+  commit. Queda atribuido a `humano` (antes había que sellar "como jhon", sin
+  documentar). Se niega dentro de OpenCode y el gate lo explica al bloquear.
+- **`setup.sh --with-ci`**: instala `.github/workflows/skalling-verify.yml`
+  (re-corre el test declarado en `project.yaml` en la plataforma) y un
+  `CODEOWNERS` para `.opencode/`, `db/teamdb/` y los workflows. Nunca pisa
+  archivos existentes.
+
+#### Fixed
+- **La aprobación fallaba para siempre si `__pycache__` quedaba versionado**:
+  la verificación reescribía el `.pyc` y aparecía como cambio sin stagear.
+  Los helpers ya no escriben bytecode y el setup ignora `.opencode/**/__pycache__/`.
+- **6 tests no los corría ninguna batería y 3 estaban rotos** (fixtures sin
+  los plugins que el doctor exige, versión fija de 0.9.1). Arreglados y
+  sumados a CI; `run-all.sh` falla si aparece un test huérfano.
+- **Conexiones SQLite sin cerrar** (`with sqlite3.connect()` no cierra): 0
+  `ResourceWarning` en la batería.
+
 ## [0.13.1] - 2026-09-27
 
 ### Tercera auditoría externa (sobre e95a388)

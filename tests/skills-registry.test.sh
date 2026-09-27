@@ -77,10 +77,13 @@ bash "$ROOT/scripts/teamdb-init.sh" "$PROJ" >/dev/null 2>&1
 P_DB="$PROJ/.opencode/context/team.db"
 P_VER=$(sqlite3 "$P_DB" "SELECT value FROM schema_meta WHERE key='version'" 2>/dev/null)
 P_SKILLS=$(sqlite3 "$P_DB" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='skills_registry'" 2>/dev/null)
-if [ "$P_VER" = "0.9.1" ] && [ "$P_SKILLS" = "1" ]; then
-  assert_pass "teamdb-init proyecto: 0.9.1 + skills_registry"
+# La versión esperada sale de VERSION: fijarla a mano dejó este test roto
+# desde 0.9.1 sin que nadie lo notara (no estaba en ninguna batería).
+EXPECTED_VER="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' "$ROOT/VERSION" | head -1)"
+if [ "$P_VER" = "$EXPECTED_VER" ] && [ "$P_SKILLS" = "1" ]; then
+  assert_pass "teamdb-init proyecto: $EXPECTED_VER + skills_registry"
 else
-  assert_fail "teamdb-init proyecto: 0.9.1 + skills_registry" "ver=$P_VER skills=$P_SKILLS"
+  assert_fail "teamdb-init proyecto: $EXPECTED_VER + skills_registry" "ver=$P_VER skills=$P_SKILLS"
 fi
 
 # ── D) Sync puebla global + proyecto (idempotente) ────────────

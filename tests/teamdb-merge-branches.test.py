@@ -7,6 +7,7 @@ ambos contenidos, aplicaba A y descartaba B como "misma versión". TeamDB
 quedaba con A fechado a las 12:00 y todo salía con código 0.
 """
 import os
+from contextlib import closing
 import sqlite3
 import subprocess
 import tempfile
@@ -65,7 +66,7 @@ class MergeAcrossBranches(unittest.TestCase):
         self.git(project, 'push', '-q', 'origin', 'HEAD:main')
 
     def state(self, project):
-        with sqlite3.connect(project / '.opencode/context/team.db') as conn:
+        with closing(sqlite3.connect(project / '.opencode/context/team.db')) as conn, conn:
             body = conn.execute("SELECT body_md FROM decisions WHERE slug='api'").fetchone()[0]
             version = conn.execute("SELECT updated_at FROM memory_versions WHERE table_name='decisions' AND slug='api'").fetchone()[0]
         return body, version

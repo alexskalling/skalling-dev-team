@@ -20,6 +20,11 @@ PROYECTO_TMP="$FIXTURE/proyecto-con-warning"
 trap 'rm -rf "$FIXTURE"' EXIT
 
 mkdir -p "$GLOBAL_LIMPIO/agents" "$GLOBAL_LIMPIO/skills/core" "$GLOBAL_LIMPIO/command" "$GLOBAL_LIMPIO/templates" "$GLOBAL_LIMPIO/skalling-data" "$PROYECTO_LIMPIO/.opencode"
+# El doctor exige los plugins de control (desde v0.11.15): sin ellos el
+# fixture "limpio" tenía un error de proyecto y no medía el entorno.
+mkdir -p "$GLOBAL_LIMPIO/plugins/lib"
+cp "$ROOT"/plugins/*.js "$GLOBAL_LIMPIO/plugins/"
+cp "$ROOT"/plugins/lib/*.mjs "$GLOBAL_LIMPIO/plugins/lib/"
 printf '%s\n' '# Constitución' '' '## 🏛️ Reglas Base' '' 'R13 design-system.md' > "$GLOBAL_LIMPIO/constitucion.md"
 printf '%s\n' '# Comando de fixture' > "$GLOBAL_LIMPIO/command/skalling-fixture.md"
 for agente in Alex Pol Jes Sol Teo Jhon Luz Pau; do

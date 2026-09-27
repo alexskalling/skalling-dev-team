@@ -1,5 +1,6 @@
 import hashlib
 import os
+from contextlib import closing
 import sqlite3
 import subprocess
 import tempfile
@@ -24,7 +25,7 @@ class GitClose(unittest.TestCase):
         context = self.project / '.opencode/context'
         context.mkdir(parents=True)
         self.db = context / 'team.db'
-        with sqlite3.connect(self.db) as conn:
+        with closing(sqlite3.connect(self.db)) as conn, conn:
             conn.executescript((ROOT / 'sql/project-schema.sql').read_text())
         (self.project / '.gitignore').write_text('.opencode/\n')
 
@@ -41,7 +42,7 @@ class GitClose(unittest.TestCase):
         command = command or {'luz': 'review --lens risk'}.get(agent, 'skalling-verify.sh (test real del proyecto)')
         patch = self.git('diff', '--cached', '--', '.', ':(exclude)db/teamdb/team.dump.sql').stdout.rstrip('\n')
         digest = hashlib.sha256(patch.encode()).hexdigest()[:16]
-        with sqlite3.connect(self.db) as conn:
+        with closing(sqlite3.connect(self.db)) as conn, conn:
             conn.execute("INSERT INTO receipts(id,task_id,agent,command,exit_code,ts,tree_hash) VALUES(?,?,?,?,?,'2020-01-01 00:00:00',?)",
                          (digest + str(success) + agent + command, 'fixture', agent, command, success, digest))
 
@@ -87,7 +88,7 @@ class GitClose(unittest.TestCase):
             self.change(value)
             self.receipt()
             self.git('commit', '-qm', f'change {value}')
-        with sqlite3.connect(self.db) as conn:
+        with closing(sqlite3.connect(self.db)) as conn, conn:
             conn.execute("INSERT INTO preferences(slug,body_md,scope) VALUES('new-memory','Una decisión posterior','project')")
         head = self.git('rev-parse', 'HEAD').stdout.strip()
         result = self.hook('pre-push', f'refs/heads/main {head} refs/heads/main {self.base}\n')
@@ -154,7 +155,7 @@ class GitClose(unittest.TestCase):
         result = subprocess.run(['bash', str(ROOT / 'scripts/teamdb-seal-receipt.sh'),
                                  'fixture', 'luz', str(self.project)], capture_output=True, text=True, env=env)
         self.assertEqual(result.returncode, 0, result.stderr)
-        with sqlite3.connect(self.db) as conn:
+        with closing(sqlite3.connect(self.db)) as conn, conn:
             self.assertEqual(conn.execute('SELECT tree_hash FROM receipts').fetchone()[0], expected)
         self.assertFalse((self.project / 'db/teamdb/team.dump.sql').exists())
 

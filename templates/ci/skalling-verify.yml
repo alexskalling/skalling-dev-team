@@ -1,0 +1,55 @@
+# Skalling — verificación autoritativa del proyecto (instalada por setup.sh --with-ci).
+#
+# Los hooks y receipts de Skalling son controles LOCALES: quien controla su
+# checkout puede saltarlos. Este workflow vuelve a correr el test del proyecto
+# en la plataforma, donde nadie lo puede falsificar. Para que proteja de verdad,
+# en GitHub → Settings → Branches (o Rulesets) de la rama principal:
+#   - Require status checks to pass: "Skalling / tests del proyecto"
+#   - Require a pull request before merging (con revisión)
+#   - Block force pushes y deletions
+# Mientras eso no esté activo, este workflow informa pero no bloquea nada.
+name: Skalling
+
+on:
+  pull_request:
+  push:
+    branches: [main, master, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: tests del proyecto
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Entorno según lo que use el proyecto; agregá lo que falte (base de
+      # datos de prueba, servicios, variables SIN secretos de producción).
+      - if: hashFiles('package.json') != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+      - if: hashFiles('package-lock.json') != ''
+        run: npm ci
+      - if: hashFiles('pnpm-lock.yaml') != ''
+        run: corepack enable && pnpm install --frozen-lockfile
+      - if: hashFiles('yarn.lock') != ''
+        run: corepack enable && yarn install --immutable
+      - if: hashFiles('requirements.txt', 'pyproject.toml') != ''
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - if: hashFiles('requirements.txt') != ''
+        run: pip install -r requirements.txt
+
+      - name: Correr el comando de tests declarado en .opencode/project.yaml
+        run: |
+          COMMAND="$(PYTHONPATH=.opencode/scripts python3 -m skalling_config .opencode/project.yaml unit)"
+          if [ -z "$COMMAND" ]; then
+            echo "::error::.opencode/project.yaml no declara testing.unit.command; sin tests no hay verificación."
+            exit 1
+          fi
+          echo "Corriendo: $COMMAND"
+          bash -c "$COMMAND"

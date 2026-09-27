@@ -11,6 +11,7 @@ Contrato:
 - visual NO sube el riesgo: un cambio visual trivial sigue siendo trivial;
   exige, eso sí, que exista el sistema de diseño en TeamDB.
 """
+from contextlib import closing
 import sqlite3
 import subprocess
 from pathlib import Path
@@ -56,7 +57,7 @@ def normalize(kind, risk, scope='unknown', clarity='clear', decision='none', sen
 
 def readiness(db_path):
     try:
-        with sqlite3.connect('file:' + str(db_path) + '?mode=ro', uri=True) as db:
+        with closing(sqlite3.connect('file:' + str(db_path) + '?mode=ro', uri=True)) as db, db:
             row = db.execute("SELECT value FROM schema_meta WHERE key='project_readiness' LIMIT 1").fetchone()
     except sqlite3.Error:
         return 'missing'
@@ -67,7 +68,7 @@ def memory_blockers(db_path, visual):
     """Lo mínimo que un implementador necesita leer antes de tocar código."""
     blockers = []
     try:
-        with sqlite3.connect('file:' + str(db_path) + '?mode=ro', uri=True) as db:
+        with closing(sqlite3.connect('file:' + str(db_path) + '?mode=ro', uri=True)) as db, db:
             if not db.execute("SELECT 1 FROM concepts WHERE slug='project-summary' AND length(body_md)>0").fetchone():
                 blockers.append('Falta resumen de proyecto en TeamDB')
             if visual and not db.execute("SELECT 1 FROM concepts WHERE slug='design-system' AND length(body_md)>0").fetchone():

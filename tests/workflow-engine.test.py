@@ -4,6 +4,7 @@ import os
 import sys
 import shutil
 from pathlib import Path
+from contextlib import closing
 import sqlite3
 import tempfile
 import threading
@@ -45,7 +46,7 @@ class Workflow(unittest.TestCase):
         subprocess.run(['git', '-C', str(self.root), 'commit', '-q', '-m', 'init'], check=True)
         self.db_path = self.root / '.opencode/context/team.db'
         shutil.copyfile(self.template_db, self.db_path)
-        with sqlite3.connect(self.db_path) as db:
+        with closing(sqlite3.connect(self.db_path)) as db, db:
             db.execute("INSERT OR REPLACE INTO schema_meta(key,value) VALUES('project_readiness','initialized')")
             db.execute("INSERT INTO concepts(slug,title,body_md,updated_at) VALUES('project-summary','Resumen','App de prueba',datetime('now'))")
             db.execute("INSERT INTO plans(slug,title,design_md,status) VALUES('plan','Plan','# diseño','approved')")
@@ -269,7 +270,7 @@ class Workflow(unittest.TestCase):
     def test_unready_project_or_missing_reuse_never_starts(self):
         with self.assertRaises(ValueError):
             self.call('alex', 'start', risk='low', files=['app.py'], acceptance='x', scope='local', decision='none')
-        with sqlite3.connect(self.db_path) as db:
+        with closing(sqlite3.connect(self.db_path)) as db, db:
             db.execute("UPDATE schema_meta SET value='missing' WHERE key='project_readiness'")
         with self.assertRaises(ValueError) as caught:
             self.start()
@@ -280,7 +281,7 @@ class Workflow(unittest.TestCase):
             self.call('alex', 'start', risk='low', files=['app.py'], acceptance='x', scope='local',
                       decision='none', reuse='x', visual=True)
         self.assertIn('sistema de diseño', str(caught.exception))
-        with sqlite3.connect(self.db_path) as db:
+        with closing(sqlite3.connect(self.db_path)) as db, db:
             db.execute("INSERT INTO concepts(slug,title,body_md,updated_at) VALUES('design-system','DS','tokens',datetime('now'))")
         started = self.call('alex', 'start', risk='low', files=['app.py'], acceptance='x', scope='local',
                             decision='none', reuse='x', visual=True)
@@ -296,7 +297,7 @@ class Workflow(unittest.TestCase):
         self.assertEqual(delivered['verification']['agent'], 'auto')
         completed = self.call('alex', 'complete')
         self.assertEqual(completed['state'], 'completed')
-        with sqlite3.connect(self.db_path) as db:
+        with closing(sqlite3.connect(self.db_path)) as db, db:
             row = db.execute("SELECT agent, command, exit_code, tree_hash FROM receipts WHERE task_id='request'").fetchone()
             metric = db.execute("SELECT outcome FROM workflow_metrics WHERE request_id='request'").fetchone()
         self.assertEqual(row[:3], ('auto', 'skalling_workflow:complete', 0))
@@ -337,14 +338,14 @@ class Workflow(unittest.TestCase):
         self.assertEqual(self.call('alex', 'status')['state'], 'superseded')
         with self.assertRaises(ValueError):
             self.call('teo', 'deliver')
-        with sqlite3.connect(self.db_path) as db:
+        with closing(sqlite3.connect(self.db_path)) as db, db:
             outcomes = dict(db.execute("SELECT request_id, coalesce(outcome,'open') FROM workflow_metrics"))
         self.assertEqual(outcomes['request'], 'superseded')
         self.assertNotEqual(outcomes['other'], 'superseded')
 
 
     def test_plan_task_is_approved_with_the_verification_the_engine_recorded(self):
-        with sqlite3.connect(self.db_path) as db:
+        with closing(sqlite3.connect(self.db_path)) as db, db:
             db.execute("INSERT INTO tasks(plan_id,slug,title,status) VALUES(?,'t1','Tarea','in_review')", (self.plan_id,))
         advance = lambda: subprocess.run(
             ['bash', str(ROOT / 'scripts/teamdb-claim.sh'), '--advance', 'plan', 't1', '--to=approved', str(self.root)],
@@ -359,7 +360,7 @@ class Workflow(unittest.TestCase):
         self.verify()
         approved = advance()
         self.assertEqual(approved.returncode, 0, approved.stdout + approved.stderr)
-        with sqlite3.connect(self.db_path) as db:
+        with closing(sqlite3.connect(self.db_path)) as db, db:
             self.assertEqual(db.execute("SELECT status FROM tasks WHERE slug='t1'").fetchone()[0], 'approved')
 
 
@@ -477,7 +478,7 @@ class Workflow(unittest.TestCase):
                 break
             time.sleep(0.1)
         proc.terminate()                     # lo que hace el plugin al cancelar
-        proc.wait(timeout=10)
+        proc.communicate(timeout=10)         # espera y cierra stdout/stderr
         time.sleep(0.3)
         self.assertEqual(subprocess.run(['pgrep', '-f', marker], capture_output=True, text=True).stdout.strip(), '')
 
@@ -488,7 +489,7 @@ class Workflow(unittest.TestCase):
         outside = tempfile.TemporaryDirectory()
         self.addCleanup(outside.cleanup)
         oc = Path(outside.name) / 'opencode.db'
-        with sqlite3.connect(oc) as conn:
+        with closing(sqlite3.connect(oc)) as conn, conn:
             conn.execute('CREATE TABLE session_v2 (id TEXT PRIMARY KEY, parent_id TEXT)')
             conn.execute('CREATE TABLE session_message (id INTEGER PRIMARY KEY, session_id TEXT, type TEXT, time_created INTEGER, data TEXT)')
             conn.executemany('INSERT INTO session_v2 VALUES (?,?)', [('alex-session', None), ('teo-sub', 'alex-session'), ('otra', None)])
@@ -500,7 +501,7 @@ class Workflow(unittest.TestCase):
         def message(session, agent, tokens_in, tokens_out, cache, cost, when=None):
             data = {'agent': agent, 'cost': cost, 'tokens': {'input': tokens_in, 'output': tokens_out, 'reasoning': 0,
                                                             'cache': {'read': cache, 'write': 0}}}
-            with sqlite3.connect(oc) as conn:
+            with closing(sqlite3.connect(oc)) as conn, conn:
                 conn.execute('INSERT INTO session_message(session_id,type,time_created,data) VALUES (?,?,?,?)',
                              (session, 'assistant', int((when or time.time()) * 1000), json.dumps(data)))
         message('alex-session', 'Alex', 1000, 100, 5000, 0.01)
@@ -512,7 +513,7 @@ class Workflow(unittest.TestCase):
         completed = self.call('alex', 'complete')
         self.assertEqual(completed['usage']['tokens_input'], 3000)
         self.assertEqual(completed['usage']['agents'], ['Alex', 'Teo'])
-        with sqlite3.connect(self.db_path) as db:
+        with closing(sqlite3.connect(self.db_path)) as db, db:
             row = db.execute("SELECT tokens_input, tokens_output, tokens_cache_read, cost, agents_used, retries "
                              "FROM workflow_metrics WHERE request_id='request'").fetchone()
         self.assertEqual(row, (3000, 400, 12000, 0.03, 'Alex,Teo', 0))

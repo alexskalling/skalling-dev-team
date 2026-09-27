@@ -1,6 +1,7 @@
 """Exercise the distributed package, not just source prompt assertions."""
 import json
 import os
+from contextlib import closing
 import sqlite3
 import subprocess
 import tempfile
@@ -56,18 +57,18 @@ class InstalledWorkflow(unittest.TestCase):
             self.assertFalse((context / 'stack').exists())
 
             def summary():
-                with sqlite3.connect(context / 'team.db') as db:
+                with closing(sqlite3.connect(context / 'team.db')) as db, db:
                     return db.execute("SELECT body_md FROM concepts WHERE slug='project-summary'").fetchone()[0]
 
             self.assertIn('Portal inicial', summary())
             package.write_text(package.read_text().replace('Portal inicial', 'Portal actualizado'))
             run(config / 'bootstrap-context.sh', '--target', project, '--force')
             self.assertIn('Portal actualizado', summary())
-            with sqlite3.connect(context / 'team.db') as db:
+            with closing(sqlite3.connect(context / 'team.db')) as db, db:
                 db.execute("UPDATE concepts SET body_md='Decisión humana conservada' WHERE slug='project-summary'")
             run(config / 'bootstrap-context.sh', '--target', project, '--force')
             self.assertEqual(summary(), 'Decisión humana conservada')
-            with sqlite3.connect(context / 'team.db') as db:
+            with closing(sqlite3.connect(context / 'team.db')) as db, db:
                 pending = db.execute("SELECT value FROM schema_meta WHERE key='bootstrap.pending.project-summary'").fetchone()
                 self.assertIn('Portal actualizado', pending[0])
 
@@ -98,7 +99,7 @@ class InstalledWorkflow(unittest.TestCase):
                 '--purpose=Evitar regresiones visuales', '--acceptance=Comparación visual correcta', '--by=sol', project)
             run(scripts / 'teamdb-amend.sh', 'unify', '--show', project)
             self.assertNotEqual(run(scripts / 'teamdb-execute-plan.sh', 'unify', project, check=False).returncode, 0)
-            with sqlite3.connect(context / 'team.db') as db:
+            with closing(sqlite3.connect(context / 'team.db')) as db, db:
                 plan_id = db.execute("SELECT id FROM plans WHERE slug='unify'").fetchone()[0]
             run(scripts / 'teamdb-plan-approve.sh', project, plan_id,
                 'Reutilizar variable brand sin crear archivos CSS', 'Ambos botones comparten brand',

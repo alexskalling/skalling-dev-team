@@ -488,6 +488,26 @@ check_controls() {
             fi
         fi
     fi
+
+    # Instalaciones anteriores a 0.14.0: un allow con comodín antes de la ruta
+    # ("bash */.opencode/scripts/x.sh *") deja correr cualquier script que
+    # reciba esa ruta como argumento, sin pedir permiso.
+    local insecure="" dir file
+    for dir in "$OPENCODE_DIR/agents" "$PROJECT_DIR/.opencode/agents"; do
+        [[ "$GLOBAL_ONLY" == true && "$dir" == "$PROJECT_DIR/.opencode/agents" ]] && continue
+        [[ -d "$dir" ]] || continue
+        for file in "$dir"/*.md; do
+            [[ -f "$file" ]] || continue
+            if grep -qE '^[[:space:]]+"(bash |python3 )?\*/[^"]*":[[:space:]]*allow' "$file"; then
+                insecure="$insecure $file"
+            fi
+        done
+    done
+    if [[ -n "$insecure" ]]; then
+        err "Permisos con comodín inseguro (instalación anterior a 0.14.0) en:$insecure — reinstalar: install-global.sh y setup.sh en cada proyecto"
+    else
+        ok "Permisos sin comodines antes de la ruta del programa"
+    fi
 }
 
 check_inteligencia_codigo() {

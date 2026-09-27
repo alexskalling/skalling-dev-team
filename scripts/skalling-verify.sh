@@ -17,6 +17,10 @@
 #   2 = no hay comando de test configurado en project.yaml (no es un fail:
 #       Skalling no puede inventar un comando que el proyecto no declaró)
 set -euo pipefail
+# Los helpers Python no dejan bytecode en .opencode/scripts: un .pyc nuevo
+# durante la verificación aparecía como cambio sin stagear y la aprobación
+# se rechazaba (auditoría 2026-09-27).
+export PYTHONDONTWRITEBYTECODE=1
 
 PROJECT="${1:?Uso: skalling-verify.sh <project>}"
 YAML="$PROJECT/.opencode/project.yaml"

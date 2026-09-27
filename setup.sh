@@ -11,6 +11,7 @@
 #   bash setup.sh --dry-run                # ver qué haría sin tocar
 #   bash setup.sh --skip-backup            # no crear backup antes
 #   bash setup.sh --force                  # sobrescribir todo sin preguntar
+#   bash setup.sh --with-ci                # además: workflow de CI y CODEOWNERS (.github/)
 
 set -euo pipefail
 
@@ -34,6 +35,7 @@ DRY_RUN=false
 FORCE=false
 SKIP_BACKUP=false
 UNINSTALL=false
+WITH_CI=false
 TARGET_DIR=""
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -47,6 +49,7 @@ while [[ $# -gt 0 ]]; do
         --force) FORCE=true; shift ;;
         --skip-backup) SKIP_BACKUP=true; shift ;;
         --uninstall) UNINSTALL=true; shift ;;
+        --with-ci) WITH_CI=true; shift ;;
         --help|-h)
             sed -n '2,15p' "${BASH_SOURCE[0]}"
             exit 0 ;;
@@ -537,8 +540,14 @@ install_root_gitignore_block() {
         ".opencode/context/team.db" ".opencode/context/team.db-*" ".opencode/context/team.db.pre-migration-*" \
         ".opencode/context/.pre-migration-*" ".opencode/context/.backup-*" ".opencode/context/.backups/" \
         ".opencode/context/.legacy-backup-*" ".opencode/context/.locks/" ".opencode/context/*.lock" \
-        ".opencode/context/teamdb/" ".opencode/context/review/" ".skalling-backups/" ".codegraph/"
+        ".opencode/context/teamdb/" ".opencode/context/review/" ".skalling-backups/" ".codegraph/" \
+        ".opencode/**/__pycache__/"
     log OK ".gitignore raíz: la DB local y sus respaldos no se versionan"
+    # Bytecode ya versionado: cada verificación lo reescribe y la aprobación
+    # del commit fallaba para siempre por "cambios sin stagear".
+    if git -C "$TARGET_DIR" ls-files -- '.opencode/**/__pycache__/*' | grep -q .; then
+        warn "Hay __pycache__ de .opencode versionado; sacarlo del índice (conserva los archivos): git rm -r --cached -- '.opencode/**/__pycache__' && git commit"
+    fi
     if git -C "$TARGET_DIR" ls-files --error-unmatch .opencode/context/team.db >/dev/null 2>&1; then
         warn "team.db ya está versionado: cada pull pisa la base local de otra persona. Sacarlo del índice (conserva el archivo): git rm --cached .opencode/context/team.db && git commit"
     fi
@@ -625,6 +634,9 @@ step_summary() {
    📋 Log:     $INSTALL_LOG
 
    🚀 Abrí opencode en este proyecto. Los hooks ya están activos.
+
+   ✍️  Commits desde tu terminal o IDE: git add … y después
+      bash .opencode/scripts/skalling-approve.sh   (corre los tests; si pasan, habilita el commit)
 
 EOF
 }
@@ -732,6 +744,29 @@ do_uninstall() {
 # MAIN
 # ──────────────────────────────────────────────────────────────────────────────
 
+# La capa autoritativa (docs/security-model.md): CI que re-corre los tests
+# del proyecto y CODEOWNERS para lo que se ejecuta en cada máquina. Solo crea
+# archivos que no existen; nunca pisa un workflow o CODEOWNERS del proyecto.
+step_install_ci() {
+    log INFO "CI y CODEOWNERS (.github/)"
+    run mkdir -p "$TARGET_DIR/.github/workflows"
+    local workflow="$TARGET_DIR/.github/workflows/skalling-verify.yml"
+    local owners="$TARGET_DIR/.github/CODEOWNERS"
+    if [[ -f "$workflow" ]]; then
+        log INFO "skalling-verify.yml ya existe, se preserva"
+    else
+        run cp "$SCRIPT_DIR/templates/ci/skalling-verify.yml" "$workflow"
+        log OK "Workflow de CI instalado: .github/workflows/skalling-verify.yml"
+    fi
+    if [[ -f "$owners" || -f "$TARGET_DIR/CODEOWNERS" || -f "$TARGET_DIR/docs/CODEOWNERS" ]]; then
+        log WARN "Ya hay un CODEOWNERS: agregá a mano las rutas de templates/ci/CODEOWNERS.template"
+    else
+        run cp "$SCRIPT_DIR/templates/ci/CODEOWNERS.template" "$owners"
+        log WARN "CODEOWNERS instalado con @OWNER de ejemplo: reemplazalo por el responsable real"
+    fi
+    log INFO "Falta activarlo en GitHub: rama principal protegida, check 'Skalling / tests del proyecto' obligatorio y revisión de Code Owners"
+}
+
 main() {
     echo ""
     if [[ "$UNINSTALL" == true ]]; then
@@ -766,6 +801,7 @@ main() {
     step_install_project_config
     step_init_teamdb
     step_install_agents_md
+    if [[ "$WITH_CI" == true ]]; then step_install_ci; fi
 
     if [[ "$DRY_RUN" == true ]]; then
         log INFO "Dry-run completo. Sin cambios."

@@ -2,6 +2,7 @@
 """Session-bound goal state and guarded local commit; never pushes."""
 import hashlib
 import json
+from contextlib import closing
 import sqlite3
 import subprocess
 import sys
@@ -38,7 +39,7 @@ def operate(root, session, action, payload):
             return None
         path.parent.mkdir(parents=True, exist_ok=True)
         schema = Path(__file__).resolve().parents[1] / 'sql/project-schema.sql'
-        with sqlite3.connect(path) as initial:
+        with closing(sqlite3.connect(path)) as initial, initial:
             initial.executescript(schema.read_text())
     db = sqlite3.connect(path, timeout=5)
     db.row_factory = sqlite3.Row

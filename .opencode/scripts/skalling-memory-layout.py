@@ -5,6 +5,7 @@ import datetime
 import hashlib
 import json
 import shutil
+from contextlib import closing
 import sqlite3
 from pathlib import Path
 
@@ -21,7 +22,7 @@ def main():
     db_path = context / 'team.db'
     if not db_path.is_file():
         raise SystemExit('TeamDB no existe; no se mueve ningún archivo')
-    with sqlite3.connect(db_path, timeout=10) as db:
+    with closing(sqlite3.connect(db_path, timeout=10)) as db, db:
         if args.export_concept:
             slug = args.export_concept
             if not slug or any(c not in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_' for c in slug):

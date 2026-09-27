@@ -44,19 +44,39 @@ proyecto y los helpers de TeamDB de cada rol. Instalar paquetes, publicar,
 reescribir historia, borrar, tocar infraestructura (`gh`, `aws`, `kubectl`,
 `terraform`, `docker`...) o nombrar rutas de credenciales pide permiso.
 
+Cómo evalúa OpenCode (verificado en el binario de 2.0.18): cada comando se
+compara con todos los patrones, **gana la última regla que coincide** y `*`
+acepta cualquier texto, espacios y `/` incluidos. De ahí tres invariantes que
+fija `tests/permission-bypass.test.mjs`:
+
+- ningún `allow` tiene un comodín antes de la ruta del programa (un
+  `bash */x.sh` acepta `bash otro.sh /x.sh`);
+- las reglas críticas (`ask`/`deny` de git que publica o reescribe, borrado,
+  red, credenciales) van al final de cada rol: ningún `allow` las pisa;
+- el guard (`plugins/lib/git-guard.mjs`) bloquea lo que un patrón no puede
+  distinguir: opciones que ejecutan programas (`rg --pre`, `sed e`,
+  `git --upload-pack`...), `..` en rutas de scripts, lectura de credenciales
+  y escritura de archivos por parte de los roles sin edición (tampoco en
+  `/tmp`).
+
 Límites que siguen existiendo y hay que conocer:
 
 - `npm test`, `npm run build` y equivalentes ejecutan lo que diga el
-  `package.json`, que un rol con edición puede modificar. La ejecución de
-  código del proyecto es inherente a implementar y probar: el aislamiento
-  real es el del sistema operativo (contenedor, VM, usuario sin
-  credenciales de producción).
+  `package.json`, que un rol con edición (Teo, Pau) puede modificar. La
+  ejecución de código del proyecto es inherente a implementar y probar: el
+  aislamiento real es el del sistema operativo (contenedor, VM, usuario sin
+  credenciales de producción). Un repositorio con código malicioso ejecuta
+  ese código al correr sus tests.
+- El bloqueo de credenciales por bash es de mejor esfuerzo: cubre rutas
+  nombradas, comodines y búsquedas recursivas, pero un shell tiene infinitas
+  formas de armar un nombre. La defensa real es **no tener secretos de
+  producción en el checkout** de desarrollo.
 - `webfetch` sigue permitido a los roles técnicos para leer documentación.
   Una página puede contener instrucciones maliciosas (inyección de prompt);
-  la lista blanca impide que se conviertan en comandos o lecturas de
-  credenciales sin que el usuario lo vea, pero no impide que el agente
-  incluya contenido del proyecto en una URL. Para código confidencial,
-  poner `webfetch: ask` en `data/permission-policy.json`.
+  la lista blanca impide que se conviertan en comandos sin que el usuario lo
+  vea, y `git fetch` ya no acepta URLs arbitrarias, pero el agente puede
+  incluir contenido del proyecto en una URL de `webfetch`. Para código
+  confidencial, poner `webfetch: ask` en `data/permission-policy.json`.
 
 ### Confianza en el `.opencode/` de cada proyecto
 

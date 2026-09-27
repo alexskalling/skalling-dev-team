@@ -63,7 +63,12 @@ permission:
     "git worktree list *": allow
     "git config --get *": allow
     "git fetch": allow
-    "git fetch *": allow
+    "git fetch --all": allow
+    "git fetch --prune": allow
+    "git fetch --tags": allow
+    "git fetch --all --prune": allow
+    "git fetch origin": allow
+    "git fetch origin *": allow
     "node --version": allow
     "python3 --version": allow
     "npm --version": allow
@@ -90,13 +95,347 @@ permission:
     "pnpm run *": ask
     "git stash": ask
     "git stash *": ask
+    "python3 .opencode/scripts/teamdb-destructive.py *": ask
+    "python3 ~/.config/opencode/scripts/teamdb-destructive.py *": ask
+    "python3 /Users/*/.config/opencode/scripts/teamdb-destructive.py *": ask
+    "python3 /home/*/.config/opencode/scripts/teamdb-destructive.py *": ask
+    "python3 /c/Users/*/.config/opencode/scripts/teamdb-destructive.py *": ask
+    "python3 .opencode/scripts/teamdb-destructive.py preview *": allow
+    "python3 ~/.config/opencode/scripts/teamdb-destructive.py preview *": allow
+    "python3 /Users/*/.config/opencode/scripts/teamdb-destructive.py preview *": allow
+    "python3 /home/*/.config/opencode/scripts/teamdb-destructive.py preview *": allow
+    "python3 /c/Users/*/.config/opencode/scripts/teamdb-destructive.py preview *": allow
+    cat: allow
+    "cat *": allow
+    head: allow
+    "head *": allow
+    tail: allow
+    "tail *": allow
+    ls: allow
+    "ls *": allow
+    rg: allow
+    "rg *": allow
+    grep: allow
+    "grep *": allow
+    wc: allow
+    "wc *": allow
+    sort: allow
+    "sort *": allow
+    uniq: allow
+    "uniq *": allow
+    echo: allow
+    "echo *": allow
+    printf: allow
+    "printf *": allow
+    pwd: allow
+    "pwd *": allow
+    find: allow
+    "find *": allow
+    "which *": allow
+    "command -v *": allow
+    "type *": allow
+    "basename *": allow
+    "dirname *": allow
+    date: allow
+    "date *": allow
+    whoami: allow
+    uname: allow
+    "uname *": allow
+    "stat *": allow
+    "file *": allow
+    "readlink *": allow
+    "realpath *": allow
+    "test *": allow
+    "[ *": allow
+    sed: allow
+    "sed *": allow
+    "sed -i*": allow
+    "git status": allow
+    "git status *": allow
+    "git diff": allow
+    "git diff *": allow
+    "git log": allow
+    "git log *": allow
+    "git show": allow
+    "git show *": allow
+    "git ls-files": allow
+    "git ls-files *": allow
+    "git rev-parse": allow
+    "git rev-parse *": allow
+    "git stash list": allow
+    "git stash list *": allow
+    "codegraph status": allow
+    "codegraph status *": allow
+    "codegraph query": allow
+    "codegraph query *": allow
+    "codegraph explore": allow
+    "codegraph explore *": allow
+    "codegraph node": allow
+    "codegraph node *": allow
+    "codegraph files": allow
+    "codegraph files *": allow
+    "codegraph callers": allow
+    "codegraph callers *": allow
+    "codegraph callees": allow
+    "codegraph callees *": allow
+    "codegraph impact": allow
+    "codegraph impact *": allow
+    "codegraph affected": allow
+    "codegraph affected *": allow
+    "~/.config/opencode/scripts/teamdb-read.sh": allow
+    "/Users/*/.config/opencode/scripts/teamdb-read.sh": allow
+    "/home/*/.config/opencode/scripts/teamdb-read.sh": allow
+    "/c/Users/*/.config/opencode/scripts/teamdb-read.sh": allow
+    "~/.config/opencode/scripts/teamdb-read.sh *": allow
+    "/Users/*/.config/opencode/scripts/teamdb-read.sh *": allow
+    "/home/*/.config/opencode/scripts/teamdb-read.sh *": allow
+    "/c/Users/*/.config/opencode/scripts/teamdb-read.sh *": allow
+    "bash ~/.config/opencode/scripts/teamdb-read.sh": allow
+    "bash /Users/*/.config/opencode/scripts/teamdb-read.sh": allow
+    "bash /home/*/.config/opencode/scripts/teamdb-read.sh": allow
+    "bash /c/Users/*/.config/opencode/scripts/teamdb-read.sh": allow
+    "bash ~/.config/opencode/scripts/teamdb-read.sh *": allow
+    "bash /Users/*/.config/opencode/scripts/teamdb-read.sh *": allow
+    "bash /home/*/.config/opencode/scripts/teamdb-read.sh *": allow
+    "bash /c/Users/*/.config/opencode/scripts/teamdb-read.sh *": allow
+    ".opencode/scripts/teamdb-read.sh": allow
+    ".opencode/scripts/teamdb-read.sh *": allow
+    "bash .opencode/scripts/teamdb-read.sh": allow
+    "bash .opencode/scripts/teamdb-read.sh *": allow
+    "~/.config/opencode/scripts/teamdb-context.sh": allow
+    "/Users/*/.config/opencode/scripts/teamdb-context.sh": allow
+    "/home/*/.config/opencode/scripts/teamdb-context.sh": allow
+    "/c/Users/*/.config/opencode/scripts/teamdb-context.sh": allow
+    "~/.config/opencode/scripts/teamdb-context.sh *": allow
+    "/Users/*/.config/opencode/scripts/teamdb-context.sh *": allow
+    "/home/*/.config/opencode/scripts/teamdb-context.sh *": allow
+    "/c/Users/*/.config/opencode/scripts/teamdb-context.sh *": allow
+    "bash ~/.config/opencode/scripts/teamdb-context.sh": allow
+    "bash /Users/*/.config/opencode/scripts/teamdb-context.sh": allow
+    "bash /home/*/.config/opencode/scripts/teamdb-context.sh": allow
+    "bash /c/Users/*/.config/opencode/scripts/teamdb-context.sh": allow
+    "bash ~/.config/opencode/scripts/teamdb-context.sh *": allow
+    "bash /Users/*/.config/opencode/scripts/teamdb-context.sh *": allow
+    "bash /home/*/.config/opencode/scripts/teamdb-context.sh *": allow
+    "bash /c/Users/*/.config/opencode/scripts/teamdb-context.sh *": allow
+    ".opencode/scripts/teamdb-context.sh": allow
+    ".opencode/scripts/teamdb-context.sh *": allow
+    "bash .opencode/scripts/teamdb-context.sh": allow
+    "bash .opencode/scripts/teamdb-context.sh *": allow
+    "~/.config/opencode/scripts/teamdb-search.sh": allow
+    "/Users/*/.config/opencode/scripts/teamdb-search.sh": allow
+    "/home/*/.config/opencode/scripts/teamdb-search.sh": allow
+    "/c/Users/*/.config/opencode/scripts/teamdb-search.sh": allow
+    "~/.config/opencode/scripts/teamdb-search.sh *": allow
+    "/Users/*/.config/opencode/scripts/teamdb-search.sh *": allow
+    "/home/*/.config/opencode/scripts/teamdb-search.sh *": allow
+    "/c/Users/*/.config/opencode/scripts/teamdb-search.sh *": allow
+    "bash ~/.config/opencode/scripts/teamdb-search.sh": allow
+    "bash /Users/*/.config/opencode/scripts/teamdb-search.sh": allow
+    "bash /home/*/.config/opencode/scripts/teamdb-search.sh": allow
+    "bash /c/Users/*/.config/opencode/scripts/teamdb-search.sh": allow
+    "bash ~/.config/opencode/scripts/teamdb-search.sh *": allow
+    "bash /Users/*/.config/opencode/scripts/teamdb-search.sh *": allow
+    "bash /home/*/.config/opencode/scripts/teamdb-search.sh *": allow
+    "bash /c/Users/*/.config/opencode/scripts/teamdb-search.sh *": allow
+    ".opencode/scripts/teamdb-search.sh": allow
+    ".opencode/scripts/teamdb-search.sh *": allow
+    "bash .opencode/scripts/teamdb-search.sh": allow
+    "bash .opencode/scripts/teamdb-search.sh *": allow
+    "~/.config/opencode/scripts/teamdb-related.sh": allow
+    "/Users/*/.config/opencode/scripts/teamdb-related.sh": allow
+    "/home/*/.config/opencode/scripts/teamdb-related.sh": allow
+    "/c/Users/*/.config/opencode/scripts/teamdb-related.sh": allow
+    "~/.config/opencode/scripts/teamdb-related.sh *": allow
+    "/Users/*/.config/opencode/scripts/teamdb-related.sh *": allow
+    "/home/*/.config/opencode/scripts/teamdb-related.sh *": allow
+    "/c/Users/*/.config/opencode/scripts/teamdb-related.sh *": allow
+    "bash ~/.config/opencode/scripts/teamdb-related.sh": allow
+    "bash /Users/*/.config/opencode/scripts/teamdb-related.sh": allow
+    "bash /home/*/.config/opencode/scripts/teamdb-related.sh": allow
+    "bash /c/Users/*/.config/opencode/scripts/teamdb-related.sh": allow
+    "bash ~/.config/opencode/scripts/teamdb-related.sh *": allow
+    "bash /Users/*/.config/opencode/scripts/teamdb-related.sh *": allow
+    "bash /home/*/.config/opencode/scripts/teamdb-related.sh *": allow
+    "bash /c/Users/*/.config/opencode/scripts/teamdb-related.sh *": allow
+    ".opencode/scripts/teamdb-related.sh": allow
+    ".opencode/scripts/teamdb-related.sh *": allow
+    "bash .opencode/scripts/teamdb-related.sh": allow
+    "bash .opencode/scripts/teamdb-related.sh *": allow
+    "~/.config/opencode/scripts/teamdb-status.sh": allow
+    "/Users/*/.config/opencode/scripts/teamdb-status.sh": allow
+    "/home/*/.config/opencode/scripts/teamdb-status.sh": allow
+    "/c/Users/*/.config/opencode/scripts/teamdb-status.sh": allow
+    "~/.config/opencode/scripts/teamdb-status.sh *": allow
+    "/Users/*/.config/opencode/scripts/teamdb-status.sh *": allow
+    "/home/*/.config/opencode/scripts/teamdb-status.sh *": allow
+    "/c/Users/*/.config/opencode/scripts/teamdb-status.sh *": allow
+    "bash ~/.config/opencode/scripts/teamdb-status.sh": allow
+    "bash /Users/*/.config/opencode/scripts/teamdb-status.sh": allow
+    "bash /home/*/.config/opencode/scripts/teamdb-status.sh": allow
+    "bash /c/Users/*/.config/opencode/scripts/teamdb-status.sh": allow
+    "bash ~/.config/opencode/scripts/teamdb-status.sh *": allow
+    "bash /Users/*/.config/opencode/scripts/teamdb-status.sh *": allow
+    "bash /home/*/.config/opencode/scripts/teamdb-status.sh *": allow
+    "bash /c/Users/*/.config/opencode/scripts/teamdb-status.sh *": allow
+    ".opencode/scripts/teamdb-status.sh": allow
+    ".opencode/scripts/teamdb-status.sh *": allow
+    "bash .opencode/scripts/teamdb-status.sh": allow
+    "bash .opencode/scripts/teamdb-status.sh *": allow
+    "~/.config/opencode/scripts/teamdb-resume.sh": allow
+    "/Users/*/.config/opencode/scripts/teamdb-resume.sh": allow
+    "/home/*/.config/opencode/scripts/teamdb-resume.sh": allow
+    "/c/Users/*/.config/opencode/scripts/teamdb-resume.sh": allow
+    "~/.config/opencode/scripts/teamdb-resume.sh *": allow
+    "/Users/*/.config/opencode/scripts/teamdb-resume.sh *": allow
+    "/home/*/.config/opencode/scripts/teamdb-resume.sh *": allow
+    "/c/Users/*/.config/opencode/scripts/teamdb-resume.sh *": allow
+    "bash ~/.config/opencode/scripts/teamdb-resume.sh": allow
+    "bash /Users/*/.config/opencode/scripts/teamdb-resume.sh": allow
+    "bash /home/*/.config/opencode/scripts/teamdb-resume.sh": allow
+    "bash /c/Users/*/.config/opencode/scripts/teamdb-resume.sh": allow
+    "bash ~/.config/opencode/scripts/teamdb-resume.sh *": allow
+    "bash /Users/*/.config/opencode/scripts/teamdb-resume.sh *": allow
+    "bash /home/*/.config/opencode/scripts/teamdb-resume.sh *": allow
+    "bash /c/Users/*/.config/opencode/scripts/teamdb-resume.sh *": allow
+    ".opencode/scripts/teamdb-resume.sh": allow
+    ".opencode/scripts/teamdb-resume.sh *": allow
+    "bash .opencode/scripts/teamdb-resume.sh": allow
+    "bash .opencode/scripts/teamdb-resume.sh *": allow
+    "~/.config/opencode/scripts/teamdb-memory.sh": allow
+    "/Users/*/.config/opencode/scripts/teamdb-memory.sh": allow
+    "/home/*/.config/opencode/scripts/teamdb-memory.sh": allow
+    "/c/Users/*/.config/opencode/scripts/teamdb-memory.sh": allow
+    "~/.config/opencode/scripts/teamdb-memory.sh *": allow
+    "/Users/*/.config/opencode/scripts/teamdb-memory.sh *": allow
+    "/home/*/.config/opencode/scripts/teamdb-memory.sh *": allow
+    "/c/Users/*/.config/opencode/scripts/teamdb-memory.sh *": allow
+    "bash ~/.config/opencode/scripts/teamdb-memory.sh": allow
+    "bash /Users/*/.config/opencode/scripts/teamdb-memory.sh": allow
+    "bash /home/*/.config/opencode/scripts/teamdb-memory.sh": allow
+    "bash /c/Users/*/.config/opencode/scripts/teamdb-memory.sh": allow
+    "bash ~/.config/opencode/scripts/teamdb-memory.sh *": allow
+    "bash /Users/*/.config/opencode/scripts/teamdb-memory.sh *": allow
+    "bash /home/*/.config/opencode/scripts/teamdb-memory.sh *": allow
+    "bash /c/Users/*/.config/opencode/scripts/teamdb-memory.sh *": allow
+    ".opencode/scripts/teamdb-memory.sh": allow
+    ".opencode/scripts/teamdb-memory.sh *": allow
+    "bash .opencode/scripts/teamdb-memory.sh": allow
+    "bash .opencode/scripts/teamdb-memory.sh *": allow
+    "~/.config/opencode/scripts/teamdb-link.sh": allow
+    "/Users/*/.config/opencode/scripts/teamdb-link.sh": allow
+    "/home/*/.config/opencode/scripts/teamdb-link.sh": allow
+    "/c/Users/*/.config/opencode/scripts/teamdb-link.sh": allow
+    "~/.config/opencode/scripts/teamdb-link.sh *": allow
+    "/Users/*/.config/opencode/scripts/teamdb-link.sh *": allow
+    "/home/*/.config/opencode/scripts/teamdb-link.sh *": allow
+    "/c/Users/*/.config/opencode/scripts/teamdb-link.sh *": allow
+    "bash ~/.config/opencode/scripts/teamdb-link.sh": allow
+    "bash /Users/*/.config/opencode/scripts/teamdb-link.sh": allow
+    "bash /home/*/.config/opencode/scripts/teamdb-link.sh": allow
+    "bash /c/Users/*/.config/opencode/scripts/teamdb-link.sh": allow
+    "bash ~/.config/opencode/scripts/teamdb-link.sh *": allow
+    "bash /Users/*/.config/opencode/scripts/teamdb-link.sh *": allow
+    "bash /home/*/.config/opencode/scripts/teamdb-link.sh *": allow
+    "bash /c/Users/*/.config/opencode/scripts/teamdb-link.sh *": allow
+    ".opencode/scripts/teamdb-link.sh": allow
+    ".opencode/scripts/teamdb-link.sh *": allow
+    "bash .opencode/scripts/teamdb-link.sh": allow
+    "bash .opencode/scripts/teamdb-link.sh *": allow
+    "~/.config/opencode/scripts/teamdb-claim.sh": allow
+    "/Users/*/.config/opencode/scripts/teamdb-claim.sh": allow
+    "/home/*/.config/opencode/scripts/teamdb-claim.sh": allow
+    "/c/Users/*/.config/opencode/scripts/teamdb-claim.sh": allow
+    "~/.config/opencode/scripts/teamdb-claim.sh *": allow
+    "/Users/*/.config/opencode/scripts/teamdb-claim.sh *": allow
+    "/home/*/.config/opencode/scripts/teamdb-claim.sh *": allow
+    "/c/Users/*/.config/opencode/scripts/teamdb-claim.sh *": allow
+    "bash ~/.config/opencode/scripts/teamdb-claim.sh": allow
+    "bash /Users/*/.config/opencode/scripts/teamdb-claim.sh": allow
+    "bash /home/*/.config/opencode/scripts/teamdb-claim.sh": allow
+    "bash /c/Users/*/.config/opencode/scripts/teamdb-claim.sh": allow
+    "bash ~/.config/opencode/scripts/teamdb-claim.sh *": allow
+    "bash /Users/*/.config/opencode/scripts/teamdb-claim.sh *": allow
+    "bash /home/*/.config/opencode/scripts/teamdb-claim.sh *": allow
+    "bash /c/Users/*/.config/opencode/scripts/teamdb-claim.sh *": allow
+    ".opencode/scripts/teamdb-claim.sh": allow
+    ".opencode/scripts/teamdb-claim.sh *": allow
+    "bash .opencode/scripts/teamdb-claim.sh": allow
+    "bash .opencode/scripts/teamdb-claim.sh *": allow
+    "~/.config/opencode/scripts/teamdb-dump.sh": allow
+    "/Users/*/.config/opencode/scripts/teamdb-dump.sh": allow
+    "/home/*/.config/opencode/scripts/teamdb-dump.sh": allow
+    "/c/Users/*/.config/opencode/scripts/teamdb-dump.sh": allow
+    "~/.config/opencode/scripts/teamdb-dump.sh *": allow
+    "/Users/*/.config/opencode/scripts/teamdb-dump.sh *": allow
+    "/home/*/.config/opencode/scripts/teamdb-dump.sh *": allow
+    "/c/Users/*/.config/opencode/scripts/teamdb-dump.sh *": allow
+    "bash ~/.config/opencode/scripts/teamdb-dump.sh": allow
+    "bash /Users/*/.config/opencode/scripts/teamdb-dump.sh": allow
+    "bash /home/*/.config/opencode/scripts/teamdb-dump.sh": allow
+    "bash /c/Users/*/.config/opencode/scripts/teamdb-dump.sh": allow
+    "bash ~/.config/opencode/scripts/teamdb-dump.sh *": allow
+    "bash /Users/*/.config/opencode/scripts/teamdb-dump.sh *": allow
+    "bash /home/*/.config/opencode/scripts/teamdb-dump.sh *": allow
+    "bash /c/Users/*/.config/opencode/scripts/teamdb-dump.sh *": allow
+    ".opencode/scripts/teamdb-dump.sh": allow
+    ".opencode/scripts/teamdb-dump.sh *": allow
+    "bash .opencode/scripts/teamdb-dump.sh": allow
+    "bash .opencode/scripts/teamdb-dump.sh *": allow
+    "~/.config/opencode/scripts/teamdb-export-md.sh": allow
+    "/Users/*/.config/opencode/scripts/teamdb-export-md.sh": allow
+    "/home/*/.config/opencode/scripts/teamdb-export-md.sh": allow
+    "/c/Users/*/.config/opencode/scripts/teamdb-export-md.sh": allow
+    "~/.config/opencode/scripts/teamdb-export-md.sh *": allow
+    "/Users/*/.config/opencode/scripts/teamdb-export-md.sh *": allow
+    "/home/*/.config/opencode/scripts/teamdb-export-md.sh *": allow
+    "/c/Users/*/.config/opencode/scripts/teamdb-export-md.sh *": allow
+    "bash ~/.config/opencode/scripts/teamdb-export-md.sh": allow
+    "bash /Users/*/.config/opencode/scripts/teamdb-export-md.sh": allow
+    "bash /home/*/.config/opencode/scripts/teamdb-export-md.sh": allow
+    "bash /c/Users/*/.config/opencode/scripts/teamdb-export-md.sh": allow
+    "bash ~/.config/opencode/scripts/teamdb-export-md.sh *": allow
+    "bash /Users/*/.config/opencode/scripts/teamdb-export-md.sh *": allow
+    "bash /home/*/.config/opencode/scripts/teamdb-export-md.sh *": allow
+    "bash /c/Users/*/.config/opencode/scripts/teamdb-export-md.sh *": allow
+    ".opencode/scripts/teamdb-export-md.sh": allow
+    ".opencode/scripts/teamdb-export-md.sh *": allow
+    "bash .opencode/scripts/teamdb-export-md.sh": allow
+    "bash .opencode/scripts/teamdb-export-md.sh *": allow
+    "git add": allow
+    "git add *": allow
+    "git diff *--output*": allow
+    "git show *--output*": allow
+    "sort *-o*": allow
+    "~/.config/opencode/scripts/teamdb-attempt.sh": allow
+    "/Users/*/.config/opencode/scripts/teamdb-attempt.sh": allow
+    "/home/*/.config/opencode/scripts/teamdb-attempt.sh": allow
+    "/c/Users/*/.config/opencode/scripts/teamdb-attempt.sh": allow
+    "~/.config/opencode/scripts/teamdb-attempt.sh *": allow
+    "/Users/*/.config/opencode/scripts/teamdb-attempt.sh *": allow
+    "/home/*/.config/opencode/scripts/teamdb-attempt.sh *": allow
+    "/c/Users/*/.config/opencode/scripts/teamdb-attempt.sh *": allow
+    "bash ~/.config/opencode/scripts/teamdb-attempt.sh": allow
+    "bash /Users/*/.config/opencode/scripts/teamdb-attempt.sh": allow
+    "bash /home/*/.config/opencode/scripts/teamdb-attempt.sh": allow
+    "bash /c/Users/*/.config/opencode/scripts/teamdb-attempt.sh": allow
+    "bash ~/.config/opencode/scripts/teamdb-attempt.sh *": allow
+    "bash /Users/*/.config/opencode/scripts/teamdb-attempt.sh *": allow
+    "bash /home/*/.config/opencode/scripts/teamdb-attempt.sh *": allow
+    "bash /c/Users/*/.config/opencode/scripts/teamdb-attempt.sh *": allow
+    ".opencode/scripts/teamdb-attempt.sh": allow
+    ".opencode/scripts/teamdb-attempt.sh *": allow
+    "bash .opencode/scripts/teamdb-attempt.sh": allow
+    "bash .opencode/scripts/teamdb-attempt.sh *": allow
     "cp *.db*": ask
     "mv *.db*": ask
     "cp *.sqlite*": ask
     "mv *.sqlite*": ask
-    "python3 */teamdb-destructive.py *": ask
-    "python3 */teamdb-destructive.py apply *": ask
-    "python3 */teamdb-destructive.py preview *": allow
+    "python3 .opencode/scripts/teamdb-destructive.py apply *": ask
+    "python3 ~/.config/opencode/scripts/teamdb-destructive.py apply *": ask
+    "python3 /Users/*/.config/opencode/scripts/teamdb-destructive.py apply *": ask
+    "python3 /home/*/.config/opencode/scripts/teamdb-destructive.py apply *": ask
+    "python3 /c/Users/*/.config/opencode/scripts/teamdb-destructive.py apply *": ask
     rm: ask
     "rm *": ask
     rmdir: ask
@@ -218,234 +557,9 @@ permission:
     "git -C * reflog delete *": ask
     "cd * && git reflog delete": ask
     "cd * && git reflog delete *": ask
-    cat: allow
-    "cat *": allow
-    head: allow
-    "head *": allow
-    tail: allow
-    "tail *": allow
-    ls: allow
-    "ls *": allow
-    rg: allow
-    "rg *": allow
-    grep: allow
-    "grep *": allow
-    wc: allow
-    "wc *": allow
-    sort: allow
-    "sort *": allow
-    uniq: allow
-    "uniq *": allow
-    echo: allow
-    "echo *": allow
-    printf: allow
-    "printf *": allow
-    pwd: allow
-    "pwd *": allow
-    find: allow
-    "find *": allow
-    "which *": allow
-    "command -v *": allow
-    "type *": allow
-    "basename *": allow
-    "dirname *": allow
-    date: allow
-    "date *": allow
-    whoami: allow
-    uname: allow
-    "uname *": allow
-    "stat *": allow
-    "file *": allow
-    "readlink *": allow
-    "realpath *": allow
-    "test *": allow
-    "[ *": allow
-    sed: allow
-    "sed *": allow
-    "sed -i*": allow
     "sed -i*.env*": ask
     "sed -i*.pem*": ask
     "sed -i*id_rsa*": ask
-    "git status": allow
-    "git status *": allow
-    "git diff": allow
-    "git diff *": allow
-    "git log": allow
-    "git log *": allow
-    "git show": allow
-    "git show *": allow
-    "git ls-files": allow
-    "git ls-files *": allow
-    "git rev-parse": allow
-    "git rev-parse *": allow
-    "cd * && git status": allow
-    "cd * && git status *": allow
-    "cd * && git diff": allow
-    "cd * && git diff *": allow
-    "cd * && git log": allow
-    "cd * && git log *": allow
-    "cd * && git show": allow
-    "cd * && git show *": allow
-    "cd * && git ls-files": allow
-    "cd * && git ls-files *": allow
-    "cd * && git rev-parse": allow
-    "cd * && git rev-parse *": allow
-    "cd * && git stash list": allow
-    "cd * && git stash list *": allow
-    "git stash list": allow
-    "git stash list *": allow
-    "codegraph status": allow
-    "codegraph status *": allow
-    "codegraph query": allow
-    "codegraph query *": allow
-    "codegraph explore": allow
-    "codegraph explore *": allow
-    "codegraph node": allow
-    "codegraph node *": allow
-    "codegraph files": allow
-    "codegraph files *": allow
-    "codegraph callers": allow
-    "codegraph callers *": allow
-    "codegraph callees": allow
-    "codegraph callees *": allow
-    "codegraph impact": allow
-    "codegraph impact *": allow
-    "codegraph affected": allow
-    "codegraph affected *": allow
-    "*/.config/opencode/scripts/teamdb-read.sh": allow
-    "*/.config/opencode/scripts/teamdb-read.sh *": allow
-    "bash */.config/opencode/scripts/teamdb-read.sh": allow
-    "bash */.config/opencode/scripts/teamdb-read.sh *": allow
-    ".opencode/scripts/teamdb-read.sh": allow
-    ".opencode/scripts/teamdb-read.sh *": allow
-    "bash .opencode/scripts/teamdb-read.sh": allow
-    "bash .opencode/scripts/teamdb-read.sh *": allow
-    "*/.opencode/scripts/teamdb-read.sh": allow
-    "*/.opencode/scripts/teamdb-read.sh *": allow
-    "bash */.opencode/scripts/teamdb-read.sh": allow
-    "bash */.opencode/scripts/teamdb-read.sh *": allow
-    "*/.config/opencode/scripts/teamdb-context.sh": allow
-    "*/.config/opencode/scripts/teamdb-context.sh *": allow
-    "bash */.config/opencode/scripts/teamdb-context.sh": allow
-    "bash */.config/opencode/scripts/teamdb-context.sh *": allow
-    ".opencode/scripts/teamdb-context.sh": allow
-    ".opencode/scripts/teamdb-context.sh *": allow
-    "bash .opencode/scripts/teamdb-context.sh": allow
-    "bash .opencode/scripts/teamdb-context.sh *": allow
-    "*/.opencode/scripts/teamdb-context.sh": allow
-    "*/.opencode/scripts/teamdb-context.sh *": allow
-    "bash */.opencode/scripts/teamdb-context.sh": allow
-    "bash */.opencode/scripts/teamdb-context.sh *": allow
-    "*/.config/opencode/scripts/teamdb-search.sh": allow
-    "*/.config/opencode/scripts/teamdb-search.sh *": allow
-    "bash */.config/opencode/scripts/teamdb-search.sh": allow
-    "bash */.config/opencode/scripts/teamdb-search.sh *": allow
-    ".opencode/scripts/teamdb-search.sh": allow
-    ".opencode/scripts/teamdb-search.sh *": allow
-    "bash .opencode/scripts/teamdb-search.sh": allow
-    "bash .opencode/scripts/teamdb-search.sh *": allow
-    "*/.opencode/scripts/teamdb-search.sh": allow
-    "*/.opencode/scripts/teamdb-search.sh *": allow
-    "bash */.opencode/scripts/teamdb-search.sh": allow
-    "bash */.opencode/scripts/teamdb-search.sh *": allow
-    "*/.config/opencode/scripts/teamdb-related.sh": allow
-    "*/.config/opencode/scripts/teamdb-related.sh *": allow
-    "bash */.config/opencode/scripts/teamdb-related.sh": allow
-    "bash */.config/opencode/scripts/teamdb-related.sh *": allow
-    ".opencode/scripts/teamdb-related.sh": allow
-    ".opencode/scripts/teamdb-related.sh *": allow
-    "bash .opencode/scripts/teamdb-related.sh": allow
-    "bash .opencode/scripts/teamdb-related.sh *": allow
-    "*/.opencode/scripts/teamdb-related.sh": allow
-    "*/.opencode/scripts/teamdb-related.sh *": allow
-    "bash */.opencode/scripts/teamdb-related.sh": allow
-    "bash */.opencode/scripts/teamdb-related.sh *": allow
-    "*/.config/opencode/scripts/teamdb-status.sh": allow
-    "*/.config/opencode/scripts/teamdb-status.sh *": allow
-    "bash */.config/opencode/scripts/teamdb-status.sh": allow
-    "bash */.config/opencode/scripts/teamdb-status.sh *": allow
-    ".opencode/scripts/teamdb-status.sh": allow
-    ".opencode/scripts/teamdb-status.sh *": allow
-    "bash .opencode/scripts/teamdb-status.sh": allow
-    "bash .opencode/scripts/teamdb-status.sh *": allow
-    "*/.opencode/scripts/teamdb-status.sh": allow
-    "*/.opencode/scripts/teamdb-status.sh *": allow
-    "bash */.opencode/scripts/teamdb-status.sh": allow
-    "bash */.opencode/scripts/teamdb-status.sh *": allow
-    "*/.config/opencode/scripts/teamdb-resume.sh": allow
-    "*/.config/opencode/scripts/teamdb-resume.sh *": allow
-    "bash */.config/opencode/scripts/teamdb-resume.sh": allow
-    "bash */.config/opencode/scripts/teamdb-resume.sh *": allow
-    ".opencode/scripts/teamdb-resume.sh": allow
-    ".opencode/scripts/teamdb-resume.sh *": allow
-    "bash .opencode/scripts/teamdb-resume.sh": allow
-    "bash .opencode/scripts/teamdb-resume.sh *": allow
-    "*/.opencode/scripts/teamdb-resume.sh": allow
-    "*/.opencode/scripts/teamdb-resume.sh *": allow
-    "bash */.opencode/scripts/teamdb-resume.sh": allow
-    "bash */.opencode/scripts/teamdb-resume.sh *": allow
-    "*/.config/opencode/scripts/teamdb-memory.sh": allow
-    "*/.config/opencode/scripts/teamdb-memory.sh *": allow
-    "bash */.config/opencode/scripts/teamdb-memory.sh": allow
-    "bash */.config/opencode/scripts/teamdb-memory.sh *": allow
-    ".opencode/scripts/teamdb-memory.sh": allow
-    ".opencode/scripts/teamdb-memory.sh *": allow
-    "bash .opencode/scripts/teamdb-memory.sh": allow
-    "bash .opencode/scripts/teamdb-memory.sh *": allow
-    "*/.opencode/scripts/teamdb-memory.sh": allow
-    "*/.opencode/scripts/teamdb-memory.sh *": allow
-    "bash */.opencode/scripts/teamdb-memory.sh": allow
-    "bash */.opencode/scripts/teamdb-memory.sh *": allow
-    "*/.config/opencode/scripts/teamdb-link.sh": allow
-    "*/.config/opencode/scripts/teamdb-link.sh *": allow
-    "bash */.config/opencode/scripts/teamdb-link.sh": allow
-    "bash */.config/opencode/scripts/teamdb-link.sh *": allow
-    ".opencode/scripts/teamdb-link.sh": allow
-    ".opencode/scripts/teamdb-link.sh *": allow
-    "bash .opencode/scripts/teamdb-link.sh": allow
-    "bash .opencode/scripts/teamdb-link.sh *": allow
-    "*/.opencode/scripts/teamdb-link.sh": allow
-    "*/.opencode/scripts/teamdb-link.sh *": allow
-    "bash */.opencode/scripts/teamdb-link.sh": allow
-    "bash */.opencode/scripts/teamdb-link.sh *": allow
-    "*/.config/opencode/scripts/teamdb-claim.sh": allow
-    "*/.config/opencode/scripts/teamdb-claim.sh *": allow
-    "bash */.config/opencode/scripts/teamdb-claim.sh": allow
-    "bash */.config/opencode/scripts/teamdb-claim.sh *": allow
-    ".opencode/scripts/teamdb-claim.sh": allow
-    ".opencode/scripts/teamdb-claim.sh *": allow
-    "bash .opencode/scripts/teamdb-claim.sh": allow
-    "bash .opencode/scripts/teamdb-claim.sh *": allow
-    "*/.opencode/scripts/teamdb-claim.sh": allow
-    "*/.opencode/scripts/teamdb-claim.sh *": allow
-    "bash */.opencode/scripts/teamdb-claim.sh": allow
-    "bash */.opencode/scripts/teamdb-claim.sh *": allow
-    "*/.config/opencode/scripts/teamdb-dump.sh": allow
-    "*/.config/opencode/scripts/teamdb-dump.sh *": allow
-    "bash */.config/opencode/scripts/teamdb-dump.sh": allow
-    "bash */.config/opencode/scripts/teamdb-dump.sh *": allow
-    ".opencode/scripts/teamdb-dump.sh": allow
-    ".opencode/scripts/teamdb-dump.sh *": allow
-    "bash .opencode/scripts/teamdb-dump.sh": allow
-    "bash .opencode/scripts/teamdb-dump.sh *": allow
-    "*/.opencode/scripts/teamdb-dump.sh": allow
-    "*/.opencode/scripts/teamdb-dump.sh *": allow
-    "bash */.opencode/scripts/teamdb-dump.sh": allow
-    "bash */.opencode/scripts/teamdb-dump.sh *": allow
-    "*/.config/opencode/scripts/teamdb-export-md.sh": allow
-    "*/.config/opencode/scripts/teamdb-export-md.sh *": allow
-    "bash */.config/opencode/scripts/teamdb-export-md.sh": allow
-    "bash */.config/opencode/scripts/teamdb-export-md.sh *": allow
-    ".opencode/scripts/teamdb-export-md.sh": allow
-    ".opencode/scripts/teamdb-export-md.sh *": allow
-    "bash .opencode/scripts/teamdb-export-md.sh": allow
-    "bash .opencode/scripts/teamdb-export-md.sh *": allow
-    "*/.opencode/scripts/teamdb-export-md.sh": allow
-    "*/.opencode/scripts/teamdb-export-md.sh *": allow
-    "bash */.opencode/scripts/teamdb-export-md.sh": allow
-    "bash */.opencode/scripts/teamdb-export-md.sh *": allow
-    "git add": allow
-    "git add *": allow
     "git commit": ask
     "git commit *": ask
     "git push": ask
@@ -465,9 +579,6 @@ permission:
     "find *-exec*": ask
     "find *-ok*": ask
     "find *-fprint*": ask
-    "git diff *--output*": allow
-    "git show *--output*": allow
-    "sort *-o*": allow
     "cat *.env*": ask
     "cat *.pem*": ask
     "cat *id_rsa*": ask
@@ -530,18 +641,6 @@ permission:
     "git -C * worktree prune*": ask
     "cd * && git worktree remove*": ask
     "cd * && git worktree prune*": ask
-    "*/.config/opencode/scripts/teamdb-attempt.sh": allow
-    "*/.config/opencode/scripts/teamdb-attempt.sh *": allow
-    "bash */.config/opencode/scripts/teamdb-attempt.sh": allow
-    "bash */.config/opencode/scripts/teamdb-attempt.sh *": allow
-    ".opencode/scripts/teamdb-attempt.sh": allow
-    ".opencode/scripts/teamdb-attempt.sh *": allow
-    "bash .opencode/scripts/teamdb-attempt.sh": allow
-    "bash .opencode/scripts/teamdb-attempt.sh *": allow
-    "*/.opencode/scripts/teamdb-attempt.sh": allow
-    "*/.opencode/scripts/teamdb-attempt.sh *": allow
-    "bash */.opencode/scripts/teamdb-attempt.sh": allow
-    "bash */.opencode/scripts/teamdb-attempt.sh *": allow
     "*/.ssh/*": ask
     "*/.aws/*": ask
     "*.netrc*": ask
@@ -555,6 +654,18 @@ permission:
     "*id_rsa*": ask
     "*id_ed25519*": ask
     "*id_ecdsa*": ask
+    "* .env": ask
+    "* .env *": ask
+    "* .env.*": ask
+    "*/.env": ask
+    "*/.env *": ask
+    "*/.env.*": ask
+    "*\".env*": ask
+    "*'.env*": ask
+    "*=.env*": ask
+    "*<.env*": ask
+    "*.pem": ask
+    "*.pem *": ask
 ---
 
 # Pau — Memoria y documentación

@@ -1,0 +1,13 @@
+# Skalling — revisión obligatoria de lo que se ejecuta en la máquina de cada integrante
+# (instalado por setup.sh --with-ci). Reemplazá @OWNER por la persona o equipo
+# responsable (ej. @mi-org/leads) y activá en la rama principal:
+# "Require review from Code Owners".
+#
+# Los plugins, agentes, scripts y hooks de .opencode/ corren localmente en cada
+# commit, pull y push; la memoria compartida viaja en db/teamdb/.
+/.opencode/            @OWNER
+/db/teamdb/            @OWNER
+/.github/workflows/    @OWNER
+/.gitattributes        @OWNER
+/.gitignore            @OWNER
+/AGENTS.md             @OWNER

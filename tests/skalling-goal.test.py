@@ -1,5 +1,6 @@
 import hashlib
 import importlib.util
+from contextlib import closing
 import sqlite3
 import subprocess
 import tempfile
@@ -92,7 +93,7 @@ class GoalTests(unittest.TestCase):
             self.act('commit', message='Cambio', files=['app.py'])
         patch = self.git('diff', '--cached', '--', '.', ':(exclude)db/teamdb/team.dump.sql').rstrip(b'\n')
         digest = hashlib.sha256(patch).hexdigest()[:16]
-        with sqlite3.connect(self.root / '.opencode/context/team.db') as db:
+        with closing(sqlite3.connect(self.root / '.opencode/context/team.db')) as db, db:
             db.execute("INSERT INTO receipts(id,task_id,agent,command,exit_code,tree_hash,ts) VALUES(?,?,?,?,?,?,CURRENT_TIMESTAMP)",
                        ('fixture', 'fixture', 'jhon', 'skalling_workflow:complete', 0, digest))
         result = self.act('commit', message='test: cambia valor de fixture', files=['app.py'])

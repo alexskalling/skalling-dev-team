@@ -7,7 +7,11 @@
 # `receipts` de TeamDB, y es lo que git-gate.py exige para permitir un commit
 # (prueba de review). skalling-receipt.sh es un archivo JSON suelto en disco,
 # bitácora de trabajo sin relación con el gate de commits.
-# Uso: bash teamdb-seal-receipt.sh <task_id> <jhon|luz> [project]
+# Uso: bash teamdb-seal-receipt.sh <task_id> <jhon|luz|humano> [project]
+#
+# humano: una persona que commitea desde su terminal (sin OpenCode). Mismo
+# rigor que jhon (corre el test real sobre lo staged); queda atribuido a
+# quien lo hizo. Atajo: skalling-approve.sh.
 #
 # Camino HUMANO (terminal). Dentro de OpenCode la evidencia la registra el
 # motor skalling_workflow (identidad del runtime, no de variables de shell):
@@ -34,6 +38,7 @@
 #             el gate lo acepta y lo anuncia
 #   reviewed  revisión (Luz / skalling-review.sh): exit del review
 set -euo pipefail
+export PYTHONDONTWRITEBYTECODE=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -61,8 +66,8 @@ if [ -n "${SKALLING_RUNTIME_AGENT:-}" ]; then
 fi
 AGENT="$(printf '%s' "${2:-}" | tr '[:upper:]' '[:lower:]')"
 case "$AGENT" in
-  jhon|luz) ;;
-  *) echo "ERROR: solo jhon (verificación real) o luz (revisión real) sellan; recibido: '${2:-}'" >&2; exit 2 ;;
+  jhon|luz|humano) ;;
+  *) echo "ERROR: solo jhon (verificación real), luz (revisión real) o humano (desde una terminal) sellan; recibido: '${2:-}'" >&2; exit 2 ;;
 esac
 if [ "$AGENT" = "luz" ]; then
   case "${TEAMDB_CLAIM_COMMAND:-}" in
@@ -134,7 +139,7 @@ SUMMARY="${TEAMDB_CLAIM_OUTPUT_SUMMARY:-}"
 # comando configurado, se sella igual (no podemos bloquear para siempre un
 # proyecto sin tests) pero queda anotado sin ambigüedad, nunca indistinguible
 # de un test que sí corrió y pasó.
-if [ "$AGENT" = "jhon" ]; then
+if [ "$AGENT" = "jhon" ] || [ "$AGENT" = "humano" ]; then
   # skalling-verify.sh corre sobre el WORKING TREE, pero lo que este script
   # sella es el hash de lo STAGED (git diff --cached, más abajo). Si hay
   # cambios sin stagear en archivos trackeados, el test real puede estar

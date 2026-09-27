@@ -3,6 +3,7 @@ build-schema.sh	build-schema.sh	ecb28180bb0cbd02b41da78d3d7f10af31c0a886e9fc306e
 dashboard-server.py	dashboard-server.py	7b9745966fc2b0baac0912dccfc67fdbbec84fc8ac562a821a1080dd65745079	
 mem-review.sh	mem-review.sh	a63be07221b01590678d0800213bdeaf6804f793beb22eadd9c49a953169d59e	
 merge-helper.sh	merge-helper.sh	0bd2bda66e21a40876dc1c579eee6bb0315e2e71ebbc53d73a9766213c4520dc	
+skalling-approve.sh	skalling-approve.sh
 skalling-bootstrap-context.py	skalling-bootstrap-context.py	1d92f50e3b2b8f54c81bbbade581c39b38fe14ac5d6120241270eba8f86f31db	1d92f50e3b2b8f54c81bbbade581c39b38fe14ac5d6120241270eba8f86f31db
 skalling-coverage.sh	skalling-coverage.sh
 skalling-dead-code-check.sh	skalling-dead-code-check.sh

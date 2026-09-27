@@ -9,6 +9,7 @@ y otros helpers que armaban la ruta a mano.
 """
 import importlib.util
 import os
+from contextlib import closing
 import sqlite3
 import subprocess
 import sys
@@ -46,7 +47,7 @@ class WorkflowFromWorktree(unittest.TestCase):
         self.git(self.main, 'commit', '-qm', 'init')
         subprocess.run(['bash', str(ROOT / 'scripts/teamdb-init.sh'), str(self.main)], env=ENV, capture_output=True, check=True)
         self.db = self.main / '.opencode/context/team.db'
-        with sqlite3.connect(self.db) as conn:
+        with closing(sqlite3.connect(self.db)) as conn, conn:
             conn.execute("INSERT OR REPLACE INTO schema_meta(key,value) VALUES('project_readiness','initialized')")
             conn.execute("INSERT INTO concepts(slug,title,body_md,updated_at) VALUES('project-summary','R','App',datetime('now'))")
         (self.main / '.opencode/project.yaml').write_text(
@@ -72,7 +73,7 @@ class WorkflowFromWorktree(unittest.TestCase):
         (self.worktree / 'app.py').write_text('value = 2\n')
         self.assertEqual(self.call('teo', 'deliver')['state'], 'verified')
         self.assertEqual(self.call('alex', 'complete')['state'], 'completed')
-        with sqlite3.connect(self.db) as conn:
+        with closing(sqlite3.connect(self.db)) as conn, conn:
             self.assertEqual(conn.execute("SELECT agent FROM receipts WHERE task_id='wt-1'").fetchone()[0], 'auto')
         # El gate del worktree encuentra el receipt en la base del repositorio principal.
         cwd = os.getcwd()
@@ -92,7 +93,7 @@ class WorkflowFromWorktree(unittest.TestCase):
                                "SELECT slug FROM decisions WHERE slug='wt'"], env=ENV, capture_output=True, text=True)
         self.assertEqual(read.returncode, 0, read.stderr)
         self.assertIn('"slug": "wt"', read.stdout)
-        with sqlite3.connect(self.db) as conn:
+        with closing(sqlite3.connect(self.db)) as conn, conn:
             self.assertIsNotNone(conn.execute("SELECT 1 FROM decisions WHERE slug='wt'").fetchone())
 
 

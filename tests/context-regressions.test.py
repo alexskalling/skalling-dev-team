@@ -1,5 +1,6 @@
 import json
 import re
+from contextlib import closing
 import sqlite3
 import subprocess
 import tempfile
@@ -17,7 +18,7 @@ class ContextRegression(unittest.TestCase):
         context = self.project / '.opencode/context'
         context.mkdir(parents=True)
         self.db = context / 'team.db'
-        with sqlite3.connect(self.db) as db:
+        with closing(sqlite3.connect(self.db)) as db, db:
             db.executescript((ROOT / 'sql/project-schema.sql').read_text())
             for slug, body in [('project-summary', 'Portal de operaciones'),
                                ('design-system', 'Estilos existentes. ' * 40 + 'NO cambiar la fuente corporativa.')]:
@@ -47,7 +48,7 @@ class ContextRegression(unittest.TestCase):
         self.assertTrue(any(x['slug'] == 'design-system' for x in data['omitted']))
 
     def test_initialized_db_does_not_authorize_a_blind_request(self):
-        with sqlite3.connect(self.db) as db:
+        with closing(sqlite3.connect(self.db)) as db, db:
             db.execute("INSERT INTO schema_meta VALUES('project_readiness','initialized')")
         command = ['bash', str(ROOT / 'scripts/skalling-route.sh'), 'classify', '--kind', 'code', '--project',
                    str(self.project), '--risk', 'low', '--scope', 'local']
@@ -60,7 +61,7 @@ class ContextRegression(unittest.TestCase):
         self.assertTrue(json.loads(result.stdout)['implementation_allowed'])
         result = subprocess.run(command + evidence + ['--risk', 'high'], capture_output=True, text=True, check=True)
         self.assertFalse(json.loads(result.stdout)['implementation_allowed'])
-        with sqlite3.connect(self.db) as db:
+        with closing(sqlite3.connect(self.db)) as db, db:
             db.execute("INSERT INTO plans(slug,title,design_md,status) VALUES('demo','Plan demo','Borrador','draft')")
             plan_id = db.execute("SELECT id FROM plans WHERE slug='demo'").fetchone()[0]
             db.execute("INSERT INTO tasks(plan_id,slug,title,purpose,acceptance_md,status) VALUES(?,'task-one','Cambio concreto','Preservar contrato','Valor esperado','pending')", (plan_id,))
@@ -83,7 +84,7 @@ class ContextRegression(unittest.TestCase):
         self.assertFalse((self.project / '.opencode/context/proyecto').exists())
         self.assertNotIn('npm test', yaml.read_text())
         self.assertIn('available: false', yaml.read_text())
-        with sqlite3.connect(self.db) as db:
+        with closing(sqlite3.connect(self.db)) as db, db:
             summary = db.execute("SELECT body_md FROM concepts WHERE slug='project-summary'").fetchone()[0]
             self.assertEqual(summary, 'Portal de operaciones')
             self.assertEqual(db.execute("SELECT value FROM schema_meta WHERE key='project_readiness'").fetchone()[0], 'initialized')
@@ -98,7 +99,7 @@ class ContextRegression(unittest.TestCase):
         backup = Path(json.loads(result.stdout)['backup'])
         self.assertEqual((backup / 'proyecto/custom.md').read_bytes(), content)
         self.assertFalse(legacy.exists())
-        with sqlite3.connect(self.db) as db:
+        with closing(sqlite3.connect(self.db)) as db, db:
             self.assertEqual(db.execute('SELECT content FROM legacy_documents').fetchone()[0], content)
         result = subprocess.run(tool + ['--export-concept', 'design-system'], capture_output=True, text=True, check=True)
         self.assertIn('NO cambiar la fuente corporativa.', Path(result.stdout.strip()).read_text())
@@ -116,7 +117,7 @@ class ContextRegression(unittest.TestCase):
     # ── Auditoría externa v0.12.0 #6: un solo contrato de selección ──
 
     def test_more_matches_than_top_k_always_asks_for_expansion(self):
-        with sqlite3.connect(self.db) as db:
+        with closing(sqlite3.connect(self.db)) as db, db:
             for i in range(9):
                 db.execute("INSERT INTO decisions(slug,title,body_md,status) VALUES(?,?,?,'accepted')",
                            (f'pagos-{i}', f'Pagos regla {i}', f'Restricción de pagos número {i}'))
@@ -131,7 +132,7 @@ class ContextRegression(unittest.TestCase):
                                *args, str(self.project)], capture_output=True, text=True)
 
     def seed_task(self, description='Implementar'):
-        with sqlite3.connect(self.db) as db:
+        with closing(sqlite3.connect(self.db)) as db, db:
             db.execute("INSERT INTO plans(slug,title,design_md,status) VALUES('plan','Plan','d','approved')")
             plan = db.execute("SELECT id FROM plans WHERE slug='plan'").fetchone()[0]
             db.execute("INSERT INTO tasks(plan_id,slug,title,description_md,acceptance_md,status) VALUES(?,?,?,?,?,'pending')",

@@ -10,6 +10,7 @@ Auditoría externa v0.12.0:
 """
 import os
 import shutil
+from contextlib import closing
 import sqlite3
 import subprocess
 import tempfile
@@ -55,11 +56,11 @@ class RestoreSafety(unittest.TestCase):
     def test_hostile_dump_leaves_an_existing_base_untouched(self):
         subprocess.run(['bash', str(ROOT / 'scripts/teamdb-init.sh'), str(self.root)], capture_output=True,
                        check=True, env={**os.environ, 'SKALLING_ROOT': str(ROOT)})
-        with sqlite3.connect(self.db) as conn:
+        with closing(sqlite3.connect(self.db)) as conn, conn:
             conn.execute("INSERT INTO preferences (slug,scope,body_md) VALUES ('propia','global','no tocar')")
         self.dump.write_text(self.valid_row() + 'DELETE FROM preferences;\n')
         self.assertNotEqual(self.restore('--force').returncode, 0)
-        with sqlite3.connect(self.db) as conn:
+        with closing(sqlite3.connect(self.db)) as conn, conn:
             self.assertEqual(conn.execute("SELECT body_md FROM preferences WHERE slug='propia'").fetchone()[0], 'no tocar')
             self.assertIsNone(conn.execute("SELECT 1 FROM preferences WHERE slug='tono'").fetchone())
 
@@ -69,7 +70,7 @@ class RestoreSafety(unittest.TestCase):
         self.assertEqual(first.returncode, 0, first.stderr)
         second = self.restore('--force')
         self.assertEqual(second.returncode, 0, second.stderr)
-        with sqlite3.connect(self.db) as conn:
+        with closing(sqlite3.connect(self.db)) as conn, conn:
             self.assertEqual(conn.execute("SELECT count(*), max(body_md) FROM preferences").fetchone(), (1, 'Formal'))
             self.assertEqual(conn.execute("PRAGMA integrity_check").fetchone()[0], 'ok')
 
@@ -88,13 +89,13 @@ class RestoreSafety(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         backups = sorted((self.db.parent / '.backups').glob('team.db.backup-*'))
         self.assertTrue(backups)
-        with sqlite3.connect(backups[-1]) as conn:
+        with closing(sqlite3.connect(backups[-1])) as conn, conn:
             self.assertEqual(conn.execute("SELECT body_md FROM preferences WHERE slug='reciente'").fetchone()[0], 'en el WAL')
 
     def test_failed_backup_aborts_before_a_full_reset(self):
         subprocess.run(['bash', str(ROOT / 'scripts/teamdb-init.sh'), str(self.root)], capture_output=True,
                        check=True, env={**os.environ, 'SKALLING_ROOT': str(ROOT)})
-        with sqlite3.connect(self.db) as conn:
+        with closing(sqlite3.connect(self.db)) as conn, conn:
             conn.execute("INSERT INTO preferences (slug,scope,body_md) VALUES ('valiosa','global','trabajo')")
         backups = self.db.parent / '.backups'
         shutil.rmtree(backups, ignore_errors=True)
@@ -103,7 +104,7 @@ class RestoreSafety(unittest.TestCase):
         result = self.restore('--full-reset')
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('restauración abortada sin cambios', result.stderr)
-        with sqlite3.connect(self.db) as conn:
+        with closing(sqlite3.connect(self.db)) as conn, conn:
             self.assertEqual(conn.execute("SELECT body_md FROM preferences WHERE slug='valiosa'").fetchone()[0], 'trabajo')
 
 
@@ -115,19 +116,19 @@ class RestoreSafety(unittest.TestCase):
 
     def test_bad_column_with_full_reset_leaves_the_active_base_intact(self):
         self.init()
-        with sqlite3.connect(self.db) as conn:
+        with closing(sqlite3.connect(self.db)) as conn, conn:
             conn.execute("INSERT INTO preferences (slug,scope,body_md) VALUES ('valiosa','global','trabajo')")
         self.dump.write_text('INSERT INTO "preferences" ("id","slug","scope","no_existe") VALUES (9,\'x\',\'global\',1);\n')
         result = self.restore('--full-reset')
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('queda sin cambios', result.stderr)
-        with sqlite3.connect(self.db) as conn:
+        with closing(sqlite3.connect(self.db)) as conn, conn:
             self.assertEqual(conn.execute("SELECT body_md FROM preferences WHERE slug='valiosa'").fetchone()[0], 'trabajo')
         self.assertFalse(list(self.db.parent.glob('team.db.restore-*')))
 
     def corrupt(self):
         self.init()
-        with sqlite3.connect(self.db) as conn:
+        with closing(sqlite3.connect(self.db)) as conn, conn:
             conn.execute('PRAGMA journal_mode=DELETE')
         data = bytearray(self.db.read_bytes())
         data[100:4096] = b'\xff' * (4096 - 100)        # cabecera y primera página destruidas
@@ -142,7 +143,7 @@ class RestoreSafety(unittest.TestCase):
         raw = list((self.db.parent / '.backups').glob('team.db.corrupt-*'))
         self.assertTrue(raw)
         self.assertEqual(raw[0].read_bytes(), original)
-        with sqlite3.connect(self.db) as conn:
+        with closing(sqlite3.connect(self.db)) as conn, conn:
             self.assertEqual(conn.execute("SELECT body_md FROM preferences WHERE slug='tono'").fetchone()[0], 'Formal')
             self.assertEqual(conn.execute('PRAGMA integrity_check').fetchone()[0], 'ok')
 
@@ -178,7 +179,7 @@ class RestoreSafety(unittest.TestCase):
         writer.close()
         out, err = restore.communicate(timeout=120)
         self.assertEqual(restore.returncode, 0, out + err)
-        with sqlite3.connect(self.db) as conn:
+        with closing(sqlite3.connect(self.db)) as conn, conn:
             self.assertEqual(conn.execute("SELECT body_md FROM preferences WHERE slug='concurrente'").fetchone()[0], 'confirmada')
             self.assertEqual(conn.execute("SELECT count(*) FROM preferences WHERE slug LIKE 'p%'").fetchone()[0], 40000)
 

@@ -117,6 +117,15 @@ TESTS=(
   tests/review-lenses.test.sh
   tests/pre-push.test.sh
   tests/attempts.test.sh
+  # Fuera de toda batería hasta la auditoría 2026-09-27 (3 de 6 estaban rotos).
+  tests/doctor-code-intelligence.test.sh
+  tests/doctor-memory.test.sh
+  tests/doctor-strict-environment.test.sh
+  tests/lib-memory-check.test.sh
+  tests/mem-review.test.sh
+  tests/skills-registry.test.sh
+  tests/human-approve.test.py
+  tests/setup-with-ci.test.sh
 )
 
 # Una suite listada que no existe es un FALLO, no un salto silencioso (antes

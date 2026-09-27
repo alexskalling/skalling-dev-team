@@ -12,6 +12,11 @@ HOME_BACKUP="$HOME"
 trap 'rm -rf "$INSTANCIA_PROYECTO" "$INSTANCIA_GLOBAL" "$DOCTOR_SIN_CI"; export HOME="$HOME_BACKUP"' EXIT
 
 mkdir -p "$INSTANCIA_PROYECTO/.opencode" "$INSTANCIA_GLOBAL/agents" "$INSTANCIA_GLOBAL/skills" "$INSTANCIA_GLOBAL/command" "$INSTANCIA_GLOBAL/templates" "$INSTANCIA_GLOBAL/skalling-data"
+# El doctor exige los plugins de control (desde v0.11.15): el fixture los trae
+# para que lo único medido sea Code Intelligence.
+mkdir -p "$INSTANCIA_GLOBAL/plugins/lib"
+cp "$DIRECTORIO_RAIZ"/plugins/*.js "$INSTANCIA_GLOBAL/plugins/"
+cp "$DIRECTORIO_RAIZ"/plugins/lib/*.mjs "$INSTANCIA_GLOBAL/plugins/lib/"
 
 printf '%s\n' '# Constitución de Skalling' '' '## 🏛️ Reglas Base' '' 'R13 design-system.md obligatorio' > "$INSTANCIA_GLOBAL/constitucion.md"
 for agente in Alex Pol Jes Sol Teo Jhon Luz Pau; do

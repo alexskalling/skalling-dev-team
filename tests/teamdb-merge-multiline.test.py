@@ -6,6 +6,7 @@ del repo, 0/1 conceptos, 0/2 propuestas y 0/2 planes eran sincronizables:
 el conocimiento del equipo nunca llegaba a los demás.
 """
 import shutil
+from contextlib import closing
 import sqlite3
 import subprocess
 import tempfile
@@ -27,7 +28,7 @@ class TeamdbMergeMultiline(unittest.TestCase):
         for script in ('teamdb-dump.sh', 'teamdb-restore.sh', 'teamdb-merge.sh', 'teamdb_dump.py'):
             shutil.copy(ROOT / 'scripts' / script, root / 'scripts')
         shutil.copy(ROOT / 'scripts/lib/lib-teamdb.sh', root / 'scripts/lib')
-        with sqlite3.connect(root / '.opencode/context/team.db') as conn:
+        with closing(sqlite3.connect(root / '.opencode/context/team.db')) as conn, conn:
             conn.executescript((ROOT / 'sql/project-schema.sql').read_text())
         return root
 

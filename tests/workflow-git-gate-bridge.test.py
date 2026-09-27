@@ -5,6 +5,7 @@ mock of it. This is the fix for the audit finding that finishing the new
 engine's workflow never produced a receipt git-gate.py could see."""
 import importlib.util
 import os
+from contextlib import closing
 import sqlite3
 import subprocess
 import sys
@@ -49,7 +50,7 @@ class WorkflowSealsGitGateReceipt(unittest.TestCase):
         # come from here), not a hand-rolled partial schema.
         subprocess.run(['bash', str(ROOT / 'scripts/teamdb-init.sh'), str(self.root)],
                         capture_output=True, check=True)
-        with sqlite3.connect(self.root / '.opencode/context/team.db') as db:
+        with closing(sqlite3.connect(self.root / '.opencode/context/team.db')) as db, db:
             db.execute("INSERT OR REPLACE INTO schema_meta(key,value) VALUES('project_readiness','initialized')")
             db.execute("INSERT INTO concepts(slug,title,body_md,updated_at) VALUES('project-summary','R','App',datetime('now'))")
         self.cwd = os.getcwd()
@@ -129,7 +130,7 @@ class WorkflowSealsGitGateReceipt(unittest.TestCase):
                               cwd=self.root, capture_output=True, check=True).stdout.rstrip(b'\n')
         import hashlib
         digest = hashlib.sha256(diff).hexdigest()[:16]
-        with sqlite3.connect(self.root / '.opencode/context/team.db') as db:
+        with closing(sqlite3.connect(self.root / '.opencode/context/team.db')) as db, db:
             for agent, command in (('luz', 'review-seal'), ('jhon', 'manual'), ('auto', 'review --lens risk'),
                                    ('teo', 'skalling_workflow:complete')):
                 db.execute("INSERT INTO receipts(id,task_id,agent,command,exit_code,output_summary,ts,tree_hash) "

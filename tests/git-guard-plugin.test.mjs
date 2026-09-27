@@ -113,7 +113,7 @@ test('Alex no escribe archivos por ninguna vía de la terminal', () => {
   assert.match(writeViolation('sed -i s/a/b/ f.js', 'alex'), /Teo/);
   for (const c of [
     'git status', 'git diff', 'bash ~/.config/opencode/scripts/skalling-route.sh classify --kind code --record',
-    "git commit -m \"$(cat <<'EOF'\nfix: a > b\nEOF\n)\"", 'python3 -c "print(1 > 0)"', 'cp app.log /tmp/app.log',
+    "git commit -m \"$(cat <<'EOF'\nfix: a > b\nEOF\n)\"", 'python3 -c "print(1 > 0)"', 'npm test 2>/dev/null | tail -5',
   ]) assert.equal(writeViolation(c, 'alex'), null, `no debía bloquear a Alex: ${c}`);
   assert.equal(writeViolation('sed -i s/a/b/ f.js', 'teo'), null);
 });
@@ -273,8 +273,11 @@ test('roles de solo lectura no escriben archivos por redirección ni tee', () =>
   assert.ok(writeViolation('npm test &> out.log', 'jhon'));
   assert.equal(writeViolation('echo "a > b"', 'luz'), null);
   assert.equal(writeViolation('npm test 2>&1 | tail -5', 'jhon'), null);
-  assert.equal(writeViolation('npm test > /tmp/o.log 2>/dev/null', 'jhon'), null);
-  assert.equal(writeViolation('git diff | tee /tmp/d', 'luz'), null);
+  assert.equal(writeViolation('npm test > /dev/null 2>&1', 'jhon'), null);
+  // Auditoría 2026-09-27: un archivo en /tmp se podía ejecutar después.
+  assert.ok(writeViolation('npm test > /tmp/o.log 2>/dev/null', 'jhon'));
+  assert.ok(writeViolation('git diff | tee /tmp/d', 'luz'));
+  assert.ok(writeViolation('cp app.log /tmp/app.log', 'alex'));
   assert.equal(writeViolation('echo x > src/a.ts', 'teo'), null);
   assert.equal(writeViolation('echo x > src/a.ts', undefined), null);
 });
@@ -332,7 +335,7 @@ test('nadie borra la identidad del runtime con env -i', () => {
 test('auditoría A08: v2 no transfiere identidad entre sesiones con el mismo comando', async () => {
   const { hooks, ctx } = fakeV2();
   await setupGuardV2(ctx);
-  const command = 'bash ~/.config/opencode/scripts/teamdb-seal-receipt.sh t jhon';
+  const command = 'bash ~/.config/opencode/scripts/teamdb-claim.sh claim t';
   await hooks['tool:execute.before']({ tool: 'shell', agent: 'Jhon', sessionID: 'j', messageID: 'm', id: '1', input: { command } });
   await hooks['tool:execute.before']({ tool: 'shell', agent: 'Teo', sessionID: 't', messageID: 'm', id: '2', input: { command } });
   const first = { command, env: {} };
@@ -365,4 +368,13 @@ test('auditoría A08: la cola de identidad vence entradas viejas y respeta un so
   now += 16 * 60 * 1000;            // nunca se ejecutó y venció
   q.register('pwd', 'Jhon', 'j');
   assert.deepEqual(q.take('pwd'), { agent: 'jhon', session: 'j' });
+});
+
+test('auditoría 2026-09-27: ningún agente corre el aprobador humano', () => {
+  const core = createCore();
+  for (const agent of ['alex', 'teo', 'jhon', 'luz']) {
+    for (const command of ['bash .opencode/scripts/skalling-approve.sh', 'bash .opencode/scripts/teamdb-seal-receipt.sh t humano']) {
+      assert.match(core.decide({ tool: 'bash', agent, sessionID: 's', input: { command } }) || '', /terminal/, `${agent}: ${command}`);
+    }
+  }
 });

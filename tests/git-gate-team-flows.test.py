@@ -7,6 +7,7 @@ qué se acepta (merge automático, rebase/cherry-pick del mismo cambio) y qué
 sigue bloqueado (resolución manual, contenido nuevo, commits sin receipt).
 """
 import hashlib
+from contextlib import closing
 import sqlite3
 import subprocess
 import tempfile
@@ -28,7 +29,7 @@ class GitGateTeamFlows(unittest.TestCase):
         context = self.project / '.opencode/context'
         context.mkdir(parents=True)
         self.db = context / 'team.db'
-        with sqlite3.connect(self.db) as conn:
+        with closing(sqlite3.connect(self.db)) as conn, conn:
             conn.executescript((ROOT / 'sql/project-schema.sql').read_text())
         (self.project / '.gitignore').write_text('.opencode/\n')
         self.write('app.py', ''.join(f'line_{n} = {n}\n' for n in range(1, 41)))
@@ -47,7 +48,7 @@ class GitGateTeamFlows(unittest.TestCase):
     def seal(self):
         patch = self.git('diff', '--cached', '--', '.', ':(exclude)db/teamdb/team.dump.sql').stdout.rstrip('\n')
         digest = hashlib.sha256(patch.encode()).hexdigest()[:16]
-        with sqlite3.connect(self.db) as conn:
+        with closing(sqlite3.connect(self.db)) as conn, conn:
             conn.execute("INSERT INTO receipts(id,task_id,agent,command,exit_code,ts,tree_hash) "
                          "VALUES(?,?,?,?,?,'2020-01-01 00:00:00',?)",
                          (digest + '-jhon', 'fixture', 'jhon', 'skalling-verify.sh (test real del proyecto)', 0, digest))

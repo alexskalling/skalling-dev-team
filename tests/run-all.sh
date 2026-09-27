@@ -45,6 +45,7 @@ COMMANDS=(
   "node --test tests/data-safety-v2.test.mjs"
   "node --test tests/workflow-plugin.test.mjs"
   "node --test tests/git-guard-plugin.test.mjs"
+  "node --test tests/permission-bypass.test.mjs"
   "python3 tests/skalling-goal.test.py"
   "node --test tests/skalling-goal-plugin.test.mjs"
   "bash tests/bootstrap-readiness.test.sh"
@@ -55,6 +56,19 @@ COMMANDS=(
   "bash tests/opencode-compat.test.sh"
   "bash tests/scripts-parity.test.sh"
 )
+
+# Un test que ninguna batería corre se pudre en silencio: 3 de 6 huérfanos
+# estaban rotos (auditoría 2026-09-27). Todo tests/*.test.* debe figurar acá,
+# en teamdb-hardening-suite.sh o en un workflow de CI.
+ORPHANS=""
+for file in tests/*.test.*; do
+  name="$(basename "$file")"
+  grep -qF "$name" tests/run-all.sh tests/teamdb-hardening-suite.sh .github/workflows/*.yml || ORPHANS="$ORPHANS $name"
+done
+if [ -n "$ORPHANS" ]; then
+  echo "FALLO: tests que ninguna batería ejecuta:$ORPHANS" >&2
+  exit 1
+fi
 
 LOG="$(mktemp)"
 trap 'rm -f "$LOG"' EXIT

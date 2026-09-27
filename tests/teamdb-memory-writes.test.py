@@ -8,6 +8,7 @@ veían: este usa el mismo camino que el agente.
 """
 import json
 import os
+from contextlib import closing
 import sqlite3
 import subprocess
 import tempfile
@@ -35,7 +36,7 @@ class MemoryWrites(unittest.TestCase):
         return json.loads(result.stdout.strip().splitlines()[0])
 
     def versions(self):
-        with sqlite3.connect(self.db) as conn:
+        with closing(sqlite3.connect(self.db)) as conn, conn:
             return dict(((t, s), v) for t, s, v in conn.execute('SELECT table_name, slug, updated_at FROM memory_versions'))
 
     def test_every_kind_of_memory_is_written_through_the_guarded_helper(self):
@@ -51,7 +52,7 @@ class MemoryWrites(unittest.TestCase):
         self.memory('decision', 'orm', 'ORM', 'Reemplazado por Drizzle', 'superseded')
         after = self.versions()[('decisions', 'orm')]
         self.assertGreater(after, before)
-        with sqlite3.connect(self.db) as conn:
+        with closing(sqlite3.connect(self.db)) as conn, conn:
             self.assertEqual(conn.execute("SELECT status FROM decisions WHERE slug='orm'").fetchone()[0], 'superseded')
             self.assertEqual(conn.execute("PRAGMA integrity_check").fetchone()[0], 'ok')
 

@@ -2,7 +2,7 @@
 
 Skalling es un equipo de **8 agentes de IA** que trabajan juntos adentro de [OpenCode](https://opencode.ai). Cada agente tiene un rol específico y siguen un ciclo ordenado para construir software bien hecho.
 
-**Versión actual: 0.13.1**
+**Versión actual: 0.14.0**
 
 ---
 
@@ -135,7 +135,7 @@ Instalar **siempre un release publicado** (`vX.Y.Z`), nunca `main`. La lista est
 **1. Instalar (una vez por máquina)**
 
 ```bash
-VERSION=v0.13.0   # último release publicado
+VERSION=v0.14.0   # último release publicado
 git clone --branch "$VERSION" --depth 1 https://github.com/alexskalling/skalling-dev-team.git ~/skalling-dev-team
 bash ~/skalling-dev-team/install-global.sh
 ```
@@ -160,7 +160,7 @@ config locales, que reemplazan a los globales) y el paso 3.
 **Windows** (Git Bash o WSL2, no nativo; en CI solo tiene smoke test):
 
 ```powershell
-git clone --branch v0.13.0 --depth 1 https://github.com/alexskalling/skalling-dev-team.git $HOME\skalling-dev-team
+git clone --branch v0.14.0 --depth 1 https://github.com/alexskalling/skalling-dev-team.git $HOME\skalling-dev-team
 .\skalling-dev-team\install-global.ps1
 ```
 
@@ -187,6 +187,16 @@ Ver el [modelo de seguridad](docs/security-model.md).
   cualquier comando que nombre rutas de credenciales.
 - **Instalar solo releases:** `/skalling-update` ofrece el último tag `vX.Y.Z`,
   nunca `main`. Publicar un release solo desde un commit con CI en verde.
+- **Commits desde tu terminal o IDE (sin OpenCode):** el hook exige que el
+  candidato staged esté verificado. Después de `git add`, corré
+  `bash .opencode/scripts/skalling-approve.sh`: ejecuta los tests del proyecto
+  sobre lo staged y, si pasan, habilita el `git commit`. Nunca `--no-verify`.
+  La primera vez, para commitear la instalación misma, es el mismo paso.
+- **CI y CODEOWNERS del proyecto:** `bash ~/skalling-dev-team/setup.sh --with-ci`
+  agrega `.github/workflows/skalling-verify.yml` (re-corre los tests en la
+  plataforma, donde no se pueden falsificar) y un `CODEOWNERS` de ejemplo.
+  Reemplazá `@OWNER` y activá en GitHub el check obligatorio y la revisión de
+  Code Owners en la rama principal.
 - **En cada repositorio del equipo:** rama principal protegida y revisión
   obligatoria de `.opencode/**` y `db/teamdb/**`. Los hooks y plugins de
   Skalling ejecutan código de esas rutas en la máquina de cada integrante.
