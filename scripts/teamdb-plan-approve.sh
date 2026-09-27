@@ -2,11 +2,14 @@
 # Completa y aprueba un plan existente después de validar alcance y aceptación.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Ruta de TeamDB: la del repositorio principal, también desde un worktree.
+# shellcheck disable=SC1091
+if [ -f "$SCRIPT_DIR/lib-teamdb.sh" ]; then . "$SCRIPT_DIR/lib-teamdb.sh"; else . "$SCRIPT_DIR/lib/lib-teamdb.sh"; fi
 export PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}"
 PROJECT="${1:?Falta proyecto}"; PLAN_ID="${2:?Falta plan_id}"
 DESIGN="${3:?Falta diseño concreto}"; ACCEPTANCE="${4:?Falta aceptación}"
 APPROVAL="${5:?Falta referencia a la aprobación/alcance del usuario}"
-DB="$PROJECT/.opencode/context/team.db"
+DB="$(teamdb_project_path "$PROJECT")"
 [[ -f "$DB" ]] || { echo 'TeamDB no existe' >&2; exit 1; }
 python3 - "$DB" "$PLAN_ID" "$DESIGN" "$ACCEPTANCE" "$APPROVAL" <<'PY'
 import sqlite3, sys

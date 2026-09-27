@@ -129,3 +129,10 @@ test('ningún plugin importa el SDK al cargar (OpenCode 2.0.x lo descarta si fal
     assert.doesNotMatch(source, /^\s*import\s[^;]*['"]@opencode-ai\/plugin['"]/m, name);
   }
 });
+
+test('el plugin espera más que el máximo del motor (1 h por verificación)', async () => {
+  // Auditoría de c7517ea: el plugin cortaba a los 130 s y una batería de 7 min
+  // no podía registrar evidencia.
+  const { ENGINE_TIMEOUT_MS } = await import('../plugins/lib/workflow.mjs');
+  assert.ok(ENGINE_TIMEOUT_MS > 3600 * 1000);
+});

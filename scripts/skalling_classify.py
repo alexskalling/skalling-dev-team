@@ -12,6 +12,8 @@ Contrato:
   exige, eso sí, que exista el sistema de diseño en TeamDB.
 """
 import sqlite3
+import subprocess
+from pathlib import Path
 
 ROUTES = {
     'low': ('FAST-TRACK', 'Alex → Teo (verificación automática; Jhon si no hay comando de verificación)', 'focused'),
@@ -73,3 +75,21 @@ def memory_blockers(db_path, visual):
     except sqlite3.Error as error:
         blockers.append('TeamDB ilegible: ' + str(error))
     return blockers
+
+
+def project_db(root):
+    """TeamDB del proyecto: la del repositorio PRINCIPAL también desde un git
+    worktree (la base está gitignored y solo existe en el checkout original).
+    Misma regla que teamdb_project_path en lib-teamdb.sh; los archivos a
+    verificar siguen siendo los del worktree."""
+    root = Path(root)
+    try:
+        out = subprocess.run(['git', 'rev-parse', '--git-common-dir'], cwd=root, capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        out = None
+    if out is not None and out.returncode == 0 and out.stdout.strip():
+        common = Path(out.stdout.strip())
+        if not common.is_absolute():
+            common = root / common
+        return common.resolve().parent / '.opencode/context/team.db'
+    return root / '.opencode/context/team.db'

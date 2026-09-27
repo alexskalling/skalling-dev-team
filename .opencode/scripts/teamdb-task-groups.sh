@@ -21,10 +21,13 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Ruta de TeamDB: la del repositorio principal, también desde un worktree.
+# shellcheck disable=SC1091
+if [ -f "$SCRIPT_DIR/lib-teamdb.sh" ]; then . "$SCRIPT_DIR/lib-teamdb.sh"; else . "$SCRIPT_DIR/lib/lib-teamdb.sh"; fi
 export PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}"
 PROJECT="${1:?Uso: teamdb-task-groups.sh <project> <plan-slug>}"
 PLAN_SLUG="${2:?Uso: teamdb-task-groups.sh <project> <plan-slug>}"
-DB="$PROJECT/.opencode/context/team.db"
+DB="$(teamdb_project_path "$PROJECT")"
 
 [ -f "$DB" ] || { echo "ERROR: TeamDB no existe: $DB" >&2; exit 1; }
 

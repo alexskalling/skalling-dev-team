@@ -32,6 +32,13 @@ modules:
 # ────────────────────────────────────────────────────────────────────────────
 strict_tdd: true
 testing:
+  # Límite de cada verificación que corre el motor (segundos, máx. 3600).
+  timeout_seconds: 900
+  # Verificación rápida del carril trivial; {files} = archivos del pedido.
+  # Sin ella, lo trivial corre testing.unit completo.
+  fast:
+    available: false
+    command: ""
   unit:
     available: false
     command: ""

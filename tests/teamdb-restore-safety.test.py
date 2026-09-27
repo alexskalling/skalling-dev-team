@@ -106,5 +106,53 @@ class RestoreSafety(unittest.TestCase):
             self.assertEqual(conn.execute("SELECT body_md FROM preferences WHERE slug='valiosa'").fetchone()[0], 'trabajo')
 
 
+    # ── Auditoría de c7517ea: la recuperación es atómica ──
+
+    def init(self):
+        subprocess.run(['bash', str(ROOT / 'scripts/teamdb-init.sh'), str(self.root)], capture_output=True,
+                       check=True, env={**os.environ, 'SKALLING_ROOT': str(ROOT)})
+
+    def test_bad_column_with_full_reset_leaves_the_active_base_intact(self):
+        self.init()
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("INSERT INTO preferences (slug,scope,body_md) VALUES ('valiosa','global','trabajo')")
+        self.dump.write_text('INSERT INTO "preferences" ("id","slug","scope","no_existe") VALUES (9,\'x\',\'global\',1);\n')
+        result = self.restore('--full-reset')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('queda sin cambios', result.stderr)
+        with sqlite3.connect(self.db) as conn:
+            self.assertEqual(conn.execute("SELECT body_md FROM preferences WHERE slug='valiosa'").fetchone()[0], 'trabajo')
+        self.assertFalse(list(self.db.parent.glob('team.db.restore-*')))
+
+    def corrupt(self):
+        self.init()
+        with sqlite3.connect(self.db) as conn:
+            conn.execute('PRAGMA journal_mode=DELETE')
+        data = bytearray(self.db.read_bytes())
+        data[100:4096] = b'\xff' * (4096 - 100)        # cabecera y primera página destruidas
+        self.db.write_bytes(bytes(data))
+        return bytes(data)
+
+    def test_corrupt_base_can_be_rebuilt_with_full_reset_keeping_a_raw_copy(self):
+        original = self.corrupt()
+        self.dump.write_text(self.valid_row())
+        result = self.restore('--full-reset')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        raw = list((self.db.parent / '.backups').glob('team.db.corrupt-*'))
+        self.assertTrue(raw)
+        self.assertEqual(raw[0].read_bytes(), original)
+        with sqlite3.connect(self.db) as conn:
+            self.assertEqual(conn.execute("SELECT body_md FROM preferences WHERE slug='tono'").fetchone()[0], 'Formal')
+            self.assertEqual(conn.execute('PRAGMA integrity_check').fetchone()[0], 'ok')
+
+    def test_corrupt_base_is_not_touched_by_force_without_full_reset(self):
+        original = self.corrupt()
+        self.dump.write_text(self.valid_row())
+        result = self.restore('--force')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('--full-reset', result.stderr)
+        self.assertEqual(self.db.read_bytes(), original)
+
+
 if __name__ == '__main__':
     unittest.main()

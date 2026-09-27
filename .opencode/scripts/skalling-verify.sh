@@ -40,7 +40,11 @@ block = m.group(1) if m else ""
 avail_m = re.search(r"available:\s*(\w+)", block)
 cmd_m = re.search(r"command:\s*(.*)", block)
 available = bool(avail_m) and avail_m.group(1).strip().lower() == "true"
-command = cmd_m.group(1).strip().strip("\"'"'"'") if cmd_m else ""
+command = cmd_m.group(1).strip() if cmd_m else ""
+# Solo el par de comillas externas del YAML (strip de ambas comillas se comía
+# la final de comandos como python3 -c '"'"'import app'"'"').
+if len(command) >= 2 and command[0] == command[-1] and command[0] in "\"'"'"'":
+    command = command[1:-1]
 print(command if (available and command) else "")
 ' "$YAML")"
 

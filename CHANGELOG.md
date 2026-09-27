@@ -72,6 +72,32 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 - `teamdb-memory.sh` y `teamdb-read.sh` explican sus campos y aceptan el
   proyecto como primer argumento; el guard avisa cuando un pedido dirigido a un
   rol ("Jhon verifica…", "Sos Jhon…") se manda a otro agente.
+- **Segunda auditoría externa (sobre c7517ea):**
+  - Un pedido que se amplía (`rescope`) y sube de riesgo toma la nueva ruta:
+    vuelve a `clarified` (medio) o `requested` (alto), pierde la verificación
+    automática y exige plan de Sol y verificación de Jhon. En el mismo riesgo,
+    el comando congelado se rearma con los archivos nuevos.
+  - La versión de decisiones, preferencias y problemas viaja dentro de su fila
+    del dump (`__version`): con `merge=union` las dos copias convergen al
+    contenido más nuevo, y misma versión con contenido distinto sale como
+    `CONFLICTO SIN RESOLVER` (código 3).
+  - El restore construye la base en un archivo aparte y solo reemplaza la
+    activa si la importación y el `integrity_check` pasan. `--full-reset` sobre
+    una base corrupta conserva la copia cruda y reconstruye desde el dump.
+  - Motor, Goal y diez helpers resuelven TeamDB en el repositorio principal
+    también desde un worktree (antes solo algunos); el motor no crea bases vacías.
+  - Límite de verificación configurable (`testing.timeout_seconds`, 15 min
+    por defecto, 1 h máximo) y cancelación por grupo de procesos; el plugin
+    espera más que el motor. Un check vencido no se registra.
+  - Un clon nuevo nunca restauraba la memoria: `teamdb-init` retenía el lock
+    que `teamdb-restore` necesitaba. Ahora lo suelta durante el restore.
+  - **Consumo real por pedido, automático:** al completar, el motor suma de la
+    base de OpenCode los tokens (entrada, salida, caché), el costo y los agentes
+    de la sesión y sus subagentes dentro de la ventana del pedido, más los
+    reintentos, y los guarda en `workflow_metrics`
+    (`skalling-metrics.sh report|summary` los muestra).
+  - El parser de `project.yaml` le quitaba la comilla final a comandos como
+    `python3 -c 'import app'`.
 - El doctor ya no aborta a mitad del diagnóstico (`[[ ]] && info` con `set -e`)
   y verifica la config del proyecto.
 - README, arquitectura y constitución describen el flujo vigente. Receta única

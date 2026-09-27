@@ -11,6 +11,9 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}"
+# Ruta de TeamDB: la del repositorio principal, también desde un worktree.
+# shellcheck disable=SC1091
+if [ -f "$SCRIPT_DIR/lib-teamdb.sh" ]; then . "$SCRIPT_DIR/lib-teamdb.sh"; else . "$SCRIPT_DIR/lib/lib-teamdb.sh"; fi
 
 persist_classification() {
   local db="$1" request_id="$2" intent="$3" route="$4" agents="$5" risk="$6" supersedes="$7"
@@ -105,7 +108,8 @@ print("\t".join([r["risk"], r["route"], r["agents"], r["verification"],
 ' "$kind" "$risk" "$scope" "$clarity" "$decision" "$sensitive" "$visual")" || return 2
   local route agents verification needs_user_decision implementation_allowed readiness="missing"
   IFS=$'\t' read -r risk route agents verification needs_user_decision implementation_allowed <<< "$normalized"
-  local project_db="$project/.opencode/context/team.db"
+  local project_db
+  project_db="$(teamdb_project_path "$project")"
   if [ -f "$project_db" ]; then
     readiness="$(python3 -c 'import sys; from skalling_classify import readiness; print(readiness(sys.argv[1]))' "$project_db")"
   fi
@@ -118,16 +122,16 @@ print("\t".join([r["risk"], r["route"], r["agents"], r["verification"],
   if [ "$record" = true ]; then
     [ -n "$intent" ] || { printf 'ERROR: --record requiere --intent\n' >&2; return 2; }
     [ -n "$request_id" ] || request_id="req-$(date +%Y%m%d%H%M%S)-$$"
-    persist_classification "$project/.opencode/context/team.db" "$request_id" "$intent" "$route" "$agents" "$risk" "$supersedes"
+    persist_classification "$project_db" "$request_id" "$intent" "$route" "$agents" "$risk" "$supersedes"
   fi
-  python3 - "$risk" "$route" "$agents" "$verification" "$request_id" "$needs_user_decision" "$implementation_allowed" "$readiness" "$project" "$kind" "$acceptance" "$reuse" "$plan_id" "$visual" ${files[@]+"${files[@]}"} <<'PY'
+  python3 - "$risk" "$route" "$agents" "$verification" "$request_id" "$needs_user_decision" "$implementation_allowed" "$readiness" "$project" "$kind" "$acceptance" "$reuse" "$plan_id" "$visual" "${project_db:-}" ${files[@]+"${files[@]}"} <<'PY'
 import json, sys
 from teamdb_guard import connect as protected_connect
 from skalling_classify import memory_blockers
 from pathlib import Path
 risk, route, agents, verification, request_id, decision, allowed, readiness = sys.argv[1:9]
-project, kind, acceptance, reuse, plan_id, visual = sys.argv[9:15]
-files = sys.argv[15:]
+project, kind, acceptance, reuse, plan_id, visual, project_db = sys.argv[9:16]
+files = sys.argv[16:]
 blockers = []
 if kind == "code" and allowed == "true":
     root = Path(project).resolve()
@@ -141,7 +145,7 @@ if kind == "code" and allowed == "true":
         blockers.append("Falta --acceptance: resultado observable del pedido")
     if not reuse.strip():
         blockers.append("Falta --reuse: qué componente/patrón existente se reutiliza")
-    db_path = root / ".opencode/context/team.db"
+    db_path = Path(project_db) if project_db else root / ".opencode/context/team.db"
     blockers.extend(memory_blockers(db_path, visual == "true"))
     if risk in ("medium", "high"):
         with protected_connect("file:" + str(db_path) + "?mode=ro", uri=True) as db:

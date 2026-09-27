@@ -54,7 +54,11 @@ DB="$(teamdb_project_path "$PROJECT")"
 # se excluye a propósito por la misma razón que audit_log: es un log de
 # trazabilidad que crece sin límite, no estado a sincronizar entre máquinas.
 # Mismo orden que teamdb_dump.TABLES (restore/merge validan contra esa lista).
-DUMP_TABLES=(concepts decisions preferences known_problems memory_versions work_in_progress tags memory_tags memory_links proposals plans specs design_notes tasks task_dependencies task_claims plan_history task_context_capsules skills_registry routing_decisions receipts task_lock_history attempts agent_workflows)
+# memory_versions no se exporta aparte: la versión de decisions, preferences y
+# known_problems viaja DENTRO de su fila (columna "__version"). Separadas, un
+# merge=union de git juntaba la versión más nueva con el contenido viejo
+# (auditoría de c7517ea).
+DUMP_TABLES=(concepts decisions preferences known_problems work_in_progress tags memory_tags memory_links proposals plans specs design_notes tasks task_dependencies task_claims plan_history task_context_capsules skills_registry routing_decisions receipts task_lock_history attempts agent_workflows)
 
 # Directorio de salida versionado (NO en .gitignore)
 OUT_DIR="$PROJECT/db/teamdb"
@@ -91,6 +95,9 @@ def sql_text(s):
 
 out = []
 secret_hits = []
+VERSIONED = ("decisions", "preferences", "known_problems")
+has_versions = con.execute(
+    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='memory_versions'").fetchone() is not None
 
 for t in tables:
     # Tabla puede no existir en DBs viejas sin migraciones completas: skip.
@@ -116,7 +123,13 @@ for t in tables:
                 secret_hits.append(f'{t}.{c} ({n} valores)')
 
     col_sql = ",".join(f'"{c}"' for c in cols)
-    rows = con.execute(f'SELECT {col_sql} FROM "{t}" ORDER BY {order_sql}').fetchall()
+    select_sql, params = col_sql, ()
+    if t in VERSIONED and has_versions and "slug" in cols:
+        select_sql += f', (SELECT updated_at FROM memory_versions mv WHERE mv.table_name=? AND mv.slug="{t}"."slug")'
+        params = (t,)
+        cols = cols + ["__version"]
+        col_sql = ",".join(f'"{c}"' for c in cols)
+    rows = con.execute(f'SELECT {select_sql} FROM "{t}" ORDER BY {order_sql}', params).fetchall()
     for row in rows:
         vals = []
         for v in row:

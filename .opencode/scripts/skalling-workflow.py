@@ -10,21 +10,26 @@ import os
 from pathlib import Path
 import re
 import shlex
+import signal
 import sqlite3
 import subprocess
 import sys
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from skalling_classify import memory_blockers, normalize, readiness  # noqa: E402
+from skalling_classify import ROUTES, memory_blockers, normalize, project_db, readiness  # noqa: E402
 
 ROLES = {'alex', 'pol', 'sol', 'teo', 'jhon', 'luz', 'pau', 'jes'}
 # Verificador mecánico del carril trivial: no es un agente, es el comando de
 # verificación del proyecto ejecutado por el motor sobre el candidato.
 AUTO_VERIFIER = 'auto'
-# El plugin corta el proceso a los 130 s: la verificación automática tiene
-# que terminar antes para registrar su resultado.
-AUTO_VERIFY_TIMEOUT = 110
+# Límite de cada comando de verificación: testing.timeout_seconds del
+# proyecto (congelado en start), 15 min por defecto, 1 h como máximo. Antes
+# era 110-120 s fijos y la batería real de un proyecto (7 min) no podía
+# registrar evidencia (auditoría de c7517ea). El plugin espera más que esto.
+DEFAULT_TIMEOUT = 900
+MAX_TIMEOUT = 3600
+_ACTIVE = None  # comando en curso, para cancelarlo con todo su grupo
 TERMINAL = {'completed', 'superseded'}
 TRANSITIONS = {
     'clarify': ('pol', 'requested', 'clarified'),
@@ -204,18 +209,73 @@ def configured_command(root, name):
     command = re.search(r'command:\s*(.*)', block)
     if not available or available.group(1).strip().lower() != 'true' or not command:
         return ''
-    return command.group(1).strip().strip('"\'')
+    value = command.group(1).strip()
+    # Solo el par de comillas externas del YAML: strip('"\'') se comía la
+    # comilla final de comandos como python3 -c 'import app'.
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in '"\'':
+        value = value[1:-1]
+    return value
+
+
+def verification_timeout(root):
+    path = root / '.opencode/project.yaml'
+    text = path.read_text(encoding='utf-8') if path.is_file() else ''
+    match = re.search(r'(?m)^[ \t]+timeout_seconds:\s*(\d+)', text)
+    value = int(match.group(1)) if match else DEFAULT_TIMEOUT
+    return max(1, min(value, MAX_TIMEOUT))
+
+
+def run_bounded(argv, root, env, timeout):
+    """Corre el comando en su propio grupo de procesos: al vencer el plazo (o
+    si el plugin cancela y llega SIGTERM) se termina el grupo entero, sin
+    dejar pruebas huérfanas corriendo."""
+    global _ACTIVE
+    proc = subprocess.Popen(argv, cwd=root, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            start_new_session=True)
+    _ACTIVE = proc
+    try:
+        output, _ = proc.communicate(timeout=timeout)
+        return proc.returncode, output[-16000:].decode('utf-8', 'replace')
+    except subprocess.TimeoutExpired:
+        _kill_group(proc)
+        proc.communicate()
+        raise
+    finally:
+        _ACTIVE = None
+
+
+def _kill_group(proc):
+    if hasattr(os, 'killpg'):
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+    elif proc.poll() is None:
+        proc.kill()
+
+
+def _cancel(signum, _frame):
+    if _ACTIVE is not None:
+        _kill_group(_ACTIVE)
+    sys.exit(128 + signum)
+
+
+def verification_template(root):
+    """Plantillas de verificación del proyecto, congeladas al iniciar el
+    workflow (las lee Alex antes de que Teo toque nada: editar project.yaml
+    después no cambia qué se ejecuta). testing.fast admite {files}."""
+    return {'fast': configured_command(root, 'fast') or None, 'unit': configured_command(root, 'unit') or None}
+
+
+def render_verification(template, files):
+    template = template or {}
+    if template.get('fast'):
+        return ['bash', '-c', template['fast'].replace('{files}', shlex.join(sorted(files)))]
+    return ['bash', '-c', template['unit']] if template.get('unit') else None
 
 
 def auto_verification(root, files):
-    """Comando de verificación del carril trivial, congelado al iniciar el
-    workflow (lo lee Alex, antes de que Teo toque nada: editar project.yaml
-    después no cambia qué se ejecuta). testing.fast admite {files}."""
-    fast = configured_command(root, 'fast')
-    if fast:
-        return ['bash', '-c', fast.replace('{files}', shlex.join(sorted(files)))]
-    unit = configured_command(root, 'unit')
-    return ['bash', '-c', unit] if unit else None
+    return render_verification(verification_template(root), files)
 
 
 def record_start_metrics(db, identifier, classification, intent, supersedes):
@@ -234,10 +294,75 @@ def record_start_metrics(db, identifier, classification, intent, supersedes):
                     classification['agents'].count('→') + 1))
 
 
-def record_finish_metrics(db, identifier, duration_ms, handoffs):
-    if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='workflow_metrics'").fetchone():
-        db.execute("UPDATE workflow_metrics SET outcome='success', completed_at=datetime('now'), duration_ms=?, "
-                   "handoffs=? WHERE request_id=? AND completed_at IS NULL", (duration_ms, handoffs, identifier))
+def opencode_db():
+    """Base de OpenCode (sesiones y mensajes con tokens). SKALLING_OPENCODE_DB
+    la redefine (tests); si no, $XDG_DATA_HOME/opencode/opencode.db."""
+    explicit = os.environ.get('SKALLING_OPENCODE_DB')
+    if explicit:
+        return Path(explicit)
+    data = os.environ.get('XDG_DATA_HOME') or str(Path.home() / '.local/share')
+    return Path(data) / 'opencode/opencode.db'
+
+
+def runtime_usage(session, since, until):
+    """Consumo real del pedido según OpenCode: respuestas de la sesión que lo
+    inició y de sus subagentes, entre start y complete. None si no hay datos
+    (otra versión de OpenCode, base ausente): medir no debe romper el cierre."""
+    path = opencode_db()
+    if not session or not path.is_file():
+        return None
+    try:
+        con = sqlite3.connect('file:' + str(path) + '?mode=ro', uri=True, timeout=5)
+        try:
+            tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            if not {'session_v2', 'session_message'} <= tables:
+                return None
+            rows = con.execute("""
+                WITH RECURSIVE tree(id) AS (
+                  SELECT id FROM session_v2 WHERE id = ?
+                  UNION SELECT s.id FROM session_v2 s JOIN tree ON s.parent_id = tree.id)
+                SELECT m.session_id, m.data FROM session_message m JOIN tree ON m.session_id = tree.id
+                WHERE m.type = 'assistant' AND m.time_created BETWEEN ? AND ?""",
+                (session, int(since * 1000), int(until * 1000))).fetchall()
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return None
+    usage = {'tokens_input': 0, 'tokens_output': 0, 'tokens_cache_read': 0, 'cost': 0.0, 'agents': set(), 'sessions': set()}
+    for session_id, raw in rows:
+        try:
+            data = json.loads(raw)
+        except (TypeError, ValueError):
+            continue
+        tokens = data.get('tokens') or {}
+        usage['tokens_input'] += int(tokens.get('input') or 0)
+        usage['tokens_output'] += int(tokens.get('output') or 0) + int(tokens.get('reasoning') or 0)
+        usage['tokens_cache_read'] += int((tokens.get('cache') or {}).get('read') or 0)
+        usage['cost'] += float(data.get('cost') or 0)
+        if data.get('agent'):
+            usage['agents'].add(str(data['agent']))
+        usage['sessions'].add(session_id)
+    if not rows:
+        return None
+    usage['agents'] = sorted(usage['agents'])
+    usage['sessions'] = len(usage['sessions'])
+    return usage
+
+
+def record_finish_metrics(db, identifier, duration_ms, handoffs, usage=None, retries=0):
+    if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='workflow_metrics'").fetchone():
+        return
+    columns = {r[1] for r in db.execute("PRAGMA table_info(workflow_metrics)")}
+    fields = {'outcome': 'success', 'duration_ms': duration_ms, 'handoffs': handoffs}
+    if 'retries' in columns:
+        fields['retries'] = retries
+    if usage and 'tokens_input' in columns:
+        fields.update(tokens_input=usage['tokens_input'], tokens_output=usage['tokens_output'],
+                      tokens_cache_read=usage['tokens_cache_read'], cost=round(usage['cost'], 6),
+                      agents_used=','.join(usage['agents']))
+    sets = ', '.join(f'{k}=?' for k in fields)
+    db.execute(f"UPDATE workflow_metrics SET {sets}, completed_at=datetime('now') "
+               "WHERE request_id=? AND completed_at IS NULL", (*fields.values(), identifier))
 
 
 def require_approved_plan(db, plan_id):
@@ -263,6 +388,9 @@ def ensure_tables(root, path):
     undeclared tables."""
     if not path.exists():
         apply_pending_migrations(root)
+    # Nunca crear una base vacía por accidente (connect() la crea): sin base,
+    # teamdb-init.sh la trata como corrupta en vez de nueva.
+    require(path.exists(), f'TeamDB no existe en {path}: correr /skalling-init (o bash scripts/teamdb-init.sh)')
     db = sqlite3.connect(path, timeout=10)
     if not db.execute("SELECT 1 FROM sqlite_master WHERE name='agent_workflows'").fetchone():
         db.close()
@@ -327,15 +455,21 @@ def check(db, root, actor, session, identifier, payload, request):
     # El comando sabe quién lo corre y que la evidencia la registra el motor
     # (skalling-review.sh no sella por su cuenta dentro de un check).
     env = {**os.environ, 'SKALLING_RUNTIME_AGENT': actor, 'SKALLING_WORKFLOW_CHECK': '1'}
-    result = subprocess.run(argv, cwd=root, capture_output=True, timeout=120, env=env)
+    timeout = state.get('verification_timeout') or DEFAULT_TIMEOUT
+    try:
+        exit_code, output = run_bounded(argv, root, env, timeout)
+    except subprocess.TimeoutExpired:
+        # Sin veredicto no es un fallo del candidato: no se registra (un check
+        # fallido registrado bloquearía la aprobación de toda la entrega).
+        raise ValueError(f'El check superó {timeout}s y se canceló sin registrarse; subir '
+                         'testing.timeout_seconds o usar un comando más acotado')
 
     db.execute('BEGIN IMMEDIATE')
     state = read(db, identifier)
     require(state is not None and state['state'] == expected, 'Workflow changed during verification; retry check')
     require(fingerprint(root, state['files']) == digest == state['digest'], 'Verification changed candidate; approval denied')
     verification = {'agent': actor, 'session': session, 'method': payload['method'], 'argv': argv,
-                     'criterion': payload['criterion'], 'exit_code': result.returncode, 'digest': digest,
-                     'output': (result.stdout + result.stderr)[-16000:].decode('utf-8', 'replace'),
+                     'criterion': payload['criterion'], 'exit_code': exit_code, 'digest': digest, 'output': output,
                      'model': request.get('model'), 'independence': 'context-and-method; model diversity unverified'}
     state['checks'].append(verification)
     state['verification'] = verification
@@ -357,11 +491,11 @@ def auto_verify(db, root, identifier, session):
     digest, argv = state['digest'], state['auto_verify']
     db.commit()
     env = {**os.environ, 'SKALLING_RUNTIME_AGENT': AUTO_VERIFIER, 'SKALLING_WORKFLOW_CHECK': '1'}
+    timeout = state.get('verification_timeout') or DEFAULT_TIMEOUT
     try:
-        result = subprocess.run(argv, cwd=root, capture_output=True, timeout=AUTO_VERIFY_TIMEOUT, env=env)
-        exit_code, output = result.returncode, (result.stdout + result.stderr)[-16000:].decode('utf-8', 'replace')
+        exit_code, output = run_bounded(argv, root, env, timeout)
     except subprocess.TimeoutExpired:
-        exit_code, output = None, f'Sin veredicto: la verificación superó {AUTO_VERIFY_TIMEOUT}s'
+        exit_code, output = None, f'Sin veredicto: la verificación superó {timeout}s'
     db.execute('BEGIN IMMEDIATE')
     state = read(db, identifier)
     require(state is not None and state['state'] == 'verification_ready', 'Workflow changed during auto verification')
@@ -392,7 +526,9 @@ def operate(request):
     action, payload = request['action'], request.get('payload', {})
     identifier = payload['id']
     require(isinstance(identifier, str) and 0 < len(identifier) <= 200, 'Invalid request id')
-    path = root / '.opencode/context/team.db'
+    # En un worktree la memoria es la del repositorio principal (mismo
+    # criterio que los helpers); los archivos son los de este checkout.
+    path = project_db(root)
     require(path.parent.is_dir(), 'Initialize project context first')
     db = ensure_tables(root, path)
     try:
@@ -444,12 +580,14 @@ def operate(request):
                      'route': classification['route'], 'agents': classification['agents'],
                      'started_at': now, 'handoffs': 0, 'checks': [], 'oracle': None, 'digest': None,
                      'base_head': base_head(root), 'delivery_number': 0, 'delivery': None,
+                     'verification_template': verification_template(root),
+                     'verification_timeout': verification_timeout(root),
                      'auto_verify': auto_verification(root, files) if risk == 'low' else None,
                      # Comando de verificación que declara el proyecto, congelado
                      # acá: Jhon/Luz lo corren con check {configured: true} sin
                      # pedir permiso (en OpenCode v2 un plugin no puede pedirlo).
                      'configured_verification': auto_verification(root, files),
-                     'supersedes': supersedes}
+                     'supersedes': supersedes, 'start_session': session}
             record_start_metrics(db, identifier, classification, payload.get('intent'), supersedes)
         else:
             require(state is not None, 'Unknown workflow')
@@ -482,15 +620,40 @@ def operate(request):
                 require(widened != state['files'], 'Rescope must add at least one new file')
                 for name in widened:
                     scoped(root, name)
-                top_before = {Path(f).parts[0] for f in state['files']}
-                top_after = {Path(f).parts[0] for f in widened}
-                if (top_after - top_before) and state['risk'] == 'low':
-                    state['risk'], state['route'] = 'medium', 'INLINE'
+                # Módulo = carpeta de primer nivel; los archivos de la raíz
+                # comparten el módulo raíz ('.').
+                module = lambda f: Path(f).parts[0] if len(Path(f).parts) > 1 else '.'
+                top_before = {module(f) for f in state['files']}
+                top_after = {module(f) for f in widened}
+                risk = state['risk']
+                if flag(payload, 'sensitive'):
+                    risk = 'high'
+                elif (top_after - top_before) and risk == 'low':
+                    risk = 'medium'
+                escalated = risk != state['risk']
                 state['files'] = widened
                 state['digest'] = None
                 state['oracle'] = None
                 state['checks'] = []
-                state['state'] = 'implementation_ready'
+                state['verification'] = None
+                template = state.get('verification_template')
+                state['configured_verification'] = render_verification(template, widened)
+                if escalated:
+                    # Cambiar la etiqueta no alcanza (auditoría de c7517ea): la
+                    # nueva ruta exige sus fases y su evidencia. El plan
+                    # anterior no cubría este alcance y lo trivial deja de
+                    # verificarse solo.
+                    state['risk'] = risk
+                    state['route'], state['agents'], _ = ROUTES[risk]
+                    state['state'] = 'clarified' if risk == 'medium' else 'requested'
+                    state['auto_verify'] = None
+                    state['plan_id'] = None
+                    state['escalated_from_rescope'] = True
+                else:
+                    # Mismo riesgo: el comando congelado se vuelve a armar con
+                    # los archivos nuevos ({files}) para que los cubra.
+                    state['auto_verify'] = render_verification(template, widened) if risk == 'low' else None
+                    state['state'] = 'implementation_ready'
             elif action == 'oracle':
                 require(actor == 'jhon' and state['state'] == 'verification_ready', 'Only Jhon prepares the oracle before verification')
                 require(session != state['implementation_session'], 'Independent verifier session required')
@@ -533,7 +696,9 @@ def operate(request):
                 state['duration_ms'] = round((now - state['started_at']) * 1000)
                 verifier = (state.get('verification') or {}).get('agent', 'jhon')
                 state['receipt_tree_hash'] = seal_receipt(db, root, identifier, state['files'], verifier, state['digest'])
-                record_finish_metrics(db, identifier, state['duration_ms'], state['handoffs'])
+                state['usage'] = runtime_usage(state.get('start_session'), state['started_at'], now)
+                record_finish_metrics(db, identifier, state['duration_ms'], state['handoffs'], state['usage'],
+                                      max(0, state.get('delivery_number', 1) - 1))
             else:
                 raise ValueError('Unknown workflow action')
         state = save(db, identifier, actor, session, action, state, evidence, now)
@@ -546,6 +711,8 @@ def operate(request):
 
 
 if __name__ == '__main__':
+    signal.signal(signal.SIGTERM, _cancel)
+    signal.signal(signal.SIGINT, _cancel)
     try:
         print(json.dumps(operate(json.load(sys.stdin))))
     except (ValueError, KeyError, OSError, sqlite3.Error, subprocess.SubprocessError) as error:

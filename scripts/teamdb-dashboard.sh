@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Centro de control TeamDB: instancia persistente y aislada por proyecto.
 set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Ruta de TeamDB: la del repositorio principal, también desde un worktree.
+# shellcheck disable=SC1091
+if [ -f "$SCRIPT_DIR/lib-teamdb.sh" ]; then . "$SCRIPT_DIR/lib-teamdb.sh"; else . "$SCRIPT_DIR/lib/lib-teamdb.sh"; fi
 
 usage() {
   cat <<'HELP'
@@ -27,7 +31,7 @@ if [ ! -d "$PROJECT" ]; then
 fi
 PROJECT="$(cd "$PROJECT" && pwd -P)"
 PROJECT_NAME="$(basename "$PROJECT")"
-DB_PATH="$PROJECT/.opencode/context/team.db"
+DB_PATH="$(teamdb_project_path "$PROJECT")"
 PROJECT_KEY="$(printf '%s' "$PROJECT" | cksum | awk '{print $1}')"
 STATE_DIR="${TMPDIR:-/tmp}/skalling-dashboard-$PROJECT_KEY"
 PIDFILE="$STATE_DIR/server.pid"

@@ -2,11 +2,14 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Ruta de TeamDB: la del repositorio principal, también desde un worktree.
+# shellcheck disable=SC1091
+if [ -f "$SCRIPT_DIR/lib-teamdb.sh" ]; then . "$SCRIPT_DIR/lib-teamdb.sh"; else . "$SCRIPT_DIR/lib/lib-teamdb.sh"; fi
 OP="${1:-}"; shift || true
 
 project_from_last() {
   PROJECT="${1:-$(pwd)}"
-  DB="$PROJECT/.opencode/context/team.db"
+  DB="$(teamdb_project_path "$PROJECT")"
   [ -f "$DB" ] || { echo "ERROR: DB no existe: $DB" >&2; exit 1; }
 }
 
@@ -43,7 +46,7 @@ case "$OP" in
     ;;
   report)
     project_from_last "${1:-$(pwd)}"
-    sqlite3 -separator ' ' "$DB" "SELECT request_id||' risk='||risk_level||' route='||COALESCE(route,'')||' agents='||agents_count||' handoffs='||handoffs||' permissions='||permission_prompts||' context_bytes='||context_bytes||' duration_ms='||COALESCE(duration_ms,0)||' outcome='||COALESCE(outcome,'pending') FROM workflow_metrics ORDER BY started_at DESC;"
+    sqlite3 -separator ' ' "$DB" "SELECT request_id||' risk='||risk_level||' route='||COALESCE(route,'')||' agents='||agents_count||' handoffs='||handoffs||' permissions='||permission_prompts||' context_bytes='||context_bytes||' duration_ms='||COALESCE(duration_ms,0)||' outcome='||COALESCE(outcome,'pending')||' tokens_in='||COALESCE(tokens_input,'-')||' tokens_out='||COALESCE(tokens_output,'-')||' cache_read='||COALESCE(tokens_cache_read,'-')||' cost='||COALESCE(cost,'-')||' retries='||COALESCE(retries,'-')||' agents_used='||COALESCE(agents_used,'-') FROM workflow_metrics ORDER BY started_at DESC;"
     ;;
   summary)
     project_from_last "${1:-$(pwd)}"
@@ -57,7 +60,11 @@ case "$OP" in
         ' avg_duration_ms=' || COALESCE(CAST(AVG(duration_ms) AS INTEGER),0) ||
         ' avg_handoffs=' || ROUND(AVG(handoffs), 2) ||
         ' avg_permissions=' || ROUND(AVG(permission_prompts), 2) ||
-        ' avg_context_bytes=' || CAST(AVG(context_bytes) AS INTEGER)
+        ' avg_context_bytes=' || CAST(AVG(context_bytes) AS INTEGER) ||
+        ' avg_tokens_in=' || COALESCE(CAST(AVG(tokens_input) AS INTEGER),'-') ||
+        ' avg_tokens_out=' || COALESCE(CAST(AVG(tokens_output) AS INTEGER),'-') ||
+        ' avg_cost=' || COALESCE(ROUND(AVG(cost), 4),'-') ||
+        ' avg_retries=' || COALESCE(ROUND(AVG(retries), 2),'-')
       FROM workflow_metrics
       GROUP BY COALESCE(route,'unclassified'), risk_level
       ORDER BY route, risk_level;"

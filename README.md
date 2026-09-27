@@ -77,6 +77,19 @@ para el resto), en un proyecto de prueba aislado:
 | Complejo y sensible (datos personales) | Ruta completa: Pol (`clarify`) → Sol (plan y `ready`) → Teo → Jhon → Luz (veredicto de riesgo) → Pau (`document`) → `complete`; 17 tests del candidato verdes y Git aceptó el commit. 10 min 46 s, 6 handoffs. Pol detectó una decisión de producto faltante y se preguntó antes de seguir. |
 | Memoria del equipo | Una decisión y un problema conocido quedaron guardados y versionados para el merge. |
 
+**Consumo observado** (tokens que registra OpenCode por sesión, sumando los subagentes; MiniMax
+Token Plan es tarifa plana, así que el costo figura 0):
+
+| Pedido | Sesiones de agente | Entrada | Salida | Leídos de caché |
+|---|---|---|---|---|
+| Trivial | 2 | 23–30 mil | 1–2,5 mil | 55–190 mil |
+| Mediano | 4 | 70 mil | 10 mil | 520 mil |
+| Complejo y sensible | 7 | 176 mil | 35 mil | 1,55 millones |
+
+Son mediciones de corridas puntuales en un proyecto chico, no un promedio: sirven para comparar
+tamaños de pedido, no para prometer un costo. El mínimo son dos agentes (Alex y Teo); sin
+`testing.fast`, la verificación automática del carril trivial corre `testing.unit` completo.
+
 Esas corridas destaparon y corrigieron defectos que ningún test unitario veía (plugins que
 2.0.x no cargaba, herramienta escondida en code mode, booleanos como texto, Jhon sin forma de
 registrar evidencia, triggers de versión que bloqueaban toda escritura de memoria). No hay todavía una matriz de CI con binarios reales de OpenCode: una

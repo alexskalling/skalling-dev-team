@@ -48,7 +48,10 @@ def configured_commands(project):
         available = re.search(r'available:\s*(\w+)', block)
         command = re.search(r'command:\s*(.*)', block)
         if available and available.group(1).lower() == 'true' and command:
-            value = command.group(1).strip().strip('"\'').replace('{files}', '*').strip()
+            value = command.group(1).strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in '"\'':
+                value = value[1:-1]  # solo el par externo del YAML
+            value = value.replace('{files}', '*').strip()
             if value and not UNSAFE.search(value) and value not in commands:
                 commands.append(value)
     return commands

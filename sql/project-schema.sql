@@ -547,7 +547,13 @@ CREATE TABLE IF NOT EXISTS workflow_metrics (
   started_at TEXT NOT NULL,
   completed_at TEXT,
   duration_ms INTEGER,
-  outcome TEXT
+  outcome TEXT,
+  tokens_input INTEGER,
+  tokens_output INTEGER,
+  tokens_cache_read INTEGER,
+  cost REAL,
+  agents_used TEXT,
+  retries INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_workflow_metrics_started ON workflow_metrics(started_at DESC);
 

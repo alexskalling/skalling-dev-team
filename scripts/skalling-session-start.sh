@@ -8,9 +8,13 @@
 # Best-effort: si team.db no existe, sugiere /skalling-init.
 
 set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Ruta de TeamDB: la del repositorio principal, también desde un worktree.
+# shellcheck disable=SC1091
+if [ -f "$SCRIPT_DIR/lib-teamdb.sh" ]; then . "$SCRIPT_DIR/lib-teamdb.sh"; else . "$SCRIPT_DIR/lib/lib-teamdb.sh"; fi
 
 DB_GLOBAL="${SKALLING_DB_GLOBAL:-$HOME/.config/opencode/team.db}"
-DB_PROJECT="$(pwd)/.opencode/context/team.db"
+DB_PROJECT="$(teamdb_project_path "$(pwd)")"
 DB_ACTIVE="$DB_GLOBAL"
 [ -f "$DB_PROJECT" ] && DB_ACTIVE="$DB_PROJECT"
 

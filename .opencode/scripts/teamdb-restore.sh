@@ -79,11 +79,30 @@ if [ -f "$DB" ]; then
   BACKUP_DIR="$(dirname "$DB")/.backups"
   STAMP="$(date +%Y%m%d-%H%M%S)"
   BACKUP_FILE="$BACKUP_DIR/team.db.backup-$STAMP"
-  if ! mkdir -p "$BACKUP_DIR" 2>/dev/null || ! teamdb_backup_db "$DB" "$BACKUP_FILE"; then
-    echo "ERROR: no se pudo respaldar $DB; restauración abortada sin cambios" >&2
+  if ! mkdir -p "$BACKUP_DIR" 2>/dev/null; then
+    echo "ERROR: no se pudo crear $BACKUP_DIR; restauración abortada sin cambios" >&2
     exit 1
   fi
-  echo "backup: $BACKUP_FILE"
+  if teamdb_backup_db "$DB" "$BACKUP_FILE"; then
+    echo "backup: $BACKUP_FILE"
+  elif [ "$FULL_RESET" = true ]; then
+    # Base ilegible (corrupta): el backup lógico no puede leerla, pero
+    # --full-reset es justamente para este caso. Se conserva el archivo
+    # crudo (con su WAL) y se reconstruye desde el dump.
+    CORRUPT_FILE="$BACKUP_DIR/team.db.corrupt-$STAMP"
+    for suffix in "" "-wal" "-shm"; do
+      if [ -f "$DB$suffix" ] && ! cp -p "$DB$suffix" "$CORRUPT_FILE$suffix"; then
+        echo "ERROR: no se pudo conservar la copia cruda de $DB$suffix; restauración abortada sin cambios" >&2
+        exit 1
+      fi
+    done
+    BACKUP_FILE=""
+    echo "WARN: la base no se pudo respaldar lógicamente (¿corrupta?); copia cruda en $CORRUPT_FILE" >&2
+  else
+    echo "ERROR: no se pudo respaldar $DB (¿base corrupta?); restauración abortada sin cambios." >&2
+    echo "       Para reconstruir desde el dump conservando el archivo actual: --full-reset" >&2
+    exit 1
+  fi
   BACKUP_COUNT=$(find "$BACKUP_DIR" -maxdepth 1 -name 'team.db.backup-*' -type f 2>/dev/null | wc -l | tr -d ' ')
   if [ "$BACKUP_COUNT" -gt 5 ]; then
     TO_DELETE=$((BACKUP_COUNT - 5))
@@ -109,20 +128,24 @@ sys.exit(1 if problems else 0)
   exit 1
 fi
 
-# ── Full reset: recrear desde schema (usa el mismo mecanismo de init) ────────
-if [ "$FULL_RESET" = true ]; then
-  rm -f "$DB" "$DB-wal" "$DB-shm"  # lens:ok: guarda explícita [ "$FULL_RESET" = true ] en la línea de arriba
-fi
-
-if [ ! -f "$DB" ]; then
+# ── Base candidata: se restaura en un archivo aparte y solo reemplaza a la
+# activa si todo salió bien (auditoría de c7517ea: --full-reset borraba la base
+# antes de importar, un INSERT con una columna inexistente la dejaba vacía y
+# el mensaje decía "sin cambios"). ─────────────────────────────────────────────
+CANDIDATE="$DB.restore-$$"
+trap 'rm -f "$CANDIDATE" "$CANDIDATE-wal" "$CANDIDATE-shm"; teamdb_unlock "$LOCK_DIR"' EXIT  # lens:ok: CANDIDATE es ruta propia derivada de DB y el PID
+rm -f "$CANDIDATE" "$CANDIDATE-wal" "$CANDIDATE-shm"  # lens:ok: ruta propia derivada de DB y el PID
+mkdir -p "$(dirname "$DB")"
+if [ "$FULL_RESET" = true ] || [ ! -f "$DB" ] || [ -z "${BACKUP_FILE:-}" ]; then
   if [ ! -f "$SCHEMA" ]; then
     echo "ERROR: schema no encontrado: $SCHEMA" >&2
     exit 1
   fi
-  mkdir -p "$(dirname "$DB")"
-  sqlite3 "$DB" < "$SCHEMA"
-  sqlite3 "$DB" "PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON" 2>/dev/null || true
-  echo "db creada desde schema: $DB"
+  sqlite3 "$CANDIDATE" < "$SCHEMA"
+  sqlite3 "$CANDIDATE" "PRAGMA journal_mode=WAL" >/dev/null 2>&1 || true
+else
+  # Copia consistente y verificada de la base actual (el backup recién hecho).
+  cp "$BACKUP_FILE" "$CANDIDATE"
 fi
 
 # ── Aplicar el dump: filas validadas, parámetros vinculados, una transacción ─
@@ -131,7 +154,7 @@ fi
 # los de borrado y deja el índice FTS inconsistente).
 if ! APPLY_OUT="$(PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}" python3 -c '
 import sqlite3, sys
-from teamdb_dump import TABLES, parse
+from teamdb_dump import TABLES, VERSIONED, parse
 db_path, dump_path = sys.argv[1:3]
 rows, problems = parse(dump_path)
 if problems:
@@ -141,6 +164,7 @@ con.execute("PRAGMA busy_timeout=5000")
 count = 0
 try:
     con.execute("BEGIN IMMEDIATE")
+    tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type=\"table\"")}
     for table in TABLES:
         if table not in rows:
             continue
@@ -150,6 +174,7 @@ try:
         local = {r[1] for r in info}
         pk = [r[1] for r in sorted(info, key=lambda r: r[5]) if r[5] > 0]
         for row in rows[table]:
+            version = row.pop("__version", None)
             unknown = set(row) - local
             if unknown:
                 raise ValueError("%s: columnas desconocidas %s" % (table, sorted(unknown)))
@@ -159,17 +184,30 @@ try:
             names = ",".join("\"%s\"" % c for c in row)
             con.execute("INSERT INTO \"%s\" (%s) VALUES (%s)" % (table, names, ",".join("?" * len(row))),
                         list(row.values()))
+            if version and table in VERSIONED and "memory_versions" in tables:
+                con.execute("INSERT INTO memory_versions(table_name, slug, updated_at) VALUES (?,?,?) "
+                            "ON CONFLICT(table_name, slug) DO UPDATE SET updated_at=excluded.updated_at",
+                            (table, row.get("slug"), version))
             count += 1
     con.commit()
+    if con.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+        raise ValueError("la base restaurada no pasó integrity_check")
+    con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 except (sqlite3.Error, ValueError) as error:
     con.rollback()
     sys.exit("fila no aplicada: %s" % error)
 finally:
     con.close()
 print(count)
-' "$DB" "$DUMP" 2>&1)"; then
-  echo "ERROR: restore falló aplicando el dump (sin cambios): $APPLY_OUT" >&2
+' "$CANDIDATE" "$DUMP" 2>&1)"; then
+  echo "ERROR: restore falló aplicando el dump; la base activa queda sin cambios: $APPLY_OUT" >&2
   exit 1
 fi
+
+# ── Reemplazo: el WAL de la base vieja ya quedó en el backup (o en la copia
+# cruda); si quedara al lado, SQLite lo aplicaría sobre la base nueva. ─────────
+rm -f "$DB-wal" "$DB-shm"  # lens:ok: WAL/SHM de la base activa, respaldados arriba
+mv -f "$CANDIDATE" "$DB"
+rm -f "$CANDIDATE-wal" "$CANDIDATE-shm"  # lens:ok: ruta propia derivada de DB y el PID
 
 echo "restore: $APPLY_OUT filas aplicadas desde $DUMP"

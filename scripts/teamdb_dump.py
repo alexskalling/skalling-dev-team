@@ -10,9 +10,8 @@ literales y funciones escalares, sobre una base en memoria.
 import re
 import sqlite3
 
-# Mismo orden que teamdb-dump.sh (padres antes que hijos; memory_versions
-# después de las tablas que versiona, para que su valor restaurado prevalezca
-# sobre el que ponen los triggers al insertar).
+# Mismo orden que teamdb-dump.sh (padres antes que hijos). memory_versions se
+# acepta solo por compatibilidad con dumps anteriores a la columna __version.
 TABLES = ('concepts', 'decisions', 'preferences', 'known_problems', 'memory_versions', 'work_in_progress',
           'tags', 'memory_tags', 'memory_links', 'proposals', 'plans', 'specs', 'design_notes', 'tasks',
           'task_dependencies', 'task_claims', 'plan_history', 'task_context_capsules', 'skills_registry',
@@ -20,6 +19,10 @@ TABLES = ('concepts', 'decisions', 'preferences', 'known_problems', 'memory_vers
 
 INSERT_RE = re.compile(r'^INSERT INTO "([^"]+)" \((.*?)\) VALUES \((.*)\);$', re.S)
 IDENTIFIER_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
+# Columna sintética: versión de decisions/preferences/known_problems, que
+# viaja con su fila. Quien aplica el dump la saca antes de insertar.
+VERSION_COLUMN = '__version'
+VERSIONED = ('decisions', 'preferences', 'known_problems')
 
 
 def _literal_evaluator():

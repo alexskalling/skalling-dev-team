@@ -146,7 +146,16 @@ if [ "$DB_WAS_MISSING" = true ] && [ -f "$PROJECT/db/teamdb/team.dump.sql" ]; th
   done
   if [ -n "$RESTORE_SCRIPT" ]; then
     echo "teamdb: dump versionado encontrado, restaurando estado..."
-    bash "$RESTORE_SCRIPT" "$PROJECT" --force || {
+    # teamdb-restore.sh toma el mismo lock: con el nuestro tomado esperaba 10 s
+    # y fallaba, así que un clon nuevo nunca restauraba la memoria del equipo.
+    teamdb_unlock "$LOCK_DIR"
+    RESTORE_RC=0
+    bash "$RESTORE_SCRIPT" "$PROJECT" --force || RESTORE_RC=$?
+    if ! teamdb_lock "$LOCK_DIR" 10; then
+      echo "ERROR: no se pudo retomar el lock de TeamDB tras restaurar" >&2
+      exit 1
+    fi
+    [ "$RESTORE_RC" -eq 0 ] || {
       echo "ERROR: restore desde dump falló; TeamDB no quedó inicializada" >&2
       exit 1
     }

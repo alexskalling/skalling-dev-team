@@ -1,5 +1,7 @@
 import importlib.util
+import json
 import os
+import sys
 import shutil
 from pathlib import Path
 import sqlite3
@@ -393,6 +395,136 @@ class Workflow(unittest.TestCase):
         self.assertEqual(checked['verification']['argv'], ['bash', '-c', 'bash tests/check.test.sh'])
         self.assertEqual(checked['verification']['exit_code'], 0)
         self.assertEqual(self.call('jhon', 'approve', evidence='comando del proyecto cubre el criterio')['state'], 'verified')
+
+
+    def test_growing_request_takes_the_new_route_and_its_evidence(self):
+        # Auditoría de c7517ea (P1): low + rescope a otro módulo con sintaxis
+        # inválida terminaba completed con verificador auto, sin Sol ni Jhon.
+        (self.root / 'src').mkdir()
+        (self.root / 'src/other.py').write_text('x = 1\n')
+        subprocess.run(['git', '-C', str(self.root), 'add', '-A'], check=True)
+        subprocess.run(['git', '-C', str(self.root), 'commit', '-q', '-m', 'add src'], check=True)
+        self.configure(fast='ls {files}')
+        self.start()
+        (self.root / 'src/other.py').write_text('def broken(:\n')
+        rescoped = self.call('teo', 'rescope', files=['src/other.py'], evidence='hacía falta tocar src/')
+        self.assertEqual((rescoped['risk'], rescoped['state']), ('medium', 'clarified'))
+        self.assertIsNone(rescoped['auto_verify'])
+        for actor, action in (('teo', 'deliver'), ('alex', 'complete')):
+            with self.assertRaises(ValueError):
+                self.call(actor, action)
+        self.call('sol', 'plan', evidence='plan para el alcance nuevo')
+        self.call('sol', 'ready', evidence='listo', plan_id=self.plan_id)
+        delivered = self.call('teo', 'deliver')
+        self.assertEqual(delivered['state'], 'verification_ready', 'medium no se verifica solo')
+        with self.assertRaises(ValueError):
+            self.call('alex', 'complete')
+
+    def test_same_risk_rescope_rebuilds_the_command_over_the_new_files(self):
+        self.configure(fast='ls {files}')
+        self.start()
+        (self.root / 'tests/extra.test.sh').write_text('true\n')
+        rescoped = self.call('teo', 'rescope', files=['tests/extra.test.sh'], evidence='test nuevo')
+        self.assertEqual(rescoped['risk'], 'low')
+        self.assertIn('tests/extra.test.sh', rescoped['auto_verify'][2])
+        self.configure(fast='true')   # editar project.yaml no cambia la plantilla congelada
+        again = self.call('teo', 'rescope', files=['app.py', 'tests/extra2.test.sh'], evidence='otro test')
+        self.assertTrue(again['auto_verify'][2].startswith('ls '))
+
+
+    # ── Auditoría de c7517ea (P2): límites de las verificaciones ──
+
+    def configure_raw(self, text):
+        (self.root / '.opencode/project.yaml').write_text(text)
+
+    def ready_for_checks(self, timeout):
+        self.configure_raw(f'testing:\n  timeout_seconds: {timeout}\n')
+        self.start('medium')
+        self.call('sol', 'plan', evidence='d')
+        self.call('sol', 'ready', evidence='r', plan_id=self.plan_id)
+        self.call('teo', 'deliver')
+        self.call('jhon', 'oracle', expected='one', negative='two', invariant='int', refutation='t')
+
+    def test_timeout_comes_from_the_project_and_is_frozen(self):
+        self.ready_for_checks(timeout=3)
+        self.configure_raw('testing:\n  timeout_seconds: 1\n')   # editar después no lo cambia
+        checked = self.call('jhon', 'check', argv=['bash', '-c', 'sleep 2; true'], method='m', criterion='c')
+        self.assertEqual(checked['verification']['exit_code'], 0)
+
+    def test_timed_out_check_is_cancelled_without_orphans_or_record(self):
+        self.ready_for_checks(timeout=1)
+        marker = 'sleep 57.31'
+        with self.assertRaises(ValueError) as caught:
+            self.call('jhon', 'check', argv=['bash', '-c', f'{marker} & {marker}; true'], method='m', criterion='c')
+        self.assertIn('superó 1s', str(caught.exception))
+        time.sleep(0.3)
+        leftover = subprocess.run(['pgrep', '-f', marker], capture_output=True, text=True)
+        self.assertEqual(leftover.stdout.strip(), '', 'quedaron procesos huérfanos')
+        self.assertEqual(self.call('jhon', 'status')['checks'], [], 'un check vencido no se registra')
+        ok = self.call('jhon', 'check', argv=['true'], method='m', criterion='c')
+        self.assertEqual(ok['verification']['exit_code'], 0)
+
+    def test_cancelling_the_engine_kills_the_running_verification(self):
+        self.ready_for_checks(timeout=60)
+        marker = 'sleep 58.73'
+        request = {'project': str(self.root), 'actor': 'jhon', 'session': 'jhon-session', 'action': 'check',
+                   'payload': {'id': 'request', 'argv': ['bash', '-c', f'{marker} & {marker}'], 'method': 'm', 'criterion': 'c'}}
+        proc = subprocess.Popen([sys.executable, str(ROOT / 'scripts/skalling-workflow.py')], stdin=subprocess.PIPE,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        proc.stdin.write(json.dumps(request)); proc.stdin.close()
+        for _ in range(50):
+            if subprocess.run(['pgrep', '-f', marker], capture_output=True).stdout:
+                break
+            time.sleep(0.1)
+        proc.terminate()                     # lo que hace el plugin al cancelar
+        proc.wait(timeout=10)
+        time.sleep(0.3)
+        self.assertEqual(subprocess.run(['pgrep', '-f', marker], capture_output=True, text=True).stdout.strip(), '')
+
+
+    def test_request_usage_is_captured_automatically_from_opencode(self):
+        # Auditoría de c7517ea: el consumo dependía de eventos manuales. Al
+        # completar, el motor suma tokens/costo de la sesión y sus subagentes.
+        outside = tempfile.TemporaryDirectory()
+        self.addCleanup(outside.cleanup)
+        oc = Path(outside.name) / 'opencode.db'
+        with sqlite3.connect(oc) as conn:
+            conn.execute('CREATE TABLE session_v2 (id TEXT PRIMARY KEY, parent_id TEXT)')
+            conn.execute('CREATE TABLE session_message (id INTEGER PRIMARY KEY, session_id TEXT, type TEXT, time_created INTEGER, data TEXT)')
+            conn.executemany('INSERT INTO session_v2 VALUES (?,?)', [('alex-session', None), ('teo-sub', 'alex-session'), ('otra', None)])
+        os.environ['SKALLING_OPENCODE_DB'] = str(oc)
+        self.addCleanup(os.environ.pop, 'SKALLING_OPENCODE_DB', None)
+        self.configure(fast='ls {files}')
+        self.start()
+
+        def message(session, agent, tokens_in, tokens_out, cache, cost, when=None):
+            data = {'agent': agent, 'cost': cost, 'tokens': {'input': tokens_in, 'output': tokens_out, 'reasoning': 0,
+                                                            'cache': {'read': cache, 'write': 0}}}
+            with sqlite3.connect(oc) as conn:
+                conn.execute('INSERT INTO session_message(session_id,type,time_created,data) VALUES (?,?,?,?)',
+                             (session, 'assistant', int((when or time.time()) * 1000), json.dumps(data)))
+        message('alex-session', 'Alex', 1000, 100, 5000, 0.01)
+        message('teo-sub', 'Teo', 2000, 300, 7000, 0.02)
+        message('otra', 'Alex', 99999, 9999, 0, 9.0)                    # otra sesión: no cuenta
+        message('alex-session', 'Alex', 55555, 5555, 0, 5.0, when=1.0)  # fuera de la ventana: no cuenta
+        (self.root / 'app.py').write_text('value = 1  # ok\n')
+        self.call('teo', 'deliver')
+        completed = self.call('alex', 'complete')
+        self.assertEqual(completed['usage']['tokens_input'], 3000)
+        self.assertEqual(completed['usage']['agents'], ['Alex', 'Teo'])
+        with sqlite3.connect(self.db_path) as db:
+            row = db.execute("SELECT tokens_input, tokens_output, tokens_cache_read, cost, agents_used, retries "
+                             "FROM workflow_metrics WHERE request_id='request'").fetchone()
+        self.assertEqual(row, (3000, 400, 12000, 0.03, 'Alex,Teo', 0))
+
+    def test_missing_opencode_database_never_breaks_completion(self):
+        os.environ['SKALLING_OPENCODE_DB'] = str(self.root / 'no-existe.db')
+        self.addCleanup(os.environ.pop, 'SKALLING_OPENCODE_DB', None)
+        self.configure(fast='ls {files}')
+        self.start()
+        (self.root / 'app.py').write_text('value = 1  # ok\n')
+        self.call('teo', 'deliver')
+        self.assertEqual(self.call('alex', 'complete')['state'], 'completed')
 
 
 if __name__ == '__main__': unittest.main()

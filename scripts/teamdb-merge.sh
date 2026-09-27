@@ -149,6 +149,7 @@ idmap = {}
 stats = {"inserted": 0, "updated": 0, "local_newer": 0, "unchanged": 0, "remapped": 0}
 errors = []
 conflicts = []
+unresolved = []
 has_versions = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='memory_versions'").fetchone() is not None
 
 
@@ -219,7 +220,11 @@ for table, key, fks in SPECS:
         continue
     versioned = table in VERSIONED and has_versions
     if versioned:
-        rows = [{**r, "updated_at": remote_versions.get((table, r.get("slug")), "")} for r in rows]
+        # La versión viaja en la fila (__version); memory_versions suelto solo
+        # en dumps viejos. Con merge=union cada contenido trae SU versión.
+        rows = [{**{k: v for k, v in r.items() if k != "__version"},
+                 "updated_at": str(r.get("__version") or remote_versions.get((table, r.get("slug")), "") or "")}
+                for r in rows]
     has_updated_at = "updated_at" in cols or versioned
     surrogate = surrogate_id(table, cols)
     match_cols = key or tuple(c for c in cols if c != "id")
@@ -248,6 +253,9 @@ for table, key, fks in SPECS:
             differs = any(values.get(c) != local_row.get(c) for c in values if c != "id")
             if remote_ts <= local_ts:
                 stats["unchanged" if remote_ts == local_ts else "local_newer"] += 1
+                if differs and remote_ts == local_ts:
+                    unresolved.append(f"{table}/{local_row.get('slug', local_row.get('id'))}: misma versión "
+                                      f"({local_ts}) con contenido distinto; se conserva el local, decidir a mano")
                 if differs and remote_ts < local_ts:
                     conflicts.append(f"{table}/{local_row.get('slug', local_row.get('id'))}: se conserva la versión local ({local_ts} > {remote_ts})")
                 continue
@@ -304,12 +312,16 @@ print(f"merge: {stats['inserted']} insertadas, {stats['updated']} actualizadas, 
       f"{stats['remapped']} ids traducidos")
 for conflict in conflicts:
     print(f"CONFLICTO resuelto por versión: {conflict}")
+for conflict in unresolved:
+    print(f"CONFLICTO SIN RESOLVER: {conflict}", file=sys.stderr)
 for e in errors:
     print(f"ERROR fila no aplicada: {e}", file=sys.stderr)
 if unparsed:
     print(f"ERROR: {unparsed} sentencias del dump no se pudieron leer", file=sys.stderr)
 if errors or unparsed:
     sys.exit(2)
+if unresolved:
+    sys.exit(3)
 PY
 )"
 

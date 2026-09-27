@@ -7,6 +7,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from skalling_classify import project_db  # noqa: E402
+
 
 def git(root, *args):
     return subprocess.check_output(['git', '-C', str(root), *args], input=b'', stderr=subprocess.PIPE)
@@ -28,7 +31,8 @@ def operate(root, session, action, payload):
     actual = Path(git(root, 'rev-parse', '--show-toplevel').decode().strip()).resolve()
     if root != actual or not session:
         raise ValueError('Goal requiere la raíz Git real y una sesión de OpenCode.')
-    path = root / '.opencode/context/team.db'
+    # Memoria del repositorio principal, también desde un worktree.
+    path = project_db(root)
     if not path.exists():
         if action != 'start':
             return None

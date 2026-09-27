@@ -2,9 +2,14 @@ import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const engine = fileURLToPath(new URL('../../scripts/skalling-workflow.py', import.meta.url));
+export const ENGINE_TIMEOUT_MS = 3_660_000;
 async function run(request, signal) {
   return new Promise((resolve, reject) => {
-    const child = execFile('python3', [engine], {cwd:request.project, signal, timeout:130000, maxBuffer:1024*1024},
+    // Más que el máximo del motor (1 h): el límite real de cada verificación
+    // es testing.timeout_seconds; cancelar la llamada manda SIGTERM y el
+    // motor termina el grupo de procesos de la prueba.
+    const child = execFile('python3', [engine], {cwd:request.project, signal, timeout:ENGINE_TIMEOUT_MS,
+      killSignal:'SIGTERM', maxBuffer:4*1024*1024},
       (error, stdout, stderr) => {
         if (error) return reject(new Error(stderr || error.message));
         try { resolve(JSON.parse(stdout)); } catch (failure) { reject(failure); }

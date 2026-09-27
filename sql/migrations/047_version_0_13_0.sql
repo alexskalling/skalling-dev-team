@@ -2,6 +2,7 @@
 --
 -- 1. task_claims.session: la identidad de un claim es rol + sesión. Antes dos
 --    sesiones de Teo recibían el mismo claim como "idempotente".
+-- 3 (abajo). workflow_metrics: tokens, costo, agentes y reintentos por pedido.
 -- 2. memory_versions: versión (último cambio) de decisions, preferences y
 --    known_problems. Sin versión, el merge entre integrantes ignoraba
 --    cualquier cambio (contenido o estado) de una fila que ya existía en el
@@ -14,6 +15,14 @@
 --    Resolución: gana la versión más reciente; teamdb-merge.sh informa los
 --    conflictos.
 ALTER TABLE task_claims ADD COLUMN session TEXT;
+
+-- 3. Consumo real por pedido, leído de OpenCode al completar el workflow.
+ALTER TABLE workflow_metrics ADD COLUMN tokens_input INTEGER;
+ALTER TABLE workflow_metrics ADD COLUMN tokens_output INTEGER;
+ALTER TABLE workflow_metrics ADD COLUMN tokens_cache_read INTEGER;
+ALTER TABLE workflow_metrics ADD COLUMN cost REAL;
+ALTER TABLE workflow_metrics ADD COLUMN agents_used TEXT;
+ALTER TABLE workflow_metrics ADD COLUMN retries INTEGER;
 
 CREATE TABLE IF NOT EXISTS memory_versions (
   table_name TEXT NOT NULL CHECK (table_name IN ('decisions','preferences','known_problems')),

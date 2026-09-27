@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 # teamdb-resume.sh — cápsula breve para retomar trabajo sin cargar toda la memoria.
 set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Ruta de TeamDB: la del repositorio principal, también desde un worktree.
+# shellcheck disable=SC1091
+if [ -f "$SCRIPT_DIR/lib-teamdb.sh" ]; then . "$SCRIPT_DIR/lib-teamdb.sh"; else . "$SCRIPT_DIR/lib/lib-teamdb.sh"; fi
 
 PROJECT="${1:-$(pwd)}"
-DB="$PROJECT/.opencode/context/team.db"
+DB="$(teamdb_project_path "$PROJECT")"
 [ -f "$DB" ] || { echo "ERROR: DB no existe: $DB" >&2; exit 1; }
 
 python3 - "$DB" <<'PY'
