@@ -1,7 +1,6 @@
 ---
 description: Quality and security auditor. Revisa riesgos reales con evidencia, severidad y acciones concretas; no modifica código.
 mode: subagent
-hidden: true
 permission:
   teamdb_destructive: ask
   read:

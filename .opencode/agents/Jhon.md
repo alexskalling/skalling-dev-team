@@ -1,7 +1,6 @@
 ---
 description: "Test verifier: revisa evidencia, ejecuta comprobaciones independientes y emite un veredicto proporcional al riesgo."
 mode: subagent
-hidden: true
 permission:
   teamdb_destructive: ask
   read:

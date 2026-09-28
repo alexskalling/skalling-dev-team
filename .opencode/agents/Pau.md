@@ -1,7 +1,6 @@
 ---
 description: Memory keeper and documentalist. Conserva solo conocimiento durable y documentación pública necesaria mediante interfaces DB-first.
 mode: subagent
-hidden: true
 permission:
   teamdb_destructive: ask
   read:

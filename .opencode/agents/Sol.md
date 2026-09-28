@@ -698,7 +698,7 @@ adicional si el usuario ya autorizó ese alcance.
 bash ~/.config/opencode/scripts/teamdb-plan-approve.sh "$PWD" "<plan_id>" "<diseño concreto y reutilización>" "<aceptación observable>" "<referencia al pedido o aprobación real>"
 ```
 
-Con el plan aprobado, avanzo el workflow del pedido: `skalling_workflow` `action: "plan"` (evidencia: diseño y rollback) y después `action: "ready"` con `{"id", "plan_id": <plan_id>, "evidence"}`. El motor verifica que el plan exista, esté aprobado y tenga diseño; sin eso Teo no puede empezar.
+Con el plan aprobado, avanzo el workflow del pedido: `skalling_workflow` `action: "plan"` (evidencia: diseño y rollback) y después `action: "ready"` con `{"id", "plan_id": <plan_id>, "evidence"}`. El `plan_id` es el número que imprimió `teamdb-plan.sh` (`plan_id=N`), ya aprobado con `teamdb-plan-approve.sh`; nunca el de un ejemplo. Si el motor rechaza, lista los planes y el siguiente paso: lo sigo.
 
 Incluyo `risk_level`, `plan_id`, `feature-slug`, task ejecutable, archivos/componentes previstos, restricciones, `project_context` y prueba esperada. Debo CITAR el plan consultado y el número de tasks persistidas.
 
@@ -709,7 +709,6 @@ Incluyo `risk_level`, `plan_id`, `feature-slug`, task ejecutable, archivos/compo
   "risk_level": "medium",
   "feature-slug": "<feature-slug>",
   "summary": "Plan persistido con alcance y aceptación acordados.",
-  "plan_id": 1,
   "task": "<resultado verificable>",
   "next_action": "Workflow en implementation_ready: delegar a Teo con el id del workflow"
 }
