@@ -17,6 +17,16 @@ if [ -n "$PREV_HOOK" ] && [ -x "$PREV_HOOK" ]; then
   "$PREV_HOOK" "$@"
 fi
 
+# Un pull puede traer scripts nuevos: la base local se migra antes de fusionar
+# el dump (aditivo, idempotente; un fallo se muestra y no corta el pull).
+for ensure in "$PROJECT/.opencode/scripts/teamdb-ensure-current.sh" \
+              "${SKALLING_ROOT:-$HOME/.config/opencode}/scripts/teamdb-ensure-current.sh"; do
+  if [ -f "$ensure" ]; then
+    bash "$ensure" "$PROJECT" || true
+    break
+  fi
+done
+
 # Fail-open: sin dump versionado no hay nada que mergear (repo sin Fase 0).
 [ -f "$PROJECT/db/teamdb/team.dump.sql" ] || exit 0
 

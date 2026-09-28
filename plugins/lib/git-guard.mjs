@@ -569,6 +569,32 @@ function wholeTreeGrep(words) {
   return paths.length === 0 || paths.some((p) => /^(?:\.|\.\/|\*|\.\.|\/|~|\$HOME)\/?$/.test(p));
 }
 
+// Herramientas propias cuyo --scope/--exclude es un glob que filtra
+// `git ls-files` (solo archivos versionados): no abren lo que el glob "podría"
+// alcanzar fuera de git. Sin esta excepción, `skalling-review.sh --scope
+// 'scripts/**'` quedaba bloqueado para todos, incluida Luz, porque `**`
+// "podría" coincidir con .env. Solo se exceptúa el VALOR de esas opciones; un
+// valor que nombra algo sensible o cualquier otro argumento secreto se bloquea.
+const SCOPED_TOOLS = new Set(['skalling-review.sh']);
+const SCOPE_OPTIONS = new Set(['--scope', '--exclude']);
+
+function scopedToolArgs(words) {
+  const [head, second] = words;
+  if (SCOPED_TOOLS.has(head)) return 1;
+  if (['bash', 'sh', 'zsh'].includes(head) && second && SCOPED_TOOLS.has(second.replace(/^.*\//, ''))) return 2;
+  return 0;
+}
+
+function scopeValueIsSensitive(value) {
+  return value.split(',').some((part) => {
+    const segments = part.split('/');
+    const base = segments.filter(Boolean).pop() || '';
+    // Comodín genérico (scripts/**): solo importa a qué carpeta apunta.
+    if (/^[*?]+$/.test(base)) return isSecretPath(segments.slice(0, -1).join('/') || '.');
+    return isSecretPath(part);
+  });
+}
+
 export function credentialViolation(command) {
   const base = removeHeredocBodies(command || '');
   const { segments } = splitSegments(base);
@@ -580,6 +606,22 @@ export function credentialViolation(command) {
     if (NON_READERS.has(head) || (head === 'git' && NON_READING_GIT.has(words[1]))) continue;
     // --env-file carga variables en el proceso sin mostrarlas.
     let sources = words.slice(1).filter((w) => !w.startsWith('--env-file'));
+    const toolStart = scopedToolArgs(words);
+    if (toolStart) {
+      const scoped = [];
+      const rest = words.slice(toolStart).filter((w, i, all) => {
+        const option = w.split('=')[0];
+        if (SCOPE_OPTIONS.has(option) && w.includes('=')) { scoped.push(w.slice(w.indexOf('=') + 1)); return false; }
+        if (SCOPE_OPTIONS.has(w)) return false;
+        if (i > 0 && SCOPE_OPTIONS.has(all[i - 1])) { scoped.push(w); return false; }
+        return true;
+      });
+      if (scoped.some(scopeValueIsSensitive)) {
+        return 'Skalling no lee credenciales desde los agentes: el --scope de la revisión apunta a algo sensible '
+          + `(\`${seg.trim()}\`). Usá un directorio de código, p. ej. --scope 'src/**'.`;
+      }
+      sources = rest;
+    }
     if (['cp', 'mv', 'rsync', 'scp'].includes(head)) sources = sources.filter((a) => !a.startsWith('-')).slice(0, -1);
     const hit = sources.find((w) => isSecretPath(w) || /:\S*\.env(?:\.\w+)?$/.test(w));
     if (hit || wholeTreeGrep(words) || (assigned && sources.some((w) => w.includes('$')))) {

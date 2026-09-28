@@ -126,6 +126,8 @@ TESTS=(
   tests/skills-registry.test.sh
   tests/human-approve.test.py
   tests/setup-with-ci.test.sh
+  tests/init-installs-project.test.sh
+  tests/teamdb-ensure-current.test.sh
 )
 
 # Una suite listada que no existe es un FALLO, no un salto silencioso (antes

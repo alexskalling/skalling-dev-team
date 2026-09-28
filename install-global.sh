@@ -443,6 +443,11 @@ install_data_files() {
     if [[ -f "$SCRIPT_DIR/data/permission-policy.json" ]]; then
         run cp "$SCRIPT_DIR/data/permission-policy.json" "$DATA_DIR/permission-policy.json"
     fi
+    # /skalling-init instala en cada proyecto con el setup.sh de este checkout
+    # (agentes, plugins, scripts y hooks); acá queda registrado dónde está.
+    if [[ "$DRY_RUN" == false ]]; then
+        printf '%s\n' "$SCRIPT_DIR" > "$DATA_DIR/source-dir"
+    fi
     log OK "Data files listos"
 }
 

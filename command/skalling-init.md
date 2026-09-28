@@ -4,13 +4,19 @@ description: Inicializa la memoria TeamDB y detecta el stack del proyecto actual
 
 # Skalling Init
 
-Inicializa Skalling usando el bootstrap canónico instalado. No reimplementes la
-detección ni escribas directamente en la base de datos.
+Inicializa Skalling usando el bootstrap canónico instalado. Deja el proyecto
+completo, igual que `setup.sh`: memoria, agentes, plugins, scripts, hooks de Git y
+Alex como agente por defecto. No reimplementes la detección ni escribas
+directamente en la base de datos.
 
 ```bash
 SK_ROOT="${SKALLING_ROOT:-${SKALLING_OPENCODE_DIR:-$HOME/.config/opencode}}"
-bash "$SK_ROOT/bootstrap-context.sh" --target "$(pwd)"
+bash "$SK_ROOT/bootstrap-context.sh" --target "$(pwd)" --install-project
 ```
+
+Al terminar, avisá al usuario que **reinicie OpenCode** para cargar los agentes y
+plugins del proyecto, y que los archivos nuevos (`.opencode/`, `.gitignore`,
+`.gitattributes`, `db/teamdb/`) se commitean con el camino humano que indica el hook.
 
 Si el proyecto ya está inicializado, muestra primero el estado y pide confirmación
 antes de usar `--force`. Al terminar, resume stack detectado, ubicación de TeamDB y

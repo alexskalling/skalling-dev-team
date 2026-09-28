@@ -644,19 +644,11 @@ check_scripts_parity() {
         # Mostrar las últimas líneas del output de build-local-snapshot para guiar
         local detail
         detail="$(printf '%s\n' "$out" | tail -8 | sed 's/^/      /')"
-        if [[ "$STRICT" == true ]]; then
-            err "scripts/ ↔ .opencode/scripts/ drift detectado (--strict promueve a error)"
-            if [[ -n "$detail" ]]; then
-                printf "%b\n" "$detail" >&2
-            fi
-            info "regenerá con: bash scripts/build-local-snapshot.sh --apply"
-        else
-            warn "scripts/ ↔ .opencode/scripts/ drift detectado"
-            if [[ -n "$detail" ]]; then
-                printf "%b\n" "$detail" >&2
-            fi
-            info "regenerá con: bash scripts/build-local-snapshot.sh --apply"
+        if [[ -n "$detail" ]]; then
+            printf "%b\n" "$detail" >&2
         fi
+        info "scripts/ ↔ .opencode/scripts/ drift detectado (ver detalle arriba)"
+        info "regenerá con: bash scripts/build-local-snapshot.sh --apply"
     fi
 }
 

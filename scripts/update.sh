@@ -74,8 +74,11 @@ locate_repo() {
         fi
     fi
 
-    # Buscar en ubicaciones comunes
+    # El checkout que registró install-global.sh; después, ubicaciones comunes.
+    local recorded=""
+    [[ -f "$SCRIPT_DIR/../skalling-data/source-dir" ]] && recorded="$(head -1 "$SCRIPT_DIR/../skalling-data/source-dir")"
     local candidates=(
+        ${recorded:+"$recorded"}
         "$SCRIPT_DIR/.."  # scripts/ -> raíz del repo
         "$HOME/skalling-dev-team"
         "$HOME/Proyectos/skalling-dev-team"

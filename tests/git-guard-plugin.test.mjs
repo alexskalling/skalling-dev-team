@@ -378,3 +378,32 @@ test('auditoría 2026-09-27: ningún agente corre el aprobador humano', () => {
     }
   }
 });
+
+test('la revisión de Skalling con --scope de glob no se toma como lectura de credenciales', () => {
+  const core = createCore();
+  const run = (agent, command) => core.decide({ tool: 'bash', agent, sessionID: 's', input: { command } });
+  for (const agent of ['luz', 'jhon', 'teo', 'alex']) {
+    for (const command of [
+      "bash scripts/skalling-review.sh --lens risk --scope 'scripts/**'",
+      "bash ~/.config/opencode/scripts/skalling-review.sh --lens risk --scope 'scripts/**' --exclude 'scripts/hooks/**'",
+      'bash .opencode/scripts/skalling-review.sh --lens risk --scope=src/**/*.py',
+      "bash scripts/skalling-review.sh --lens risk --scope '**'",
+    ]) {
+      assert.equal(run(agent, command), null, `${agent}: ${command}`);
+    }
+  }
+  // El valor del --scope sigue revisándose, y la excepción no se extiende a otros comandos.
+  for (const command of [
+    "bash scripts/skalling-review.sh --lens risk --scope '~/.ssh/**'",
+    'bash scripts/skalling-review.sh --lens risk --scope .env',
+    "bash scripts/skalling-review.sh --lens risk --scope '**/.env'",
+    'bash scripts/skalling-review.sh --lens risk --scope src/** ~/.ssh/id_rsa',
+    'cat ~/.ssh/id_rsa --scope x',
+    'cat ~/.ssh/id_rsa --diff',
+    "cat --scope 'scripts/**' .env",
+    'cat .env',
+    "grep -r password --scope 'scripts/**' .",
+  ]) {
+    assert.match(run('luz', command) || '', /credenciales/, command);
+  }
+});

@@ -18,6 +18,12 @@ DB_PROJECT="$(teamdb_project_path "$(pwd)")"
 DB_ACTIVE="$DB_GLOBAL"
 [ -f "$DB_PROJECT" ] && DB_ACTIVE="$DB_PROJECT"
 
+# Base del proyecto atrasada respecto de los scripts instalados: se migra sola
+# (aditivo, idempotente). Un fallo se muestra pero no corta el inicio.
+if [ -f "$DB_PROJECT" ] && [ -f "$SCRIPT_DIR/teamdb-ensure-current.sh" ]; then
+  bash "$SCRIPT_DIR/teamdb-ensure-current.sh" "$(dirname "$(dirname "$(dirname "$DB_PROJECT")")")" || true
+fi
+
 print_header() {
   printf '\n─── SKALLING SESSION START ───\n\n'
 }

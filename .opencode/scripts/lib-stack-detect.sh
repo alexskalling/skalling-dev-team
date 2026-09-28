@@ -26,12 +26,13 @@ skalling_init_detected() {
 
 # Setter con sanitización (no usar eval directo con contenido externo).
 # Sanitiza: rechaza caracteres que podrían romper eval (; & $ ` etc.)
+# Permite: alfanuméricos, guion, guion bajo, punto, slash, dos puntos, coma, espacio.
 skalling_set_detected() {
     local key="$1" value="$2"
-    # Sanitizar: solo permitir alfanuméricos, guion, guion bajo, punto, slash, dos puntos
-    if [[ ! "$value" =~ ^[a-zA-Z0-9._:/+-]*$ ]]; then
-        # Si tiene caracteres raros, sanitizar agresivamente
-        value="$(printf '%s' "$value" | tr -cd 'a-zA-Z0-9._:/+-' )"
+    # Sanitizar: solo permitir lo que no rompe eval y es útil para valores de stack
+    if [[ ! "$value" =~ ^[a-zA-Z0-9.,_:/+\ -]*$ ]]; then
+        # Si tiene caracteres raros, sanitizar agresivamente (pero preservar coma y espacio)
+        value="$(printf '%s' "$value" | tr -cd 'a-zA-Z0-9.,_:/+ -' )"
     fi
     eval "skalling_detected_${key}=\"\${value}\""
 }
@@ -129,6 +130,37 @@ skalling_extract_files() {
     '
 }
 
+# Extrae lista de "coexisting:" (archivos que deben coexistir).
+# Output: un file por línea. Retorna vacío si el bloque no tiene la key.
+skalling_extract_coexisting() {
+    local block="$1"
+    echo "$block" | awk '
+        /^coexisting:/ {
+            in_coexisting=1
+            if ($0 ~ /coexisting:[[:space:]]*\[/) {
+                inline=$0
+                sub(/.*\[/, "", inline)
+                sub(/\].*/, "", inline)
+                n=split(inline, parts, ",")
+                for (i=1; i<=n; i++) {
+                    gsub(/[ \047"]/, "", parts[i])
+                    if (parts[i] != "") print parts[i]
+                }
+                in_coexisting=0
+                next
+            }
+            next
+        }
+        in_coexisting && /^  - / {
+            line=$0
+            sub(/^  - /, "", line)
+            print line
+            next
+        }
+        in_coexisting && /^[a-z]/ { in_coexisting=0 }
+    '
+}
+
 # Extrae pares pattern:value de una sección (framework, test_runner, package_manager).
 # Output: alterna líneas PATTERN= y VALUE= (o DEFAULT=).
 skalling_extract_section() {
@@ -195,9 +227,12 @@ skalling_detect_from_yaml() {
         [[ -z "$block" ]] && continue
 
         # Verificar si algún archivo del detector existe en project_dir
-        local files
+        local files coexisting
         files="$(skalling_extract_files "$block")"
+        coexisting="$(skalling_extract_coexisting "$block")"
         local matched=false
+
+        # Paso 1: al menos un archivo principal debe existir
         while IFS= read -r f; do
             [[ -z "$f" ]] && continue
             if [[ -f "$project_dir/$f" ]]; then
@@ -213,6 +248,25 @@ skalling_detect_from_yaml() {
                 fi
             fi
         done <<< "$files"
+
+        # Paso 2: si el detector tiene coexisting, TODOS deben existir
+        if [[ "$matched" == true && -n "$coexisting" ]]; then
+            while IFS= read -r f; do
+                [[ -z "$f" ]] && continue
+                local coexisting_match=false
+                if [[ -f "$project_dir/$f" ]]; then
+                    coexisting_match=true
+                elif compgen -G "$project_dir/$f" >/dev/null 2>&1; then
+                    local gm
+                    gm="$(compgen -G "$project_dir/$f" 2>/dev/null | head -1)"
+                    [[ -n "$gm" && -e "$gm" ]] && coexisting_match=true
+                fi
+                if [[ "$coexisting_match" == false ]]; then
+                    matched=false
+                    break
+                fi
+            done <<< "$coexisting"
+        fi
 
         if [[ "$matched" == true ]]; then
             # Extraer valores básicos del bloque

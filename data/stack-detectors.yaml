@@ -313,6 +313,27 @@ detectors:
       - default: flutter-test
 
   # ──────────────────────────────────────────────────────────────────────────
+  # Multi-stack (Skalling propio: Bash + Python + Node coexisten)
+  # Se activa cuando un repo tiene scripts bash + scripts python + plugins node.
+  # Idioma: CSV explícito — "bash,python,node" comunida los stacks al TeamDB.
+  # Test runner: el runner Bash unificado que este repo ya tiene configurado.
+  # ──────────────────────────────────────────────────────────────────────────
+  - id: multi-bash-python-node
+    # Archivo marcador: solo existe en repos que usan el runner unificado.
+    files:
+      - tests/run-all.sh
+    # Todos deben coexistir para确认 es un repo multi-stack real.
+    coexisting:
+      - plugins/*.js
+      - scripts/*.sh
+      - scripts/*.py
+    language: bash,python,node
+    runtime: ""
+    test_runner:
+      - default: bash tests/run-all.sh
+    package_manager: mixed
+
+  # ──────────────────────────────────────────────────────────────────────────
   # Custom (el usuario puede agregar)
   # ──────────────────────────────────────────────────────────────────────────
 custom: []

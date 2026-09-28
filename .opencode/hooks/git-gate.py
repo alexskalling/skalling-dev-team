@@ -193,12 +193,19 @@ def check(diff_args, db, label, equivalents=None, require_receipt=True):
                          'candidato exacto staged; un comprobante de Alex o Teo no cuenta. '
                          'No fabricar comprobantes ni limpiar memoria para desbloquear Git.' + hint
                          + ' Si sos una persona commiteando desde tu terminal (fuera de OpenCode): '
-                         '`bash .opencode/scripts/skalling-approve.sh` corre los tests del proyecto sobre '
+                         f'`bash {approve_script()}` corre los tests del proyecto sobre '
                          'lo staged y, si pasan, habilita este commit.')
     command = str(decisive[0][1] or '')
     if command.startswith('waived:'):
         print(f'AVISO: {label} aprobado SIN tests por decisión humana ({command[7:].strip()}) ({digest})', file=sys.stderr)
     print(f'OK: {label} coincide con el receipt sellado ({digest})')
+
+
+def approve_script():
+    # setup.sh lo copia al proyecto; /skalling-init usa la instalación global.
+    if (project_root() / '.opencode/scripts/skalling-approve.sh').is_file():
+        return '.opencode/scripts/skalling-approve.sh'
+    return '~/.config/opencode/scripts/skalling-approve.sh'
 
 
 def project_root():

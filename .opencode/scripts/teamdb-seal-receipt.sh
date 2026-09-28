@@ -128,7 +128,23 @@ trap 'teamdb_unlock "$LOCK_DIR"' EXIT
 
 COMMAND="${TEAMDB_CLAIM_COMMAND:-}"
 EXIT_CODE="${TEAMDB_CLAIM_EXIT_CODE:-}"
-SUMMARY="${TEAMDB_CLAIM_OUTPUT_SUMMARY:-}"
+
+# Sanitizar surrogate code points (U+D800-U+DFFF): Python 3.14's os.fsencode()
+# en subprocess.run/fork_exec rechaza strings con surrogates, y JSON encoding
+# no puede UTF-8-encodearlos. El reemplazo es U+FFFD (Unicode replacement char),
+# legible y reversible. Solo se sanitiza TEAMDB_CLAIM_OUTPUT_SUMMARY porque es
+# la única variable que callers externos pueden setear con contenido arbitrario;
+# los otros valores son generados internamente por el script.
+if [ -n "${TEAMDB_CLAIM_OUTPUT_SUMMARY:-}" ]; then
+  SUMMARY="$(python3 -c "
+import sys, re
+raw = sys.argv[1]
+clean = re.sub(r'[\ud800-\udfff]', '\ufffd', raw)
+sys.stdout.write(clean)
+" "$TEAMDB_CLAIM_OUTPUT_SUMMARY")"
+else
+  SUMMARY=""
+fi
 
 # jhon es "test verifier": su trabajo es ejecutar comprobaciones
 # independientes, no confiar en que quien lo invocó ya las corrió. Antes, un

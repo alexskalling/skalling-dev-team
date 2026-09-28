@@ -4,6 +4,28 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-09-27
+
+#### Fixed
+- **`/skalling-init` instala el proyecto completo**, igual que `setup.sh`:
+  agentes, plugins, scripts, hooks de Git y Alex por defecto. Antes solo
+  creaba la memoria y dependía de la instalación global de cada persona.
+  Usa `bootstrap-context.sh --install-project`, que corre el `setup.sh` del
+  checkout que registra `install-global.sh` (`skalling-data/source-dir`).
+- **Los controles se activan aunque el contexto esté incompleto.** En un
+  proyecto casi vacío el bootstrap cortaba antes de instalar los hooks y la
+  config: quedaba sin gate de Git y con el agente nativo `build` por defecto.
+- **La TeamDB del proyecto se migra sola.** Las migraciones solo corrían con
+  `/skalling-init`, `setup.sh` o a mano: tras un `/skalling-update` o un pull
+  con scripts nuevos, cada base quedaba en la versión vieja (en 0.13.0 eso
+  rompió la escritura de memoria). `teamdb-ensure-current.sh` la migra al
+  iniciar sesión y en el hook `post-merge`; solo hacia adelante, idempotente.
+- **`/skalling-codegraph`** usa `codegraph init` cuando no está `gentle-ai`
+  (antes fallaba), y **`/skalling-update`** encuentra el checkout registrado
+  por el instalador aunque no esté en una ruta conocida.
+- **El hook indica la ruta real del aprobador humano** (`.opencode/scripts/`
+  o `~/.config/opencode/scripts/`); antes apuntaba siempre al proyecto.
+
 ## [0.14.0] - 2026-09-27
 
 ### Auditoría de preparación para producción (sobre 78c862c)

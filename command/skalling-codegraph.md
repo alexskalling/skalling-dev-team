@@ -9,7 +9,10 @@ raíz con Git, verifica `.codegraph/` e inicializa una sola vez con el comando o
 
 ```bash
 PROJECT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-test -d "$PROJECT/.codegraph" || gentle-ai codegraph init --cwd "$PROJECT"
+if [ ! -d "$PROJECT/.codegraph" ]; then
+  if command -v gentle-ai >/dev/null 2>&1; then gentle-ai codegraph init --cwd "$PROJECT"
+  else codegraph init "$PROJECT"; fi
+fi
 codegraph status
 ```
 

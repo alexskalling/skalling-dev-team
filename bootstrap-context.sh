@@ -10,6 +10,8 @@
 #   bash bootstrap-context.sh --dry-run          # ver qué haría sin tocar
 #   bash bootstrap-context.sh --force            # regenerar sin preguntar
 #   bash bootstrap-context.sh --only-detection   # solo detecta, no escribe
+#   bash bootstrap-context.sh --install-project  # además instala agentes, plugins, scripts
+#                                                # y hooks en el proyecto (setup.sh); lo usa /skalling-init
 
 set -euo pipefail
 
@@ -37,6 +39,7 @@ CONTEXT_DIR="$OPENCODE_DIR/context"
 DRY_RUN=false
 FORCE=false
 ONLY_DETECTION=false
+INSTALL_PROJECT=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -44,8 +47,9 @@ while [[ $# -gt 0 ]]; do
         --dry-run) DRY_RUN=true; shift ;;
         --force) FORCE=true; shift ;;
         --only-detection) ONLY_DETECTION=true; shift ;;
+        --install-project) INSTALL_PROJECT=true; shift ;;
         --help|-h)
-            sed -n '2,12p' "${BASH_SOURCE[0]}"
+            sed -n '2,14p' "${BASH_SOURCE[0]}"
             exit 0 ;;
         *) echo "Argumento desconocido: $1"; exit 1 ;;
     esac
@@ -278,6 +282,40 @@ apply_project_config() {
     fi
 }
 
+# Checkout fuente de Skalling: lo registra install-global.sh. Si el bootstrap
+# corre desde el propio checkout (tiene setup.sh al lado), se usa ese.
+skalling_source_dir() {
+    if [[ -f "$SCRIPT_DIR/setup.sh" && -d "$SCRIPT_DIR/agents-base" ]]; then
+        printf '%s\n' "$SCRIPT_DIR"; return 0
+    fi
+    local recorded="$SCRIPT_DIR/skalling-data/source-dir"
+    if [[ -f "$recorded" ]]; then
+        local dir; dir="$(head -1 "$recorded")"
+        if [[ -f "$dir/setup.sh" && -d "$dir/agents-base" ]]; then
+            printf '%s\n' "$dir"; return 0
+        fi
+    fi
+    return 1
+}
+
+# /skalling-init instala lo mismo que setup.sh: agentes, plugins, scripts y
+# hooks DENTRO del proyecto (viajan por git: todo el equipo usa la misma
+# versión). Antes solo creaba la memoria y dependía de la instalación global.
+install_project_bundle() {
+    local project="$1" source
+    if ! source="$(skalling_source_dir)"; then
+        err "No encuentro el checkout de Skalling para instalar en el proyecto. Reinstalá con install-global.sh desde el checkout, o corré: bash <checkout>/setup.sh --target \"$project\""
+        return 1
+    fi
+    echo "  Instalando agentes, plugins, scripts y hooks en el proyecto (setup.sh de $source)"
+    if bash "$source/setup.sh" --target "$project" </dev/null >/dev/null 2>&1; then
+        ok "Proyecto instalado (agentes, plugins, scripts, hooks)"
+    else
+        err "setup.sh falló; ver $project/.skalling-backups/setup.log"
+        return 1
+    fi
+}
+
 activate_teamdb_hooks() {
     local project="$1"
     git -C "$project" rev-parse --git-dir >/dev/null 2>&1 || return 0
@@ -337,6 +375,16 @@ main() {
     generate_bundle
     generate_project_yaml
     init_teamdb "$PROJECT_DIR"
+    if [[ "$INSTALL_PROJECT" == true && "$DRY_RUN" == false ]]; then
+        install_project_bundle "$PROJECT_DIR" || return 1
+    fi
+    # Los controles (gate de Git, Alex por defecto, build/general apagados) se
+    # activan SIEMPRE, antes de evaluar el contexto: un proyecto "degradado"
+    # quedaba sin hooks y con el agente nativo que edita sin flujo.
+    if [[ "$DRY_RUN" == false ]]; then
+        activate_teamdb_hooks "$PROJECT_DIR"
+        apply_project_config "$PROJECT_DIR" || return 1
+    fi
     if [[ "$DRY_RUN" == false ]]; then
         init_codegraph
         if ! hydrate_project_context "$CODEGRAPH_STATUS"; then
@@ -344,8 +392,6 @@ main() {
             return 3
         fi
     fi
-    activate_teamdb_hooks "$PROJECT_DIR"
-    apply_project_config "$PROJECT_DIR" || return 1
     check_design_md
 
     echo ""
