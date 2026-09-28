@@ -39,6 +39,31 @@ TRANSITIONS = {
     'deliver': ('teo', 'implementation_ready', 'verification_ready'),
     'document': ('pau', 'quality_reviewed', 'documented'),
 }
+# Quién actúa y con qué acción en cada estado. Va en cada respuesta
+# (next_step) y en cada rechazo: sin esto un modelo adivinaba el orden (caso
+# real: creyó que Jhon aprueba antes de ready y probó acciones inexistentes).
+NEXT_STEP = {
+    'requested': 'Pol: clarify (alcance y aceptación acordados con el usuario)',
+    'clarified': 'Sol: plan (diseño y rollback como evidencia)',
+    'planned': 'Sol: ready con el plan aprobado. ' + '{plan_steps}',
+    'implementation_ready': 'Teo: implementa con TDD y hace deliver (Alex le delega incluyendo el id del workflow)',
+    'verification_ready': 'Jhon: oracle, después check y approve (o reject si falla). Jhon aprueba DESPUÉS del deliver de Teo',
+    'quality_reviewed': 'Pau: document',
+    'documented': 'Alex: complete',
+    'completed': 'cerrado: para otro cambio, Alex hace start con un id nuevo',
+    'superseded': 'reemplazado por otro workflow: seguí el nuevo',
+}
+
+
+def next_step(state):
+    current = state.get('state')
+    if current == 'verified':
+        return 'Luz: check y approve (riesgo alto)' if state.get('risk') == 'high' else 'Alex: complete'
+    if current == 'verification_ready' and state.get('auto_verify'):
+        return 'verificación automática del proyecto (la corre el motor al deliver); si falló, Teo corrige y vuelve a deliver'
+    return NEXT_STEP.get(current, 'status para ver el estado').replace('{plan_steps}', PLAN_STEPS)
+
+
 DUMP_PATHSPEC = ':(exclude)db/teamdb/team.dump.sql'
 SCOPE_EXCLUDES = [DUMP_PATHSPEC, ':(exclude).opencode', ':(exclude).git']
 
@@ -347,11 +372,23 @@ def record_finish_metrics(db, identifier, duration_ms, handoffs, usage=None, ret
                "WHERE request_id=? AND completed_at IS NULL", (*fields.values(), identifier))
 
 
+PLAN_STEPS = ('1) bash ~/.config/opencode/scripts/teamdb-plan.sh crea el plan y devuelve su número (plan_id); '
+              '2) bash ~/.config/opencode/scripts/teamdb-plan-approve.sh "$PWD" <plan_id> "<diseño>" "<aceptación>" '
+              '"<aprobación del usuario>" lo aprueba con diseño; 3) ready con {"id", "plan_id": <ese número>, "evidence"}. '
+              'El plan_id es el número real que devolvió el paso 1, nunca el de un ejemplo.')
+
+
 def require_approved_plan(db, plan_id):
-    require(plan_id not in (None, ''), 'Sol marca ready con el plan aprobado: payload.plan_id')
+    require(plan_id not in (None, ''), 'Falta payload.plan_id. ' + PLAN_STEPS)
     row = db.execute("SELECT 1 FROM plans WHERE id=? AND status IN ('approved','in_progress') "
                      "AND length(design_md)>0", (plan_id,)).fetchone()
-    require(row is not None, f'El plan {plan_id} no existe o no está aprobado con diseño')
+    if row is None:
+        plans = db.execute("SELECT id, slug, status, length(coalesce(design_md,''))>0 FROM plans "
+                           "ORDER BY id DESC LIMIT 5").fetchall()
+        listed = '; '.join(f"id={i} {slug} [{status}{', con diseño' if design else ', sin diseño'}]"
+                           for i, slug, status, design in plans) or 'ninguno todavía'
+        raise ValueError(f'El plan {plan_id} no existe o no está aprobado con diseño. Planes en TeamDB: {listed}. '
+                         + PLAN_STEPS)
 
 
 def apply_pending_migrations(root):
@@ -517,9 +554,9 @@ def operate(request):
         if action == 'status':
             state = read(db, identifier)
             require(state is not None, 'Unknown workflow')
-            return state
+            return with_next_step(state)
         if action == 'check':
-            return check(db, root, actor, session, identifier, payload, request)
+            return with_next_step(check(db, root, actor, session, identifier, payload, request))
 
         db.execute('BEGIN IMMEDIATE')
         state = read(db, identifier)
@@ -687,9 +724,23 @@ def operate(request):
         db.commit()
         if action == 'deliver' and state['state'] == 'verification_ready' and state.get('auto_verify'):
             state = auto_verify(db, root, identifier, session)
-        return state
+        return with_next_step(state)
+    except ValueError as error:
+        # El rechazo dice además en qué estado está el pedido y quién sigue.
+        db.rollback()
+        current = read(db, identifier)
+        if current is not None and 'Siguiente paso:' not in str(error):
+            raise ValueError(f"{error}. Estado del workflow: {current['state']}. "
+                             f"Siguiente paso: {next_step(current)}") from None
+        raise
     finally:
         db.close()
+
+
+def with_next_step(state):
+    if isinstance(state, dict) and 'state' in state:
+        return {**state, 'next_step': next_step(state)}
+    return state
 
 
 if __name__ == '__main__':

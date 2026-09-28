@@ -72,6 +72,41 @@ class Workflow(unittest.TestCase):
         self.call('jhon', 'check', argv=['bash', 'tests/check.test.sh'], method='falsification', criterion='value stays 1')
         return self.call('jhon', 'approve', evidence='falsification check covers the declared acceptance criterion')
 
+    def test_medium_route_reaches_implementation_with_real_plan_helpers(self):
+        # Caso real (sesión 2026-09-28): Sol mandó ready con plan_id 1 (el
+        # número del ejemplo de su prompt) y el equipo creyó que no había
+        # transición de planned a implementation_ready. Los demás tests
+        # insertan el plan directo en la base; este usa los helpers reales.
+        scripts = ROOT / 'scripts'
+        env = {k: v for k, v in os.environ.items() if not k.startswith(('SKALLING_', 'TEAMDB_'))}
+        self.assertEqual(self.start(risk='medium')['state'], 'clarified')
+        self.assertIn('Sol: plan', self.call('alex', 'status')['next_step'])
+        self.assertEqual(self.call('sol', 'plan', evidence='diseño: cambiar app.py; rollback: git revert')['state'], 'planned')
+        with self.assertRaises(ValueError) as wrong:
+            self.call('sol', 'ready', evidence='listo', plan_id=999)
+        self.assertIn('Planes en TeamDB', str(wrong.exception))
+        self.assertIn('teamdb-plan-approve.sh', str(wrong.exception))
+        created = subprocess.run(['bash', str(scripts / 'teamdb-plan.sh'), str(self.root), 'cambio-valor', 'Cambio de valor', '-',
+                                  '--purpose', 'Cambiar el valor de app.py', '--acceptance', 'value remains one'],
+                                 input='- [ ] Ajustar app.py\n', capture_output=True, text=True, env=env)
+        self.assertEqual(created.returncode, 0, created.stderr)
+        with closing(sqlite3.connect(self.db_path)) as db:
+            plan_id = db.execute("SELECT id FROM plans WHERE slug='cambio-valor'").fetchone()[0]
+        approved = subprocess.run(['bash', str(scripts / 'teamdb-plan-approve.sh'), str(self.root), str(plan_id),
+                                   'Diseño: app.py conserva el valor uno', 'Aceptación: value remains one',
+                                   'Aprobado por el usuario en el pedido'], capture_output=True, text=True, env=env)
+        self.assertEqual(approved.returncode, 0, approved.stderr)
+        ready = self.call('sol', 'ready', evidence='plan aprobado', plan_id=plan_id)
+        self.assertEqual(ready['state'], 'implementation_ready')
+        self.assertIn('Teo', ready['next_step'])
+
+    def test_rejection_says_state_and_who_acts_next(self):
+        self.start(risk='medium')
+        with self.assertRaises(ValueError) as early:
+            self.call('jhon', 'approve', evidence='antes de tiempo')
+        self.assertIn('Estado del workflow: clarified', str(early.exception))
+        self.assertIn('Siguiente paso: Sol: plan', str(early.exception))
+
     def test_fast_route_requires_independent_executed_verification(self):
         self.assertEqual(self.start()['state'], 'implementation_ready')
         with self.assertRaises(ValueError): self.call('teo', 'complete')

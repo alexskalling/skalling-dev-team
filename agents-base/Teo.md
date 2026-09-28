@@ -756,7 +756,6 @@ El alcance depende del riesgo: `low` focalizado; `medium` módulo y casos negati
   "from": "TEO",
   "to": "JHON",
   "risk_level": "medium",
-  "plan_id": 1,
   "task": "<task-slug>",
   "summary": "Cambio implementado dentro del alcance acordado.",
   "artifacts": ["<archivo>"],

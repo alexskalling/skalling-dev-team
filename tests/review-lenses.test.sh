@@ -23,6 +23,10 @@ assert_fail() {
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
+# Identidad de runtime (v0.11.14, 7befe46): sin runtime, el camino HUMANO.
+# shellcheck source=tests/lib/identity-env.sh
+. "$ROOT/tests/lib/identity-env.sh"
+
 new_repo() {
   # new_repo <dir>: repo git con commit inicial
   local repo="$1"
@@ -128,7 +132,7 @@ fi
 # v0.12.0 #2): el helper la reproduce para probar la mecánica del sello.
 seal_luz() {
   TEAMDB_CLAIM_COMMAND="review --lens all" TEAMDB_CLAIM_EXIT_CODE=0 TEAMDB_CLAIM_OUTPUT_SUMMARY='{"total":0}' \
-    bash "$ROOT/scripts/teamdb-seal-receipt.sh" "$1" luz "$2"
+    without_runtime bash "$ROOT/scripts/teamdb-seal-receipt.sh" "$1" luz "$2"
 }
 SEAL_REPO="$TMP/seal-repo"
 new_repo "$SEAL_REPO"

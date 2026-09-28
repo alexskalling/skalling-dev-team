@@ -27,6 +27,13 @@ git -C "$TEST_DIR" config user.name Test
 SKALLING_ROOT="$ROOT" bash "$ROOT/scripts/teamdb-init.sh" "$TEST_DIR" >/dev/null
 # shellcheck disable=SC1091
 . "$ROOT/scripts/lib/lib-teamdb.sh"
+
+# ── Identidad (v0.11.14, 7befe46) ──────────────────────────────────────────
+# Este test usa los DOS caminos: as_runtime_agent para el claim/advance de un
+# agente de OpenCode, without_runtime para el sello, que en un agente se niega.
+# shellcheck source=tests/lib/identity-env.sh
+. "$ROOT/tests/lib/identity-env.sh"
+
 DB="$TEST_DIR/.opencode/context/team.db"
 NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
@@ -46,10 +53,10 @@ setup_ready_for_review() {
   # jhon, que es quien va a intentar aprobar).
   local slug="$1"
   create_task "$slug" "teo"
-  TEAMDB_ACTOR=teo bash "$ROOT/scripts/teamdb-claim.sh" "$slug" task --input-hash=impl "$TEST_DIR" >/dev/null
+  as_runtime_agent teo bash "$ROOT/scripts/teamdb-claim.sh" "$slug" task --input-hash=impl "$TEST_DIR" >/dev/null
   local claim_id
   claim_id="$(teamdb_exec_value "$DB" "SELECT id FROM task_claims WHERE actor='teo' AND status='active'")"
-  TEAMDB_ACTOR=teo bash "$ROOT/scripts/teamdb-claim.sh" --release "$claim_id" --status=done --by=teo "$TEST_DIR" >/dev/null
+  as_runtime_agent teo bash "$ROOT/scripts/teamdb-claim.sh" --release "$claim_id" --status=done "$TEST_DIR" >/dev/null
   teamdb_exec_value "$DB" "SELECT t.id FROM tasks t JOIN plans p ON p.id=t.plan_id WHERE p.slug=? AND t.slug=?" "$slug" task
 }
 
@@ -74,14 +81,14 @@ TASK1="task-fails"
 write_project_yaml "exit 1"
 stage_something
 TASK_ID1="$(setup_ready_for_review "$TASK1")"
-bash "$ROOT/scripts/teamdb-seal-receipt.sh" "$TASK_ID1" jhon "$TEST_DIR" >/dev/null 2>&1
+without_runtime bash "$ROOT/scripts/teamdb-seal-receipt.sh" "$TASK_ID1" jhon "$TEST_DIR" >/dev/null 2>&1
 SEALED_EXIT="$(teamdb_exec_value "$DB" "SELECT exit_code FROM receipts WHERE task_id=? AND agent='jhon' ORDER BY id DESC LIMIT 1" "$TASK_ID1")"
 if [ "$SEALED_EXIT" != "0" ]; then
   assert_pass "test real del proyecto falla → receipt de jhon queda con exit_code != 0"
 else
   assert_fail "test real del proyecto falla → receipt de jhon queda con exit_code != 0" "exit_code=$SEALED_EXIT"
 fi
-if TEAMDB_ACTOR=jhon bash "$ROOT/scripts/teamdb-claim.sh" --advance "$TASK1" task --to=approved --by=jhon "$TEST_DIR" >/dev/null 2>&1; then
+if as_runtime_agent jhon bash "$ROOT/scripts/teamdb-claim.sh" --advance "$TASK1" task --to=approved "$TEST_DIR" >/dev/null 2>&1; then
   assert_fail "test real falla → in_review->approved se bloquea"
 else
   assert_pass "test real falla → in_review->approved se bloquea"
@@ -89,7 +96,7 @@ fi
 
 # Ni fabricando un TEAMDB_CLAIM_EXIT_CODE=0 se puede pasar por encima del
 # resultado real: la corrida real de jhon manda, no lo que el caller pida.
-TEAMDB_CLAIM_EXIT_CODE=0 bash "$ROOT/scripts/teamdb-seal-receipt.sh" "$TASK_ID1" jhon "$TEST_DIR" >/dev/null 2>&1
+TEAMDB_CLAIM_EXIT_CODE=0 without_runtime bash "$ROOT/scripts/teamdb-seal-receipt.sh" "$TASK_ID1" jhon "$TEST_DIR" >/dev/null 2>&1
 FORCED_EXIT="$(teamdb_exec_value "$DB" "SELECT exit_code FROM receipts WHERE task_id=? AND agent='jhon' ORDER BY id DESC LIMIT 1" "$TASK_ID1")"
 if [ "$FORCED_EXIT" != "0" ]; then
   assert_pass "TEAMDB_CLAIM_EXIT_CODE=0 del caller no puede pisar el resultado real del test"
@@ -102,8 +109,8 @@ TASK2="task-passes"
 write_project_yaml "exit 0"
 stage_something
 TASK_ID2="$(setup_ready_for_review "$TASK2")"
-bash "$ROOT/scripts/teamdb-seal-receipt.sh" "$TASK_ID2" jhon "$TEST_DIR" >/dev/null 2>&1
-if TEAMDB_ACTOR=jhon bash "$ROOT/scripts/teamdb-claim.sh" --advance "$TASK2" task --to=approved --by=jhon "$TEST_DIR" >/dev/null 2>&1; then
+without_runtime bash "$ROOT/scripts/teamdb-seal-receipt.sh" "$TASK_ID2" jhon "$TEST_DIR" >/dev/null 2>&1
+if as_runtime_agent jhon bash "$ROOT/scripts/teamdb-claim.sh" --advance "$TASK2" task --to=approved "$TEST_DIR" >/dev/null 2>&1; then
   assert_pass "test real del proyecto pasa → in_review->approved procede"
 else
   assert_fail "test real del proyecto pasa → in_review->approved procede"
@@ -116,7 +123,7 @@ TASK3="task-unconfigured"
 rm -f "$TEST_DIR/.opencode/project.yaml"
 stage_something
 TASK_ID3="$(setup_ready_for_review "$TASK3")"
-if bash "$ROOT/scripts/teamdb-seal-receipt.sh" "$TASK_ID3" jhon "$TEST_DIR" >/dev/null 2>&1; then
+if without_runtime bash "$ROOT/scripts/teamdb-seal-receipt.sh" "$TASK_ID3" jhon "$TEST_DIR" >/dev/null 2>&1; then
   SUMMARY3="$(teamdb_exec_value "$DB" "SELECT output_summary FROM receipts WHERE task_id=? AND agent='jhon' ORDER BY id DESC LIMIT 1" "$TASK_ID3")"
   if grep -q "SIN-CONFIGURAR" <<< "$SUMMARY3"; then
     assert_pass "sin testing.unit.command: seal no falla, pero el receipt queda anotado SIN-CONFIGURAR"
@@ -134,7 +141,7 @@ write_project_yaml "exit 1"
 stage_something
 TASK_ID4="$(setup_ready_for_review "$TASK4")"
 set +e
-TEAMDB_CLAIM_EXIT_CODE=0 bash "$ROOT/scripts/teamdb-seal-receipt.sh" "$TASK_ID4" luz "$TEST_DIR" >/dev/null 2>&1
+TEAMDB_CLAIM_EXIT_CODE=0 without_runtime bash "$ROOT/scripts/teamdb-seal-receipt.sh" "$TASK_ID4" luz "$TEST_DIR" >/dev/null 2>&1
 LUZ_RC=$?
 set -e
 LUZ_ROWS="$(teamdb_exec_value "$DB" "SELECT count(*) FROM receipts WHERE task_id=? AND agent='luz'" "$TASK_ID4")"
@@ -144,7 +151,7 @@ else
   assert_fail "luz sin evidencia de revisión no sella nada" "rc=$LUZ_RC rows=$LUZ_ROWS"
 fi
 set +e
-bash "$ROOT/scripts/teamdb-seal-receipt.sh" "$TASK_ID4" "" "$TEST_DIR" >/dev/null 2>&1
+without_runtime bash "$ROOT/scripts/teamdb-seal-receipt.sh" "$TASK_ID4" "" "$TEST_DIR" >/dev/null 2>&1
 ANON_RC=$?
 set -e
 if [ "$ANON_RC" = "2" ]; then
@@ -153,7 +160,7 @@ else
   assert_fail "sin agente no se asume luz" "rc=$ANON_RC"
 fi
 TEAMDB_CLAIM_COMMAND="review --lens risk" TEAMDB_CLAIM_EXIT_CODE=0 TEAMDB_CLAIM_OUTPUT_SUMMARY='{"total":0}' \
-  bash "$ROOT/scripts/teamdb-seal-receipt.sh" "$TASK_ID4" luz "$TEST_DIR" >/dev/null 2>&1
+  without_runtime bash "$ROOT/scripts/teamdb-seal-receipt.sh" "$TASK_ID4" luz "$TEST_DIR" >/dev/null 2>&1
 LUZ_CMD="$(teamdb_exec_value "$DB" "SELECT command FROM receipts WHERE task_id=? AND agent='luz' ORDER BY id DESC LIMIT 1" "$TASK_ID4")"
 if [ "$LUZ_CMD" = "review --lens risk" ]; then
   assert_pass "luz sella con la evidencia que deja skalling-review.sh"

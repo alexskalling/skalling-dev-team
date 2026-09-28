@@ -164,13 +164,14 @@ test_agent_frontmatter() {
         fi
     done
 
-    # Hidden: true para Jhon, Luz, Pau
-    local hidden_agents=(Jhon Luz Pau)
-    for agent in "${hidden_agents[@]}"; do
+    # Ningún agente del equipo es hidden: OpenCode no lista a los ocultos en
+    # la herramienta de subagentes y Alex concluía que Jhon, Luz y Pau "no
+    # existen" (sesión real 2026-09-28): nadie podía verificar ni aprobar.
+    for agent in "${expected_all[@]}"; do
         if grep -q "^hidden: true" "$REPO_ROOT/agents-base/${agent}.md"; then
-            pass "${agent} tiene hidden: true"
+            fail "${agent} tiene hidden: true (Alex no lo ve como subagente)"
         else
-            fail "${agent} NO tiene hidden: true"
+            pass "${agent} visible para Alex"
         fi
     done
 }

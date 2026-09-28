@@ -48,6 +48,10 @@ SKALLING_ROOT="$ROOT" bash "$ROOT/scripts/teamdb-init.sh" "$TEST_DIR" >/dev/null
 # shellcheck source=scripts/lib/lib-teamdb.sh
 . "$ROOT/scripts/lib/lib-teamdb.sh"
 
+# Identidad de runtime (v0.11.14, 7befe46): as_runtime_agent / without_runtime.
+# shellcheck source=tests/lib/identity-env.sh
+. "$ROOT/tests/lib/identity-env.sh"
+
 # ─── Issue 1: claim rechaza tareas en estados terminales
 echo "=== Issue 1: claim rechaza estados terminales ==="
 PLAN_ID=$(setup_plan "$TEST_DIR" "issue1")
@@ -59,7 +63,7 @@ for STATE in approved resolved rejected blocked; do
     CAPTURE_RC="$_CAP_RC"
     CAPTURE_OUT="$_CAP_OUT"
   }
-  run_capture "TEAMDB_ACTOR=teo bash '$ROOT/scripts/teamdb-claim.sh' 'issue1' 'task-1' --input-hash=h --ttl=300 '$TEST_DIR'"
+  run_capture "as_runtime_agent teo bash '$ROOT/scripts/teamdb-claim.sh' 'issue1' 'task-1' --input-hash=h --ttl=300 '$TEST_DIR'"
   if [ "$CAPTURE_RC" != "0" ] && echo "$CAPTURE_OUT" | grep -qE "status.*$STATE|terminal|inmutable|not.*allowed"; then
     assert_pass "claim rechazado en status=$STATE"
   else
@@ -73,7 +77,7 @@ done
 echo "=== Issue 2: claim verifica deps blocks ==="
 PLAN_ID=$(setup_plan "$TEST_DIR" "issue2")
 # task-2 depende de task-1 (pendiente). Claim directo de task-2 debe fallar
-run_capture "TEAMDB_ACTOR=teo bash '$ROOT/scripts/teamdb-claim.sh' 'issue2' 'task-2' --input-hash=h --ttl=300 '$TEST_DIR'"
+run_capture "as_runtime_agent teo bash '$ROOT/scripts/teamdb-claim.sh' 'issue2' 'task-2' --input-hash=h --ttl=300 '$TEST_DIR'"
 if [ "$CAPTURE_RC" != "0" ] && echo "$CAPTURE_OUT" | grep -qE "deps|blocked|dependencies"; then
   assert_pass "claim directo de task-2 (con dep pendiente) rechazado"
 else
@@ -100,12 +104,12 @@ fi
 # ─── Issue 3: input hash determinista
 echo "=== Issue 3: input hash determinista ==="
 # Sin --input-hash, el default debe ser el mismo para mismo (plan, task, actor, context)
-H1=$(TEAMDB_ACTOR=teo bash "$ROOT/scripts/teamdb-claim.sh" "issue2" "task-1" --ttl=300 "$TEST_DIR" 2>&1 || true)
+H1=$(as_runtime_agent teo bash "$ROOT/scripts/teamdb-claim.sh" "issue2" "task-1" --ttl=300 "$TEST_DIR" 2>&1 || true)
 sleep 1  # para que NOW sea distinto si depende de tiempo
-H2=$(TEAMDB_ACTOR=teo bash "$ROOT/scripts/teamdb-claim.sh" "issue2" "task-1" --ttl=300 "$TEST_DIR" 2>&1 || true)
+H2=$(as_runtime_agent teo bash "$ROOT/scripts/teamdb-claim.sh" "issue2" "task-1" --ttl=300 "$TEST_DIR" 2>&1 || true)
 # Extraer el default hash usado en el audit log
 # Para esto, validamos que el --resume encuentra exactamente 1 claim activo
-RESUME=$(TEAMDB_ACTOR=teo bash "$ROOT/scripts/teamdb-claim.sh" --resume "$TEST_DIR" 2>&1)
+RESUME=$(as_runtime_agent teo bash "$ROOT/scripts/teamdb-claim.sh" --resume "$TEST_DIR" 2>&1)
 RESUME_COUNT=$(echo "$RESUME" | python3 -c "
 import json, sys
 try:
@@ -124,12 +128,12 @@ fi
 echo "=== Issue 4: lease comparación fechas ==="
 PLAN_ID=$(setup_plan "$TEST_DIR" "issue4")
 # Claim con lease corto (5 segundos)
-run_capture "TEAMDB_ACTOR=teo bash '$ROOT/scripts/teamdb-claim.sh' 'issue4' 'task-1' --input-hash=lease-test --ttl=5 '$TEST_DIR'"
+run_capture "as_runtime_agent teo bash '$ROOT/scripts/teamdb-claim.sh' 'issue4' 'task-1' --input-hash=lease-test --ttl=5 '$TEST_DIR'"
 if [ "$CAPTURE_RC" = "0" ]; then
   # Esperar a que el lease expire
   sleep 7
   # Re-claim debe ser posible (lease vencido)
-  run_capture "TEAMDB_ACTOR=teo bash '$ROOT/scripts/teamdb-claim.sh' 'issue4' 'task-1' --input-hash=lease-test --ttl=300 '$TEST_DIR'"
+  run_capture "as_runtime_agent teo bash '$ROOT/scripts/teamdb-claim.sh' 'issue4' 'task-1' --input-hash=lease-test --ttl=300 '$TEST_DIR'"
   if [ "$CAPTURE_RC" = "0" ]; then
     # El nuevo claim debe tener attempt > 1
     ATTEMPT=$(teamdb_exec_value "$DB" "SELECT attempt FROM task_claims WHERE task_id=(SELECT id FROM tasks WHERE plan_id=? AND slug='task-1') AND status='active'" "$PLAN_ID")
@@ -157,12 +161,12 @@ fi
 echo "=== Issue 5: release state transitions ==="
 # Caso A: done → task in_review (no resolved)
 PLAN_5A=$(setup_plan "$TEST_DIR" "issue5a")
-run_capture "TEAMDB_ACTOR=teo bash '$ROOT/scripts/teamdb-claim.sh' 'issue5a' 'task-1' --input-hash=release-test --ttl=300 '$TEST_DIR'"
+run_capture "as_runtime_agent teo bash '$ROOT/scripts/teamdb-claim.sh' 'issue5a' 'task-1' --input-hash=release-test --ttl=300 '$TEST_DIR'"
 CLAIM_ID=$(teamdb_exec_value "$DB" "SELECT id FROM task_claims WHERE input_hash='release-test' AND status='active' LIMIT 1")
 [ -n "$CLAIM_ID" ] || { echo "FAIL: setup claim no creó"; exit 1; }
 
 # Release done: task debe ir a in_review (no a resolved)
-run_capture "TEAMDB_ACTOR=teo bash '$ROOT/scripts/teamdb-claim.sh' --release '$CLAIM_ID' --status=done --by=teo '$TEST_DIR'"
+run_capture "as_runtime_agent teo bash '$ROOT/scripts/teamdb-claim.sh' --release '$CLAIM_ID' --status=done '$TEST_DIR'"
 if [ "$CAPTURE_RC" = "0" ]; then
   TASK_STATUS=$(teamdb_exec_value "$DB" "SELECT status FROM tasks WHERE id=(SELECT task_id FROM task_claims WHERE id=?)" "$CLAIM_ID")
   if [ "$TASK_STATUS" = "in_review" ]; then
@@ -175,7 +179,7 @@ else
 fi
 
 # Claim inexistente rechazado
-run_capture "TEAMDB_ACTOR=teo bash '$ROOT/scripts/teamdb-claim.sh' --release 99999 --status=done '$TEST_DIR'"
+run_capture "as_runtime_agent teo bash '$ROOT/scripts/teamdb-claim.sh' --release 99999 --status=done '$TEST_DIR'"
 if [ "$CAPTURE_RC" != "0" ] && echo "$CAPTURE_OUT" | grep -qE "no.*existe|not.*found"; then
   assert_pass "release claim inexistente rechazado"
 else
@@ -184,12 +188,12 @@ fi
 
 # Release por actor incorrecto (no el owner) — plan propio
 setup_plan "$TEST_DIR" "issue5c" >/dev/null
-run_capture "TEAMDB_ACTOR=alex bash '$ROOT/scripts/teamdb-claim.sh' 'issue5c' 'task-1' --input-hash=other-actor --ttl=300 '$TEST_DIR'"
+run_capture "as_runtime_agent alex bash '$ROOT/scripts/teamdb-claim.sh' 'issue5c' 'task-1' --input-hash=other-actor --ttl=300 '$TEST_DIR'"
 if [ "$CAPTURE_RC" = "0" ]; then
   # alex es owner del nuevo claim. Intentar release con jhon debe fallar
   ALICE_CLAIM=$(teamdb_exec_value "$DB" "SELECT id FROM task_claims WHERE input_hash='other-actor' AND actor='alex' AND status='active' LIMIT 1")
   if [ -n "$ALICE_CLAIM" ]; then
-    run_capture "TEAMDB_ACTOR=jhon bash '$ROOT/scripts/teamdb-claim.sh' --release '$ALICE_CLAIM' --status=done '$TEST_DIR'"
+    run_capture "as_runtime_agent jhon bash '$ROOT/scripts/teamdb-claim.sh' --release '$ALICE_CLAIM' --status=done '$TEST_DIR'"
     if [ "$CAPTURE_RC" != "0" ] && echo "$CAPTURE_OUT" | grep -qE "owner|not.*owner|wrong.*actor"; then
       assert_pass "release por actor incorrecto rechazado"
     else
@@ -203,7 +207,7 @@ else
 fi
 
 # Release de claim ya released (status=done) rechazado — reuse CLAIM_ID del caso A
-run_capture "TEAMDB_ACTOR=teo bash '$ROOT/scripts/teamdb-claim.sh' --release '$CLAIM_ID' --status=done --by=teo '$TEST_DIR'"
+run_capture "as_runtime_agent teo bash '$ROOT/scripts/teamdb-claim.sh' --release '$CLAIM_ID' --status=done '$TEST_DIR'"
 if [ "$CAPTURE_RC" != "0" ] && echo "$CAPTURE_OUT" | grep -qE "status|not.*active|already"; then
   assert_pass "release de claim ya released rechazado"
 else
@@ -212,10 +216,10 @@ fi
 
 # Status no permitido (e.g., 'unknown') — plan propio
 setup_plan "$TEST_DIR" "issue5e" >/dev/null
-run_capture "TEAMDB_ACTOR=teo bash '$ROOT/scripts/teamdb-claim.sh' 'issue5e' 'task-1' --input-hash=val-stat --ttl=300 '$TEST_DIR'"
+run_capture "as_runtime_agent teo bash '$ROOT/scripts/teamdb-claim.sh' 'issue5e' 'task-1' --input-hash=val-stat --ttl=300 '$TEST_DIR'"
 TASK_CLAIM=$(teamdb_exec_value "$DB" "SELECT id FROM task_claims WHERE input_hash='val-stat' AND status='active' LIMIT 1")
 if [ -n "$TASK_CLAIM" ]; then
-  run_capture "TEAMDB_ACTOR=teo bash '$ROOT/scripts/teamdb-claim.sh' --release '$TASK_CLAIM' --status=unknown --by=teo '$TEST_DIR'"
+  run_capture "as_runtime_agent teo bash '$ROOT/scripts/teamdb-claim.sh' --release '$TASK_CLAIM' --status=unknown '$TEST_DIR'"
   if [ "$CAPTURE_RC" != "0" ] && echo "$CAPTURE_OUT" | grep -qE "status.*invalid|invalid.*status"; then
     assert_pass "release con status inválido rechazado"
   else

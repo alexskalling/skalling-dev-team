@@ -4,6 +4,56 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.14.3] - 2026-09-28
+
+Correctivo del release anterior: el cambio de "ejemplos sin números reales" de
+0.14.2 reemplazó `"plan_id": 1` por `"plan_id": "<número real que devolvió
+teamdb-plan.sh>"`, pero el schema (`templates/handoff.schema.json`) exige que
+`plan_id` sea `integer` y el placeholder era un string: `context-regressions`
+rompió al validar los ejemplos de Teo y Sol contra el schema real. 0.14.3 quita
+la línea de los ejemplos (`plan_id` no está en `required` del schema) y alinea
+toda la versión a 0.14.3.
+
+#### Fixed
+- **Ejemplos de handoff válidos otra vez**: los JSON de ejemplo en `Teo.md` y
+  `Sol.md` (y sus espejos) ya no incluyen `plan_id`; `context-regressions`
+  vuelve a validar cada ejemplo contra `templates/handoff.schema.json`.
+- **Versión coherente en 0.14.3**: la migración de versión se renombra a
+  `052_version_0_14_3.sql` y todos los loci (VERSION, `schema_meta` de
+  proyecto y global, `teamdb-init.sh` y su espejo, README, CHANGELOG) quedan
+  en 0.14.3; `teamdb-init.sh` sobre una base nueva deja
+  `schema_meta.version=0.14.3` sin abortar (fail-closed: el criterio que más
+  se cae en las suites).
+
+## [0.14.2] - 2026-09-28
+
+Sesión real trabada medio día: Sol llamó `ready` con un plan sin aprobar, el
+error no decía cómo resolverlo, Alex no veía a Jhon, Luz ni Pau, adivinó el
+orden del flujo y terminó intentando implementar él mismo.
+
+#### Fixed
+- **Jhon, Luz y Pau ya no son `hidden`.** OpenCode no lista los agentes
+  ocultos en la herramienta de subagentes: Alex concluía que "no existen" y
+  nadie podía verificar ni aprobar. El test de setup exige ahora lo contrario.
+- **`skalling_workflow` dice el siguiente paso.** Cada respuesta trae
+  `next_step` (quién actúa y con qué acción) y cada rechazo agrega el estado
+  actual y el siguiente paso, en vez de solo "`approve` requires ...".
+- **`ready` explica cómo resolverse**: si el plan no existe o no está aprobado
+  con diseño, lista los planes de TeamDB (id, estado, con o sin diseño) y los
+  tres pasos: `teamdb-plan.sh` → `teamdb-plan-approve.sh` → `ready` con ese
+  número.
+- **Ejemplos sin números reales**: los prompts de Sol y Teo tenían
+  `"plan_id": 1` como ejemplo.
+- **Alex** sigue el siguiente paso del motor; si no avanza, muestra el mensaje
+  al usuario y pide decisión. Nunca implementa ni saltea el flujo.
+- La descripción de la herramienta dice el orden completo: Jhon aprueba
+  **después** del `deliver` de Teo.
+
+#### Tests
+- Ruta media de punta a punta con los helpers reales (`teamdb-plan.sh` y
+  `teamdb-plan-approve.sh`): los tests anteriores insertaban el plan aprobado
+  directo en la base y nunca probaron el camino que usa Sol.
+
 ## [0.14.1] - 2026-09-27
 
 #### Fixed

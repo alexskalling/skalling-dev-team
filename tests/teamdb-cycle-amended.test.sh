@@ -25,6 +25,13 @@ SKALLING_ROOT="$ROOT" bash "$ROOT/scripts/teamdb-init.sh" "$TEST_DIR" >/dev/null
 # shellcheck source=scripts/lib/lib-teamdb.sh
 . "$ROOT/scripts/lib/lib-teamdb.sh"
 
+# Identidad de runtime (v0.11.14, 7befe46): as_runtime_agent / without_runtime.
+# El claim end-to-end de mas abajo la fija a teo: antes declaraba --actor=teo y
+# solo pasaba por suerte cuando el que corria la suite era teo; corrido por jhon
+# el claim moria en el guard de identidad.
+# shellcheck source=tests/lib/identity-env.sh
+. "$ROOT/tests/lib/identity-env.sh"
+
 # ─── Caso 1: tasks.md con dependencias via _depends
 cat > /tmp/cycle-tasks.md <<'EOF'
 - [ ] Endpoint POST /login
@@ -188,7 +195,7 @@ fi
 run_capture "bash '$ROOT/scripts/teamdb-plan.sh' '$TEST_DIR' 'e2e' 'E2E test' /tmp/cycle-tasks.md"
 if [ "$CAPTURE_RC" = "0" ]; then
   # claim, release, status
-  bash "$ROOT/scripts/teamdb-claim.sh" "e2e" "task-endpoint-post-login" --actor=teo --input-hash=h1 --ttl=60 "$TEST_DIR" >/dev/null 2>&1
+  as_runtime_agent teo bash "$ROOT/scripts/teamdb-claim.sh" "e2e" "task-endpoint-post-login" --input-hash=h1 --ttl=60 "$TEST_DIR" >/dev/null 2>&1
   CLAIM=$(teamdb_exec_value "$DB" "SELECT COUNT(*) FROM task_claims WHERE task_id=(SELECT id FROM tasks WHERE plan_id=(SELECT id FROM plans WHERE slug='e2e') AND slug='task-endpoint-post-login')")
   if [ "$CLAIM" -ge 1 ]; then
     assert_pass "ciclo end-to-end: claim funciona sobre plan creado por teamdb-plan"

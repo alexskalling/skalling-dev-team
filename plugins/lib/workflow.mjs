@@ -60,7 +60,7 @@ async function handle(args, runtime, execute) {
 
 export function workflowTool(tool, execute = run) {
   return tool({
-    description: 'Única autoridad del flujo de código, con evidencia ejecutada: start (Alex clasifica), clarify (Pol), plan/ready (Sol, plan aprobado), deliver/rescope (Teo), oracle/check/approve/reject (Jhon; Luz en alto), document (Pau), complete (Alex sella), status. Payload JSON con id; nunca actor. Bajo: Teo + verificación automática del proyecto; medio: Sol → Teo → Jhon; alto: Pol → Sol → Teo → Jhon → Luz → Pau.',
+    description: 'Única autoridad del flujo de código, con evidencia ejecutada. Orden: start (Alex) → clarify (Pol, solo alto) → plan (Sol) → ready (Sol, con el plan_id REAL que devolvió teamdb-plan.sh y aprobado con teamdb-plan-approve.sh) → deliver/rescope (Teo) → oracle/check/approve o reject (Jhon, DESPUÉS del deliver; Luz además en alto) → document (Pau, alto) → complete (Alex sella). Bajo: Teo + verificación automática; medio: Sol → Teo → Jhon; alto: Pol → Sol → Teo → Jhon → Luz → Pau. Cada respuesta y cada rechazo traen el siguiente paso (quién y qué acción): seguilo; no hay otras acciones. Payload JSON con id; nunca actor.',
     args: {action:tool.schema.string(), payload:tool.schema.string()},
     async execute(args, context) {
       return handle(args, {agent:context.agent, sessionID:context.sessionID, directory:context.directory,
@@ -194,7 +194,7 @@ export async function setupWorkflowV2(ctx, execute = run, agentsDir = fileURLToP
       // `execute` los modelos no la encontraban (prueba real: varios intentos
       // fallidos antes del primer start).
       options: { codemode: false },
-      description: 'Única autoridad del flujo de código, con evidencia ejecutada: start (Alex clasifica), clarify (Pol), plan/ready (Sol, plan aprobado), deliver/rescope (Teo), oracle/check/approve/reject (Jhon; Luz en alto), document (Pau), complete (Alex sella), status. Payload JSON con id; nunca actor. Bajo: Teo + verificación automática del proyecto; medio: Sol → Teo → Jhon; alto: Pol → Sol → Teo → Jhon → Luz → Pau.',
+      description: 'Única autoridad del flujo de código, con evidencia ejecutada. Orden: start (Alex) → clarify (Pol, solo alto) → plan (Sol) → ready (Sol, con el plan_id REAL que devolvió teamdb-plan.sh y aprobado con teamdb-plan-approve.sh) → deliver/rescope (Teo) → oracle/check/approve o reject (Jhon, DESPUÉS del deliver; Luz además en alto) → document (Pau, alto) → complete (Alex sella). Bajo: Teo + verificación automática; medio: Sol → Teo → Jhon; alto: Pol → Sol → Teo → Jhon → Luz → Pau. Cada respuesta y cada rechazo traen el siguiente paso (quién y qué acción): seguilo; no hay otras acciones. Payload JSON con id; nunca actor.',
       // Esquema completo: OpenCode 2.x repara los tipos antes de llamar
       // ("false" → false, string JSON → objeto). Sin él, un modelo mandó
       // "visual": "false" y el motor lo leyó como visual (prueba real).

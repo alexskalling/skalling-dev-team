@@ -22,6 +22,23 @@ set -e
 SKALLING_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$SKALLING_ROOT"
 
+# Misma resolucion de Python y misma guarda de dependencias que tests/run-all.sh
+# (lineas 12-21). Los tests .py de este lote se lanzan como `python3 <test>`: con
+# el PATH antepuesto resuelven al .venv del repo (donde estan jsonschema y pyyaml)
+# y no al python3 del sistema, que los tiene o no segun la maquina. Sin esto el
+# lote daba fallos por entorno, no por codigo bajo prueba. Una dependencia
+# faltante es un FALLO con mensaje claro, no un salto.
+PY="${PYTHON:-}"
+if [ -z "$PY" ]; then
+  if [ -x "$SKALLING_ROOT/.venv/bin/python" ]; then PY="$SKALLING_ROOT/.venv/bin/python"; else PY="python3"; fi
+fi
+if ! "$PY" -c 'import jsonschema, yaml' 2>/dev/null; then
+  echo "FALLO: $PY no tiene jsonschema/pyyaml (python3 -m venv .venv && .venv/bin/pip install jsonschema pyyaml)" >&2
+  exit 1
+fi
+PATH="$(dirname "$PY"):$PATH"
+export PATH
+
 JOBS="${SKALLING_TEST_JOBS:-8}"
 
 TESTS=(

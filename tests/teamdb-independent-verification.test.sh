@@ -13,6 +13,11 @@ git -C "$TEST_DIR" config user.name Test
 
 SKALLING_ROOT="$ROOT" bash "$ROOT/scripts/teamdb-init.sh" "$TEST_DIR" >/dev/null
 . "$ROOT/scripts/lib/lib-teamdb.sh"
+
+# Identidad de runtime (v0.11.14, 7befe46): as_runtime_agent / without_runtime.
+# Acá el reparto es jhon verifica, teo entrega.
+# shellcheck source=tests/lib/identity-env.sh
+. "$ROOT/tests/lib/identity-env.sh"
 DB="$TEST_DIR/.opencode/context/team.db"
 NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
@@ -28,19 +33,19 @@ create_task() {
 }
 
 create_task "self-review" "jhon"
-TEAMDB_ACTOR=jhon bash "$ROOT/scripts/teamdb-claim.sh" self-review task --input-hash=self "$TEST_DIR" >/dev/null
+as_runtime_agent jhon bash "$ROOT/scripts/teamdb-claim.sh" self-review task --input-hash=self "$TEST_DIR" >/dev/null
 SELF_CLAIM="$(teamdb_exec_value "$DB" "SELECT id FROM task_claims WHERE actor='jhon' AND status='active'")"
-TEAMDB_ACTOR=jhon bash "$ROOT/scripts/teamdb-claim.sh" --release "$SELF_CLAIM" --status=done --by=jhon "$TEST_DIR" >/dev/null
-if TEAMDB_ACTOR=jhon bash "$ROOT/scripts/teamdb-claim.sh" --advance self-review task --to=approved --by=jhon "$TEST_DIR" >/dev/null 2>&1; then
+as_runtime_agent jhon bash "$ROOT/scripts/teamdb-claim.sh" --release "$SELF_CLAIM" --status=done "$TEST_DIR" >/dev/null
+if as_runtime_agent jhon bash "$ROOT/scripts/teamdb-claim.sh" --advance self-review task --to=approved "$TEST_DIR" >/dev/null 2>&1; then
   echo "FAIL: Jhon pudo aprobar una implementación entregada por Jhon" >&2
   exit 1
 fi
 
 create_task "independent-review" "teo"
-TEAMDB_ACTOR=teo bash "$ROOT/scripts/teamdb-claim.sh" independent-review task --input-hash=independent "$TEST_DIR" >/dev/null
+as_runtime_agent teo bash "$ROOT/scripts/teamdb-claim.sh" independent-review task --input-hash=independent "$TEST_DIR" >/dev/null
 TEO_CLAIM="$(teamdb_exec_value "$DB" "SELECT id FROM task_claims WHERE actor='teo' AND status='active'")"
-TEAMDB_ACTOR=teo bash "$ROOT/scripts/teamdb-claim.sh" --release "$TEO_CLAIM" --status=done --by=teo "$TEST_DIR" >/dev/null
-if TEAMDB_ACTOR=jhon bash "$ROOT/scripts/teamdb-claim.sh" --advance independent-review task --to=approved --by=jhon "$TEST_DIR" >/dev/null 2>&1; then
+as_runtime_agent teo bash "$ROOT/scripts/teamdb-claim.sh" --release "$TEO_CLAIM" --status=done "$TEST_DIR" >/dev/null
+if as_runtime_agent jhon bash "$ROOT/scripts/teamdb-claim.sh" --advance independent-review task --to=approved "$TEST_DIR" >/dev/null 2>&1; then
   echo "FAIL: Jhon pudo aprobar sin receipt de verificación sellado" >&2
   exit 1
 fi
@@ -53,7 +58,7 @@ echo 'value = 1' > "$TEST_DIR/app.py"
 git -C "$TEST_DIR" add -- app.py
 STALE_HASH="0000000000000000"
 teamdb_exec_write "$DB" "INSERT INTO receipts(id,task_id,agent,command,exit_code,output_summary,ts,tree_hash) VALUES(?,?,?,'independent-check',0,'ok',datetime('now'),?)" "review-independent-stale" "$TASK_ID" jhon "$STALE_HASH" >/dev/null
-if TEAMDB_ACTOR=jhon bash "$ROOT/scripts/teamdb-claim.sh" --advance independent-review task --to=approved --by=jhon "$TEST_DIR" >/dev/null 2>&1; then
+if as_runtime_agent jhon bash "$ROOT/scripts/teamdb-claim.sh" --advance independent-review task --to=approved "$TEST_DIR" >/dev/null 2>&1; then
   echo "FAIL: Jhon pudo aprobar con un tree_hash sellado que no coincide con el candidato staged actual" >&2
   exit 1
 fi
@@ -63,6 +68,6 @@ fi
 DIFF_TEXT="$(git -C "$TEST_DIR" diff --cached -- . ':(exclude)db/teamdb/team.dump.sql')"
 TREE_HASH="$(printf '%s' "$DIFF_TEXT" | shasum -a 256 | cut -c1-16)"
 teamdb_exec_write "$DB" "INSERT INTO receipts(id,task_id,agent,command,exit_code,output_summary,ts,tree_hash) VALUES(?,?,?,'independent-check',0,'ok',datetime('now'),?)" "review-independent" "$TASK_ID" jhon "$TREE_HASH" >/dev/null
-TEAMDB_ACTOR=jhon bash "$ROOT/scripts/teamdb-claim.sh" --advance independent-review task --to=approved --by=jhon "$TEST_DIR" >/dev/null
+as_runtime_agent jhon bash "$ROOT/scripts/teamdb-claim.sh" --advance independent-review task --to=approved "$TEST_DIR" >/dev/null
 
 echo "PASS: la aprobación exige verificador distinto, receipt sellado de Jhon y tree_hash vigente"

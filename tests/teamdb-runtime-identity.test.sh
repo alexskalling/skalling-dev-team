@@ -20,6 +20,8 @@ mkdir -p "$TEST_DIR/.opencode/context"
 git -C "$TEST_DIR" init -q
 
 SKALLING_ROOT="$ROOT" bash "$ROOT/scripts/teamdb-init.sh" "$TEST_DIR" >/dev/null
+# shellcheck source=tests/lib/identity-env.sh
+. "$ROOT/tests/lib/identity-env.sh"
 # shellcheck disable=SC1091
 . "$ROOT/scripts/lib/lib-teamdb.sh"
 DB="$TEST_DIR/.opencode/context/team.db"
@@ -138,10 +140,21 @@ else
 fi
 
 # 6. Sin runtime (humano en la CLI, CI), vale lo declarado como siempre.
-if [ "$(teamdb_runtime_actor jhon)" = "jhon" ] && [ "$(teamdb_runtime_actor '')" = "unknown" ]; then
+# El caso tiene que evaluarse SIN SKALLING_RUNTIME_AGENT. Antes se llamaba a
+# teamdb_runtime_actor en el proceso del propio test, que hereda la identidad
+# del runner: con runtime presente la funcion manda el runtime y rechaza lo
+# declarado (lib-teamdb.sh:63-66), o sea lo contrario de lo que este assert
+# verifica. Sin runtime no hay quien atribuya el comando y vale lo declarado.
+# Las comillas simples son el punto: ese script lo evalúa el bash -c hijo, con
+# lib-teamdb.sh ya sourceado ahí adentro. Si las expandiera el shell de este
+# test, $(teamdb_runtime_actor ...) correría acá (heredando la identidad del
+# runner) y el assert mediría lo contrario de lo que verifica.
+# shellcheck disable=SC2016
+DECLARED_OK="$(without_runtime bash -c '. "$1"; [ "$(teamdb_runtime_actor jhon)" = jhon ] && [ "$(teamdb_runtime_actor "")" = unknown ]' _ "$ROOT/scripts/lib/lib-teamdb.sh" && echo yes || echo no)"
+if [ "$DECLARED_OK" = "yes" ]; then
   assert_pass "sin runtime se respeta el actor declarado"
 else
-  assert_fail "sin runtime se respeta el actor declarado"
+  assert_fail "sin runtime se respeta el actor declarado" "declared_ok=$DECLARED_OK"
 fi
 
 echo "PASS=$PASS FAIL=$FAIL"

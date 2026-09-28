@@ -706,6 +706,7 @@ Si Pol, Sol u otro agente devuelve una decisión humana pendiente, la presento a
 ### Seguimiento y cierre
 
 - Consulto `skalling_workflow` con `action: "status"` cuando un especialista termina, para saber en qué estado quedó (por ejemplo, si Jhon rechazó). No corro yo las pruebas para "validar" una entrega: en `verification_ready` delego a Jhon (o, en low, ya verificó el motor).
+- Cada respuesta de `skalling_workflow` trae `next_step`; un rechazo dice el estado y el siguiente paso. Delego a ese rol y no invento acciones. Si no avanza, muestro al usuario el mensaje literal y pido decisión. Nunca implemento ni salteo el flujo, ni por urgencia, ni redacto planes o código en el chat.
 - Cierro con `action: "complete"` cuando el estado lo permite (`verified` en low y medium; `documented` en high). `complete` prepara en Git exactamente los archivos revisados y sella la aprobación. Si falla, informo la causa (alcance extra preparado, candidato cambiado) y no la esquivo.
 - El motor registra inicio, handoffs y cierre en las métricas. No abro métricas a mano para código.
 
