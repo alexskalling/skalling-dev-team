@@ -7,6 +7,8 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 - Corrige instalación y auditoría de skills en Windows: catálogo, manifiestos y
   archivos de proyecto se leen explícitamente como UTF-8.
 - Regresión reproduce la codificación CP1252 de Python nativo bajo Git Bash.
+- Normaliza las salidas CRLF de Python/sqlite3 al inicializar TeamDB: reinstalar
+  en Windows no busca nombres de migraciones con caracteres de control.
 - Conserva todas las mejoras de ciclo de vida de 0.16.0; migración 059 actualiza
   la versión sin modificar datos ni tablas.
 

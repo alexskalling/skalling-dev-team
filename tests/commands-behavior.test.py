@@ -47,6 +47,39 @@ class CommandsTest(unittest.TestCase):
             skills.sync_registry(self.db, skills.inventory(self.project/'.opencode/skills'))
             self.assertTrue(skills.audit(ROOT, self.project)['ready'])
 
+    def test_reinstall_accepts_native_windows_migration_listing(self):
+        import shutil
+        fixture = Path(self.tmp.name)/'windows-project'
+        fixture.mkdir()
+        shim_dir = Path(self.tmp.name)/'bin'
+        shim_dir.mkdir()
+        shim = shim_dir/'python3'
+        shim.write_text(f'''#!{sys.executable}
+import subprocess, sys
+result = subprocess.run([{sys.executable!r}, *sys.argv[1:]], stdout=subprocess.PIPE)
+data = result.stdout
+if sys.argv[1:2] == ['-'] and sys.argv[2:3] == [{str(ROOT/'sql/migrations')!r}]:
+    data = data.replace(b'\\n', b'\\r\\n')
+sys.stdout.buffer.write(data)
+sys.exit(result.returncode)
+''')
+        shim.chmod(0o755)
+        sqlite = shim_dir/'sqlite3'
+        sqlite.write_text(f'''#!{sys.executable}
+import subprocess, sys
+result = subprocess.run([{shutil.which('sqlite3')!r}, *sys.argv[1:]], stdout=subprocess.PIPE)
+sys.stdout.buffer.write(result.stdout.replace(b'\\n', b'\\r\\n'))
+sys.exit(result.returncode)
+''')
+        sqlite.chmod(0o755)
+        with patch.dict(os.environ, {'PATH': str(shim_dir)+os.pathsep+os.environ['PATH']}):
+            first = self.command('teamdb-init.sh', fixture)
+            self.assertEqual(first.returncode, 0, first.stderr)
+            second = self.command('teamdb-init.sh', fixture)
+            self.assertEqual(second.returncode, 0, second.stderr)
+            self.assertIn('[skip]', second.stdout)
+            self.assertNotIn('[apply]', second.stdout)
+
     def test_prune_retains_new_and_legacy_backups_without_touching_database(self):
         before = self.db.read_bytes()
         for index in range(7):

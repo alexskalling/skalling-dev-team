@@ -109,7 +109,11 @@ root = Path(sys.argv[1])
 print('\n'.join(sorted(p.name for p in root.iterdir() if p.suffix in {'.sql', '.py'}))) if root.is_dir() else None
 PYLIST
 )"
+# Native Python/sqlite3 emit CRLF under Git Bash. Normalize this line protocol
+# before comparing migration identifiers or using them as filesystem paths.
+MIGRATIONS="${MIGRATIONS//$'\r'/}"
 APPLIED_MIGRATIONS="$(sqlite3 "$DB" 'SELECT name FROM applied_migrations' 2>/dev/null || true)"
+APPLIED_MIGRATIONS="${APPLIED_MIGRATIONS//$'\r'/}"
 PENDING=false
 while IFS= read -r mig_base; do
   [ -n "$mig_base" ] || continue
@@ -197,11 +201,13 @@ fi
 # "duplicate column" de 004 sobre DBs nuevas, se toleran arriba).
 EXPECTED_VERSION="0.16.1"
 VERSION="$(sqlite3 "$DB" "SELECT value FROM schema_meta WHERE key='version'" 2>/dev/null || true)"
+VERSION="${VERSION//$'\r'/}"
 if [ "$VERSION" != "$EXPECTED_VERSION" ]; then
   echo "ERROR: teamdb schema version=$VERSION, esperado $EXPECTED_VERSION (migrations incompletas)" >&2
   exit 1
 fi
 HAS_ACTOR_SOURCE="$(sqlite3 "$DB" "SELECT count(*) FROM pragma_table_info('audit_log') WHERE name='actor_source'" 2>/dev/null || true)"
+HAS_ACTOR_SOURCE="${HAS_ACTOR_SOURCE//$'\r'/}"
 if [ "${HAS_ACTOR_SOURCE:-0}" -lt 1 ]; then
   echo "ERROR: audit_log.actor_source ausente tras migrations (correr git pull + teamdb-init)" >&2
   exit 1
