@@ -84,7 +84,7 @@ def catalog(root):
     if path is None:
         raise ValueError('Falta catálogo skills-by-stack.yaml')
     sections, section, entry = {}, None, None
-    for line in path.read_text().splitlines():
+    for line in path.read_text(encoding='utf-8').splitlines():
         top = re.match(r'^([a-z_-]+):', line)
         item = re.match(r'^  - name:\s*(\S+)\s*$', line)
         field = re.match(r'^    (reason|install|optional):\s*(.*)$', line)
@@ -111,9 +111,9 @@ def repair(root, target):
     source = root / ('skills-base' if (root/'skills-base').is_dir() else 'skills')
     destination = target/'skills'; destination.mkdir(parents=True, exist_ok=True)
     manifest = destination/'.skalling-managed.json'
-    hashes = json.loads(manifest.read_text()) if manifest.exists() else {}
+    hashes = json.loads(manifest.read_text(encoding='utf-8')) if manifest.exists() else {}
     legacy = root/('data' if (root/'data').is_dir() else 'skalling-data')/'skills-managed-legacy.json'
-    allowed = json.loads(legacy.read_text()) if legacy.exists() else {}
+    allowed = json.loads(legacy.read_text(encoding='utf-8')) if legacy.exists() else {}
     preserved = []
     for entry in catalog(root)['core']:
         name = entry['name']; src, dst = source/name, destination/name
@@ -140,7 +140,7 @@ def repair(root, target):
             shutil.copytree(src, dst, dirs_exist_ok=True)
         hashes[name] = digest(dst)
     temporary = manifest.with_suffix('.tmp')
-    temporary.write_text(json.dumps(hashes, indent=2)+'\n'); temporary.replace(manifest)
+    temporary.write_text(json.dumps(hashes, indent=2)+'\n', encoding='utf-8'); temporary.replace(manifest)
     return preserved
 
 
@@ -160,9 +160,9 @@ def audit(root, project):
     # skills remain untouched and are reported separately.
     source = root / ('skills-base' if (root/'skills-base').is_dir() else 'skills')
     manifest = directory/'.skalling-managed.json'
-    managed = json.loads(manifest.read_text()) if manifest.is_file() else {}
+    managed = json.loads(manifest.read_text(encoding='utf-8')) if manifest.is_file() else {}
     legacy_file = root/('data' if (root/'data').is_dir() else 'skalling-data')/'skills-managed-legacy.json'
-    legacy = json.loads(legacy_file.read_text()) if legacy_file.is_file() else {}
+    legacy = json.loads(legacy_file.read_text(encoding='utf-8')) if legacy_file.is_file() else {}
     drift, customized = [], []
     for entry in entries['core']:
         name = entry['name']
@@ -190,11 +190,11 @@ def audit(root, project):
     for base, dirs, files in os.walk(project):
         dirs[:] = [d for d in dirs if d not in excluded]
         if 'package.json' in files:
-            data = json.loads((Path(base)/'package.json').read_text())
+            data = json.loads((Path(base)/'package.json').read_text(encoding='utf-8'))
             deps.update(data.get('dependencies', {})); deps.update(data.get('devDependencies', {}))
         for file in ('pyproject.toml','requirements.txt'):
             if file in files:
-                body = (Path(base)/file).read_text()
+                body = (Path(base)/file).read_text(encoding='utf-8')
                 if re.search(r'\bpytest\b', body): signals.add('testing-pytest')
                 if re.search(r'\bfastapi\b', body): signals.add('python-fastapi')
     for dep, key in [('next','nextjs'),('react','react'),('vue','vue'),('svelte','svelte'),('astro','astro'),('nuxt','nuxt'),('vitest','testing-vitest'),('@playwright/test','testing-e2e'),('playwright','testing-e2e')]:

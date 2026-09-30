@@ -33,6 +33,20 @@ class CommandsTest(unittest.TestCase):
         return subprocess.run(['bash', str(ROOT / 'scripts' / name), *map(str, args)],
                               text=True, capture_output=True, timeout=30)
 
+    def test_skills_install_and_audit_with_windows_default_encoding(self):
+        import skalling_skills as skills
+        original = Path.read_text
+
+        def windows_read(path, encoding=None, errors=None):
+            return original(path, encoding=encoding or 'cp1252', errors=errors)
+
+        # Git Bash uses native Python: text without an explicit encoding follows
+        # the Windows code page even though the repository files are UTF-8.
+        with patch.object(Path, 'read_text', windows_read):
+            self.assertEqual(skills.repair(ROOT, self.project/'.opencode'), [])
+            skills.sync_registry(self.db, skills.inventory(self.project/'.opencode/skills'))
+            self.assertTrue(skills.audit(ROOT, self.project)['ready'])
+
     def test_prune_retains_new_and_legacy_backups_without_touching_database(self):
         before = self.db.read_bytes()
         for index in range(7):

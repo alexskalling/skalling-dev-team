@@ -2,6 +2,14 @@
 
 Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) y el proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.1] — 2026-09-30
+
+- Corrige instalación y auditoría de skills en Windows: catálogo, manifiestos y
+  archivos de proyecto se leen explícitamente como UTF-8.
+- Regresión reproduce la codificación CP1252 de Python nativo bajo Git Bash.
+- Conserva todas las mejoras de ciclo de vida de 0.16.0; migración 059 actualiza
+  la versión sin modificar datos ni tablas.
+
 ## [0.16.0] - 2026-09-30
 
 - La actualización de permisos evita claves YAML duplicadas en cabeceras completas: OpenCode ya no descarta silenciosamente permisos, modo y modelo del agente. Conserva la precedencia de reglas y permite retirar los bloques gestionados sin perder la configuración anterior. Regresión verificada contra OpenCode real.
