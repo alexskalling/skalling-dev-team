@@ -16,6 +16,9 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 IMPACT = {
+    'plugins/lib/model-fallback.mjs': ['tests/model-fallback.test.mjs'],
+    'plugins/skalling-model-fallback.js': ['tests/model-fallback.test.mjs', 'tests/installed-workflow.test.py'],
+    'scripts/skalling-models.sh': ['tests/skalling-models.test.sh', 'tests/scripts-parity.test.sh'],
     'plugins/lib/git-guard.mjs': ['tests/git-guard-plugin.test.mjs', 'tests/permission-bypass.test.mjs',
                                  'tests/workflow-plugin.test.mjs', 'tests/data-safety-v2.test.mjs'],
     'plugins/lib/workflow.mjs': ['tests/workflow-plugin.test.mjs', 'tests/permission-bypass.test.mjs',

@@ -96,6 +96,35 @@ else
   assert_pass "agente desconocido en set es rechazado"
 fi
 
+bash "$SCRIPT" fallback set Teo provider/backup provider/last >/dev/null
+bash "$SCRIPT" fallback timeout Teo 120 30 >/dev/null
+if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["Teo"] == {"models":["provider/backup","provider/last"],"timeoutMs":120000,"chunkTimeoutMs":30000}' "$TMP/model-fallbacks.json"; then
+  assert_pass "fallback conserva cadena y plazos sin modificar el principal"
+else
+  assert_fail "fallback conserva cadena y plazos"
+fi
+for bad in 'provider/backup provider/backup' 'invalid' 'a/b c/d e/f g/h'; do
+  # Deliberately split this list into separate CLI arguments.
+  # shellcheck disable=SC2086
+  if bash "$SCRIPT" fallback set Teo $bad >/dev/null 2>&1; then
+    assert_fail "fallback rechaza configuración inválida: $bad"
+  else
+    assert_pass "fallback rechaza configuración inválida: $bad"
+  fi
+done
+bash "$SCRIPT" apply
+if bash "$SCRIPT" fallback show | grep -q 'provider/backup'; then
+  assert_pass "apply/reinstall conserva fallbacks"
+else
+  assert_fail "apply/reinstall conserva fallbacks"
+fi
+bash "$SCRIPT" fallback reset Teo >/dev/null
+if [ "$(cat "$TMP/model-fallbacks.json")" = '{}' ]; then
+  assert_pass "fallback reset elimina política"
+else
+  assert_fail "fallback reset elimina política"
+fi
+
 if command -v shellcheck >/dev/null 2>&1; then
   SC_RC=0
   shellcheck "$SCRIPT" >/dev/null 2>&1 || SC_RC=$?

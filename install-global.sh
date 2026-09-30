@@ -491,6 +491,8 @@ install_skalling_scripts() {
     run cp "$SCRIPT_DIR/plugins/skalling-data-safety.js" "$OPENCODE_DIR/plugins/skalling-data-safety.js"
     run cp "$SCRIPT_DIR/plugins/lib/data-safety.mjs" "$OPENCODE_DIR/plugins/lib/data-safety.mjs"
     run cp "$SCRIPT_DIR/plugins/skalling-workflow.js" "$OPENCODE_DIR/plugins/skalling-workflow.js"
+    run cp "$SCRIPT_DIR/plugins/skalling-model-fallback.js" "$OPENCODE_DIR/plugins/skalling-model-fallback.js"
+    run cp "$SCRIPT_DIR/plugins/lib/model-fallback.mjs" "$OPENCODE_DIR/plugins/lib/model-fallback.mjs"
     run cp "$SCRIPT_DIR/plugins/lib/workflow.mjs" "$OPENCODE_DIR/plugins/lib/workflow.mjs"
     run cp "$SCRIPT_DIR/plugins/skalling-git-guard.js" "$OPENCODE_DIR/plugins/skalling-git-guard.js"
     run cp "$SCRIPT_DIR/plugins/lib/git-guard.mjs" "$OPENCODE_DIR/plugins/lib/git-guard.mjs"
@@ -779,6 +781,8 @@ do_uninstall() {
     if [ -f "$OPENCODE_DIR/plugins/skalling-git-guard.js" ]; then run rm -f "$OPENCODE_DIR/plugins/skalling-git-guard.js"; fi
     if [ -f "$OPENCODE_DIR/plugins/lib/git-guard.mjs" ]; then run rm -f "$OPENCODE_DIR/plugins/lib/git-guard.mjs"; fi
     if [ -f "$OPENCODE_DIR/plugins/skalling-workflow.js" ]; then run rm -f "$OPENCODE_DIR/plugins/skalling-workflow.js"; fi
+    if [ -f "$OPENCODE_DIR/plugins/skalling-model-fallback.js" ]; then run rm -f "$OPENCODE_DIR/plugins/skalling-model-fallback.js"; fi
+    if [ -f "$OPENCODE_DIR/plugins/lib/model-fallback.mjs" ]; then run rm -f "$OPENCODE_DIR/plugins/lib/model-fallback.mjs"; fi
     if [ -f "$OPENCODE_DIR/plugins/lib/workflow.mjs" ]; then run rm -f "$OPENCODE_DIR/plugins/lib/workflow.mjs"; fi
     if [ -f "$OPENCODE_DIR/scripts/skalling-workflow.py" ]; then run rm -f "$OPENCODE_DIR/scripts/skalling-workflow.py"; fi
     # Los hooks globales los usan proyectos con hooks copiados que buscan

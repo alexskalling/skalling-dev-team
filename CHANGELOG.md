@@ -4,6 +4,20 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-09-30
+
+### Added
+- `/skalling-models fallback set|show|reset|timeout`: cadena explícita de hasta tres
+  modelos por agente, persistente al reinstalar y separada del modelo principal.
+- Plugin para OpenCode 2.0.18 que selecciona el siguiente respaldo dentro del
+  reintento nativo de la misma ejecución ante errores del proveedor, timeout y
+  salida inválida. Conserva sesión, contexto y asentamiento nativo de herramientas.
+- Plazos nativos de transporte, intentos acotados y registros sin prompts ni
+  respuestas privadas. Cancelación, rechazo de permisos, fallos de herramientas
+  y filtros de contenido no disparan un cambio de modelo.
+- Pruebas unitarias, de configuración/instalación y ensayo opt-in con el runtime
+  real y proveedor sintético local, sin consumo de proveedores externos.
+
 ## [0.15.0] - 2026-09-30
 
 ### Changed
@@ -1615,7 +1629,8 @@ Sesiones que pedían "plan X" generaban `.md` huérfanos en `.opencode/changes/<
 - Templates OKF (6 tipos: Concept, Decision, Preference, Workaround, WorkInProgress, Context)
 - `setup.sh` inicial (legacy, sin idempotencia)
 
-[Unreleased]: https://github.com/alexskalling/skalling-dev-team/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/alexskalling/skalling-dev-team/compare/v0.15.1...HEAD
+[0.15.1]: https://github.com/alexskalling/skalling-dev-team/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/alexskalling/skalling-dev-team/compare/5540f3e9221210e91a12db77cac27b744199ed75...v0.15.0
 [0.10.4]: https://github.com/alexskalling/skalling-dev-team/compare/v0.10.3...v0.10.4
 [0.10.3]: https://github.com/alexskalling/skalling-dev-team/compare/v0.10.2...v0.10.3

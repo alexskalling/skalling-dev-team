@@ -357,8 +357,8 @@ step_install_scripts() {
 # global y en modo proyecto: sin skalling-git-guard no hay identidad del
 # runtime ni bloqueo de ediciones por rol, y los helpers caen al actor que
 # declare el comando (pensado para la CLI humana).
-SKALLING_PLUGINS=(skalling-goal.js skalling-data-safety.js skalling-workflow.js skalling-git-guard.js)
-SKALLING_PLUGIN_LIBS=(data-safety.mjs workflow.mjs git-guard.mjs)
+SKALLING_PLUGINS=(skalling-model-fallback.js skalling-goal.js skalling-data-safety.js skalling-workflow.js skalling-git-guard.js)
+SKALLING_PLUGIN_LIBS=(model-fallback.mjs data-safety.mjs workflow.mjs git-guard.mjs)
 SKALLING_GIT_HOOKS=(pre-commit pre-push post-merge post-rewrite)
 
 step_install_hooks() {
