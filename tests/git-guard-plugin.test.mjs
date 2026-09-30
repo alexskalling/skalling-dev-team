@@ -356,8 +356,11 @@ test('nadie se salta los hooks de git (--no-verify, -n, core.hooksPath)', () => 
     'git commit --no-verify -F /tmp/commit_msg.txt', 'cd /p/ucadigital\ngit commit --no-verify -F /tmp/m.txt',
     'git push --no-verify origin v2', 'git commit -n -m x', 'git commit -an -m x',
     'git -c core.hooksPath=/dev/null commit -m x',
+    'git config --get core.hooksPath; git config core.hooksPath /dev/null',
+    'git config --get core.hooksPath && HUSKY=0 git commit -m x',
   ]) assert.ok(hookBypassViolation(c), `debía bloquear: ${c}`);
-  for (const c of ['git commit -m "no usar --no-verify"', 'git commit --amend -m x', 'git push origin v2'])
+  for (const c of ['git commit -m "no usar --no-verify"', 'git commit --amend -m x', 'git push origin v2',
+    'git config --get core.hooksPath', 'git show --stat HEAD; git config --get core.hooksPath; cat .git/hooks/pre-commit'])
     assert.equal(hookBypassViolation(c), null, `no debía bloquear: ${c}`);
 });
 

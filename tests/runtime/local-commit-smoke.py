@@ -77,6 +77,9 @@ export default {id:'local-commit-regression',setup:async ctx=>{
             assert decision(result[name], command) == 'allow', (name, command)
         for command in ('git push origin main', 'git commit --amend -m fix'):
             assert decision(result[name], command) == 'ask', (name, command)
+    for name in ('Alex', 'Pol', 'Teo', 'Jhon', 'Luz', 'Pau'):
+        for command in ('git -C \"$PWD\" status --porcelain', 'git -C \"$PWD\" log --oneline -5'):
+            assert decision(result[name], command) == 'allow', (name, command)
     assert decision(result['Pau'], 'git commit -m fix') == 'ask'
     for name in ('Alex', 'Teo', 'Jhon', 'Luz', 'Pau'):
         command = 'bash /Users/example/.config/opencode/scripts/skalling-refresh.sh --check /work'

@@ -695,6 +695,42 @@ def reuse_evidence(db, root, actor, session, identifier, payload):
     return state
 
 
+def implementation_probe(db, root, actor, session, identifier, payload):
+    """Run the frozen project test for Teo, without review or commit authority."""
+    db.execute('BEGIN IMMEDIATE')
+    state = read(db, identifier)
+    require(state is not None, 'Unknown workflow')
+    require(actor == 'teo' and state['state'] == 'implementation_ready', 'Probe role/order invalid')
+    require('argv' not in payload, 'Probe only runs the configured command; argv is not accepted')
+    argv = state.get('auto_verify') or state.get('configured_verification')
+    require(bool(argv), 'Probe requires testing.fast or testing.unit configured in the project')
+    digest = fingerprint(root, state['files'])
+    save(db, identifier, actor, session, 'probe-started', state, {'argv': argv, 'digest': digest}, time.time())
+    revision = state['updated_at']
+    db.commit()  # Tests must not hold the TeamDB write lock.
+    started = time.monotonic()
+    timeout = state.get('verification_timeout') or DEFAULT_TIMEOUT
+    failure_kind = None
+    try:
+        exit_code, output = run_bounded(argv, root, {**os.environ,
+            'SKALLING_RUNTIME_AGENT': actor, 'SKALLING_WORKFLOW_CHECK': '1'}, timeout)
+    except subprocess.TimeoutExpired:
+        exit_code, output, failure_kind = None, f'Probe exceeded {timeout}s; process group cancelled', 'timeout'
+    db.execute('BEGIN IMMEDIATE')
+    state = read(db, identifier)
+    require(state is not None and state['state'] == 'implementation_ready'
+            and state['updated_at'] == revision, 'Workflow changed during probe; retry')
+    require(fingerprint(root, state['files']) == digest, 'Candidate changed during probe; evidence discarded')
+    record = {'agent': actor, 'session': session, 'argv': argv, 'digest': digest,
+              'exit_code': exit_code, 'output': output, 'failure_kind': failure_kind,
+              'duration_ms': round((time.monotonic() - started) * 1000), 'finished_at': time.time()}
+    # Intentionally separate from independent checks, coverage and receipts.
+    state.setdefault('implementation_checks', []).append(record)
+    save(db, identifier, actor, session, 'probe', state, record, time.time())
+    db.commit()
+    return state
+
+
 def check(db, root, actor, session, identifier, payload, request):
     """Runs the verification command OUTSIDE any held write lock: the command
     can take up to 120s and every other agent_workflows writer only waits 10s,
@@ -940,6 +976,8 @@ def operate(request):
             return with_next_step(reuse_evidence(db, root, actor, session, identifier, payload))
         if action == 'check':
             return with_next_step(check(db, root, actor, session, identifier, payload, request))
+        if action == 'probe':
+            return with_next_step(implementation_probe(db, root, actor, session, identifier, payload))
 
         db.execute('BEGIN IMMEDIATE')
         state = read(db, identifier)
@@ -1254,6 +1292,17 @@ def public_response(state):
     response = {key: state[key] for key in fields if key in state}
     response['next_step'] = next_step(state)
     response['recommended_action'] = next_action(state)
+    if state['state'] == 'implementation_ready' and (state.get('auto_verify') or state.get('configured_verification')):
+        response['implementation_probe'] = {
+            'action': 'probe', 'payload': {'id': state['id']}, 'agent': 'teo',
+            'purpose': 'RED antes de editar: ejecuta la prueba configurada sin pedir comandos al usuario; no aprueba ni entrega',
+            'count': len(state.get('implementation_checks', [])),
+        }
+        if state.get('implementation_checks'):
+            last_probe = state['implementation_checks'][-1]
+            response['implementation_probe']['last'] = {
+                key: last_probe[key] for key in ('exit_code', 'failure_kind', 'duration_ms', 'digest')}
+            response['implementation_probe']['last']['output'] = last_probe['output'][-2000:]
     commit_states = {'quality_reviewed', 'documented', 'completed'} if state.get('risk') == 'high' else {'verified', 'completed'}
     if state['state'] in commit_states:
         response['local_commit'] = {

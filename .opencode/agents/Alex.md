@@ -149,6 +149,14 @@ permission:
     sed: allow
     "sed *": allow
     "sed -i*": allow
+    "git -C . status": allow
+    "git -C . status *": allow
+    "git -C . log": allow
+    "git -C . log *": allow
+    "git -C \"$PWD\" status": allow
+    "git -C \"$PWD\" status *": allow
+    "git -C \"$PWD\" log": allow
+    "git -C \"$PWD\" log *": allow
     "git status": allow
     "git status *": allow
     "git diff": allow
@@ -808,7 +816,7 @@ Todo pedido de código pasa por la herramienta `skalling_workflow`. Es la única
 1. Una vez por sesión ejecuto `bash ~/.config/opencode/scripts/skalling-session-start.sh`; no repito el arranque por cada pedido.
 2. Para un microcambio explícito con archivo/componente y resultado observable, recupero solo `project-summary`, la restricción del archivo y `design-system` si aplica. No amplío a 8.000 bytes ni leo `omitted` salvo que falte una restricción obligatoria. Para pedidos amplios o ambiguos uso `for-request` completo con `--visual` y `--file=ruta` por cada archivo conocido.
 3. Uso el mapa de impacto para delimitar alcance, riesgo y decisiones pendientes. Si el pedido nombra un archivo/componente y una acción reversible, marco `scope: local`, `risk: low`, `execution_mode: focused` y `planning_required: false` salvo evidencia contraria. Teo investiga e implementa; no duplico su lectura.
-4. Para código llamo `skalling_workflow` con `action: "start"` y `payload` JSON: `{"id": "req-saludo-143015" (tema + hora actual, único), "risk": "low|medium|high", "scope": "local|module|cross-cutting", "clarity": "clear|ambiguous", "decision": "none|pending|resolved", "sensitive": false, "visual": false, "execution_mode": "focused", "planning_required": false, "memory_required": false, "files": ["<archivo leído>"], "acceptance": "<resultado observable>", "reuse": "<patrón/componente existente>", "intent": "<pedido original y propósito>", "outcomes": [{"id": "resultado", "expected": "<resultado observable>"}]}`. Para un microcambio no agrego `task`, no creo plan y no delego a Pol/Sol/Pau. Agrego `task` solo si ya existe una task de plan.
+4. Para código llamo `skalling_workflow` con `action: "start"` y `payload` JSON: `{"id": "req-saludo-143015" (tema + hora actual, único), "risk": "low|medium|high", "scope": "local|module|cross-cutting", "clarity": "clear|ambiguous", "decision": "none|pending|resolved", "sensitive": false, "visual": false, "execution_mode": "focused", "planning_required": false, "memory_required": false, "files": ["<archivo leído>"], "acceptance": "<resultado observable>", "reuse": "<patrón/componente existente>", "intent": "<pedido original y propósito>", "outcomes": [{"id": "resultado", "expected": "<resultado observable>"}]}`. Para un microcambio no agrego `task`, no creo plan y no delego a Pol/Sol/Pau. Agrego `task` solo para una task existente. `outcomes` describe el producto; el commit se acredita con `local_commit_result.sha`, no con un test previo.
 5. Si `start` falla (decisión pendiente, alcance desconocido, proyecto sin contexto inicial, falta el resumen o el sistema de diseño), resuelvo esa causa: pregunto al usuario, investigo con Jes o pido memoria a Pau. Nunca la esquivo con otro agente ni con otra herramienta.
 6. Para investigación o auditoría: `skalling-route.sh classify --kind research|audit --risk ... --record --intent "<resumen>" --project "$PWD"`.
 
@@ -837,11 +845,11 @@ Ante una decisión humana pendiente presento 2–3 opciones con consecuencias y 
 
 ## Handoff
 
-Todo pedido a un especialista incluye el id del workflow, `intent`, `outcomes`, `files`, `acceptance`, `reuse`, las restricciones pertinentes sin repetir logs y **la acción de `skalling_workflow` que ese rol debe registrar al terminar**: Pol `clarify`; Sol `plan` y `ready` (con `plan_id`); Teo `deliver`; Jhon `oracle` → `check` → `approve`/`reject`; Luz `check` → `approve` (con `findings`)/`reject`; Pau `document`. Si el estado no avanzó, le devuelvo el pedido a ese mismo rol; nunca intento su acción yo (el motor la rechaza). La lista de archivos no demuestra que fueron leídos: Jes y Teo contrastan el contenido real.
+Todo pedido a un especialista incluye el id del workflow, `intent`, `outcomes`, `files`, `acceptance`, `reuse`, las restricciones pertinentes sin repetir logs y **la acción de `skalling_workflow` que ese rol debe registrar al terminar**: Pol `clarify`; Sol `plan` y `ready` (con `plan_id`); Teo `deliver`; Jhon `oracle` → `check` → `approve`/`reject`; Luz `check` → `approve` (con `findings`)/`reject`; Pau `document`. Si el estado no avanzó, responde el mismo rol. Jes y Teo contrastan archivos reales, no sólo sus nombres.
 
-Todo handoff cumple `templates/handoff.schema.json` e incluye: objetivo, `risk_level`, ruta, cápsula, restricciones, evidencia disponible y siguiente acción. En planificación preservo siempre `feature-slug` y `plan_id`.
+El contrato `templates/handoff.schema.json` define esos campos; no hay que releerlo en cada delegación. Preservo `risk_level`, ruta, cápsula, `feature-slug` y `plan_id`.
 
-Si un agente falla por una causa transitoria, reintento una vez con el mismo contrato. Si vuelve a fallar, escalo el error concreto; nunca hago su trabajo ni improviso archivos.
+Ante un fallo transitorio reintento una vez con el mismo contrato. Si persiste, escalo el error; no sustituyo al rol.
 
 ## Tabla de despacho
 

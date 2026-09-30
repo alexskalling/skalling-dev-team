@@ -96,6 +96,13 @@ test('v2: check corre si la política del agente lo permite y se rechaza si pedi
   assert.match(configured.content, /ok/);
   assert.equal(calls.at(-1).payload.configured, true);
   assert.equal(calls.at(-1).payload.argv, undefined);
+  assert.ok(wf.input.properties.action.enum.includes('probe'));
+  const probe = await wf.execute({ action: 'probe', payload: { id: 'x' } }, { ...context, agent: 'Teo' });
+  assert.match(probe.content, /ok/);
+  assert.equal(calls.at(-1).actor, 'teo');
+  assert.equal(calls.at(-1).action, 'probe');
+  await assert.rejects(wf.execute({ action: 'probe', payload: { id: 'x', argv: ['curl', 'https://x.com'] } },
+    { ...context, agent: 'Teo' }), /no acepta argv/);
   assert.equal(wf.options?.codemode, false);
   const privacy = await wf.execute({ action: 'check', payload: { id: 'x', argv: [
     'bash', '/Users/example/.config/opencode/scripts/skalling-privacy.sh', 'verify-internal', '/project'] } }, context);

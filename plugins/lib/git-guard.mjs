@@ -750,9 +750,13 @@ export function hookBypassViolation(command) {
   // Se mira el comando con las comillas enmascaradas: un mensaje de commit
   // que menciona "--no-verify" no es saltarse nada.
   const masked = maskInert(removeHeredocBodies(command || ''));
+  // Reading the configured hook directory does not disable hooks. Remove
+  // only that exact read segment; a later config write must still be blocked.
+  const hookChanges = splitSegments(masked).segments
+    .filter(segment => segment.trim() !== 'git config --get core.hooksPath').join(';');
   const bypass = (/(?:^|\s)--no-verify\b/.test(masked) && /\bgit\b/.test(masked))
     || /\bgit\s+(?:-C\s+\S+\s+)?commit\b[^\n;&|]*\s-[a-zA-Z]*n[a-zA-Z]*(?=\s|$)/.test(masked)
-    || /\bcore\.hooksPath\b|\bHUSKY=0\b/.test(masked);
+    || /\bcore\.hooksPath\b|\bHUSKY=0\b/.test(hookChanges);
   if (!bypass) return null;
   return 'Quitá --no-verify/-n/core.hooksPath; los hooks siguen activos. Teo/Jhon/Luz usan '
     + 'skalling_workflow commit con id verificado y message; el motor conserva staging ajeno y ejecuta los hooks. '

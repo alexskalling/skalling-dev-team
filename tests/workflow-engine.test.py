@@ -166,6 +166,66 @@ class Workflow(unittest.TestCase):
             lines += [f'  {name}:', '    available: true', f'    command: "{command}"']
         (self.root / '.opencode/project.yaml').write_text('\n'.join(lines) + '\n')
 
+    def test_implementation_probe_runs_frozen_red_without_approving_or_delivering(self):
+        self.configure(fast='bash tests/check.test.sh')
+        (self.root / 'tests/check.test.sh').write_text('test "$(cat app.py)" = "value = 2"\n')
+        self.start()
+        self.configure(fast='touch unexpected-command')
+        result = self.call('teo', 'probe')
+        self.assertEqual(result['implementation_checks'][-1]['exit_code'], 1)
+        self.assertEqual(result['state'], 'implementation_ready')
+        self.assertEqual(result['delivery_number'], 0)
+        self.assertEqual(result['checks'], [])
+        self.assertFalse((self.root / 'unexpected-command').exists())
+        public = self.engine.public_response(result)
+        self.assertEqual(public['implementation_probe']['action'], 'probe')
+        self.assertEqual(public['implementation_probe']['last']['exit_code'], 1)
+        with self.assertRaises(ValueError):
+            self.call('teo', 'commit', message='Must not commit RED')
+        (self.root / 'app.py').write_text('value = 2\n')
+        delivered = self.call('teo', 'deliver')
+        self.assertEqual(delivered['state'], 'verified')
+        self.assertEqual(len(delivered['checks']), 1)
+        with self.assertRaisesRegex(ValueError, 'Probe role/order'):
+            self.call('teo', 'probe')
+
+    def test_probe_rejects_wrong_roles_and_model_commands(self):
+        self.configure(fast='bash tests/check.test.sh')
+        self.start()
+        for role in ('alex', 'jhon', 'luz', 'pau'):
+            with self.subTest(role=role), self.assertRaisesRegex(ValueError, 'Probe role/order'):
+                self.call(role, 'probe')
+        with self.assertRaisesRegex(ValueError, 'configured command'):
+            self.call('teo', 'probe', argv=['touch', 'unexpected-command'])
+
+    def test_probe_does_not_hold_write_lock_or_accept_candidate_mutation(self):
+        from unittest.mock import patch
+        self.configure(fast='bash tests/check.test.sh')
+        self.start()
+        def mutate(*args):
+            with sqlite3.connect(self.db_path, timeout=0.1) as other:
+                other.execute("UPDATE schema_meta SET value=value WHERE key='project_readiness'")
+            (self.root / 'app.py').write_text('value = 9\n')
+            return 0, 'not valid evidence'
+        with patch.object(self.engine, 'run_bounded', side_effect=mutate):
+            with self.assertRaisesRegex(ValueError, 'Candidate changed'):
+                self.call('teo', 'probe')
+        state = self.call('alex', 'status')
+        self.assertFalse(state.get('implementation_checks'))
+        self.assertEqual(state['checks'], [])
+
+    def test_probe_timeout_never_becomes_green_evidence(self):
+        from unittest.mock import patch
+        self.configure(fast='bash tests/check.test.sh')
+        self.start()
+        with patch.object(self.engine, 'run_bounded', side_effect=subprocess.TimeoutExpired('test', 1)):
+            result = self.call('teo', 'probe')
+        record = result['implementation_checks'][-1]
+        self.assertEqual(record['failure_kind'], 'timeout')
+        self.assertIsNone(record['exit_code'])
+        self.assertEqual(result['state'], 'implementation_ready')
+        self.assertEqual(result['checks'], [])
+
     def test_verifiers_disable_implicit_pnpm_installs_even_with_inherited_install_setting(self):
         env = {**os.environ, 'PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN': 'install',
                'npm_config_verify_deps_before_run': 'install'}

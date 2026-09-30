@@ -173,6 +173,14 @@ permission:
     "sha256sum *": allow
     mktemp: allow
     "mktemp *": allow
+    "git -C . status": allow
+    "git -C . status *": allow
+    "git -C . log": allow
+    "git -C . log *": allow
+    "git -C \"$PWD\" status": allow
+    "git -C \"$PWD\" status *": allow
+    "git -C \"$PWD\" log": allow
+    "git -C \"$PWD\" log *": allow
     "git status": allow
     "git status *": allow
     "git diff": allow
@@ -858,10 +866,10 @@ Si `status` o una respuesta del workflow incluye `last_rejection`, esa razón es
 
 ### Modo low — intervención quirúrgica
 
-1. Reproduzco el comportamiento con una prueba que falla cuando aplica.
+1. RED antes de editar: `skalling_workflow probe` con el id ejecuta la prueba configurada. No copio `auto_verify` a terminal ni invento inline/heredocs.
 2. Implemento el mínimo para pasar.
 3. Refactorizo solo dentro del alcance.
-4. Reviso el diff. Si el workflow trae `auto_verify`, dejo que `deliver` ejecute ese comando una sola vez; corro antes solo pruebas distintas necesarias para TDD o para el resultado solicitado. Sin `auto_verify`, hago la comprobación focal y dejo su evidencia al revisor.
+4. Reviso el diff. Con `auto_verify`, `deliver` corre GREEN; RED antes y GREEN después pueden usar la misma prueba. No repito GREEN sobre el mismo candidato. Sin `auto_verify`, corro la prueba focal y entrego evidencia.
 5. Entrego con `skalling_workflow` `action: "deliver"` (`{"id": "<workflow>"}`). Si necesité tocar un archivo no declarado, antes hago `action: "rescope"` con los archivos y la razón; el motor rechaza cambios fuera del alcance.
 6. Leo el estado que devuelve `deliver`: si no recibí un estado (error, herramienta no encontrada), no entregué y no lo informo como entregado. En `low`, `deliver` corre la verificación configurada del proyecto. `verified` significa que pasó la comprobación automática; falta contrastar outcomes y cerrar con Alex. `implementation_ready` con `failure_output` significa que falló: corrijo y vuelvo a entregar. `verification_ready` significa que verifica Jhon.
 

@@ -128,7 +128,7 @@ test('los roles sin edición no escriben archivos ni en /tmp', () => {
 const MUST_STAY_ALLOWED = {
   Alex: ['bash .opencode/scripts/teamdb-read.sh decisions', 'bash /Users/ana/.config/opencode/scripts/teamdb-read.sh x',
     'bash /home/ana/.config/opencode/scripts/teamdb-status.sh', 'bash ~/.config/opencode/scripts/skalling-route.sh classify --record',
-    'git status', 'git -C /p diff', 'git fetch origin', 'git fetch origin main', 'git stash list', 'git branch -v',
+    'git status', 'git -C "$PWD" status --porcelain', 'git -C "$PWD" log --oneline -5', 'git -C . status', 'git -C . log -1', 'git -C /p diff', 'git fetch origin', 'git fetch origin main', 'git stash list', 'git branch -v',
     'git branch -a', 'rg foo src', 'grep -rn foo src/', "sed -n '10,20p' README.md", 'git log --oneline -5'],
   Jes: ['bash .opencode/scripts/teamdb-search.sh auth', 'cat README.md', 'git log --oneline -5'],
   Sol: ['bash .opencode/scripts/teamdb-plan.sh show x', 'bash ~/.config/opencode/scripts/teamdb-context.sh x'],

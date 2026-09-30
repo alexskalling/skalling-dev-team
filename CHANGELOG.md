@@ -2,6 +2,17 @@
 
 Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) y el proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.5] — 2026-09-30
+
+- Teo puede ejecutar RED con `skalling_workflow probe`: usa la prueba del
+  proyecto congelada al iniciar, sin inventar comandos ni pedir permisos de shell.
+- La evidencia de implementación se separa de la aprobación: RED, errores y
+  timeouts nunca habilitan un commit. GREEN sigue en `deliver` cuando corresponde.
+- Las consultas Git de estado/historial con `-C .` o `-C "$PWD"` y la lectura
+  exacta del directorio de hooks dejan de provocar bloqueos falsos.
+- El protocolo distingue repetir una prueba sobre el mismo candidato de
+  ejecutar RED antes del cambio y GREEN después. Push conserva autorización humana.
+
 ## [0.16.4] — 2026-09-30
 
 - Las verificaciones del workflow y el helper de terminal desactivan

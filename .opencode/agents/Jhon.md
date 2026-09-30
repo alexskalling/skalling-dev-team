@@ -150,6 +150,14 @@ permission:
     "sha256sum *": allow
     mktemp: allow
     "mktemp *": allow
+    "git -C . status": allow
+    "git -C . status *": allow
+    "git -C . log": allow
+    "git -C . log *": allow
+    "git -C \"$PWD\" status": allow
+    "git -C \"$PWD\" status *": allow
+    "git -C \"$PWD\" log": allow
+    "git -C \"$PWD\" log *": allow
     "git status": allow
     "git status *": allow
     "git diff": allow
