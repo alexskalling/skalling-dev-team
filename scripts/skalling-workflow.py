@@ -19,6 +19,7 @@ import time
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from skalling_classify import ROUTES, memory_blockers, normalize, project_db, readiness  # noqa: E402
 from skalling_config import testing_config  # noqa: E402
+from skalling_git import path_identity, isolated_index, commit_unit
 
 ROLES = {'alex', 'pol', 'sol', 'teo', 'jhon', 'luz', 'pau', 'jes'}
 # Verificador mecánico del carril trivial: no es un agente, es el comando de
@@ -134,12 +135,25 @@ def record_rejection(state, actor, reason):
 
 DUMP_PATHSPEC = ':(exclude)db/teamdb/team.dump.sql'
 SCOPE_EXCLUDES = [DUMP_PATHSPEC, ':(exclude).opencode', ':(exclude).git']
+RUNTIME_DIRS = {'agents', 'command', 'commands', 'plugins', 'hooks', 'scripts', 'skills', 'skalling-data'}
+RUNTIME_FILES = {'VERSION', 'runtime-manifest.json', 'project.yaml', 'opencode.json', 'opencode.jsonc', '.gitattributes'}
+
+
+def runtime_file(root, name):
+    parts = scoped(root, name).relative_to(root).parts
+    return len(parts) > 1 and parts[0] == '.opencode'
 
 
 def scoped(root, name):
     path = (root / name).resolve()
-    if not path.is_relative_to(root) or any(p in {'.git', '.opencode'} for p in path.relative_to(root).parts):
+    if not path.is_relative_to(root) or '.git' in path.relative_to(root).parts:
         raise ValueError('Scope must stay in product files within the project')
+    parts = path.relative_to(root).parts
+    if '.opencode' in parts and not (len(parts) >= 2 and parts[0] == '.opencode'
+            and (parts[1] in RUNTIME_DIRS or (len(parts) == 2 and parts[1] in RUNTIME_FILES))):
+        raise ValueError('Private Skalling context is not a commit unit; enumerate only runtime files')
+    if path.is_dir():
+        raise ValueError('Enumerate individual files; directories cannot identify an exact reviewed candidate')
     if path.name.startswith('.env') or path.suffix in {'.pem', '.db', '.sqlite', '.sqlite3'}:
         raise ValueError('Sensitive files require a separate authorized operation')
     return path
@@ -200,7 +214,7 @@ def changed_paths(root):
     return paths
 
 
-def require_scope(root, files, head=None):
+def require_scope(root, files, head=None, external_baseline=None):
     changed = changed_paths(root)
     if inside_git(root):
         base = head or subprocess.check_output(['git', 'hash-object', '-t', 'tree', '--stdin'], cwd=root, input=b'').decode().strip()
@@ -209,6 +223,9 @@ def require_scope(root, files, head=None):
         require(committed.returncode == 0, 'Cannot inspect changes since workflow start')
         changed.update(p for p in committed.stdout.decode().split('\0') if p)
     extra = changed - set(files)
+    baseline = external_baseline or {}
+    extra = {name for name in extra if name not in baseline or baseline[name] is None
+             or path_identity(root, name) != baseline[name]}
     require(not extra, f'Scope creep: {sorted(extra)} changed but not declared; use rescope')
 
 
@@ -253,7 +270,8 @@ def require_index_in_scope(root, files):
     verified here: refuse instead of approving it by accident."""
     extra = staged_paths(root) - set(files)
     require(not extra, f'Staged files outside the reviewed scope: {sorted(extra)}. '
-                       'Unstage them (git restore --staged) or review them in their own flow before completing')
+                       'Teo/Jhon/Luz: usar skalling_workflow commit con id y message; '
+                       'conserva el índice ajeno. No pedir al usuario commitear, no mezclar ni resetear todo')
 
 
 def inside_git(root):
@@ -261,7 +279,7 @@ def inside_git(root):
     return out.returncode == 0 and out.stdout.strip() == b'true'
 
 
-def seal_receipt(db, root, identifier, files, verifier, digest, action='complete'):
+def seal_receipt(db, root, identifier, files, verifier, digest, action='complete', index_env=None):
     """Prepare a local commit or complete: stage exactly the reviewed files and
     seal a receipt with the same tree_hash algorithm scripts/hooks/git-gate.py
     checks at commit time. Fails closed: a completed workflow always leaves a
@@ -269,17 +287,19 @@ def seal_receipt(db, root, identifier, files, verifier, digest, action='complete
     the workflow 'completed' without the evidence Git asks for)."""
     if not inside_git(root):
         return None
-    require_index_in_scope(root, files)
-    try:
-        added = subprocess.run(['git', 'add', '-A', '--'] + list(files), cwd=root, capture_output=True, timeout=30)
-        require(added.returncode == 0, 'git add falló al preparar el candidato: '
-                + added.stderr.decode('utf-8', 'replace').strip())
+    if index_env is None:
         require_index_in_scope(root, files)
+    try:
+        if index_env is None:
+            added = subprocess.run(['git', 'add', '-A', '--'] + list(files), cwd=root, capture_output=True, timeout=30)
+            require(added.returncode == 0, 'git add falló al preparar el candidato: '
+                    + added.stderr.decode('utf-8', 'replace').strip())
+            require_index_in_scope(root, files)
         # What got staged has to be what was verified (no edit slipped in
         # between the last fingerprint and git add).
         require(fingerprint(root, files) == digest, 'Candidate changed while staging; approval denied')
         diff = subprocess.run(['git', 'diff', '--cached', '--', '.', DUMP_PATHSPEC],
-                               cwd=root, capture_output=True, timeout=30)
+                               cwd=root, env=index_env, capture_output=True, timeout=30)
     except (OSError, subprocess.SubprocessError) as error:
         raise ValueError('No se pudo preparar el candidato en Git: ' + str(error))
     patch = diff.stdout.rstrip(b'\n')  # git-gate.py hashes the patch with the same rstrip
@@ -930,6 +950,8 @@ def operate(request):
             blockers = memory_blockers(path, classification['visual'])
             require(not blockers, '; '.join(blockers))
             files = file_list(payload)
+            require(not any(runtime_file(root, f) for f in files) or classification['risk'] == 'high',
+                    'Skalling runtime files require risk high and independent Jhon/Luz verification')
             require(bool(str(payload.get('acceptance', '')).strip()), 'Observable acceptance required')
             require(bool(str(payload.get('reuse', '')).strip()),
                     'Reuse strategy required: qué componente/patrón existente se reutiliza')
@@ -954,6 +976,7 @@ def operate(request):
                      'started_at': now, 'handoffs': 0, 'checks': [], 'oracle': None, 'digest': None,
                      'rejection_count': 0,
                      'base_head': base_head(root), 'delivery_number': 0, 'delivery': None,
+                     'external_baseline': {name: path_identity(root, name) for name in changed_paths(root) - set(files)},
                      'verification_template': verification_template(root),
                      'verification_timeout': verification_timeout(root),
                      'auto_verify': auto_verification(root, files) if risk == 'low' else None,
@@ -1002,7 +1025,7 @@ def operate(request):
             if state['state'] == 'completed' and action == 'complete' and actor == 'alex':
                 db.rollback()
                 return with_next_step(state)
-            require(state['state'] not in TERMINAL or (state['state'] == 'completed' and action == 'prepare_commit'),
+            require(state['state'] not in TERMINAL or (state['state'] == 'completed' and action in {'prepare_commit', 'commit'}),
                     f"{state['state']} workflows are immutable")
             if action in TRANSITIONS:
                 owner, previous, target = TRANSITIONS[action]
@@ -1013,7 +1036,7 @@ def operate(request):
                     state['plan_id'] = payload['plan_id']
                     bind_tasks(db, state, payload.get('task_ids'))
                 if action == 'deliver':
-                    require_scope(root, state['files'], state.get('base_head'))
+                    require_scope(root, state['files'], state.get('base_head'), state.get('external_baseline'))
                     invalidate_prepared_receipt(db, state)
                     state['digest'] = fingerprint(root, state['files'])
                     state['implementation_session'] = session
@@ -1025,6 +1048,13 @@ def operate(request):
                                           'digest': state['digest'], 'delivery_number': state['delivery_number'],
                                           'base_head': state['base_head']}
                 state['state'] = target
+            elif action == 'preserve_external':
+                require(actor == 'alex' and bool(str(evidence).strip()),
+                        'Alex must explain which user/other-task changes are external; do not infer ownership')
+                names = file_list(payload)
+                require(not (set(names) & set(state['files'])), 'Declared workflow files cannot be excluded')
+                require(set(names) <= changed_paths(root), 'External files must be current Git changes')
+                state.setdefault('external_baseline', {}).update({name: path_identity(root, name) for name in names})
             elif action == 'rescope':
                 require(actor == 'teo' and state['state'] in {'implementation_ready', 'verification_ready'},
                         'Only Teo widens scope, and only before an approval is trusted')
@@ -1047,7 +1077,7 @@ def operate(request):
                 top_before = {module(f) for f in state['files']}
                 top_after = {module(f) for f in widened}
                 risk = state['risk']
-                if flag(payload, 'sensitive'):
+                if flag(payload, 'sensitive') or any(runtime_file(root, f) for f in widened):
                     risk = 'high'
                 elif (top_after - top_before) and risk == 'low':
                     risk = 'medium'
@@ -1121,21 +1151,34 @@ def operate(request):
                 reason = payload.get('findings') or evidence
                 invalidate_prepared_receipt(db, state)
                 record_rejection(state, actor, reason)
-            elif action == 'prepare_commit':
+            elif action in {'prepare_commit', 'commit'}:
                 require(actor in {'teo', 'jhon', 'luz'}, 'Only Teo, Jhon or Luz prepare autonomous local commits')
                 require(inside_git(root), 'Local commits require a Git repository')
                 approved = {'quality_reviewed', 'documented'} if state['risk'] == 'high' else {'verified'}
                 approved.add('completed')
                 require(state['state'] in approved, 'Local commit requires the verification for this risk level')
-                require_scope(root, state['files'], state.get('base_head'))
-                require_index_in_scope(root, state['files'])
+                require_scope(root, state['files'], state.get('base_head'), state.get('external_baseline'))
                 require(fingerprint(root, state['files']) == state['digest'], 'Candidate changed after verification')
                 cover_outcomes(state, payload, 'delivery')
                 verifier = (state.get('verification') or {}).get('agent', 'jhon')
-                receipt = seal_receipt(db, root, identifier, state['files'], verifier, state['digest'], 'prepare_commit')
-                state['receipt_tree_hash'] = receipt or state.get('receipt_tree_hash')
-                state['prepared_receipt_verifier'] = verifier
-                evidence = 'Verified local unit staged and sealed; git commit is allowed, push needs user authorization'
+                if action == 'commit':
+                    def validate_commit():
+                        require(fingerprint(root, state['files']) == state['digest'], 'Candidate changed after verification')
+                        require_scope(root, state['files'], state.get('base_head'), state.get('external_baseline'))
+                    def seal_commit(env):
+                        state['receipt_tree_hash'] = seal_receipt(db, root, identifier, state['files'], verifier,
+                                                                  state['digest'], 'prepare_commit', env)
+                        state['prepared_receipt_verifier'] = verifier
+                        save(db, identifier, actor, session, 'prepare_commit', state, 'Isolated candidate sealed', now)
+                        db.commit()
+                    state['local_commit_result'] = commit_unit(root, state['files'], payload.get('message'),
+                                                              validate_commit, seal_commit)
+                    evidence = state['local_commit_result']
+                else:
+                    receipt = seal_receipt(db, root, identifier, state['files'], verifier, state['digest'], 'prepare_commit')
+                    state['receipt_tree_hash'] = receipt or state.get('receipt_tree_hash')
+                    state['prepared_receipt_verifier'] = verifier
+                    evidence = 'Verified local unit staged and sealed; git commit is allowed, push needs user authorization'
             elif action in {'cancel', 'fail'}:
                 require(actor == 'alex' and bool(str(evidence).strip()), 'Only Alex terminates with concrete evidence')
                 invalidate_prepared_receipt(db, state)
@@ -1147,16 +1190,19 @@ def operate(request):
                 expected = ('quality_reviewed' if state.get('execution_mode') == 'focused' and not state.get('memory_required')
                             else 'documented') if state['risk'] == 'high' else 'verified'
                 require(state['state'] == expected, f'Completion requires {expected}')
-                require_scope(root, state['files'], state.get('base_head'))
-                require_index_in_scope(root, state['files'])
+                require_scope(root, state['files'], state.get('base_head'), state.get('external_baseline'))
                 require(fingerprint(root, state['files']) == state['digest'], 'Candidate changed after verification')
                 state['state'] = 'completed'
                 state['completed_at'] = now
                 state['duration_ms'] = round((now - state['started_at']) * 1000)
                 cover_outcomes(state, payload, 'delivery')
                 verifier = (state.get('verification') or {}).get('agent', 'jhon')
-                state['receipt_tree_hash'] = (seal_receipt(db, root, identifier, state['files'], verifier, state['digest'])
-                                              or state.get('receipt_tree_hash'))
+                if inside_git(root) and staged_paths(root) - set(state['files']):
+                    with isolated_index(root, state['files']) as (env, _, _):
+                        receipt = seal_receipt(db, root, identifier, state['files'], verifier, state['digest'], index_env=env)
+                else:
+                    receipt = seal_receipt(db, root, identifier, state['files'], verifier, state['digest'])
+                state['receipt_tree_hash'] = receipt or state.get('receipt_tree_hash')
                 state['usage'] = workflow_usage(db, state, now)
                 record_finish_metrics(db, identifier, state['duration_ms'], state['handoffs'], state['usage'],
                                       state.get('rejection_count', 0))
@@ -1193,17 +1239,18 @@ def public_response(state):
               'task', 'plan_id', 'task_ids', 'routing_id', 'terminal_reason', 'digest', 'delivery_number', 'next_step', 'receipt_tree_hash',
               'duration_ms', 'execution_mode', 'memory_required', 'planning_required',
               'last_rejection', 'blocked_reason', 'rejection_count', 'oracle',
-              'intent', 'outcomes', 'coverage', 'human_corrections', 'user_acceptance', 'usage', 'auto_verify', 'context')
+              'intent', 'outcomes', 'coverage', 'human_corrections', 'user_acceptance', 'usage', 'auto_verify', 'context', 'local_commit_result')
     response = {key: state[key] for key in fields if key in state}
     response['next_step'] = next_step(state)
     response['recommended_action'] = next_action(state)
     commit_states = {'quality_reviewed', 'documented', 'completed'} if state.get('risk') == 'high' else {'verified', 'completed'}
     if state['state'] in commit_states:
         response['local_commit'] = {
-            'ready': True, 'agents': ['teo', 'jhon', 'luz'], 'prepare_action': 'prepare_commit',
+            'ready': True, 'agents': ['teo', 'jhon', 'luz'], 'legacy_prepare_action': 'prepare_commit',
+            'action': 'commit', 'payload': {'id': state['id'], 'message': '<mensaje descriptivo>'},
             'delegate_to': 'luz' if state.get('risk') == 'high' else 'jhon',
-            'handoff': f"Conservar workflow {state['id']}: prepare_commit y commit local; no repetir checks válidos",
-            'then': 'git commit -m "mensaje"', 'repeat_checks': False, 'push': 'user_approval',
+            'handoff': f"Conservar workflow {state['id']}: action commit con message crea el commit y conserva staging ajeno; no repetir checks válidos ni pedir al usuario hacerlo",
+            'then': 'reportar local_commit_result.sha; el commit ya fue creado', 'repeat_checks': False, 'push': 'user_approval',
             'coverage_required': not bool(state.get('coverage')),
         }
     response['check_count'] = len(state.get('checks', []))

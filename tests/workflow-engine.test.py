@@ -320,6 +320,118 @@ assert.equal(createCore().decide({tool:'shell',agent:fixture.actor,input:{comman
         with self.assertRaisesRegex(ValueError, 'outside the reviewed scope'):
             self.call('jhon', 'prepare_commit')
 
+    def test_existing_user_changes_are_preserved_but_new_edits_still_need_scope(self):
+        other = self.root / 'user.txt'
+        other.write_text('previous user work')
+        started = self.start()
+        self.call('teo', 'deliver')
+        other.write_text('changed during workflow')
+        with self.assertRaisesRegex(ValueError, 'Scope creep'):
+            self.engine.require_scope(self.root, ['app.py', 'tests/check.test.sh'],
+                                      self.engine.base_head(self.root),
+                                      started['external_baseline'])
+
+    def assert_isolated_commit_preserves_foreign_work(self, committer):
+        unborn = self.engine.base_head(self.root) is None
+        other = self.root / 'user.txt'
+        other.write_text('previous user work')
+        extra = self.root / '.opencode/plugin.js'
+        extra.write_text('staged tooling\n')
+        subprocess.run(['git', 'add', str(extra)], cwd=self.root, check=True)
+        staged = subprocess.check_output(['git', 'ls-files', '-s', '--', '.opencode/plugin.js'], cwd=self.root)
+        extra.write_text('newer tooling in working tree\n')
+        self.start('medium')
+        (self.root / 'tests/check.test.sh').write_text('test "$(cat app.py)" = "value = 1" # reviewed\n')
+        verified = self.verify()
+        hook = self.root / '.git/hooks/pre-commit'
+        hook.write_text(f'#!/bin/sh\nexec python3 "{ROOT / "scripts/hooks/git-gate.py"}" pre-commit\n')
+        hook.chmod(0o755)
+        with self.assertRaisesRegex(ValueError, 'Only Teo'):
+            self.call('alex', 'commit', message='fix: verified unit')
+        committed = self.call(committer, 'commit', message='fix: verified unit')
+        sha = committed['local_commit_result']['sha']
+        names = subprocess.check_output(['git', 'diff-tree', '--root', '--no-commit-id', '--name-only', '-r', sha], cwd=self.root, text=True)
+        self.assertEqual(set(names.splitlines()), {'app.py', 'tests/check.test.sh'} if unborn else {'tests/check.test.sh'})
+        self.assertEqual(staged, subprocess.check_output(['git', 'ls-files', '-s', '--', '.opencode/plugin.js'], cwd=self.root))
+        self.assertEqual(extra.read_text(), 'newer tooling in working tree\n')
+        self.assertEqual(other.read_text(), 'previous user work')
+        self.assertEqual(len(committed['checks']), len(verified['checks']))
+        for actor in ('teo', 'luz'):
+            retried = self.call(actor, 'commit', message='fix: verified unit')
+            self.assertEqual(retried['local_commit_result']['sha'], sha)
+        self.assertEqual(self.call('alex', 'complete')['state'], 'completed')
+
+    def test_jhon_isolated_commit_preserves_tooling_index_and_user_work(self):
+        self.assert_isolated_commit_preserves_foreign_work('jhon')
+
+    def test_teo_isolated_commit_preserves_tooling_index_and_user_work(self):
+        self.assert_isolated_commit_preserves_foreign_work('teo')
+
+    def test_luz_isolated_commit_preserves_tooling_index_and_user_work(self):
+        self.assert_isolated_commit_preserves_foreign_work('luz')
+
+    def test_old_workflow_recovers_external_changes_with_explicit_provenance(self):
+        self.start()
+        other = self.root/'user.txt'; other.write_text('user added after start')
+        with self.assertRaisesRegex(ValueError, 'Scope creep'):
+            self.call('teo', 'deliver')
+        for actor in ('teo', 'pau'):
+            with self.assertRaises(ValueError):
+                self.call(actor, 'preserve_external', files=['user.txt'], evidence='not my task')
+        with self.assertRaises(ValueError):
+            self.call('alex', 'preserve_external', files=['app.py'], evidence='cannot hide own edits')
+        self.call('alex', 'preserve_external', files=['user.txt'], evidence='User message confirms their separate edit')
+        self.assertEqual(self.call('teo', 'deliver')['state'], 'verification_ready')
+
+    def test_runtime_bundle_can_be_reviewed_separately_but_context_stays_private(self):
+        runtime = self.root/'.opencode/plugins/local.js'
+        runtime.parent.mkdir(); runtime.write_text('export const enabled = true;\n')
+        for name in ('.opencode/context/team.db', '.opencode/context/note.md', '.env', '.git/config', '.opencode'):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                self.engine.scoped(self.root, name)
+        with self.assertRaisesRegex(ValueError, 'risk high'):
+            self.call('alex', 'start', risk='low', scope='local', files=['.opencode/plugins/local.js'],
+                      acceptance='plugin enabled', reuse='runtime', execution_mode='focused')
+        self.call('alex', 'start', risk='high', scope='local', files=['.opencode/plugins/local.js'],
+                  acceptance='plugin enabled', reuse='runtime', execution_mode='focused')
+        self.call('teo', 'deliver')
+        self.call('jhon', 'oracle', expected='enabled true', negative='enabled false', invariant='runtime export', refutation='read export')
+        self.call('jhon', 'check', argv=['python3', '-c', 'from pathlib import Path; assert "enabled = true" in Path(".opencode/plugins/local.js").read_text()'],
+                  method='export assertion', criterion='plugin enabled')
+        self.call('jhon', 'approve', evidence='assertion confirms enabled export')
+        with self.assertRaisesRegex(ValueError, 'verification for this risk'):
+            self.call('teo', 'commit', message='chore: runtime')
+        self.call('luz', 'check', argv=['python3', '-c', 'from pathlib import Path; assert Path(".opencode/plugins/local.js").read_text() == "export const enabled = true;\\n"'],
+                  method='inspect entire plugin', criterion='no executable side effects')
+        self.call('luz', 'approve', evidence='pure export only', findings='No IO or side effects')
+        self.assertTrue(self.call('luz', 'commit', message='chore: runtime')['local_commit_result']['created'])
+
+    def test_isolated_commit_hook_failure_leaves_index_and_head_intact(self):
+        self.start('medium')
+        (self.root / 'tests/check.test.sh').write_text('test "$(cat app.py)" = "value = 1" # reviewed\n')
+        self.verify()
+        index = self.root / '.git/index'
+        before = index.read_bytes()
+        head = self.engine.base_head(self.root)
+        hook = self.root / '.git/hooks/pre-commit'
+        hook.write_text('#!/bin/sh\nexit 1\n'); hook.chmod(0o755)
+        with self.assertRaisesRegex(ValueError, 'git commit'):
+            self.call('teo', 'commit', message='fix: verified unit')
+        self.assertEqual(index.read_bytes(), before)
+        self.assertEqual(self.engine.base_head(self.root), head)
+        self.assertFalse((self.root / '.git/index.lock').exists())
+
+    def test_first_commit_uses_verified_unit_and_preserves_foreign_staging(self):
+        subprocess.run(['git', 'checkout', '--orphan', 'first'], cwd=self.root, check=True, capture_output=True)
+        self.assert_isolated_commit_preserves_foreign_work('jhon')
+
+    def test_index_busy_never_removes_another_process_lock(self):
+        self.start('medium'); self.verify()
+        lock = self.root/'.git/index.lock'; lock.write_text('another process')
+        with self.assertRaisesRegex(ValueError, 'ocupado'):
+            self.call('jhon', 'commit', message='fix: verified unit')
+        self.assertEqual(lock.read_text(), 'another process')
+
     def test_focused_sensitive_work_has_review_without_mandatory_planning(self):
         state = self.call('alex', 'start', risk='high', scope='local', files=['app.py'],
                           acceptance='value stays one', reuse='existing app', execution_mode='focused')

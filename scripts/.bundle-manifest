@@ -77,3 +77,4 @@ skalling-metrics-report.py	skalling-metrics-report.py	91ad79606586509c126f6ccfb3
 skalling-privacy-check.py	skalling-privacy-check.py
 skalling_lifecycle.py	skalling_lifecycle.py
 skalling-reconcile.py	skalling-reconcile.py
+skalling_git.py	skalling_git.py

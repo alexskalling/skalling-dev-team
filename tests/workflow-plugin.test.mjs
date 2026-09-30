@@ -75,6 +75,13 @@ test('v2: check corre si la política del agente lo permite y se rechaza si pedi
   assert.ok(wf.input.properties.action.enum.includes('prepare_commit'));
   await wf.execute({ action: 'prepare_commit', payload: { id: 'unit' } }, context);
   assert.equal(calls.pop().action, 'prepare_commit');
+  assert.ok(wf.input.properties.action.enum.includes('commit'));
+  assert.ok(wf.input.properties.action.enum.includes('preserve_external'));
+  await wf.execute({ action: 'commit', payload: { id: 'unit', message: 'fix: unidad verificada' } }, context);
+  const committed = calls.pop();
+  assert.equal(committed.actor, 'jhon');
+  assert.equal(committed.action, 'commit');
+  assert.equal(committed.payload.message, 'fix: unidad verificada');
   const ok = await wf.execute({ action: 'check', payload: JSON.stringify({ id: 'x', argv: ['npm', 'test'] }) }, context);
   assert.match(ok.content, /ok/);
   assert.equal(calls[0].actor, 'jhon');
