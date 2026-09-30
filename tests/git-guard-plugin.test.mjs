@@ -162,6 +162,22 @@ test('la autorización es del pedido vigente, no de la sesión', () => {
     /skalling_workflow start/);
 });
 
+test('restart recovers the existing workflow through status without creating a new plan', () => {
+  const core = createCore({readState: () => ({ok:true,state:'implementation_ready'})});
+  const delegation = {tool:'subagent',agent:'Alex',sessionID:'restarted',
+    input:{agent:'Teo',prompt:'Implementa el workflow existing-workflow'}};
+  const blocked = core.decide(delegation);
+  assert.match(blocked, /skalling_workflow status/);
+  assert.match(blocked, /no demuestra que el workflow no exista/);
+  assert.equal(core.workflows.size, 0);
+  core.observe({tool:'skalling_workflow',agent:'Alex',sessionID:'restarted',
+    output:ready('existing-workflow')});
+  assert.equal(core.decide(delegation), null);
+  const rejected = createCore({readState: () => ({ok:true,state:'rejected'})});
+  rejected.observe({tool:'skalling_workflow',agent:'Alex',sessionID:'restarted',output:ready('existing-workflow')});
+  assert.match(rejected.decide(delegation), /está en rejected/);
+});
+
 test('Alex solo delega al equipo: general/build/explore editan sin flujo', () => {
   const core = createCore();
   for (const agent of ['general', 'build', 'explore', 'plan', '']) {
@@ -524,7 +540,7 @@ test('MEDIA-2: tras el reject de Jhon, TeamDB bloquea delegar a Teo aunque el ma
 });
 
 // El lector por defecto: sqlite de solo lectura sobre agent_workflows del
-// proyecto (con worktree resuelto a la raíz principal), sin crear nada.
+// proyecto (con worktree resuelto a la raíz principal), sin crear datos.
 test('MEDIA-2: el lector real lee agent_workflows y falla cerrado si la base no se puede leer', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'skworkflow-'));
   fs.mkdirSync(path.join(root, '.git'), { recursive: true });
@@ -588,4 +604,40 @@ test('la revisión de Skalling con --scope de glob no se toma como lectura de cr
   ]) {
     assert.match(run('luz', command) || '', /credenciales/, command);
   }
+});
+
+// Regression: OpenCode/Bun's read-only connection cannot initialize absent
+// WAL sidecars. Retrying an existing-file connection must still deny SQL writes.
+test('WAL recovery is query-only and observes committed changes in the live journal', async () => {
+  const {readWorkflowRow} = await import('../plugins/lib/git-guard.mjs');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'skwal-'));
+  const file = path.join(root, 'team.db');
+  const writer = new DatabaseSync(file);
+  writer.exec('PRAGMA journal_mode=WAL; CREATE TABLE agent_workflows(id TEXT PRIMARY KEY, body TEXT)');
+  writer.prepare('INSERT INTO agent_workflows VALUES(?,?)').run('wf', '{"state":"implementation_ready"}');
+  writer.close();
+  const attempts = [];
+  class Driver {
+    constructor(filename, options) {
+      attempts.push(options);
+      this.readOnly = options.readOnly;
+      this.db = new DatabaseSync(filename, options);
+    }
+    exec(sql) { this.db.exec(sql); }
+    prepare(sql) {
+      if (this.readOnly) throw new Error('unable to open database file');
+      assert.throws(() => this.db.exec("UPDATE agent_workflows SET body='{}'"), /readonly|read-only/i);
+      return this.db.prepare(sql);
+    }
+    close() { this.db.close(); }
+  }
+  const drivers = [{Open:Driver,read:{readOnly:true},auxiliary:{readOnly:false}}];
+  assert.match(readWorkflowRow(file,'wf',drivers).body, /implementation_ready/);
+  assert.deepEqual(attempts, [{readOnly:true},{readOnly:false}]);
+  const liveWriter = new DatabaseSync(file);
+  liveWriter.prepare('UPDATE agent_workflows SET body=? WHERE id=?').run('{"state":"rejected"}','wf');
+  assert.match(readWorkflowRow(file,'wf',drivers).body, /rejected/, 'must not ignore uncheckpointed WAL');
+  liveWriter.close();
+  assert.throws(() => readWorkflowRow(file,'wf',[]), /SQLITE_DRIVER_UNAVAILABLE/);
+  fs.rmSync(root, {recursive:true,force:true});
 });

@@ -24,3 +24,16 @@ grep -q 'Falta sandbox' <<< "$OUT"
 grep -q 'Siguiente' <<< "$OUT"
 [ "$(printf '%s' "$OUT" | wc -c | tr -d ' ')" -lt 3000 ]
 echo "PASS: resume devuelve una cápsula breve y accionable"
+sqlite3 "$DB" <<'SQL'
+INSERT INTO agent_workflows(id,body) VALUES
+('request-a','{"id":"request-a","state":"implementation_ready","intent":"Evitar mensajes duplicados","outcomes":[{"id":"one","expected":"Un mensaje por destinatario"}]}'),
+('request-b','{"id":"request-b","state":"requested","intent":"Corregir tabla","outcomes":[]}');
+SQL
+OUT="$(bash "$ROOT/scripts/teamdb-resume.sh" "$TMP")"
+grep -q 'Evitar mensajes duplicados' <<< "$OUT"
+grep -q 'Un mensaje por destinatario' <<< "$OUT"
+grep -q 'no elegir por recencia' <<< "$OUT"
+OUT="$(bash "$ROOT/scripts/teamdb-resume.sh" "$TMP" request-a)"
+grep -q 'status con id=request-a' <<< "$OUT"
+if grep -q request-b <<< "$OUT"; then exit 1; fi
+echo 'PASS: resume conserva objetivos y desambigua workflows'

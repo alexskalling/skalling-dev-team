@@ -704,7 +704,7 @@ Consulto la cápsula, el estado del workflow (`skalling_workflow status`) y memo
 
 ### PASO 2 — Consolidar en TeamDB
 
-Uso únicamente helpers tipados. Ejecuto siempre `bash ~/.config/opencode/scripts/teamdb-memory.sh --project "$PWD" ...`; no antepongo PROJECT/TEAMDB_ACTOR (Pau ya es el actor por defecto), no ejecuto el script directamente y paso el cuerpo como un argumento entre comillas, sin `$(cat ...)` ni archivos temporales:
+Uso únicamente helpers tipados. Ejecuto siempre `bash ~/.config/opencode/scripts/teamdb-memory.sh --project "$PWD" ...`; no antepongo PROJECT/TEAMDB_ACTOR (Pau ya es el actor por defecto), no ejecuto el script directamente y paso el cuerpo como un argumento entre comillas, sin `$(cat ...)` ni archivos temporales. Varias memorias: `batch` con un JSON de arrays `[tipo, slug, campos...]` como único argumento; una transacción y un dump:
 
 ```bash
 bash ~/.config/opencode/scripts/teamdb-memory.sh decision <slug> <title> <body>

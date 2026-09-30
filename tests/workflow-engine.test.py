@@ -448,8 +448,9 @@ class Workflow(unittest.TestCase):
         self.start()
         with self.assertRaises(ValueError):
             self.call('teo', 'rescope', files=['app.py'], evidence='no new file, same as declared')
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, 'Siguiente paso: Teo: reintenta rescope'):
             self.call('teo', 'rescope', files=['extra.py'], evidence='')
+        self.assertEqual(self.call('alex', 'status')['state'], 'implementation_ready')
 
     def test_delivery_identity_classifies_added_modified_deleted(self):
         (self.root / 'tests/old.py').write_text('legacy = 1\n')
@@ -841,6 +842,41 @@ class Workflow(unittest.TestCase):
             row = db.execute("SELECT tokens_input, tokens_output, tokens_cache_read, cost, agents_used, retries "
                              "FROM workflow_metrics WHERE request_id='request'").fetchone()
         self.assertEqual(row, (3000, 400, 12000, 0.03, 'Alex,Teo', 0))
+
+    def test_handoff_context_is_automatic_and_not_shared_between_agents(self):
+        started = self.start()
+        self.assertIn('context', self.engine.public_response(started))
+        item = started['context']['concepts'][0]
+        own = self.call('alex', 'status', context_seen=[item['read_key']])
+        self.assertTrue(own['context']['concepts'][0]['already_read'])
+        teo = self.call('teo', 'status')
+        self.assertEqual(teo['context']['concepts'][0]['body'], 'App de prueba')
+        with sqlite3.connect(self.db_path) as db:
+            self.assertGreater(db.execute("SELECT context_bytes FROM workflow_metrics WHERE request_id='request'").fetchone()[0], 0)
+            # Retrieval never steals ownership or counts a status as a handoff.
+            state = json.loads(db.execute("SELECT body FROM agent_workflows WHERE id='request'").fetchone()[0])
+            self.assertEqual(state['handoffs'], 0)
+
+    def test_usage_resumed_session_is_counted_without_double_counting_children(self):
+        runtime = self.root / 'runtime.db'
+        with sqlite3.connect(runtime) as db:
+            db.executescript('CREATE TABLE session_v2(id TEXT PRIMARY KEY,parent_id TEXT);'
+                             'CREATE TABLE session_message(id INTEGER PRIMARY KEY,session_id TEXT,type TEXT,time_created INTEGER,data TEXT);')
+            db.executemany('INSERT INTO session_v2 VALUES(?,?)', [('alex-session', None), ('resumed', None), ('child', 'resumed')])
+        from unittest.mock import patch
+        with patch.dict(os.environ, {'SKALLING_OPENCODE_DB': str(runtime)}):
+            self.start()
+            request = dict(project=str(self.root), actor='alex', session='resumed', action='status', payload={'id':'request'})
+            self.engine.operate(request)
+            child = {**request, 'actor':'teo', 'session':'child'}
+            self.engine.operate(child)
+            with sqlite3.connect(runtime) as db:
+                data = json.dumps({'agent':'Teo', 'tokens':{'input':50,'output':10}})
+                db.execute("INSERT INTO session_message VALUES(1,'child','assistant',?,?)", (int(time.time()*1000), data))
+                db.execute("INSERT INTO session_message VALUES(2,'resumed','assistant',1,?)", (data,))
+            state = self.engine.operate(request)
+            self.assertEqual(state['usage']['tokens_input'], 50)
+            self.assertEqual(state['usage']['tokens_output'], 10)
 
     def test_missing_opencode_database_never_breaks_completion(self):
         os.environ['SKALLING_OPENCODE_DB'] = str(self.root / 'no-existe.db')

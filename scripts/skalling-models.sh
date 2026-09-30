@@ -19,12 +19,17 @@
 #                                                  # (lo usa install-global.sh tras
 #                                                  # reinstalar, para no perder overrides)
 #
+# set/reset/apply sincronizan el JSON con los agentes globales y del proyecto
+# actual. Reiniciar OpenCode carga los cambios; una sesión activa conserva su
+# selección. apply --project permite indicar otro proyecto explícitamente.
+#
 # Corré "opencode models" para ver los IDs disponibles en tu instalación.
 set -euo pipefail
 
-OPENCODE_DIR="${SKALLING_OPENCODE_DIR:-$HOME/.config/opencode}"
+OPENCODE_DIR="${SKALLING_OPENCODE_DIR:-${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}}"
 AGENTS_DIR="$OPENCODE_DIR/agents"
 OVERRIDES_FILE="$OPENCODE_DIR/model-overrides.json"
+PROJECT_DIR="${SKALLING_PROJECT_DIR:-$PWD}"
 AGENTS=(Alex Jes Jhon Luz Pau Pol Sol Teo)
 
 usage() {
@@ -33,7 +38,7 @@ Uso:
   skalling-models.sh show
   skalling-models.sh set <Agente> <provider/model-id>
   skalling-models.sh reset [Agente]
-  skalling-models.sh apply
+  skalling-models.sh apply [--project <ruta>]
   skalling-models.sh fallback show|reset [Agente]
   skalling-models.sh fallback set <Agente> <provider/model> [otros modelos...]
   skalling-models.sh fallback timeout <Agente> <total-segundos> <silencio-segundos>
@@ -55,56 +60,73 @@ is_known_agent() {
 # el repo de Skalling -- funciona igual si solo tenes la instalacion global,
 # sin el checkout del proyecto.
 apply_overrides() {
-  python3 - "$AGENTS_DIR" "$OVERRIDES_FILE" "$@" <<'PY'
+  python3 - "$AGENTS_DIR" "$OVERRIDES_FILE" "$PROJECT_DIR" "$@" <<'PY'
 import json, re, sys
 from pathlib import Path
 
 agents_dir, overrides_path = Path(sys.argv[1]), Path(sys.argv[2])
-targets = sys.argv[3:]
+project = Path(sys.argv[3])
+targets = sys.argv[4:]
+directories = [agents_dir]
+local = project / ".opencode/agents"
+# El checkout fuente genera sus agentes: no contaminarlo con preferencias personales.
+if local.is_dir() and not (project / "agents-base").is_dir() and local.resolve() != agents_dir.resolve():
+    directories.append(local)
 
 overrides = {}
 if overrides_path.is_file():
     overrides = json.loads(overrides_path.read_text(encoding="utf-8") or "{}")
 
-for name in targets:
-    agent_file = agents_dir / f"{name}.md"
+for directory in directories:
+  for name in targets:
+    agent_file = directory / f"{name}.md"
     if not agent_file.is_file():
-        print(f"AVISO: {agent_file} no existe, se salta", file=sys.stderr)
+        if directory == agents_dir:
+            print(f"AVISO: {agent_file} no existe", file=sys.stderr)
         continue
     text = agent_file.read_text(encoding="utf-8")
-    parts = text.split("---", 2)
-    if len(parts) < 3:
-        print(f"AVISO: {agent_file} no tiene frontmatter reconocible, se salta", file=sys.stderr)
-        continue
-    front = parts[1]
-    front = re.sub(r"(?m)^model:.*\n", "", front)
+    header = re.match(r"\A---\r?\n(.*?)\r?\n---(?:\r?\n|$)", text, re.S)
     model = overrides.get(name)
-    if model:
-        # Despues de "mode:" si existe, si no al principio del frontmatter.
-        if re.search(r"(?m)^mode:.*$", front):
-            front = re.sub(r"(?m)^(mode:.*)$", r"\1\nmodel: " + model, front, count=1)
-        else:
-            front = f"\nmodel: {model}" + front
-    parts[1] = front
-    agent_file.write_text("---".join(parts), encoding="utf-8")
+    if not header:
+        if text.startswith('---'):
+            sys.exit(f"ERROR: frontmatter inválido: {agent_file}")
+        if not model:
+            continue
+        updated = f"---\nmodel: {model}\n---\n" + text
+    else:
+        lines = [line for line in header[1].splitlines() if not re.match(r'^model:', line)]
+        if model:
+            lines.append(f"model: {model}")
+        updated = "---\n" + "\n".join(lines) + "\n---\n" + text[header.end():]
+    if updated != text:
+        temporary = agent_file.with_name(agent_file.name + '.models-tmp')
+        temporary.write_text(updated, encoding="utf-8")
+        temporary.chmod(agent_file.stat().st_mode)
+        temporary.replace(agent_file)
+
 PY
 }
 
 cmd_show() {
-  local name f current
-  for name in "${AGENTS[@]}"; do
-    f="$AGENTS_DIR/$name.md"
-    if [ ! -f "$f" ]; then
-      printf '%-6s (no instalado)\n' "$name"
-      continue
-    fi
-    current="$(grep -m1 -E '^model:' "$f" 2>/dev/null | sed -E 's/^model:[[:space:]]*//' || true)"
-    if [ -n "$current" ]; then
-      printf '%-6s %s\n' "$name" "$current"
-    else
-      printf '%-6s (default de la sesión)\n' "$name"
-    fi
-  done
+  python3 - "$AGENTS_DIR" "$OVERRIDES_FILE" "${AGENTS[@]}" <<'PYSHOW'
+import json, re, sys
+from pathlib import Path
+agents, config = Path(sys.argv[1]), Path(sys.argv[2])
+overrides = json.loads(config.read_text()) if config.is_file() else {}
+for name in sys.argv[3:]:
+    path = agents / f'{name}.md'
+    if not path.is_file():
+        print(f'{name:<6} (no instalado)')
+        continue
+    text = path.read_text()
+    header = re.match(r'\A---\r?\n(.*?)\r?\n---(?:\r?\n|$)', text, re.S)
+    match = re.search(r'(?m)^model:\s*(.+)$', header[1]) if header else None
+    metadata = match[1].strip() if match else None
+    desired = overrides.get(name)
+    shown = desired or metadata or '(default de la sesión)'
+    drift = ' [JSON; archivo global desactualizado: ejecutar apply]' if desired and desired != metadata else ''
+    print(f'{name:<6} {shown}{drift}')
+PYSHOW
 }
 
 cmd_set() {
@@ -150,6 +172,12 @@ path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding=
 }
 
 cmd_apply() {
+  if [ "${1:-}" = "--project" ] && [ "$#" -eq 2 ]; then
+    PROJECT_DIR="$2"
+  elif [ "$#" -ne 0 ]; then
+    usage >&2
+    return 2
+  fi
   mkdir -p "$OPENCODE_DIR"
   apply_overrides "${AGENTS[@]}"
 }
@@ -206,7 +234,7 @@ case "${1:-show}" in
   fallback) shift; if [ "$#" -eq 0 ]; then set -- show; fi; cmd_fallback "$@" ;;
   set) shift; cmd_set "$@" ;;
   reset) shift; cmd_reset "$@" ;;
-  apply) cmd_apply ;;
+  apply) shift; cmd_apply "$@" ;;
   -h|--help) usage ;;
   *) echo "Subcomando desconocido: $1" >&2; usage >&2; exit 2 ;;
 esac

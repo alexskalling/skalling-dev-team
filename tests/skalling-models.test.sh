@@ -72,6 +72,12 @@ fi
 # apply reaplica lo que YA está en model-overrides.json sin tocar el JSON.
 BEFORE_JSON="$(cat "$TMP/model-overrides.json")"
 sed -i.bak '/^model:/d' "$TMP/agents/Teo.md" && rm -f "$TMP/agents/Teo.md.bak"
+DRIFT_SHOW="$(bash "$SCRIPT" show)"
+if grep -q '^Teo.*anthropic/claude-haiku-4-5-20251001.*desactualizado' <<< "$DRIFT_SHOW"; then
+  assert_pass "show informa modelo del JSON y detecta metadata desactualizada"
+else
+  assert_fail "show informa modelo del JSON y detecta metadata desactualizada"
+fi
 bash "$SCRIPT" apply >/dev/null
 AFTER_JSON="$(cat "$TMP/model-overrides.json")"
 if grep -q '^model: anthropic/claude-haiku-4-5-20251001$' "$TMP/agents/Teo.md" && \
@@ -123,6 +129,40 @@ if [ "$(cat "$TMP/model-fallbacks.json")" = '{}' ]; then
   assert_pass "fallback reset elimina política"
 else
   assert_fail "fallback reset elimina política"
+fi
+
+mkdir -p "$TMP/project/.opencode/agents"
+printf '%s\n' 'name: legacy-teo' 'model: gemini-2.5-flash' 'Keep project instructions.' > "$TMP/project/.opencode/agents/Teo.md"
+SKALLING_PROJECT_DIR="$TMP/project" bash "$SCRIPT" set Teo configured/current >/dev/null
+if python3 - "$TMP/project/.opencode/agents/Teo.md" <<'PYCHECK'
+from pathlib import Path
+import sys
+text=Path(sys.argv[1]).read_text()
+assert text.startswith('---\nmodel: configured/current\n---\n')
+assert text.endswith('Keep project instructions.\n')
+PYCHECK
+then
+  assert_pass "set sincroniza el agente local antiguo y conserva su prompt"
+else
+  assert_fail "set sincroniza el agente local antiguo y conserva su prompt"
+fi
+SKALLING_PROJECT_DIR="$TMP/project" bash "$SCRIPT" reset Teo >/dev/null
+if python3 - "$TMP/project/.opencode/agents/Teo.md" <<'PYCHECK'
+from pathlib import Path
+import sys
+assert 'model:' not in Path(sys.argv[1]).read_text().split('---')[1]
+PYCHECK
+then
+  assert_pass "reset elimina el modelo del frontmatter local"
+else
+  assert_fail "reset elimina el modelo del frontmatter local"
+fi
+bash "$SCRIPT" set Teo configured/current >/dev/null
+bash "$SCRIPT" apply --project "$TMP/project" >/dev/null
+if head -4 "$TMP/project/.opencode/agents/Teo.md" | grep -q 'model: configured/current'; then
+  assert_pass "apply --project corrige otro proyecto sin modificar sus instrucciones"
+else
+  assert_fail "apply --project corrige otro proyecto sin modificar sus instrucciones"
 fi
 
 if command -v shellcheck >/dev/null 2>&1; then

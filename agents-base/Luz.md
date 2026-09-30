@@ -408,6 +408,10 @@ permission:
     "go vet *": allow
     "npx --no-install tsc": allow
     "npx --no-install tsc *": allow
+    "pnpm tsc --noEmit": allow
+    "pnpm tsc --noEmit *": allow
+    "pnpm exec tsc --noEmit": allow
+    "pnpm exec tsc --noEmit *": allow
     "npx --no-install eslint": allow
     "npx --no-install eslint *": allow
     "npx --no-install vitest": allow

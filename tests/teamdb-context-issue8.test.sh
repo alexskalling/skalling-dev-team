@@ -76,8 +76,8 @@ if [ "$DISC" = "FOUND" ]; then
 else
   assert_fail "discovery encuentra rate-limit" "out=$CAPSULE"
 fi
-# Sin --discover, NO debe aparecer rate-limit (no linkeado)
-CAPSULE2=$(bash "$ROOT/scripts/teamdb-context.sh" for-task "i8" "task-1" "$TEST_DIR" 2>&1)
+# Con --linked-only, NO debe aparecer rate-limit (no linkeado)
+CAPSULE2=$(bash "$ROOT/scripts/teamdb-context.sh" for-task "i8" "task-1" --linked-only "$TEST_DIR" 2>&1)
 DISC2=$(echo "$CAPSULE2" | python3 -c "
 import json, sys
 d = json.loads(sys.stdin.read())
@@ -85,9 +85,9 @@ disc = [x for x in d['concepts'] if x['slug']=='rate-limit']
 print('FOUND' if disc else 'NOT_FOUND')
 ")
 if [ "$DISC2" = "NOT_FOUND" ]; then
-  assert_pass "sin --discover no incluye no-linkeados"
+  assert_pass "--linked-only no incluye no-linkeados"
 else
-  assert_fail "sin --discover no incluye no-linkeados" "out=$CAPSULE2"
+  assert_fail "--linked-only no incluye no-linkeados" "out=$CAPSULE2"
 fi
 
 # ─── Case C: top-k duro por categoría

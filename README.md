@@ -2,9 +2,13 @@
 
 Skalling es un equipo de **8 agentes de IA** que trabajan juntos adentro de [OpenCode](https://opencode.ai). Cada agente tiene un rol específico y siguen un ciclo ordenado para construir software bien hecho.
 
-**Versión actual: 0.15.1**
+**Versión actual: 0.15.2**
 
-La versión 0.15.1 añade respaldos de modelo configurables ante errores del proveedor,
+La versión 0.15.2 entrega contexto automáticamente con cada workflow, actualiza
+los protocolos instalados y corrige bloqueos de permisos, modelos y lectura de
+TeamDB. Las búsquedas y escrituras por lotes reducen trabajo repetido.
+
+Desde 0.15.1 hay respaldos de modelo configurables ante errores del proveedor,
 timeouts y salida inválida en OpenCode 2.0.18. Ver [configuración y límites](command/skalling-models.md).
 
 Desde 0.15.0 cada funcionalidad conserva el pedido original y sus resultados
@@ -146,7 +150,7 @@ Instalar **siempre un release publicado** (`vX.Y.Z`), nunca `main`. La lista est
 **1. Instalar (una vez por máquina)**
 
 ```bash
-VERSION=v0.15.1   # último release publicado
+VERSION=v0.15.2   # último release publicado
 git clone --branch "$VERSION" --depth 1 https://github.com/alexskalling/skalling-dev-team.git ~/skalling-dev-team
 bash ~/skalling-dev-team/install-global.sh
 ```
@@ -171,7 +175,7 @@ config locales, que reemplazan a los globales) y el paso 3.
 **Windows** (Git Bash o WSL2, no nativo; en CI solo tiene smoke test):
 
 ```powershell
-git clone --branch v0.15.1 --depth 1 https://github.com/alexskalling/skalling-dev-team.git $HOME\skalling-dev-team
+git clone --branch v0.15.2 --depth 1 https://github.com/alexskalling/skalling-dev-team.git $HOME\skalling-dev-team
 .\skalling-dev-team\install-global.ps1
 ```
 

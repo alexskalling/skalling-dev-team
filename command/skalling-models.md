@@ -19,14 +19,24 @@ bash "$SK_ROOT/scripts/skalling-models.sh" "$@"
 ```
 
 Uso:
-- `/skalling-models` o `/skalling-models show` — modelo actual de cada agente.
+- `/skalling-models` o `/skalling-models show` — asignación guardada; avisa si el archivo global está desactualizado.
 - `/skalling-models set Alex anthropic/claude-opus-5` — asigna un modelo a un agente.
 - `/skalling-models reset Alex` — vuelve ese agente al default de la sesión.
 - `/skalling-models reset` — vuelve los 8 agentes al default de la sesión.
+- `/skalling-models apply` — sincroniza los agentes globales y los del proyecto actual desde el JSON.
+- `/skalling-models apply --project /ruta/proyecto` — sincroniza otro proyecto concreto.
 
 La asignación queda en `model-overrides.json`, en tu instalación global (no en el
 repo de Skalling) — sobrevive a un `/skalling-update` o reinstalación, porque
 install-global.sh la vuelve a aplicar después de regenerar los agentes.
+
+`set`, `reset` y `apply` actualizan también los agentes locales existentes del
+proyecto actual, conservando sus permisos e instrucciones. El checkout fuente de
+Skalling conserva sus agentes generados sin preferencias personales. No edites
+`model:` a mano ni uses stash para cambiar modelos: usa este comando. Un `model:`
+en el cuerpo del Markdown no configura OpenCode; debe estar en su cabecera.
+Reinicia OpenCode para cargar los archivos actualizados. Una sesión ya abierta
+conserva su propia selección de modelo; `show` no certifica el modelo de esa sesión.
 
 ## Recuperación automática (0.15.1)
 

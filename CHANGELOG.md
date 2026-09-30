@@ -4,6 +4,47 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.15.2] - 2026-09-30
+
+### Fixed
+- `start/status/ready` entregan contexto acotado automáticamente. `for-task`
+  descubre memoria por defecto; `--linked-only` conserva la selección explícita.
+  Ambos caminos comparten revisiones `read_key`; `context_seen`/`--seen` solo
+  omiten cuerpos que el propio agente aún conserva, nunca por lecturas ajenas.
+- El contexto distingue el README de plantilla de Next.js de la descripción
+  del producto y consulta metadata real cuando corresponde.
+- Vigencia detecta cambios en fuentes anidadas sin releer su contenido completo.
+  La memoria humana y sus revisiones pendientes se preservan.
+- `skalling-project-config.py --sync-agents` actualiza protocolos locales con
+  backup, conserva modelos/permisos y detecta modificaciones personalizadas.
+  El inicio de sesión avisa de agentes desactualizados.
+- Búsqueda usa una conexión de lectura sin bloquear escritores. Memoria admite
+  `batch '[["concept","slug","Título","Cuerpo"],...]'`: transacción atómica,
+  un dump por lote y sin nuevas revisiones para contenido idéntico.
+- Métricas registran bytes de contexto y consumo de sesiones reanudadas sin
+  duplicar hijos; corrige acumuladores NULL. Resume usa objetivos persistidos
+  y no selecciona silenciosamente el workflow más reciente.
+- Teo, Jhon y Luz pueden ejecutar `pnpm tsc --noEmit` y `pnpm exec tsc --noEmit`
+  sin aprobación repetida; se conservan las restricciones de ejecución arbitraria.
+- Al retomar sin asociación de workflow en memoria, el guard indica consultar
+  `status` del pedido existente antes de delegar; no confunde un reinicio con
+  la ausencia del plan ni manda crear un workflow duplicado.
+- `skalling-models set/reset/apply` sincroniza el JSON con agentes globales y
+  del proyecto actual; `apply --project` permite corregir otra instalación.
+  `show` distingue la asignación del JSON de metadata global desactualizada.
+  Ya no interpreta un `model:` dentro del cuerpo del prompt como configuración.
+- Los permisos del proyecto incluyen todas las suites disponibles en `testing`,
+  con ambas formas de invocar scripts `pnpm test:*`; no habilitan runners arbitrarios.
+- Los agentes antiguos sin cabecera reciben los permisos del proyecto sin perder
+  sus instrucciones; el chequeo ya no omite esa diferencia silenciosamente.
+- `rescope` documenta la justificación obligatoria y, si falta, indica corregir
+  el payload en vez de recomendar seguir implementando.
+- El guard puede leer TeamDB en WAL desde OpenCode/Bun cuando faltan los
+  archivos auxiliares. Recupera la apertura con `query_only=ON`, conserva
+  el estado vigente y distingue fallo de lectura de ausencia de drivers.
+- El rechazo de delegación indica diagnosticar TeamDB y reintentar con Teo;
+  no recomienda cambiar de rol ni ofrecer un bypass.
+
 ## [0.15.1] - 2026-09-30
 
 ### Added
@@ -1629,7 +1670,8 @@ Sesiones que pedían "plan X" generaban `.md` huérfanos en `.opencode/changes/<
 - Templates OKF (6 tipos: Concept, Decision, Preference, Workaround, WorkInProgress, Context)
 - `setup.sh` inicial (legacy, sin idempotencia)
 
-[Unreleased]: https://github.com/alexskalling/skalling-dev-team/compare/v0.15.1...HEAD
+[Unreleased]: https://github.com/alexskalling/skalling-dev-team/compare/v0.15.2...HEAD
+[0.15.2]: https://github.com/alexskalling/skalling-dev-team/compare/v0.15.1...v0.15.2
 [0.15.1]: https://github.com/alexskalling/skalling-dev-team/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/alexskalling/skalling-dev-team/compare/5540f3e9221210e91a12db77cac27b744199ed75...v0.15.0
 [0.10.4]: https://github.com/alexskalling/skalling-dev-team/compare/v0.10.3...v0.10.4

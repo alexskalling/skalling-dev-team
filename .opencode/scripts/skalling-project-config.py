@@ -8,7 +8,7 @@
   solo existía como config GLOBAL y se instalaba únicamente si no había una:
   los cambios de permisos no llegaban a instalaciones existentes.
 
-- comandos de tests del proyecto: los de testing.unit/testing.fast de
+- comandos de tests del proyecto: los disponibles en testing de
   .opencode/project.yaml quedan permitidos para Teo, Jhon y Luz del proyecto.
   En OpenCode las reglas se aplican global → proyecto → agente y gana la
   última: un allow en la config del proyecto lo pisaba el `"python3 *": ask`
@@ -17,17 +17,21 @@
 
 Mezcla sin pisar el resto de la config del usuario.
 
-Uso: skalling-project-config.py <proyecto> [--check | --remove]
+Uso: skalling-project-config.py <proyecto> [--check | --remove | --sync-agents]
+  --sync-agents actualiza los prompts locales con backup; conserva sus cabeceras.
   --remove  (desinstalación) devuelve build/plan/general y el agente por
             defecto de OpenCode; conserva los permisos, que solo restringen.
 """
 import json
+import hashlib
+import datetime
+import os
 from pathlib import Path
 import re
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from skalling_config import testing_config  # noqa: E402
+from skalling_config import TESTING_KINDS, testing_config  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 DISABLED = ('build', 'plan', 'general')
@@ -37,8 +41,66 @@ END = '    # skalling: comandos de tests del proyecto (fin)'
 UNSAFE = re.compile(r'[;&|<>`$\n\r\\]|\b(?:rm|sudo|curl|wget|ssh|scp|chmod|chown|dd|mkfs|eval|git\s+push)\b')
 
 
+def agent_body(text):
+    if text.startswith('---\n') and '\n---\n' in text[4:]:
+        return text[4:].split('\n---\n', 1)[1]
+    return text
+
+
+def agent_sources():
+    directory = ROOT / ('.opencode/agents' if (ROOT / 'agents-base').is_dir() else 'agents')
+    return [directory / (name + '.md') for name in ('Alex', 'Pol', 'Sol', 'Teo', 'Jhon', 'Luz', 'Pau', 'Jes')]
+
+
+def sync_agents(project, force=False, check=False):
+    """Update managed bodies; preserve headers/models and back up every change.
+
+    A custom body is reported, never silently replaced during normal updates.
+    --sync-agents explicitly adopts the installed protocol after backing it up.
+    """
+    if (project / 'agents-base').is_dir():
+        return []
+    target = project / '.opencode/agents'
+    manifest = target / '.skalling-sync.json'
+    hashes = json.loads(manifest.read_text()) if manifest.is_file() else {}
+    drift = []
+    for source in agent_sources():
+        path = target / source.name
+        if not source.is_file() or not path.is_file():
+            continue  # Projects without a local override inherit the global agent.
+        old = path.read_text()
+        body = agent_body(old)
+        wanted = agent_body(source.read_text())
+        digest = hashlib.sha256(body.encode()).hexdigest()
+        if body == wanted:
+            if not check:
+                hashes[source.name] = digest
+            continue
+        if check or not (force or hashes.get(source.name) == digest):
+            drift.append(source.stem)
+            continue
+        stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+        backup = project / '.opencode/.skalling-backups/agents' / stamp / source.name
+        backup.parent.mkdir(parents=True, exist_ok=True)
+        backup.write_text(old)
+        header = old[:-len(body)] if body else old
+        if not header:
+            rendered = source.read_text()
+            header = rendered[:-len(wanted)] if wanted else rendered
+        # Refuse to overwrite an editor's concurrent change.
+        if path.read_text() != old:
+            raise SystemExit(f'ERROR: {path} cambió durante la sincronización; reintentar')
+        temporary = path.with_suffix('.md.skalling-tmp')
+        temporary.write_text(header + wanted)
+        os.replace(temporary, path)
+        hashes[source.name] = hashlib.sha256(wanted.encode()).hexdigest()
+    if not check and target.is_dir():
+        manifest.write_text(json.dumps(hashes, indent=2) + '\n')
+    return drift
+
+
 def configured_commands(project):
-    """testing.unit/testing.fast disponibles de project.yaml (parser único:
+    """Comandos de testing disponibles de project.yaml (parser único:
     skalling_config). {files} se convierte en comodín."""
     # El repo fuente de Skalling genera sus .opencode/agents desde
     # agents-base (render-agent.sh): tocarlos rompería la paridad.
@@ -46,10 +108,18 @@ def configured_commands(project):
         return []
     config = testing_config(project / '.opencode/project.yaml')
     commands = []
-    for name in ('unit', 'fast'):
+    for name in TESTING_KINDS:
         value = config.get(name, '').replace('{files}', '*').strip()
         if value and not UNSAFE.search(value) and value not in commands:
             commands.append(value)
+            # pnpm permite omitir `run` para scripts test:*; ambos nombres
+            # deben tener el mismo permiso, sin autorizar `pnpm run *`.
+            alias = re.fullmatch(r'pnpm (?:run )?(test:[\w:.-]+)(.*)', value)
+            if alias and (not alias[2] or alias[2].startswith(' ')):
+                for prefix in ('pnpm ', 'pnpm run '):
+                    equivalent = prefix + alias[1] + alias[2]
+                    if equivalent not in commands:
+                        commands.append(equivalent)
     return commands
 
 
@@ -69,13 +139,19 @@ def patched_agent(text, rules):
     """Reemplaza las líneas marcadas por las vigentes, al FINAL del bloque bash
     del frontmatter (gana la última regla que coincide)."""
     if not text.startswith('---\n'):
-        return text
+        # Instalaciones antiguas tienen solo el cuerpo del prompt. Antes se
+        # omitían silenciosamente, incluso en --check: nunca recibían permisos.
+        if not rules:
+            return text
+        return '---\npermission:\n  bash:\n' + '\n'.join(rules) + '\n---\n' + text
     head, sep, rest = text[4:].partition('\n---\n')
     if not sep:
         return text
     lines = head.split('\n')
     if BEGIN in lines and END in lines and lines.index(BEGIN) < lines.index(END):
         del lines[lines.index(BEGIN):lines.index(END) + 1]
+        if not rules and lines == ['permission:', '  bash:']:
+            return rest
     if '  bash:' not in lines:
         return text
     end = lines.index('  bash:') + 1
@@ -172,6 +248,9 @@ def main():
         missing = [key for key in ('default_agent', 'agent', 'permission') if current.get(key) != wanted[key]]
         if test_command_drift(project):
             missing.append('comandos de tests en ' + ', '.join(test_command_drift(project)))
+        drift = sync_agents(project, check=True)
+        if drift:
+            missing.append('protocolo de agentes: ' + ', '.join(drift) + ' (usar --sync-agents; conserva backup)')
         if missing:
             print('DRIFT: ' + ', '.join(missing))
             sys.exit(1)
@@ -179,6 +258,9 @@ def main():
         return
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(wanted, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+    drift = sync_agents(project, force='--sync-agents' in sys.argv[2:])
+    if drift:
+        print('DRIFT: prompts locales preservados: ' + ', '.join(drift) + '; --sync-agents los actualiza con backup')
     apply_test_commands(project)
     print(f'OK: {path}')
 

@@ -421,13 +421,19 @@ def runtime_usage(session, since, until):
             tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             if not {'session_v2', 'session_message'} <= tables:
                 return None
-            rows = con.execute("""
-                WITH RECURSIVE tree(id) AS (
-                  SELECT id FROM session_v2 WHERE id = ?
-                  UNION SELECT s.id FROM session_v2 s JOIN tree ON s.parent_id = tree.id)
-                SELECT m.session_id, m.data FROM session_message m JOIN tree ON m.session_id = tree.id
-                WHERE m.type = 'assistant' AND m.time_created BETWEEN ? AND ?""",
-                (session, int(since * 1000), int(until * 1000))).fetchall()
+            roots = session if isinstance(session, dict) else {session: since}
+            windows = []
+            for sid, started in roots.items():
+                windows.extend((sid, int(started * 1000)))
+            placeholders = ','.join('(?,?)' for _ in roots)
+            rows = con.execute(f"""
+                WITH RECURSIVE tree(id, since) AS (
+                  VALUES {placeholders}
+                  UNION SELECT s.id, tree.since FROM session_v2 s JOIN tree ON s.parent_id = tree.id),
+                windows AS (SELECT id, MIN(since) since FROM tree GROUP BY id)
+                SELECT m.session_id, m.data FROM session_message m JOIN windows ON m.session_id = windows.id
+                WHERE m.type = 'assistant' AND m.time_created BETWEEN windows.since AND ?""",
+                (*windows, int(until * 1000))).fetchall()
         finally:
             con.close()
     except sqlite3.Error:
@@ -451,6 +457,39 @@ def runtime_usage(session, since, until):
     usage['agents'] = sorted(usage['agents'])
     usage['sessions'] = len(usage['sessions'])
     return usage
+
+
+def workflow_usage(db, state, now):
+    roots = {state['start_session']: state['started_at']} if state.get('start_session') else {}
+    for session, started in db.execute('SELECT session,MIN(ts) FROM agent_workflow_events WHERE request_id=? GROUP BY session', (state['id'],)):
+        if session:
+            roots[session] = min(roots.get(session, started), started)
+    return runtime_usage(roots, state['started_at'], now)
+
+
+def context_response(db, root, state, payload):
+    """Deliver bounded memory at handoff; exact read keys belong to this caller.
+
+    Never persist a shared 'seen' cache: another agent or a compacted session
+    needs the full body again. Metrics measure bytes, never invented tokens.
+    """
+    from skalling_context import request_context, task_context
+    seen = payload.get('context_seen', [])
+    require(isinstance(seen, list) and len(seen) <= 200 and all(isinstance(k, str) for k in seen),
+            'context_seen must be the read_keys whose bodies are still in your own context')
+    if state.get('task'):
+        plan, task = state['task'].split('/', 1)
+        capsule = task_context(db, root, plan, task, seen=seen)
+    else:
+        capsule = request_context(db, root, state.get('intent') or state['acceptance'],
+                                  visual=state.get('visual', False),
+                                  options=[*state['files'], *('seen:' + k for k in seen)])
+    if db.execute("SELECT 1 FROM sqlite_master WHERE name='workflow_metrics'").fetchone():
+        size = len(json.dumps(capsule, ensure_ascii=False, separators=(',', ':')).encode())
+        db.execute('UPDATE workflow_metrics SET context_bytes=COALESCE(context_bytes,0)+? WHERE request_id=?',
+                   (size, state['id']))
+        db.commit()
+    return {**with_next_step(state), 'context': capsule}
 
 
 def record_finish_metrics(db, identifier, duration_ms, handoffs, usage=None, retries=0):
@@ -518,12 +557,12 @@ def ensure_tables(root, path):
 
 
 def save(db, identifier, actor, session, action, state, evidence, now):
-    if actor != AUTO_VERIFIER and action != 'feedback':
+    if actor != AUTO_VERIFIER and action not in {'feedback', 'status'}:
         state['handoffs'] += int(state.get('actor', actor) != actor)
         state['actor'] = actor
     state['updated_at'] = now
-    if action in {'deliver', 'check', 'approve', 'reject', 'reuse'}:
-        state['usage'] = runtime_usage(state.get('start_session'), state['started_at'], now)
+    if action in {'ready', 'deliver', 'check', 'approve', 'reject', 'reuse', 'status'}:
+        state['usage'] = workflow_usage(db, state, now)
     if action != 'feedback' and db.execute("SELECT 1 FROM sqlite_master WHERE name='workflow_metrics'").fetchone():
         db.execute('UPDATE workflow_metrics SET duration_ms=?, handoffs=?, retries=? WHERE request_id=?',
                    (round((now - state['started_at']) * 1000), state['handoffs'],
@@ -846,7 +885,11 @@ def operate(request):
         if action == 'status':
             state = read(db, identifier)
             require(state is not None, 'Unknown workflow')
-            return with_next_step(state)
+            if state['state'] not in TERMINAL:
+                now = time.time()
+                save(db, identifier, actor, session, 'status', state, '', now)
+                db.commit()
+            return context_response(db, root, state, payload)
         if action == 'evidence':
             state = read(db, identifier)
             require(state is not None, 'Unknown workflow')
@@ -970,7 +1013,13 @@ def operate(request):
                         'Only Teo widens scope, and only before an approval is trusted')
                 added = payload.get('files', [])
                 require(isinstance(added, list) and added and all(isinstance(f, str) for f in added), 'Enumerated files required')
-                require(bool(str(evidence).strip()), 'Rescope requires evidence explaining the additional files')
+                require(bool(str(evidence).strip()),
+                        'Rescope requires evidence explaining the additional files. '
+                        f"Estado del workflow: {state['state']}. "
+                        'Siguiente paso: Teo: reintenta rescope con el mismo id, files y '
+                        'evidence (texto que relaciona los archivos nuevos con el objetivo). '
+                        'Completa la justificación técnica con lo observado; no pidas al usuario '
+                        'rellenar este campo. Si cambia una decisión de producto, consúltala con Alex')
                 widened = sorted(set(state['files']) | set(added))
                 require(widened != state['files'], 'Rescope must add at least one new file')
                 for name in widened:
@@ -1084,7 +1133,7 @@ def operate(request):
                 verifier = (state.get('verification') or {}).get('agent', 'jhon')
                 state['receipt_tree_hash'] = (seal_receipt(db, root, identifier, state['files'], verifier, state['digest'])
                                               or state.get('receipt_tree_hash'))
-                state['usage'] = runtime_usage(state.get('start_session'), state['started_at'], now)
+                state['usage'] = workflow_usage(db, state, now)
                 record_finish_metrics(db, identifier, state['duration_ms'], state['handoffs'], state['usage'],
                                       state.get('rejection_count', 0))
             else:
@@ -1093,7 +1142,7 @@ def operate(request):
         db.commit()
         if action == 'deliver' and state['state'] == 'verification_ready' and state.get('auto_verify'):
             state = auto_verify(db, root, identifier, session)
-        return with_next_step(state)
+        return context_response(db, root, state, payload) if action in {'start', 'ready'} else with_next_step(state)
     except ValueError as error:
         # El rechazo dice además en qué estado está el pedido y quién sigue.
         db.rollback()
@@ -1120,7 +1169,7 @@ def public_response(state):
               'task', 'plan_id', 'digest', 'delivery_number', 'next_step', 'receipt_tree_hash',
               'duration_ms', 'execution_mode', 'memory_required', 'planning_required',
               'last_rejection', 'blocked_reason', 'rejection_count', 'oracle',
-              'intent', 'outcomes', 'coverage', 'human_corrections', 'user_acceptance', 'usage', 'auto_verify')
+              'intent', 'outcomes', 'coverage', 'human_corrections', 'user_acceptance', 'usage', 'auto_verify', 'context')
     response = {key: state[key] for key in fields if key in state}
     response['next_step'] = next_step(state)
     response['recommended_action'] = next_action(state)

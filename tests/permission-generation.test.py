@@ -7,6 +7,23 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class Generation(unittest.TestCase):
+    def test_local_pnpm_typecheck_is_allowed_without_opening_arbitrary_exec(self):
+        import fnmatch
+        policy = json.loads((ROOT / 'data/permission-policy.json').read_text())
+        def decision(role, command):
+            profile = policy['profiles'][role]
+            effect = 'ask'
+            for pattern in profile['bash_patterns']:
+                if fnmatch.fnmatchcase(command, pattern):
+                    effect = profile['overrides'].get(pattern, policy['rules'][pattern])
+            return effect
+        for role in ('Teo', 'Jhon', 'Luz', 'project'):
+            for command in ('pnpm tsc --noEmit', 'pnpm exec tsc --noEmit',
+                            'pnpm tsc --noEmit --pretty false', 'head -30'):
+                self.assertEqual(decision(role, command), 'allow', (role, command))
+            self.assertEqual(decision(role, 'pnpm exec arbitrary-script'), 'ask')
+            self.assertEqual(decision(role, 'head .env'), 'ask')
+
     def test_distributed_permissions_are_generated_from_policy(self):
         result = subprocess.run(['python3', str(ROOT / 'scripts/permission-policy.py'), '--check'],
                                 cwd=ROOT, capture_output=True, text=True)

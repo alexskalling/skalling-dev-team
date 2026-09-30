@@ -799,26 +799,60 @@ function projectRoot(directory) {
   }
 }
 
-// Driver sqlite del runtime: node:sqlite (Node ≥ 22.5) o bun:sqlite (el
-// runtime de OpenCode v2). Se resuelve una vez; si el runtime no trae ninguno,
-// no se puede verificar el estado y se falla cerrado.
-let sqliteOpeners;
-function openReadOnly(dbPath) {
-  if (sqliteOpeners === undefined) {
-    sqliteOpeners = [];
-    for (const spec of ['node:sqlite', 'bun:sqlite']) {
+// Use the native driver and its exact option names. Node silently ignores
+// Bun's `readonly`; probing spellings could accidentally open a writable DB.
+let sqliteDrivers;
+function availableSqliteDrivers() {
+  if (sqliteDrivers !== undefined) return sqliteDrivers;
+  sqliteDrivers = [];
+  for (const spec of ['bun:sqlite', 'node:sqlite']) {
+    try {
+      const module = requireModule(spec);
+      const bun = spec === 'bun:sqlite';
+      const Open = bun ? module.Database : module.DatabaseSync;
+      if (typeof Open === 'function') sqliteDrivers.push({Open,
+        read: bun ? {readonly:true,create:false} : {readOnly:true},
+        auxiliary: bun ? {readwrite:true,create:false} : {readOnly:false}});
+    } catch { /* This runtime may provide only one native driver. */ }
+  }
+  return sqliteDrivers;
+}
+
+function walNeedsAuxiliary(error, dbPath) {
+  if (!/unable to open database file/i.test(String(error?.message || error))) return false;
+  const header = Buffer.alloc(20);
+  const fd = fs.openSync(dbPath, 'r');
+  try {
+    return fs.readSync(fd, header, 0, 20, 0) === 20 &&
+      header.subarray(0,16).toString() === 'SQLite format 3\0' && header[18] === 2 && header[19] === 2;
+  } finally { fs.closeSync(fd); }
+}
+
+export function readWorkflowRow(dbPath, id, drivers = availableSqliteDrivers()) {
+  if (!drivers.length) throw new Error('SQLITE_DRIVER_UNAVAILABLE: OpenCode no expone bun:sqlite ni node:sqlite');
+  let failure;
+  for (const driver of drivers) {
+    const query = options => {
+      let db;
       try {
-        const Open = requireModule(spec).DatabaseSync || requireModule(spec).Database;
-        if (typeof Open === 'function') sqliteOpeners.push(Open);
-      } catch { /* driver ausente en este runtime */ }
+        db = new driver.Open(dbPath, options);
+        // Connection-local: disallow SQL writes even when SQLite needs an
+        // existing-file RW handle to initialize WAL/SHM. No immutable reads:
+        // they could miss a committed rejection still present in the WAL.
+        db.exec('PRAGMA query_only=ON');
+        return db.prepare(WORKFLOW_STATE_QUERY).get(id);
+      } finally { db?.close(); }
+    };
+    try { return query(driver.read); }
+    catch (error) {
+      failure = error;
+      if (walNeedsAuxiliary(error, dbPath)) {
+        try { return query(driver.auxiliary); }
+        catch (recoveryError) { failure = recoveryError; }
+      }
     }
   }
-  for (const Open of sqliteOpeners) {
-    for (const options of [{ readOnly: true }, { readonly: true }]) {
-      try { return new Open(dbPath, options); } catch { /* siguiente driver u opciones */ }
-    }
-  }
-  return null;
+  throw failure;
 }
 
 // { ok: true, state } con el estado vigente, { ok: true, state: null } si el
@@ -829,18 +863,13 @@ export function teamdbWorkflowState(id, directory) {
   if (!root) return { ok: true, state: null };
   const dbPath = path.join(root, '.opencode', 'context', 'team.db');
   if (!fs.existsSync(dbPath)) return { ok: true, state: null };
-  let db = null;
   try {
-    db = openReadOnly(dbPath);
-    if (!db) return { ok: false, reason: 'el runtime no abre sqlite de solo lectura' };
-    const row = db.prepare(WORKFLOW_STATE_QUERY).get(id);
+    const row = readWorkflowRow(dbPath, id);
     if (!row) return { ok: true, state: null };
     const state = JSON.parse(String(row.body || '')).state;
     return typeof state === 'string' && state ? { ok: true, state } : { ok: true, state: null };
   } catch (error) {
     return { ok: false, reason: String(error?.message || error) };
-  } finally {
-    try { db?.close(); } catch { /* ya cerrada */ }
   }
 }
 
@@ -942,8 +971,12 @@ export function createCore(options = {}) {
       if (target === 'teo') {
         const current = workflows.get(sessionID);
         if (!current) {
-          return 'Sin workflow no se delega implementación: skalling_workflow start (Alex) con riesgo, alcance, '
-            + 'archivos, aceptación y reutilización. Una decisión pendiente se resuelve con el usuario antes.';
+          return 'Esta sesión todavía no observó un workflow; no demuestra que el workflow no exista. '
+            + 'Si estás retomando un pedido, Alex consulta skalling_workflow status con payload {"id":"ID_EXISTENTE"} '
+            + 'usando el id del pedido, y reintenta la delegación con ese mismo id si queda implementation_ready. '
+            + 'Esto recupera la asociación tras un reinicio sin recrear el plan ni pedir aprobación otra vez. '
+            + 'Solo para un pedido nuevo usá skalling_workflow start con riesgo, alcance, archivos, aceptación y reutilización; '
+            + 'no elijas otro workflow por ser el más reciente.';
         }
         // El estado vigente de TeamDB manda sobre el mapa local (MEDIA-2): tras
         // el reject de Jhon el mapa de Alex seguía diciendo implementation_ready.
@@ -952,8 +985,9 @@ export function createCore(options = {}) {
         const live = readState(current.id, directory) || { ok: true, state: null };
         if (live.ok === false) {
           return `No se pudo verificar el estado del workflow ${current.id} en TeamDB (${live.reason}): se falla `
-            + 'cerrado y no se delega implementación a ciegas. Reintentá, o pedile a Jhon skalling_workflow status '
-            + 'para confirmar el estado vigente.';
+            + 'cerrado y no se delega implementación a ciegas. Diagnosticar la lectura de TeamDB en este runtime; '
+            + 'este error no prueba que falte SQLite. No cambiar a Pol/Alex ni ofrecer bypass. '
+            + 'Después de corregir la lectura, reintentar la misma delegación a Teo.';
         }
         const vigente = [live.state, current.state].find((s) => s && s !== 'implementation_ready')
           || current.state;

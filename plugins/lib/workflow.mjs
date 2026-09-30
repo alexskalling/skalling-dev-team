@@ -58,7 +58,7 @@ async function handle(args, runtime, execute) {
     session:runtime.sessionID, action:args.action, payload}, runtime.signal));
 }
 
-const WORKFLOW_DESCRIPTION = 'Autoridad del flujo: start requiere intent (pedido original), files, acceptance, reuse; outcomes [{id,expected}] separa resultados múltiples. Seguir recommended_action de cada respuesta y last_rejection, máximo tres entregas. focused para local claro sin plan/memoria; staged para el resto. Teo deliver ejecuta auto_verify cuando existe: no duplicar ese comando antes. Jhon oracle → check → approve; Luz según riesgo, Pau según estado. approve y cierre automático requieren coverage [{outcome_id,check_index,observation}] para TODOS los outcomes; un verde genérico no demuestra el pedido. check configured=true usa configuración congelada; reusable=true solo pruebas deterministas locales; Luz reuse check_index con evidence. evidence recupera un log. ready requiere plan_id aprobado. prepare_commit de Teo/Jhon/Luz sella unidad verificada; luego commit local permitido, push solo autorizado. Alex complete cierra; feedback registra feedback_id de mensaje humano, kind accepted/correction/scope_change/new_task y evidence sin inferir satisfacción. Payload con id; identidad la aporta el runtime.';
+const WORKFLOW_DESCRIPTION = 'Autoridad del flujo: start requiere intent (pedido original), files, acceptance, reuse; outcomes [{id,expected}] separa resultados múltiples. Seguir recommended_action de cada respuesta y last_rejection, máximo tres entregas. focused para local claro sin plan/memoria; staged para el resto. Teo deliver ejecuta auto_verify cuando existe: no duplicar ese comando antes. Jhon oracle → check → approve; Luz según riesgo, Pau según estado. approve y cierre automático requieren coverage [{outcome_id,check_index,observation}] para TODOS los outcomes; un verde genérico no demuestra el pedido. check configured=true usa configuración congelada; reusable=true solo pruebas deterministas locales; Luz reuse check_index con evidence. evidence recupera un log. ready requiere plan_id aprobado. rescope requiere files adicionales y evidence: por qué son necesarios para el objetivo; Teo completa esa justificación técnica. prepare_commit de Teo/Jhon/Luz sella unidad verificada; luego commit local permitido, push solo autorizado. Alex complete cierra; feedback registra feedback_id de mensaje humano, kind accepted/correction/scope_change/new_task y evidence sin inferir satisfacción. Al retomar una sesión, Alex consulta status con el id existente antes de delegar; no repite start ni crea otro plan. start/status/ready entregan context automáticamente; no repetir for-task/for-request si ya está. status context_seen omite solo revisiones que aún tienes completas. Payload con id; identidad la aporta el runtime.';
 
 export function workflowTool(tool, execute = run) {
   return tool({
@@ -157,6 +157,7 @@ const text = { type: 'string' };
 const PAYLOAD_SCHEMA = {
   type: 'object',
   properties: {
+    context_seen: {type: 'array', items: text, description: 'read_keys cuyos cuerpos completos siguen en TU contexto; vacío después de compacción o en otro agente.'},
     id: text, risk: { type: 'string', enum: ['low', 'medium', 'high'] },
     scope: { type: 'string', enum: ['local', 'module', 'cross-cutting'] },
     clarity: { type: 'string', enum: ['clear', 'ambiguous'] },
@@ -166,7 +167,7 @@ const PAYLOAD_SCHEMA = {
     outcomes: {type: 'array', items: {type: 'object', properties: {id: text, expected: text}, required: ['id', 'expected']}},
     coverage: {type: 'array', items: {type: 'object', properties: {outcome_id: text, check_index: {type: 'integer'}, observation: text}, required: ['outcome_id', 'check_index', 'observation']}},
     feedback_id: text, kind: {type: 'string', enum: ['accepted', 'correction', 'scope_change', 'new_task']},
-    acceptance: text, reuse: text, intent: text, task: text, supersedes: text, evidence: text,
+    acceptance: text, reuse: text, intent: text, task: text, supersedes: text, evidence: {type: 'string', description: 'En rescope es obligatorio: explica por qué cada archivo o grupo añadido es necesario para el objetivo.'},
     plan_id: { type: 'integer' }, method: text, criterion: text, expected: text, negative: text,
     invariant: text, refutation: text, findings: text, configured: { type: 'boolean' },
     execution_mode: { type: 'string', enum: ['focused', 'staged'] },

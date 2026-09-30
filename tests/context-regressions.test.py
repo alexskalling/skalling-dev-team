@@ -68,6 +68,19 @@ class ContextRegression(unittest.TestCase):
         (self.project / 'README.md').write_text('# Changed purpose')
         self.assertEqual(json.loads(self.capsule('contexto').stdout)['freshness']['status'], 'stale')
 
+    def test_bootstrap_does_not_mistake_next_template_for_product_purpose(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('bootstrap', ROOT / 'scripts/skalling-bootstrap-context.py')
+        bootstrap = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(bootstrap)
+        (self.project / 'README.md').write_text('This project was bootstrapped with create-next-app.\nFirst, run the development server.\n')
+        (self.project / 'app').mkdir()
+        (self.project / 'app/layout.tsx').write_text('const metadata = {title: "AIDA - Gestor de presupuestos", description: "Aplicación SKLN"}')
+        description, source = bootstrap.source_description(self.project, {}, 'nextjs')
+        self.assertIn('Gestor de presupuestos', description)
+        self.assertEqual(source, 'app/layout.tsx')
+        self.assertNotIn('development server', description)
+
     def test_missing_query_is_an_error(self):
         self.assertNotEqual(self.capsule('--max-bytes=8000').returncode, 0)
 
@@ -197,7 +210,7 @@ class ContextRegression(unittest.TestCase):
         data = json.loads(result.stdout)
         self.assertEqual(data['decisions'], [])
         self.assertTrue(data['needs_expansion'])
-        self.assertEqual(data['omitted'], [{'table': 'decisions', 'slug': 'tokens'}])
+        self.assertIn({'table': 'decisions', 'slug': 'tokens'}, data['omitted'])
         # Sin lugar ni para la referencia: igual se avisa que hay que buscar.
         tight = json.loads(self.for_task('--max-bytes=1500').stdout)
         self.assertTrue(tight['needs_expansion'] and tight['more_matches'])

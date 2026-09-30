@@ -34,7 +34,7 @@ case "$OP" in
   event)
     REQUEST_ID="${1:?Falta request-id}"; FIELD="${2:?Falta campo}"; VALUE="${3:?Falta valor}"; project_from_last "${4:-$(pwd)}"
     case "$FIELD" in handoff) COLUMN="handoffs" ;; permission) COLUMN="permission_prompts" ;; context_bytes) COLUMN="context_bytes" ;; agents) COLUMN="agents_count" ;; *) echo "ERROR: evento no permitido" >&2; exit 2 ;; esac
-    write_sql "UPDATE workflow_metrics SET $COLUMN=$COLUMN+? WHERE request_id=?" "$VALUE" "$REQUEST_ID"
+    write_sql "UPDATE workflow_metrics SET $COLUMN=COALESCE($COLUMN,0)+? WHERE request_id=?" "$VALUE" "$REQUEST_ID"
     ;;
   finish)
     REQUEST_ID="${1:?Falta request-id}"; OUTCOME="${2:?Falta outcome}"; project_from_last "${3:-$(pwd)}"

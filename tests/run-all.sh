@@ -36,6 +36,7 @@ COMMANDS=(
   "bash tests/quality-priorities.test.sh"
   "python3 tests/routing-safety.test.py"
   "python3 tests/context-regressions.test.py"
+  "python3 tests/memory-efficiency.test.py"
   "python3 tests/installed-workflow.test.py"
   "python3 tests/memory-permissions.test.py"
   "python3 tests/agent-autonomy-contract.test.py"

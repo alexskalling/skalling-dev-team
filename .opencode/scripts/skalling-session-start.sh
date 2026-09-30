@@ -61,6 +61,19 @@ if [[ ! -f "$DB_ACTIVE" ]]; then
   exit 0
 fi
 
+# Check prompt drift without reading project memory again or mutating prompts.
+if [ -f "$SCRIPT_DIR/skalling-project-config.py" ] && [ -d .opencode/agents ]; then
+  python3 - "$SCRIPT_DIR" "$PWD" <<'PYEOF'
+import importlib.util, sys
+from pathlib import Path
+spec = importlib.util.spec_from_file_location('config', Path(sys.argv[1]) / 'skalling-project-config.py')
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+drift = module.sync_agents(Path(sys.argv[2]), check=True)
+if drift:
+    print('DRIFT de protocolos locales: ' + ', '.join(drift) + '; actualizar con skalling-project-config.py --sync-agents (backup automático).')
+PYEOF
+fi
 print_commands
 print_db_section "$DB_ACTIVE" "Conceptos recientes" \
   "SELECT slug, substr(title, 1, 60) FROM concepts ORDER BY updated_at DESC LIMIT 5"

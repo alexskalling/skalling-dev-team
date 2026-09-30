@@ -21,7 +21,7 @@ usage() {
   cat <<EOF
 Uso:
   teamdb-context.sh link <plan> <task> --concepts=c1,c2 [--decisions=d1,d2] [--preferences=p1] [--problems=k1,k2] [project]
-  teamdb-context.sh for-task <plan> <task> [project]
+  teamdb-context.sh for-task <plan> <task> [--linked-only] [--seen=read_key] [--max-bytes=8000] [project]
   teamdb-context.sh for-request <query> [--top-k=8] [--max-bytes=8000] [--file=path] [project]
 
 Subcomandos:
@@ -58,82 +58,12 @@ case "$OP" in
     DB="$(teamdb_project_path "$PROJECT")"
     [ -f "$DB" ] || { echo '{"concepts":[],"decisions":[],"known_problems":[],"preferences":[]}' ; exit 0; }
     python3 - "$DB" "$QUERY" "$TOP_K" "$MAX_BYTES" "$VISUAL" "$SCRIPT_DIR" "$PROJECT" "${SEEN[@]+${SEEN[@]/#/seen:}}" "${FILE_ANCHORS[@]+${FILE_ANCHORS[@]}}" <<'PYEOF'
-import json, re, sqlite3, sys
+import json, sqlite3, sys
 sys.path.insert(0, sys.argv[6])
-from skalling_context import freshness, memory_item
-db, query = sys.argv[1:3]
-top_k, max_bytes = int(sys.argv[3]), int(sys.argv[4])
-if not 1 <= top_k <= 50 or not 512 <= max_bytes <= 100000:
-    raise SystemExit("ERROR: top-k debe ser 1..50 y max-bytes 512..100000")
-terms = list(dict.fromkeys(re.findall(r"[a-z0-9áéíóúñü]{3,}", query.lower())))
-stop = {"para", "con", "que", "los", "las", "del", "una", "por", "the", "and"}
-stop.update({"quiero", "necesito", "hacer", "esto", "este", "esta", "como", "pero", "porque", "más", "sin", "del", "los", "las"})
-terms = [term for term in terms if term not in stop][:24]
-anchors = list(dict.fromkeys(x.lower() for x in sys.argv[8:] if x and not x.startswith("seen:")))[:16]
-visual = sys.argv[5] == 'true' or any(t in terms for t in
-    ("estilos", "estilo", "diseño", "css", "tipografía", "paleta", "layout"))
-conn = sqlite3.connect("file:" + db + "?mode=ro", uri=True)
-tables = {
-    "concepts": ("title", "body_md", ""),
-    "decisions": ("title", "body_md", "status='accepted'"),
-    "known_problems": ("title", "coalesce(symptom_md,'') || char(10) || coalesce(workaround_md,'')", "status='open'"),
-    "preferences": ("slug", "body_md", ""),
-}
-result = {key: [] for key in tables}
-result.update(omitted=[], needs_expansion=False, more_matches=False, freshness=freshness(conn, sys.argv[7]))
-seen = {x[5:] for x in sys.argv[8:] if x.startswith("seen:")}
-def encode():
-    return json.dumps(result, ensure_ascii=False, separators=(",", ":"))
-candidates = []
-for table, (title, body, guard) in tables.items():
-    clauses, params = [], []
-    for term in terms:
-        clauses.append("(lower(slug) LIKE ? OR lower(" + title + ") LIKE ? OR lower(coalesce(" + body + ",'')) LIKE ?)")
-        params.extend(["%" + term + "%"] * 3)
-    for anchor in anchors:
-        clauses.append("instr(lower(coalesce(" + body + ",'')), ?) > 0")
-        params.append(anchor)
-    if table == "concepts":
-        clauses.append("slug IN ('project-summary','project-stack'" + (",'design-system'" if visual else "") + ")")
-    if not clauses:
-        continue
-    where = "(" + " OR ".join(clauses) + ")" + (" AND " + guard if guard else "")
-    # Rank matches in SQL before limiting; short titles alone never replace a rule's full body.
-    score_parts, score_params = [], []
-    for term in terms:
-        score_parts.append("(CASE WHEN lower(" + title + ") LIKE ? THEN 4 ELSE 0 END + CASE WHEN lower(coalesce(" + body + ",'')) LIKE ? THEN 1 ELSE 0 END)")
-        score_params.extend(["%" + term + "%"] * 2)
-    for anchor in anchors:
-        score_parts.append("CASE WHEN instr(lower(coalesce(" + body + ",'')), ?) > 0 THEN 100 ELSE 0 END")
-        score_params.append(anchor)
-    score = " + ".join(score_parts) or "0"
-    priority = ("CASE slug WHEN 'project-summary' THEN 10000 WHEN 'design-system' THEN "
-                + ("9000" if visual else "0") + " WHEN 'project-stack' THEN 8000 ELSE 0 END") if table == "concepts" else "0"
-    rows = conn.execute("SELECT slug," + title + ",coalesce(" + body + ",''),(" + priority +
-                        " + " + score + ") AS rank FROM " + table + " WHERE " + where +
-                        " ORDER BY rank DESC,slug LIMIT ?", score_params + params + [top_k + 1]).fetchall()
-    if len(rows) > top_k:
-        # Hay más coincidencias que top_k: nunca se esconde. Quien recibe la
-        # cápsula amplía por needs_expansion/omitted (auditoría v0.12.0 #6).
-        result["more_matches"] = True
-        result["needs_expansion"] = True
-        result["omitted"].append({"table": table, "slug": rows[top_k][0]})
-    for slug, heading, body_text, rank in rows[:top_k]:
-        candidates.append((rank, table, {"slug": slug, "title": heading, "body": body_text}))
-for _, table, item in sorted(candidates, key=lambda row: (-row[0], row[1], row[2]["slug"])):
-    item = memory_item(table, item, "body", seen)
-    result[table].append(item)
-    # Reserve space to identify omitted rows; never silently slice a decision.
-    if len(encode().encode()) > max_bytes - 192:
-        result[table].pop()
-        result["needs_expansion"] = True
-        ref = {"table": table, "slug": item["slug"]}
-        result["omitted"].append(ref)
-        if len(encode().encode()) > max_bytes:
-            result["omitted"].pop()
-            result["more_matches"] = True
-conn.close()
-print(encode())
+from skalling_context import request_context
+with sqlite3.connect("file:" + sys.argv[1] + "?mode=ro", uri=True) as conn:
+    result = request_context(conn, sys.argv[7], sys.argv[2], int(sys.argv[3]), int(sys.argv[4]), sys.argv[5] == 'true', sys.argv[8:])
+print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
 PYEOF
     ;;
   link)
@@ -206,12 +136,14 @@ PYEOF
     PROJECT=""
     TOP_K=8
     MAX_BYTES=8000
-    DISCOVER=0
+    DISCOVER=1; SEEN=()
     while [ "$#" -gt 0 ]; do
       case "$1" in
         --top-k=*) TOP_K="${1#--top-k=}" ;;
         --max-bytes=*) MAX_BYTES="${1#--max-bytes=}" ;;
         --discover) DISCOVER=1 ;;
+        --linked-only) DISCOVER=0 ;;
+        --seen=*) SEEN+=("${1#--seen=}") ;;
         --help|-h) usage ;;
         -*) echo "[ERROR] argumento desconocido: $1" >&2; exit 2 ;;
         *) PROJECT="$1" ;;
@@ -221,160 +153,13 @@ PYEOF
     [ -d "$PROJECT" ] || PROJECT="$(pwd)"
     DB="$(teamdb_project_path "$PROJECT")"
     [ -f "$DB" ] || { echo "[]" ; exit 0; }
-    python3 - "$DB" "$PLAN_SLUG" "$TASK_SLUG" "$TOP_K" "$MAX_BYTES" "$DISCOVER" "$SCRIPT_DIR" "$PROJECT" <<'PYEOF'
-import sqlite3, sys, json, re
+    python3 - "$DB" "$PLAN_SLUG" "$TASK_SLUG" "$TOP_K" "$MAX_BYTES" "$DISCOVER" "$SCRIPT_DIR" "$PROJECT" "${SEEN[@]+${SEEN[@]}}" <<'PYEOF'
+import sqlite3, sys, json
 sys.path.insert(0, sys.argv[7])
-from skalling_context import freshness
-db, plan_slug, task_slug = sys.argv[1], sys.argv[2], sys.argv[3]
-top_k = int(sys.argv[4])
-max_bytes = int(sys.argv[5])
-discover = sys.argv[6] == '1'
-conn = sqlite3.connect("file:" + db + "?mode=ro", uri=True)
-conn.row_factory = sqlite3.Row
-
-plan = conn.execute("SELECT id, slug, title FROM plans WHERE slug = ?", (plan_slug,)).fetchone()
-if not plan:
-    print(json.dumps({'concepts': [], 'decisions': [], 'preferences': [], 'known_problems': [], 'task': None, 'plan': None}, ensure_ascii=False))
-    sys.exit(0)
-task = conn.execute("""
-    SELECT id, slug, title, description_md, acceptance_md, purpose, status
-    FROM tasks WHERE plan_id = ? AND slug = ?
-""", (plan['id'], task_slug)).fetchone()
-if not task:
-    print(json.dumps({'concepts': [], 'decisions': [], 'preferences': [], 'known_problems': [], 'task': None, 'plan': {'slug': plan['slug'], 'title': plan['title']}}, ensure_ascii=False))
-    sys.exit(0)
-
-# Per-tabla: (tabla, col_slug, col_title, body, filtro de status). El cuerpo
-# de un problema conocido incluye el workaround: sin él la cápsula avisaba
-# del síntoma pero no de cómo evitarlo.
-TABLES = {
-    'concepts': ('concepts', 'slug', 'title', 'body_md', None),
-    'decisions': ('decisions', 'slug', 'title', 'body_md', "status = 'accepted'"),
-    'preferences': ('preferences', 'slug', 'scope', 'body_md', None),
-    'known_problems': ('known_problems', 'slug', 'title',
-                       "coalesce(symptom_md,'') || char(10) || coalesce(workaround_md,'')", "status = 'open'"),
-}
-
-# Contrato común con for-request (auditoría v0.12.0 #6): el presupuesto mide
-# la SALIDA COMPLETA (task y plan incluidos) y nada se recorta en silencio.
-# Una memoria que no entra va entera a `omitted` con needs_expansion=true.
-output = {
-    'task': {
-        'slug': task['slug'],
-        'title': task['title'],
-        'status': task['status'],
-        'description_md': task['description_md'],
-        'acceptance_md': task['acceptance_md'],
-        'purpose': task['purpose'],
-    },
-    'plan': {'slug': plan['slug'], 'title': plan['title']},
-    'concepts': [], 'decisions': [], 'preferences': [], 'known_problems': [],
-    'omitted': [], 'needs_expansion': False, 'more_matches': False,
-    'freshness': freshness(conn, sys.argv[8]),
-}
-RESERVE = 160  # espacio para anotar al menos una omisión
-
-
-def encode():
-    return json.dumps(output, ensure_ascii=False, separators=(',', ':'), default=str)
-
-
-def place(tbl_key, obj):
-    if len(output[tbl_key]) >= top_k:
-        output['more_matches'] = True
-        output['needs_expansion'] = True
-        output['omitted'].append({'table': tbl_key, 'slug': obj['slug']})
-        return
-    output[tbl_key].append(obj)
-    if len(encode().encode()) > max_bytes - RESERVE:
-        output[tbl_key].pop()
-        output['needs_expansion'] = True
-        output['omitted'].append({'table': tbl_key, 'slug': obj['slug']})
-        if len(encode().encode()) > max_bytes:
-            output['omitted'].pop()
-            output['more_matches'] = True
-
-
-def entry(tbl_key, mid, relevance, provenance):
-    t = TABLES[tbl_key]
-    row = conn.execute("SELECT %s, %s, %s FROM %s WHERE id = ?" % (t[1], t[2], t[3], t[0]), (mid,)).fetchone()
-    if not row:
-        return None
-    obj = {'slug': row[0], 'title': row[1] if row[1] is not None else '', 'relevance': relevance, 'provenance': provenance}
-    if row[2]:
-        obj['body_md'] = row[2]
-    return obj
-
-
-# 1. Capsules linkeadas (provenance='linked'), ordenadas por relevance DESC
-linked = conn.execute("""
-    SELECT memory_table, memory_id, relevance, provenance
-    FROM task_context_capsules
-    WHERE task_id = ?
-    ORDER BY relevance DESC, memory_table, memory_id
-""", (task['id'],)).fetchall()
-
-for row in linked:
-    tbl_key = row['memory_table']
-    if tbl_key not in TABLES:
-        continue
-    t = TABLES[tbl_key]
-    if t[4]:
-        ok = conn.execute("SELECT 1 FROM %s WHERE id = ? AND %s" % (t[0], t[4]), (row['memory_id'],)).fetchone()
-        if not ok:
-            continue
-    obj = entry(tbl_key, row['memory_id'], row['relevance'], row['provenance'] or 'linked')
-    if obj:
-        place(tbl_key, obj)
-
-# 2. Auto-discovery opcional: términos del title+description de la task
-#    Busquedas LIKE con bound params (sin cargar tablas completas).
-if discover:
-    haystack = ((task['title'] or '') + ' ' + (task['description_md'] or '')).lower()
-    terms = list(dict.fromkeys(t for t in re.findall(r"[a-z0-9áéíóúñü]{3,}", haystack)
-                              if t not in {"para", "con", "que", "los", "las", "del", "una", "the", "and"}))[:24]
-    if terms:
-        seen = {k: set(e['slug'] for e in output[k]) | {o['slug'] for o in output['omitted'] if o['table'] == k}
-                for k in TABLES}
-        for tbl_key, t in TABLES.items():
-            like_clauses = []
-            params = []
-            for term in terms:
-                like_clauses.append("(LOWER(%s) LIKE ? OR LOWER(%s) LIKE ?)" % (t[2], t[3]))
-                params.append('%' + term + '%')
-                params.append('%' + term + '%')
-            sql = "SELECT id, %s, %s, %s FROM %s WHERE (%s)" % (t[1], t[2], t[3], t[0], ' OR '.join(like_clauses))
-            if t[4]:
-                sql += " AND " + t[4]
-            # Rank before LIMIT so long descriptions cannot load entire tables.
-            score = ' + '.join("CASE WHEN lower(coalesce(%s,'')) LIKE ? THEN 1 ELSE 0 END" % t[2] for _ in terms)
-            sql += ' ORDER BY (' + score + ') DESC, ' + t[1] + ' LIMIT ?'
-            hits = conn.execute(sql, params + ['%' + term + '%' for term in terms] + [top_k + 1]).fetchall()
-            if len(hits) > top_k:
-                output['more_matches'] = output['needs_expansion'] = True
-            scored = []
-            for h in hits:
-                if h[1] in seen[tbl_key]:
-                    continue
-                text = ((h[1] or '') + ' ' + (h[2] or '')).lower()
-                rel = sum(1 for term in terms if term in text)
-                if rel > 0:
-                    scored.append((rel, h[0], h[1], h[2], h[3]))
-            scored.sort(key=lambda x: (-x[0], x[2]))
-            for rel, mid, tslug, title_col, body_col in scored:
-                obj = {'slug': tslug, 'relevance': rel, 'provenance': 'discovered',
-                       'title': tslug if t[2] == 'scope' else (title_col or tslug)}
-                if body_col:
-                    obj['body_md'] = body_col
-                place(tbl_key, obj)
-
-text = encode()
-if len(text.encode()) > max_bytes:
-    # La task sola ya excede el presupuesto: se entrega igual (no se puede
-    # omitir la task) pero se dice explícitamente.
-    output['over_budget'] = True
-    text = encode()
-print(text)
+from skalling_context import task_context
+with sqlite3.connect("file:" + sys.argv[1] + "?mode=ro", uri=True) as conn:
+    result = task_context(conn, sys.argv[8], sys.argv[2], sys.argv[3], int(sys.argv[4]), int(sys.argv[5]), sys.argv[6] == '1', sys.argv[9:])
+print(json.dumps(result, ensure_ascii=False, separators=(',', ':')))
 PYEOF
     ;;
 

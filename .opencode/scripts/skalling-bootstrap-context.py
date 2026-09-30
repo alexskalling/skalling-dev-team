@@ -52,7 +52,8 @@ def source_description(project: Path, package: dict, framework: str) -> tuple[st
     if readme.exists():
         lines = [line.strip() for line in readme.read_text(encoding="utf-8", errors="ignore").splitlines()]
         prose = [line for line in lines[:50] if line and not line.startswith(("#", "[", "!"))]
-        if prose:
+        boilerplate = any('bootstrapped with' in line and 'create-next-app' in line for line in lines[:50])
+        if prose and not boilerplate:
             return " ".join(prose[:3])[:500], "README.md"
     description = str(package.get("description") or "").strip()
     if description:
@@ -62,8 +63,11 @@ def source_description(project: Path, package: dict, framework: str) -> tuple[st
             continue
         text = candidate.read_text(encoding="utf-8", errors="ignore")
         match = re.search(r"description\s*:\s*[\"']([^\"']+)", text)
-        if match:
-            return match.group(1).strip()[:500], str(candidate.relative_to(project))
+        title = re.search(r"title\s*:\s*[\"']([^\"']+)", text)
+        values = [m.group(1).strip() for m in (title, match) if m
+                  and not re.search(r'create.next.app', m.group(1), re.I)]
+        if values:
+            return '. '.join(values)[:500], str(candidate.relative_to(project))
     return f"Proyecto {project.name} basado en {framework or 'el stack detectado'}. Alcance de producto pendiente de confirmar.", "detección de stack"
 
 
