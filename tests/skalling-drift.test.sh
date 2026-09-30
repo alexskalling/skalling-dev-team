@@ -1677,6 +1677,8 @@ test_release_y_doctor() {
         fi
     done
 
+    bash "$ROOT/tests/lib/doctor-ready-fixture.sh" "$instancia_global" "$instancia_proyecto"
+
     set +e
     OUTPUT="$(SKALLING_OPENCODE_DIR="$instancia_global" bash "$ROOT/setup-team-doctor.sh" --strict --project "$instancia_proyecto" 2>&1)"
     local estado=$?

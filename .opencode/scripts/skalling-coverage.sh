@@ -20,12 +20,7 @@ DB="$(teamdb_project_path "$PROJECT")"
 [ -f "$YAML" ] || { echo "ERROR: no existe $YAML. Corré /skalling-init primero." >&2; exit 1; }
 [ -f "$DB" ] || { echo "ERROR: TeamDB no existe: $DB" >&2; exit 1; }
 
-COMMAND="$(python3 -c '
-import re, sys
-text = open(sys.argv[1], encoding="utf-8").read()
-m = re.search(r"coverage:\s*\n\s*available:\s*\w+\s*\n\s*command:\s*(.*)", text)
-print((m.group(1).strip().strip("\"'"'"'") if m else ""))
-' "$YAML")"
+COMMAND="$(python3 "$SCRIPT_DIR/skalling_config.py" "$YAML" coverage)"
 
 if [ -z "$COMMAND" ]; then
   echo "ERROR: no hay comando de cobertura detectado en project.yaml (testing.coverage.command vacío)." >&2
@@ -37,11 +32,13 @@ echo "Corriendo: $COMMAND"
 STDOUT_FILE="$(mktemp)"
 trap '[ -n "$STDOUT_FILE" ] && rm -f "$STDOUT_FILE"' EXIT
 START_TS="$(date +%s)"
-if ! (cd "$PROJECT" && bash -c "$COMMAND") > >(tee "$STDOUT_FILE") 2>&1; then
+if ! (cd "$PROJECT" && bash -c "$COMMAND") >"$STDOUT_FILE" 2>&1; then
+  cat "$STDOUT_FILE"
   echo "ERROR: el comando de cobertura falló (exit != 0). No se registra nada." >&2
   exit 1
 fi
 
+cat "$STDOUT_FILE"
 RESULT="$(python3 - "$PROJECT" "$STDOUT_FILE" "$START_TS" <<'PY'
 import json, re, sys
 from pathlib import Path

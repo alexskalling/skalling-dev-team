@@ -19,13 +19,6 @@ fi
 SLUG="${1:-}"
 TYPE="${2:-concept}"
 PROJECT="${3:-$(pwd)}"
-# Lock file para evitar race conditions entre agentes
-LOCK_DIR="$PROJECT/.opencode/context/.locks/team"
-mkdir -p "$(dirname "$LOCK_DIR")" 2>/dev/null || true
-if ! teamdb_lock "$LOCK_DIR" 10; then
-  exit 1
-fi
-trap 'teamdb_unlock "$LOCK_DIR"' EXIT
 
 
 if [ -z "$SLUG" ]; then

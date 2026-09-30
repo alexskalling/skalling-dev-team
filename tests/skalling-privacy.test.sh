@@ -100,7 +100,9 @@ mkdir -p "$PROJECT3/.opencode"
 echo 'stack: nextjs' > "$PROJECT3/.opencode/project.yaml"
 git -C "$PROJECT3" add .opencode/project.yaml
 git -C "$PROJECT3" commit -qm "ya commiteado antes de marcar externo"
-OUT_WARN="$(bash "$SCRIPT" external "$PROJECT3" 2>&1)"
+RC_WARN=0
+OUT_WARN="$(bash "$SCRIPT" external "$PROJECT3" 2>&1)" || RC_WARN=$?
+[ "$RC_WARN" = 3 ] || { echo "external debe reportar protección incompleta"; exit 1; }
 if grep -q "AVISO IMPORTANTE" <<< "$OUT_WARN" && grep -q "project.yaml" <<< "$OUT_WARN"; then
   assert_pass "avisa si algo bajo .opencode/ ya estaba commiteado antes de marcar externo"
 else

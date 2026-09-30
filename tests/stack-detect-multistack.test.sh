@@ -12,59 +12,59 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DETECTOR_LIB="$SCRIPT_DIR/scripts/lib/lib-stack-detect.sh"
 STACK_DETECTORS="$SCRIPT_DIR/data/stack-detectors.yaml"
-TMPDIR=""
+FIXTURE_DIR=""
 FAILED=0
 
 cleanup() {
-  if [[ -n "$TMPDIR" && -d "$TMPDIR" ]]; then
-    rm -rf "$TMPDIR"
+  if [[ -n "$FIXTURE_DIR" && -d "$FIXTURE_DIR" ]]; then
+    rm -rf "$FIXTURE_DIR"
   fi
 }
 trap cleanup EXIT
 
 # ── Setup: directorio temporal con estructura multi-stack ──────────────────────
-TMPDIR="$(mktemp -d)"
-mkdir -p "$TMPDIR/scripts" "$TMPDIR/plugins" "$TMPDIR/tests"
+FIXTURE_DIR="$(mktemp -d)"
+mkdir -p "$FIXTURE_DIR/scripts" "$FIXTURE_DIR/plugins" "$FIXTURE_DIR/tests"
 
 # Bash script
-cat > "$TMPDIR/scripts/example.sh" << 'EOF'
+cat > "$FIXTURE_DIR/scripts/example.sh" << 'EOF'
 #!/usr/bin/env bash
 echo "bash script"
 EOF
 
 # Python script
-cat > "$TMPDIR/scripts/example.py" << 'EOF'
+cat > "$FIXTURE_DIR/scripts/example.py" << 'EOF'
 #!/usr/bin/env python3
 print("python script")
 EOF
 
 # Node plugin (no .mjs pero sí .js)
-cat > "$TMPDIR/plugins/example.js" << 'EOF'
+cat > "$FIXTURE_DIR/plugins/example.js" << 'EOF'
 // node plugin
 module.exports = {};
 EOF
 
 # El archivo marcador del detector multi-stack (tests/run-all.sh)
-cat > "$TMPDIR/tests/run-all.sh" << 'EOF'
+cat > "$FIXTURE_DIR/tests/run-all.sh" << 'EOF'
 #!/usr/bin/env bash
 echo "running all tests"
 EOF
 
 # README mínimo
-cat > "$TMPDIR/README.md" << 'EOF'
+cat > "$FIXTURE_DIR/README.md" << 'EOF'
 # Multi-stack test project
 EOF
 
 # ── Test ──────────────────────────────────────────────────────────────────────
 echo "Test: multi-stack detection (bash + python + node)"
-echo "  TMPDIR=$TMPDIR"
+echo "  FIXTURE_DIR=$FIXTURE_DIR"
 
 # Sourcear la lib y llamar al detector
 # shellcheck source=scripts/lib/lib-stack-detect.sh
 source "$DETECTOR_LIB"
 
 skalling_init_detected
-if ! skalling_detect_from_yaml "$STACK_DETECTORS" "$TMPDIR"; then
+if ! skalling_detect_from_yaml "$STACK_DETECTORS" "$FIXTURE_DIR"; then
   echo "  FAIL: skalling_detect_from_yaml devolvió error"
   FAILED=1
 fi

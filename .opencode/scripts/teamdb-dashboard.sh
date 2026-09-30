@@ -39,7 +39,7 @@ PORTFILE="$STATE_DIR/server.port"
 LOGFILE="$STATE_DIR/server.log"
 
 OPENCODE_DIR="${SKALLING_OPENCODE_DIR:-$HOME/.config/opencode}"
-SERVER_SCRIPT="$OPENCODE_DIR/scripts/dashboard-server.py"
+SERVER_SCRIPT="$SCRIPT_DIR/dashboard-server.py"
 HTML_PATH="$OPENCODE_DIR/web/teamdb-dashboard.html"
 mkdir -p "$STATE_DIR"
 

@@ -36,6 +36,8 @@ function decision(role, command) {
 
 // Ninguno puede quedar en "allow" para ningún rol.
 const MUST_NOT_RUN_SILENTLY = [
+  'bash /Users/x.sh /Users/a/.config/opencode/bootstrap-context.sh',
+  'bash /Users/x.sh /Users/a/.config/opencode/setup-team-doctor.sh',
   // Comodín antes de la ruta del helper: cualquier script con una ruta de helper como argumento.
   'bash /tmp/x.sh /.opencode/scripts/teamdb-read.sh',
   '/tmp/x.sh /.opencode/scripts/teamdb-read.sh',
@@ -129,14 +131,14 @@ test('Teo, Jhon y Luz pueden preparar y commitear localmente; publicar sigue pre
     }
   }
   for (const role of ['Alex', 'Pol', 'Sol', 'Jes', 'Pau']) {
-    assert.equal(decision(role, 'git commit -m "fix: corrige el total"'), 'ask', role);
+    assert.equal(decision(role, 'git commit -m "fix: corrige el total"'), role === 'Pau' ? 'block' : 'ask', role);
   }
 });
 
 // Único `*` permitido antes del nombre del programa: el segmento del home en
 // la ruta de un helper global (el guard bloquea que ese `*` se trague otro
 // script: una ruta de helper solo vale como programa, no como argumento).
-const HOME_HELPER = /^(?:bash |python3 )?\/(?:Users|home|c\/Users)\/\*\/\.config\/opencode\/scripts\/[\w.-]+(?: [\w-]+)*(?: \*)?$/;
+const HOME_HELPER = /^(?:bash |python3 )?\/(?:Users|home|c\/Users)\/\*\/\.config\/opencode\/(?:scripts\/[\w.-]+|bootstrap-context\.sh|setup-team-doctor\.sh)(?: [\w-]+)*(?: \*)?$/;
 
 test('ningún allow tiene un comodín antes de la ruta del programa', () => {
   const bad = [];

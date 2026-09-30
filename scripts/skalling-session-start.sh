@@ -72,6 +72,9 @@ spec.loader.exec_module(module)
 drift = module.sync_agents(Path(sys.argv[2]), check=True)
 if drift:
     print('DRIFT de protocolos locales: ' + ', '.join(drift) + '; actualizar con skalling-project-config.py --sync-agents (backup automático).')
+permissions = module.test_command_drift(Path(sys.argv[2]))
+if permissions:
+    print('DRIFT de permisos de verificación/commit: ' + ', '.join(permissions) + '; aplicar skalling-project-config.py al proyecto antes de delegar. No cambiar de rol.')
 PYEOF
 fi
 print_commands

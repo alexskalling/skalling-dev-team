@@ -48,6 +48,8 @@ fi
 echo ""
 echo "── Test 1: comportamiento bajo --strict con bash actual ──"
 
+bash "$ROOT/tests/lib/doctor-ready-fixture.sh" "$GLOBAL_LIMPIO" "$PROYECTO_LIMPIO"
+
 set +e
 SALIDA_ESTRICTA="$(SKALLING_OPENCODE_DIR="$GLOBAL_LIMPIO" bash "$DOCTOR" --project "$PROYECTO_LIMPIO" --strict 2>&1)"
 CODIGO_SALIDA_ESTRICTO=$?

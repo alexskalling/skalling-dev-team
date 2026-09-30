@@ -6,7 +6,7 @@ DOCTOR="$DIRECTORIO_RAIZ/setup-team-doctor.sh"
 
 INSTANCIA_PROYECTO="$(mktemp -d)"
 INSTANCIA_GLOBAL="$(mktemp -d)"
-DOCTOR_SIN_CI="$(mktemp)"
+DOCTOR_SIN_CI="$(mktemp "$DIRECTORIO_RAIZ/.doctor-no-ci.XXXXXX")"
 HOME_BACKUP="$HOME"
 
 trap 'rm -rf "$INSTANCIA_PROYECTO" "$INSTANCIA_GLOBAL" "$DOCTOR_SIN_CI"; export HOME="$HOME_BACKUP"' EXIT
@@ -136,6 +136,8 @@ rm -f "$BLOQUE_CI"
 
 echo ""
 echo "── Test: output del doctor con --global-only ──"
+
+bash "$DIRECTORIO_RAIZ/tests/lib/doctor-ready-fixture.sh" "$INSTANCIA_GLOBAL" "$INSTANCIA_PROYECTO"
 
 set +e
 SALIDA_STRICT="$(SKALLING_OPENCODE_DIR="$INSTANCIA_GLOBAL" bash "$DOCTOR" --global-only 2>&1)"

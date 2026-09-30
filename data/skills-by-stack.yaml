@@ -63,7 +63,7 @@ core:
     reason: Formaliza verificación en receipts verificables.
     always: true
   - name: skalling-memory
-    reason: Memoria estilo Engram con archivos .jsonl locales.
+    reason: Memoria durable del proyecto en TeamDB; archivos solo para exports.
     always: true
   - name: _shared
     reason: Archivos compartidos (Secciones A-D) que las skills sdd-* referencian.
@@ -106,7 +106,7 @@ core:
 # Cualquier proyecto frontend (UI)
 frontend:
   - name: impeccable
-    reason: Detector de AI slop + comandos de diseño (52k stars).
+    reason: Herramientas de revisión visual; verificar compatibilidad antes de instalar.
     install: "npx impeccable install"
     optional: false
     requires: [node >= 22]

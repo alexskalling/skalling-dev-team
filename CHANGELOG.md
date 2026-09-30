@@ -2,6 +2,16 @@
 
 Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) y el proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.3] - 2026-09-30
+
+- Refresh/init/doctor comparten inventario de skills: core faltantes, metadatos inválidos, recomendaciones según dependencias y registro reconciliado. Las skills personalizadas se conservan.
+- Status, resume y dashboard consultan workflows actuales; un porcentaje no medido ya no se presenta como progreso verificable. El historial incluye eventos del motor.
+- Memory review consulta TeamDB; merge detecta conflictos del dump, AGENTS.md y worktrees. Las lecturas de relaciones ya no toman el lock de escritura.
+- Update permite sincronizar el proyecto con backup y comprobar el inventario del runtime. La instalación local incluye todos los comandos.
+- Privacy informa y bloquea candidatos externos con memoria aún rastreada; coverage usa el parser común y conserva fallos de ejecución.
+- Models muestra configuración global/local; help advierte que Goal no está disponible en OpenCode 2.x. Metrics distingue tiempo medido de tiempo sin instrumentación.
+- Se incluyen las correcciones del flujo de commits locales de Teo/Jhon/Luz y del rol documental de Pau pendientes de publicación.
+
 ## [Unreleased]
 
 ## [0.15.2] - 2026-09-30

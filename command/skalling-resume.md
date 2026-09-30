@@ -6,7 +6,7 @@ description: Recupera el contexto mínimo para continuar el trabajo activo.
 
 ```bash
 SK_ROOT="${SKALLING_ROOT:-${SKALLING_OPENCODE_DIR:-$HOME/.config/opencode}}"
-bash "$SK_ROOT/scripts/teamdb-resume.sh" "$(pwd)"
+bash "$SK_ROOT/scripts/teamdb-resume.sh" "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 ```
 
 Devuelve un resumen pequeño y accionable: objetivo, estado, bloqueos y siguiente

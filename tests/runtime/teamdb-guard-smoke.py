@@ -32,6 +32,11 @@ with tempfile.TemporaryDirectory(prefix='skalling-teamdb-runtime-') as temporary
 import {teamdbWorkflowState,createCore} from MODULE;
 export default {id:'teamdb-regression',setup:async()=>{
   const results={};
+  const roles=createCore();
+  results.pau_check=roles.decide({tool:'shell',agent:'Pau',input:{command:'pnpm vitest run --coverage'}});
+  results.pau_commit=roles.decide({tool:'shell',agent:'Pau',input:{command:'git commit -m fix'}});
+  results.jhon_check=roles.decide({tool:'shell',agent:'Jhon',input:{command:'pnpm exec eslint modules/campanasModule'}});
+  results.pau_dispatch=roles.decide({tool:'subagent',agent:'Alex',input:{agent:'Pau',description:'Pau corre checks pendientes'}});
   for(const id of ['implementation_ready','rejected']) {
     results[id]=teamdbWorkflowState(id,ROOT);
     const core=createCore();
@@ -55,6 +60,9 @@ export default {id:'teamdb-regression',setup:async()=>{
     assert 'skalling_workflow status' in results['implementation_ready_before_status'], results
     assert results['implementation_ready_gate'] is None, results
     assert results['rejected'] == {'ok':True,'state':'rejected'}, results
+    for key in ('pau_check', 'pau_commit', 'pau_dispatch'):
+        assert 'Pau documenta' in results[key] and 'Jhon' in results[key], results
+    assert results['jhon_check'] is None, results
     assert 'rejected' in results['rejected_gate'], results
     assert hashlib.sha256(db_path.read_bytes()).hexdigest() == before, 'Guard modified database contents'
-    print('PASS OpenCode WAL: approved delegation allowed, rejected delegation blocked, DB unchanged')
+    print('PASS OpenCode: WAL intact; valid delegation and Jhon check allowed; rejected workflow and Pau engineering blocked')

@@ -692,6 +692,101 @@ permission:
     "git commit *--amend*": ask
     "git -C * commit *--amend*": ask
     "cd * && git commit *--amend*": ask
+    "bash ~/.config/opencode/scripts/skalling-refresh.sh --check *": allow
+    "bash /Users/*/.config/opencode/scripts/skalling-refresh.sh --check *": allow
+    "bash /home/*/.config/opencode/scripts/skalling-refresh.sh --check *": allow
+    "bash /c/Users/*/.config/opencode/scripts/skalling-refresh.sh --check *": allow
+    "bash .opencode/scripts/skalling-refresh.sh --check *": allow
+    "bash ~/.config/opencode/scripts/mem-review.sh *": allow
+    "bash /Users/*/.config/opencode/scripts/mem-review.sh *": allow
+    "bash /home/*/.config/opencode/scripts/mem-review.sh *": allow
+    "bash /c/Users/*/.config/opencode/scripts/mem-review.sh *": allow
+    "bash .opencode/scripts/mem-review.sh *": allow
+    "bash ~/.config/opencode/scripts/merge-helper.sh *": allow
+    "bash /Users/*/.config/opencode/scripts/merge-helper.sh *": allow
+    "bash /home/*/.config/opencode/scripts/merge-helper.sh *": allow
+    "bash /c/Users/*/.config/opencode/scripts/merge-helper.sh *": allow
+    "bash .opencode/scripts/merge-helper.sh *": allow
+    "bash ~/.config/opencode/scripts/skalling-metrics.sh report *": allow
+    "bash /Users/*/.config/opencode/scripts/skalling-metrics.sh report *": allow
+    "bash /home/*/.config/opencode/scripts/skalling-metrics.sh report *": allow
+    "bash /c/Users/*/.config/opencode/scripts/skalling-metrics.sh report *": allow
+    "bash .opencode/scripts/skalling-metrics.sh report *": allow
+    "bash ~/.config/opencode/scripts/skalling-metrics.sh summary *": allow
+    "bash /Users/*/.config/opencode/scripts/skalling-metrics.sh summary *": allow
+    "bash /home/*/.config/opencode/scripts/skalling-metrics.sh summary *": allow
+    "bash /c/Users/*/.config/opencode/scripts/skalling-metrics.sh summary *": allow
+    "bash .opencode/scripts/skalling-metrics.sh summary *": allow
+    "bash ~/.config/opencode/scripts/skalling-models.sh show": allow
+    "bash /Users/*/.config/opencode/scripts/skalling-models.sh show": allow
+    "bash /home/*/.config/opencode/scripts/skalling-models.sh show": allow
+    "bash /c/Users/*/.config/opencode/scripts/skalling-models.sh show": allow
+    "bash .opencode/scripts/skalling-models.sh show": allow
+    "bash ~/.config/opencode/scripts/skalling-models.sh fallback show *": allow
+    "bash /Users/*/.config/opencode/scripts/skalling-models.sh fallback show *": allow
+    "bash /home/*/.config/opencode/scripts/skalling-models.sh fallback show *": allow
+    "bash /c/Users/*/.config/opencode/scripts/skalling-models.sh fallback show *": allow
+    "bash .opencode/scripts/skalling-models.sh fallback show *": allow
+    "bash ~/.config/opencode/scripts/skalling-privacy.sh status *": allow
+    "bash /Users/*/.config/opencode/scripts/skalling-privacy.sh status *": allow
+    "bash /home/*/.config/opencode/scripts/skalling-privacy.sh status *": allow
+    "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh status *": allow
+    "bash .opencode/scripts/skalling-privacy.sh status *": allow
+    "bash ~/.config/opencode/setup-team-doctor.sh *": allow
+    "bash /Users/*/.config/opencode/setup-team-doctor.sh *": allow
+    "bash /home/*/.config/opencode/setup-team-doctor.sh *": allow
+    "bash /c/Users/*/.config/opencode/setup-team-doctor.sh *": allow
+    "bash .opencode/setup-team-doctor.sh *": allow
+    "bash ~/.config/opencode/scripts/skalling-refresh.sh --apply *": ask
+    "bash /Users/*/.config/opencode/scripts/skalling-refresh.sh --apply *": ask
+    "bash /home/*/.config/opencode/scripts/skalling-refresh.sh --apply *": ask
+    "bash /c/Users/*/.config/opencode/scripts/skalling-refresh.sh --apply *": ask
+    "bash .opencode/scripts/skalling-refresh.sh --apply *": ask
+    "bash ~/.config/opencode/bootstrap-context.sh *": ask
+    "bash /Users/*/.config/opencode/bootstrap-context.sh *": ask
+    "bash /home/*/.config/opencode/bootstrap-context.sh *": ask
+    "bash /c/Users/*/.config/opencode/bootstrap-context.sh *": ask
+    "bash .opencode/bootstrap-context.sh *": ask
+    "bash ~/.config/opencode/scripts/skalling-models.sh set *": ask
+    "bash /Users/*/.config/opencode/scripts/skalling-models.sh set *": ask
+    "bash /home/*/.config/opencode/scripts/skalling-models.sh set *": ask
+    "bash /c/Users/*/.config/opencode/scripts/skalling-models.sh set *": ask
+    "bash .opencode/scripts/skalling-models.sh set *": ask
+    "bash ~/.config/opencode/scripts/skalling-models.sh reset *": ask
+    "bash /Users/*/.config/opencode/scripts/skalling-models.sh reset *": ask
+    "bash /home/*/.config/opencode/scripts/skalling-models.sh reset *": ask
+    "bash /c/Users/*/.config/opencode/scripts/skalling-models.sh reset *": ask
+    "bash .opencode/scripts/skalling-models.sh reset *": ask
+    "bash ~/.config/opencode/scripts/skalling-models.sh apply *": ask
+    "bash /Users/*/.config/opencode/scripts/skalling-models.sh apply *": ask
+    "bash /home/*/.config/opencode/scripts/skalling-models.sh apply *": ask
+    "bash /c/Users/*/.config/opencode/scripts/skalling-models.sh apply *": ask
+    "bash .opencode/scripts/skalling-models.sh apply *": ask
+    "bash ~/.config/opencode/scripts/skalling-models.sh fallback set *": ask
+    "bash /Users/*/.config/opencode/scripts/skalling-models.sh fallback set *": ask
+    "bash /home/*/.config/opencode/scripts/skalling-models.sh fallback set *": ask
+    "bash /c/Users/*/.config/opencode/scripts/skalling-models.sh fallback set *": ask
+    "bash .opencode/scripts/skalling-models.sh fallback set *": ask
+    "bash ~/.config/opencode/scripts/skalling-models.sh fallback reset *": ask
+    "bash /Users/*/.config/opencode/scripts/skalling-models.sh fallback reset *": ask
+    "bash /home/*/.config/opencode/scripts/skalling-models.sh fallback reset *": ask
+    "bash /c/Users/*/.config/opencode/scripts/skalling-models.sh fallback reset *": ask
+    "bash .opencode/scripts/skalling-models.sh fallback reset *": ask
+    "bash ~/.config/opencode/scripts/skalling-models.sh fallback timeout *": ask
+    "bash /Users/*/.config/opencode/scripts/skalling-models.sh fallback timeout *": ask
+    "bash /home/*/.config/opencode/scripts/skalling-models.sh fallback timeout *": ask
+    "bash /c/Users/*/.config/opencode/scripts/skalling-models.sh fallback timeout *": ask
+    "bash .opencode/scripts/skalling-models.sh fallback timeout *": ask
+    "bash ~/.config/opencode/scripts/skalling-privacy.sh internal *": ask
+    "bash /Users/*/.config/opencode/scripts/skalling-privacy.sh internal *": ask
+    "bash /home/*/.config/opencode/scripts/skalling-privacy.sh internal *": ask
+    "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh internal *": ask
+    "bash .opencode/scripts/skalling-privacy.sh internal *": ask
+    "bash ~/.config/opencode/scripts/skalling-privacy.sh external *": ask
+    "bash /Users/*/.config/opencode/scripts/skalling-privacy.sh external *": ask
+    "bash /home/*/.config/opencode/scripts/skalling-privacy.sh external *": ask
+    "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh external *": ask
+    "bash .opencode/scripts/skalling-privacy.sh external *": ask
 ---
 
 # Teo — Ingeniería
@@ -820,14 +915,12 @@ Puedo preparar y crear commits locales de unidades verificadas del pedido sin pe
 
 ## Commits locales
 
-Como Teo/Jhon/Luz puedo hacer commits útiles del pedido sin consultar cada uno,
-salvo que el usuario lo prohíba o pida revisar antes. Después de la aprobación
-exigida por riesgo llamo `skalling_workflow prepare_commit`, reviso el índice y
-hago `git commit` con mensaje claro. El motor prepara y sella solo lo verificado;
-no repito tests para commitear. Si Alex ya completó, uso el índice sellado.
-No incluyo cambios ajenos, no salto hooks ni hago amend sin autorización.
-Comunico hash y evidencia; Alex cierra el objetivo. El usuario decide el push.
-Con `/skalling-goal` uso su helper de commit final para respetar ese contrato.
+Teo/Jhon/Luz hacemos commits útiles sin preguntar, salvo prohibición o revisión
+previa del usuario. Con `local_commit.ready`, uso `skalling_workflow prepare_commit`
+(también tras complete), reviso el índice y ejecuto `git commit -m "mensaje"`
+como comando separado. No repito tests ni delego a Pau. Sin cambios ajenos,
+bypass de hooks ni amend no autorizado. Reporto hash y evidencia; Alex cierra.
+Push/PR requieren decisión del usuario. Con `/skalling-goal` uso su helper final.
 
 ## Protocolo DB-primera
 

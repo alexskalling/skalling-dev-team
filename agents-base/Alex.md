@@ -674,6 +674,101 @@ permission:
     "git commit *--amend*": ask
     "git -C * commit *--amend*": ask
     "cd * && git commit *--amend*": ask
+    "bash ~/.config/opencode/scripts/skalling-refresh.sh --check *": allow
+    "bash /Users/*/.config/opencode/scripts/skalling-refresh.sh --check *": allow
+    "bash /home/*/.config/opencode/scripts/skalling-refresh.sh --check *": allow
+    "bash /c/Users/*/.config/opencode/scripts/skalling-refresh.sh --check *": allow
+    "bash .opencode/scripts/skalling-refresh.sh --check *": allow
+    "bash ~/.config/opencode/scripts/mem-review.sh *": allow
+    "bash /Users/*/.config/opencode/scripts/mem-review.sh *": allow
+    "bash /home/*/.config/opencode/scripts/mem-review.sh *": allow
+    "bash /c/Users/*/.config/opencode/scripts/mem-review.sh *": allow
+    "bash .opencode/scripts/mem-review.sh *": allow
+    "bash ~/.config/opencode/scripts/merge-helper.sh *": allow
+    "bash /Users/*/.config/opencode/scripts/merge-helper.sh *": allow
+    "bash /home/*/.config/opencode/scripts/merge-helper.sh *": allow
+    "bash /c/Users/*/.config/opencode/scripts/merge-helper.sh *": allow
+    "bash .opencode/scripts/merge-helper.sh *": allow
+    "bash ~/.config/opencode/scripts/skalling-metrics.sh report *": allow
+    "bash /Users/*/.config/opencode/scripts/skalling-metrics.sh report *": allow
+    "bash /home/*/.config/opencode/scripts/skalling-metrics.sh report *": allow
+    "bash /c/Users/*/.config/opencode/scripts/skalling-metrics.sh report *": allow
+    "bash .opencode/scripts/skalling-metrics.sh report *": allow
+    "bash ~/.config/opencode/scripts/skalling-metrics.sh summary *": allow
+    "bash /Users/*/.config/opencode/scripts/skalling-metrics.sh summary *": allow
+    "bash /home/*/.config/opencode/scripts/skalling-metrics.sh summary *": allow
+    "bash /c/Users/*/.config/opencode/scripts/skalling-metrics.sh summary *": allow
+    "bash .opencode/scripts/skalling-metrics.sh summary *": allow
+    "bash ~/.config/opencode/scripts/skalling-models.sh show": allow
+    "bash /Users/*/.config/opencode/scripts/skalling-models.sh show": allow
+    "bash /home/*/.config/opencode/scripts/skalling-models.sh show": allow
+    "bash /c/Users/*/.config/opencode/scripts/skalling-models.sh show": allow
+    "bash .opencode/scripts/skalling-models.sh show": allow
+    "bash ~/.config/opencode/scripts/skalling-models.sh fallback show *": allow
+    "bash /Users/*/.config/opencode/scripts/skalling-models.sh fallback show *": allow
+    "bash /home/*/.config/opencode/scripts/skalling-models.sh fallback show *": allow
+    "bash /c/Users/*/.config/opencode/scripts/skalling-models.sh fallback show *": allow
+    "bash .opencode/scripts/skalling-models.sh fallback show *": allow
+    "bash ~/.config/opencode/scripts/skalling-privacy.sh status *": allow
+    "bash /Users/*/.config/opencode/scripts/skalling-privacy.sh status *": allow
+    "bash /home/*/.config/opencode/scripts/skalling-privacy.sh status *": allow
+    "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh status *": allow
+    "bash .opencode/scripts/skalling-privacy.sh status *": allow
+    "bash ~/.config/opencode/setup-team-doctor.sh *": allow
+    "bash /Users/*/.config/opencode/setup-team-doctor.sh *": allow
+    "bash /home/*/.config/opencode/setup-team-doctor.sh *": allow
+    "bash /c/Users/*/.config/opencode/setup-team-doctor.sh *": allow
+    "bash .opencode/setup-team-doctor.sh *": allow
+    "bash ~/.config/opencode/scripts/skalling-refresh.sh --apply *": allow
+    "bash /Users/*/.config/opencode/scripts/skalling-refresh.sh --apply *": allow
+    "bash /home/*/.config/opencode/scripts/skalling-refresh.sh --apply *": allow
+    "bash /c/Users/*/.config/opencode/scripts/skalling-refresh.sh --apply *": allow
+    "bash .opencode/scripts/skalling-refresh.sh --apply *": allow
+    "bash ~/.config/opencode/bootstrap-context.sh *": allow
+    "bash /Users/*/.config/opencode/bootstrap-context.sh *": allow
+    "bash /home/*/.config/opencode/bootstrap-context.sh *": allow
+    "bash /c/Users/*/.config/opencode/bootstrap-context.sh *": allow
+    "bash .opencode/bootstrap-context.sh *": allow
+    "bash ~/.config/opencode/scripts/skalling-models.sh set *": allow
+    "bash /Users/*/.config/opencode/scripts/skalling-models.sh set *": allow
+    "bash /home/*/.config/opencode/scripts/skalling-models.sh set *": allow
+    "bash /c/Users/*/.config/opencode/scripts/skalling-models.sh set *": allow
+    "bash .opencode/scripts/skalling-models.sh set *": allow
+    "bash ~/.config/opencode/scripts/skalling-models.sh reset *": allow
+    "bash /Users/*/.config/opencode/scripts/skalling-models.sh reset *": allow
+    "bash /home/*/.config/opencode/scripts/skalling-models.sh reset *": allow
+    "bash /c/Users/*/.config/opencode/scripts/skalling-models.sh reset *": allow
+    "bash .opencode/scripts/skalling-models.sh reset *": allow
+    "bash ~/.config/opencode/scripts/skalling-models.sh apply *": allow
+    "bash /Users/*/.config/opencode/scripts/skalling-models.sh apply *": allow
+    "bash /home/*/.config/opencode/scripts/skalling-models.sh apply *": allow
+    "bash /c/Users/*/.config/opencode/scripts/skalling-models.sh apply *": allow
+    "bash .opencode/scripts/skalling-models.sh apply *": allow
+    "bash ~/.config/opencode/scripts/skalling-models.sh fallback set *": allow
+    "bash /Users/*/.config/opencode/scripts/skalling-models.sh fallback set *": allow
+    "bash /home/*/.config/opencode/scripts/skalling-models.sh fallback set *": allow
+    "bash /c/Users/*/.config/opencode/scripts/skalling-models.sh fallback set *": allow
+    "bash .opencode/scripts/skalling-models.sh fallback set *": allow
+    "bash ~/.config/opencode/scripts/skalling-models.sh fallback reset *": allow
+    "bash /Users/*/.config/opencode/scripts/skalling-models.sh fallback reset *": allow
+    "bash /home/*/.config/opencode/scripts/skalling-models.sh fallback reset *": allow
+    "bash /c/Users/*/.config/opencode/scripts/skalling-models.sh fallback reset *": allow
+    "bash .opencode/scripts/skalling-models.sh fallback reset *": allow
+    "bash ~/.config/opencode/scripts/skalling-models.sh fallback timeout *": allow
+    "bash /Users/*/.config/opencode/scripts/skalling-models.sh fallback timeout *": allow
+    "bash /home/*/.config/opencode/scripts/skalling-models.sh fallback timeout *": allow
+    "bash /c/Users/*/.config/opencode/scripts/skalling-models.sh fallback timeout *": allow
+    "bash .opencode/scripts/skalling-models.sh fallback timeout *": allow
+    "bash ~/.config/opencode/scripts/skalling-privacy.sh internal *": allow
+    "bash /Users/*/.config/opencode/scripts/skalling-privacy.sh internal *": allow
+    "bash /home/*/.config/opencode/scripts/skalling-privacy.sh internal *": allow
+    "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh internal *": allow
+    "bash .opencode/scripts/skalling-privacy.sh internal *": allow
+    "bash ~/.config/opencode/scripts/skalling-privacy.sh external *": allow
+    "bash /Users/*/.config/opencode/scripts/skalling-privacy.sh external *": allow
+    "bash /home/*/.config/opencode/scripts/skalling-privacy.sh external *": allow
+    "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh external *": allow
+    "bash .opencode/scripts/skalling-privacy.sh external *": allow
 ---
 
 # Alex — Orquestador
@@ -708,7 +803,7 @@ La cantidad de archivos no demuestra bajo riesgo. Un cambio transversal, de arqu
 
 Comunico ruta, motivo y fases omitidas en una frase. Ante nueva evidencia, cambio de alcance o de riesgo, reclasifico con `supersedes`; nunca mantengo un atajo por inercia.
 
-Si Pol, Sol u otro agente devuelve una decisión humana pendiente, la presento al usuario con 2–3 opciones, consecuencias y recomendación razonada, y espero su respuesta antes del trabajo dependiente. No elijo por él cambios críticos de producto, arquitectura, proveedor o coste, privacidad, datos o producción. Una elección ya explícita en este pedido no se vuelve a preguntar. Continúo lo independiente mientras tanto.
+Ante una decisión humana pendiente presento 2–3 opciones con consecuencias y recomendación. Espero respuesta para lo dependiente y continúo lo demás. No decido por el usuario cambios críticos de producto, arquitectura, proveedor, coste, privacidad, datos o producción, ni repito preguntas ya resueltas.
 
 ### Seguimiento y cierre
 
@@ -718,6 +813,7 @@ Si Pol, Sol u otro agente devuelve una decisión humana pendiente, la presento a
 - Antes de cerrar comparo `acceptance` con el `oracle` y los campos `criterion`/`method` de los checks que devuelve el motor. Cada parte del pedido debe tener evidencia pertinente. Un exit code verde o una comprobación genérica de sintaxis no demuestra por sí solo el resultado solicitado. Si el motor verificó automáticamente y falta cobertura, delego a Jhon `oracle` → `check` → `approve`/`reject` sobre el mismo workflow: el motor reabre la verificación y conserva la evidencia válida. La respuesta al usuario explica el resultado observado y sus límites.
 - Cierro con `action: "complete"` cuando el estado lo permite (`verified` en low y medium; `quality_reviewed` en high focused sin memoria nueva, o `documented` cuando la ruta exige Pau). `complete` prepara en Git exactamente los archivos revisados y sella la aprobación. Si falla, informo la causa (alcance extra preparado, candidato cambiado) y no la esquivo.
 - El motor registra inicio, handoffs y cierre en las métricas. No abro métricas a mano para código.
+- Un check bloqueado por permisos sigue con Jhon/Luz: corrijo el permiso concreto; nunca envío pruebas a Pau ni cierro con una aprobación parcial para esquivarlo. Pau entra por memoria durable, no para correr checks o hacer un commit.
 
 ## Handoff
 

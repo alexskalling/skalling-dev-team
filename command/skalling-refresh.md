@@ -1,25 +1,24 @@
 ---
-description: Vuelve a detectar el stack y actualiza el contexto generado con confirmación.
+description: Reconcilia contexto, skills y registro; detecta runtime local desactualizado.
 ---
 
 # Skalling Refresh
 
-Primero detecta sin escribir:
+Pedido: $ARGUMENTS
 
 ```bash
 SK_ROOT="${SKALLING_ROOT:-${SKALLING_OPENCODE_DIR:-$HOME/.config/opencode}}"
-bash "$SK_ROOT/bootstrap-context.sh" --target "$(pwd)" --only-detection
+PROJECT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+bash "$SK_ROOT/scripts/skalling-refresh.sh" --check "$PROJECT"
 ```
 
-Compara esa salida con el contexto actual. Solo tras confirmación del usuario,
-actualiza los archivos generados:
+Si se pidió actualizar, ejecutar el mismo helper con `--apply`. La invocación de
+refresh autoriza reparar contexto generado, skills core administradas y registro.
+No pedir otra confirmación por esas operaciones. Preservar personalizaciones;
+mostrar conflictos pendientes. Para una consulta de diagnóstico, usar solo --check.
 
-```bash
-SK_ROOT="${SKALLING_ROOT:-${SKALLING_OPENCODE_DIR:-$HOME/.config/opencode}}"
-bash "$SK_ROOT/bootstrap-context.sh" --target "$(pwd)" --force
-```
-
-TeamDB no se elimina. Informa exactamente qué cambió y conserva cualquier backup
-creado por el bootstrap.
-
-El bootstrap actualiza solo conceptos que siguen idénticos a su última versión generada. Preserva ediciones humanas y filas legacy; pending_review identifica observaciones nuevas bajo schema_meta/bootstrap.pending.<slug>. Pau las compara con la memoria vigente y consolida solo lo confirmado.
+El reporte distingue core faltantes, metadatos inválidos, registro desactualizado,
+recomendaciones externas y runtime local. No instalar skills externas sin una
+selección explícita, ni confundir recomendación con requisito bloqueante.
+Para runtime desactualizado usar /skalling-update --project. Una salida distinta
+de cero significa revisión/reparación incompleta: nunca decir que todo está listo.

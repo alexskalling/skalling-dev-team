@@ -34,6 +34,6 @@ grep -q 'Evitar mensajes duplicados' <<< "$OUT"
 grep -q 'Un mensaje por destinatario' <<< "$OUT"
 grep -q 'no elegir por recencia' <<< "$OUT"
 OUT="$(bash "$ROOT/scripts/teamdb-resume.sh" "$TMP" request-a)"
-grep -q 'status con id=request-a' <<< "$OUT"
+grep -q 'id=request-a' <<< "$OUT"
 if grep -q request-b <<< "$OUT"; then exit 1; fi
 echo 'PASS: resume conserva objetivos y desambigua workflows'

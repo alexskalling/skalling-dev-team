@@ -29,7 +29,7 @@ EOF
 done
 
 OUT_INITIAL="$(bash "$SCRIPT" show)"
-if [ "$(printf '%s\n' "$OUT_INITIAL" | wc -l | tr -d ' ')" = "8" ] && \
+if [ "$(printf '%s\n' "$OUT_INITIAL" | grep -E '^(Alex|Jes|Jhon|Luz|Pau|Pol|Sol|Teo) ' | wc -l | tr -d ' ')" = "8" ] && \
    ! grep -q 'anthropic\|openai' <<< "$OUT_INITIAL"; then
   assert_pass "show inicial: 8 agentes, todos en default de sesión"
 else

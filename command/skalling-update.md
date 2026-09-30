@@ -4,6 +4,8 @@ description: Comprueba y aplica actualizaciones de Skalling con confirmación y 
 
 # Skalling Update
 
+Pedido: $ARGUMENTS
+
 Para comprobar sin cambiar nada:
 
 ```bash
@@ -21,3 +23,10 @@ anterior.
 `--channel main` sigue la rama principal y es solo para mantenedores; no
 proponerlo al usuario. Con `SKALLING_REQUIRE_SIGNED_TAGS=1` el release debe
 tener una firma válida.
+
+La actualización global NO actualiza por sí sola cada proyecto. Para actualizar
+este proyecto, incluir `--project "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" --yes` tras la autorización; --yes evita
+pedir la misma confirmación otra vez. Para sincronizar únicamente con el checkout
+actual usar `--local-only --project "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" --yes`. Primero mostrar el diagnóstico
+con esos flags y `--check-only` (sin --yes). Reportar versión global, local y drift;
+no afirmar instalado en el proyecto sin comprobarlo.

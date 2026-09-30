@@ -586,11 +586,11 @@ test_tier2_fixes() {
         fail "bootstrap-context.sh NO usa lib-stack-detect"
     fi
 
-    # FIX T2.2: install-global.sh usa skalling_core_skills (data-driven)
-    if grep -q "skalling_core_skills" "$REPO_ROOT/install-global.sh"; then
-        pass "install-global.sh usa skalling_core_skills (data-driven)"
+    # FIX T2.2: install-global.sh reconcilia core desde el catálogo
+    if grep -q "skalling_skills.py.*repair" "$REPO_ROOT/install-global.sh"; then
+        pass "install-global.sh reconcilia core desde el catálogo"
     else
-        fail "install-global.sh NO usa skalling_core_skills"
+        fail "install-global.sh NO usa el reconciliador de skills"
     fi
 
     # FIX T2.3: NO más eval con valores externos en bootstrap

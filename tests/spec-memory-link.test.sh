@@ -1003,6 +1003,8 @@ test_doctor_info_spec_memory_link() {
         fi
     done
 
+    bash "$ROOT/tests/lib/doctor-ready-fixture.sh" "$instancia_global" "$instancia_proyecto"
+
     set +e
     OUTPUT="$(SKALLING_OPENCODE_DIR="$instancia_global" bash "$DOCTOR" --strict --project "$instancia_proyecto" 2>&1)"
     local rc=$?

@@ -11,21 +11,21 @@ directamente en la base de datos.
 
 ```bash
 SK_ROOT="${SKALLING_ROOT:-${SKALLING_OPENCODE_DIR:-$HOME/.config/opencode}}"
-bash "$SK_ROOT/bootstrap-context.sh" --target "$(pwd)" --install-project
+bash "$SK_ROOT/bootstrap-context.sh" --target "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" --install-project
 ```
 
 Al terminar, avisá al usuario que **reinicie OpenCode** para cargar los agentes y
 plugins del proyecto, y que los archivos nuevos (`.opencode/`, `.gitignore`,
-`.gitattributes`, `db/teamdb/`) se commitean con el camino humano que indica el hook.
+`.gitattributes`, `db/teamdb/`) pueden commitearlos Teo, Jhon o Luz siguiendo el receipt y el gate del candidato. Pau no realiza commits de implementación.
 
 Si el proyecto ya está inicializado, muestra primero el estado y pide confirmación
 antes de usar `--force`. Al terminar, resume stack detectado, ubicación de TeamDB y
 avisos reales del comando. No afirmes que algo se instaló si el proceso falló.
 
-Después de inicializar, chequeo `bash "$SK_ROOT/scripts/skalling-privacy.sh" status "$(pwd)"`.
+Después de inicializar, chequeo `bash "$SK_ROOT/scripts/skalling-privacy.sh" status "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"`.
 Si dice `privacy_mode: sin-configurar` (primera vez de verdad, no un re-init), le pregunto
 al usuario: **"¿Este proyecto es interno (de tu empresa, memoria compartida por git) o
-externo (de otro cliente/no tuyo, la memoria nunca se sube)?"** — y corro
+externo (de otro cliente/no tuyo, se excluye la memoria; si ya estaba rastreada hay que resolverlo antes de publicar)?"** — y corro
 `/skalling-privacy interno` o `/skalling-privacy externo` según responda, antes de seguir
 con cualquier otra cosa. Si ya tiene un `privacy_mode` configurado, no vuelvo a preguntar.
 

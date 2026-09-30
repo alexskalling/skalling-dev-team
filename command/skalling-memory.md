@@ -8,7 +8,7 @@ Resuelve siempre la instalación así:
 
 ```bash
 SK_ROOT="${SKALLING_ROOT:-${SKALLING_OPENCODE_DIR:-$HOME/.config/opencode}}"
-PROJECT="$(pwd)"
+PROJECT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 ```
 
 Interpreta el argumento solicitado y delega:
@@ -17,7 +17,7 @@ Interpreta el argumento solicitado y delega:
 - `related <slug> [tipo]`: `bash "$SK_ROOT/scripts/teamdb-related.sh" <slug> [tipo] "$PROJECT"`.
 - `graph [formato]`: `bash "$SK_ROOT/scripts/teamdb-graph.sh" "$PROJECT" [text|mermaid|dot]` (solo lectura).
 - `review`: `bash "$SK_ROOT/scripts/mem-review.sh" --target "$PROJECT" --dry-run`.
-- `refresh`: primero `bash "$SK_ROOT/scripts/teamdb-link.sh" "$PROJECT" --dry-run`;
+- `relink` (alias compatible: `refresh`): primero `bash "$SK_ROOT/scripts/teamdb-link.sh" "$PROJECT" --dry-run`;
   pide confirmación y solo entonces ejecútalo sin `--dry-run`.
 
 Sin argumentos, muestra estas opciones. Nunca borres recuerdos automáticamente:
@@ -25,13 +25,13 @@ presenta candidatos y exige una decisión individual del usuario.
 
 Para exportar un concepto por solicitud explícita:
 ```bash
-python3 ~/.config/opencode/scripts/skalling-memory-layout.py --project "$PWD" --export-concept design-system
+python3 "$SK_ROOT/scripts/skalling-memory-layout.py" --project "$PWD" --export-concept design-system
 ```
 
 Para retirar la navegación Markdown antigua de forma recuperable, cuando el usuario
 solicite limpiar esa estructura:
 ```bash
-python3 ~/.config/opencode/scripts/skalling-memory-layout.py --project "$PWD" --archive-legacy
+python3 "$SK_ROOT/scripts/skalling-memory-layout.py" --project "$PWD" --archive-legacy
 ```
 Conserva bytes en legacy_documents y mueve carpetas a .backups/legacy-memory-*.
 No modifica código de aplicación ni planes en .opencode/changes.

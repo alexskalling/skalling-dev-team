@@ -189,8 +189,10 @@ def check(diff_args, db, label, equivalents=None, require_receipt=True):
         hint = (' Jhon no pudo correr tests (no hay testing.unit.command): configurarlo, pedir revisión de Luz '
                 '(skalling-review.sh) o que un humano selle con SKALLING_VERIFY_WAIVER="motivo".') if not_run and not decisive else ''
         raise ValueError(f'{label}: falta revisión aprobada para estos cambios ({digest}). '
-                         'La aprobación tiene que ser de Jhon (verificación) o Luz (revisión) sobre el '
-                         'candidato exacto staged; un comprobante de Alex o Teo no cuenta. '
+                         'Teo/Jhon/Luz pueden commitear: dentro de OpenCode usá skalling_workflow prepare_commit '
+                         'con el id del workflow verificado y luego git commit -m "mensaje". '
+                         'El motor sella la evidencia de Jhon/Luz o la verificación automática sobre el candidato exacto; '
+                         'no repitas checks válidos ni delegues el commit a Pau. '
                          'No fabricar comprobantes ni limpiar memoria para desbloquear Git.' + hint
                          + ' Si sos una persona commiteando desde tu terminal (fuera de OpenCode): '
                          f'`bash {approve_script()}` corre los tests del proyecto sobre '
@@ -258,12 +260,26 @@ def check_commit(commit, db, seen):
     check([parent, commit], db, label, equivalents=lambda: equivalent_digests(commit))
 
 
+def privacy_check(db, tree=None):
+    if db is None or not db.execute("SELECT 1 FROM sqlite_master WHERE name='schema_meta'").fetchone():
+        return
+    mode = db.execute("SELECT value FROM schema_meta WHERE key='privacy_mode'").fetchone()
+    if not mode or mode[0] != 'external':
+        return
+    paths = (git('ls-tree', '-r', '--name-only', tree, '--', '.opencode', 'db/teamdb') if tree else
+             git('ls-files', '--', '.opencode', 'db/teamdb')).decode().splitlines()
+    if paths:
+        raise ValueError('Privacidad externa incompleta: el candidato contiene memoria/configuración rastreada. '
+                         'Retirar esas rutas del índice con autorización; .gitignore no basta: ' + ', '.join(paths[:5]))
+
+
 def main():
     root = project_root()
     path = root / '.opencode/context/team.db'
     db = sqlite3.connect(path.as_uri() + '?mode=ro', uri=True, timeout=5) if path.exists() else None
     try:
         if sys.argv[1] == 'pre-commit':
+            privacy_check(db)
             check(['--cached'], db, 'commit preparado')
         elif sys.argv[1] == 'pre-push':
             for line in sys.stdin:
@@ -283,6 +299,7 @@ def main():
                     args += ['--not', '--remotes']
                 seen = set()
                 for commit in git(*args).decode().splitlines():
+                    privacy_check(db, commit)
                     check_commit(commit, db, seen)
         else:
             raise ValueError('Modo de hook inválido')

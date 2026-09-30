@@ -8,7 +8,7 @@ Ejecuta el asistente canónico:
 
 ```bash
 SK_ROOT="${SKALLING_ROOT:-${SKALLING_OPENCODE_DIR:-$HOME/.config/opencode}}"
-bash "$SK_ROOT/scripts/merge-helper.sh" --target "$(pwd)"
+bash "$SK_ROOT/scripts/merge-helper.sh" --target "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 ```
 
 No resuelvas conflictos automáticamente. Explica cada archivo afectado y propón

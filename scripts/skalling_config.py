@@ -55,19 +55,39 @@ def testing_config(path):
     if not path.is_file():
         return {}
     text = path.read_text(encoding='utf-8')
-    config = {}
-    for kind in TESTING_KINDS:
-        match = re.search(r'(?m)^[ \t]+' + kind + r':[ \t]*\n((?:[ \t]{3,}\S.*\n?)*)', text)
-        block = match.group(1) if match else ''
-        available = re.search(r'(?m)^\s*available:\s*(.*)$', block)
-        command = re.search(r'(?m)^\s*command:\s*(.*)$', block)
-        if available and (scalar(available.group(1)) or '').lower() == 'true' and command:
-            value = scalar(command.group(1))
-            if value:
-                config[kind] = value
-    timeout = re.search(r'(?m)^[ \t]+timeout_seconds:\s*(.*)$', text)
-    if timeout and (scalar(timeout.group(1)) or '').isdigit():
-        config['timeout_seconds'] = int(scalar(timeout.group(1)))
+    config, blocks = {}, {}
+    in_testing, kind, kind_indent = False, None, None
+    timeout_value = None
+    for line in text.splitlines():
+        if not line.strip() or line.lstrip().startswith('#'):
+            continue
+        indent = len(line) - len(line.lstrip(' '))
+        field = re.match(r'\s*([\w-]+):\s*(.*)$', line)
+        if indent == 0:
+            in_testing = bool(field and field[1] == 'testing' and not field[2])
+            kind, kind_indent = None, None
+            continue
+        if not in_testing or not field:
+            continue
+        key, raw = field.groups()
+        if key in TESTING_KINDS and not raw:
+            kind, kind_indent = key, indent
+            blocks[kind] = {}
+        elif key == 'timeout_seconds' and (kind_indent is None or indent <= kind_indent):
+            timeout_value = scalar(raw)
+            kind = None
+        elif kind is not None and indent > kind_indent:
+            if key in {'command', 'available'}:
+                blocks[kind][key] = scalar(raw)
+        elif kind_indent is not None and indent <= kind_indent:
+            kind = None
+    for kind, block in blocks.items():
+        value = block.get('command')
+        if (block.get('available') or '').lower() == 'true' and value and value not in {'|', '>', '|-', '>-'}:
+            config[kind] = value
+    if timeout_value and timeout_value.isdigit():
+        config['timeout_seconds'] = int(timeout_value)
+
     return config
 
 

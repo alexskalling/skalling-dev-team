@@ -987,7 +987,8 @@ def operate(request):
             record_start_metrics(db, identifier, classification, payload.get('intent'), supersedes)
         else:
             require(state is not None, 'Unknown workflow')
-            require(state['state'] not in TERMINAL, f"{state['state']} workflows are immutable")
+            require(state['state'] not in TERMINAL or (state['state'] == 'completed' and action == 'prepare_commit'),
+                    f"{state['state']} workflows are immutable")
             if action in TRANSITIONS:
                 owner, previous, target = TRANSITIONS[action]
                 require(actor == owner and state['state'] == previous, f'{action} requires {owner} in {previous}')
@@ -1108,6 +1109,7 @@ def operate(request):
                 require(actor in {'teo', 'jhon', 'luz'}, 'Only Teo, Jhon or Luz prepare autonomous local commits')
                 require(inside_git(root), 'Local commits require a Git repository')
                 approved = {'quality_reviewed', 'documented'} if state['risk'] == 'high' else {'verified'}
+                approved.add('completed')
                 require(state['state'] in approved, 'Local commit requires the verification for this risk level')
                 require_scope(root, state['files'], state.get('base_head'))
                 require_index_in_scope(root, state['files'])
@@ -1173,6 +1175,13 @@ def public_response(state):
     response = {key: state[key] for key in fields if key in state}
     response['next_step'] = next_step(state)
     response['recommended_action'] = next_action(state)
+    commit_states = {'quality_reviewed', 'documented', 'completed'} if state.get('risk') == 'high' else {'verified', 'completed'}
+    if state['state'] in commit_states:
+        response['local_commit'] = {
+            'ready': True, 'agents': ['teo', 'jhon', 'luz'], 'prepare_action': 'prepare_commit',
+            'then': 'git commit -m "mensaje"', 'repeat_checks': False, 'push': 'user_approval',
+            'coverage_required': not bool(state.get('coverage')),
+        }
     response['check_count'] = len(state.get('checks', []))
     response['checks'] = [{**{k: c[k] for k in ('agent', 'exit_code', 'argv', 'duration_ms',
                         'criterion', 'method', 'reused_from', 'superseded_by', 'failure_kind') if k in c}, 'check_index': i}

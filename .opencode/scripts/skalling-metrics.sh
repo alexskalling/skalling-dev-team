@@ -46,7 +46,7 @@ case "$OP" in
     ;;
   report)
     project_from_last "${1:-$(pwd)}"
-    sqlite3 -separator ' ' "$DB" "SELECT request_id||' risk='||risk_level||' route='||COALESCE(route,'')||' agents='||agents_count||' handoffs='||handoffs||' permissions='||COALESCE(permission_prompts,'-')||' context_bytes='||COALESCE(context_bytes,'-')||' duration_ms='||COALESCE(duration_ms,0)||' outcome='||COALESCE(outcome,'pending')||' tokens_in='||COALESCE(tokens_input,'-')||' tokens_out='||COALESCE(tokens_output,'-')||' cache_read='||COALESCE(tokens_cache_read,'-')||' cost='||COALESCE(cost,'-')||' retries='||COALESCE(retries,'-')||' agents_used='||COALESCE(agents_used,'-') FROM workflow_metrics ORDER BY started_at DESC;"
+    python3 "$SCRIPT_DIR/skalling-metrics-report.py" "$DB"
     ;;
   summary)
     project_from_last "${1:-$(pwd)}"

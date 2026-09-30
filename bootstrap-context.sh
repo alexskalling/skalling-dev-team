@@ -393,6 +393,9 @@ main() {
         fi
     fi
     check_design_md
+    if [[ "$DRY_RUN" == false && "$INSTALL_PROJECT" == true ]]; then
+        python3 "$SCRIPT_DIR/scripts/skalling_skills.py" audit --root "$SCRIPT_DIR" --project "$PROJECT_DIR" || return 3
+    fi
 
     echo ""
     ok "Bootstrap completo — memoria inicializada; comprensión del pedido pendiente"

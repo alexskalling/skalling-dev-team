@@ -9,6 +9,38 @@ import {
   writeViolation, hookBypassViolation, createCore, createIdentityQueue, teamdbWorkflowState,
 } from '../plugins/lib/git-guard.mjs';
 
+test('Pau cannot substitute verification or local commits; reading evidence stays allowed', () => {
+  const core = createCore();
+  for (const command of [
+    'pnpm vitest run --config vitest.campanas.config.ts --coverage 2>&1 | tail -50',
+    'pnpm exec eslint modules/campanasModule', 'pnpm test:integration',
+    'env CI=1 pnpm run test:integration', './node_modules/.bin/vitest run',
+    'git commit -m "fix"', 'git -C . commit -m "fix"',
+  ]) {
+    assert.match(core.decide({tool:'shell',agent:'Pau',input:{command}}), /Pau.*Jhon/, command);
+  }
+  for (const command of ['git diff --stat', 'git log --oneline',
+    'rg "pnpm vitest run" README.md', 'echo "git commit"',
+    'bash ~/.config/opencode/scripts/teamdb-memory.sh decision slug title "pnpm test"']) {
+    assert.equal(core.decide({tool:'shell',agent:'Pau',input:{command}}), null, command);
+  }
+  for (const agent of ['Teo', 'Jhon', 'Luz']) {
+    assert.equal(core.decide({tool:'shell',agent,input:{command:'pnpm exec vitest run tests/a.test.ts'}}), null);
+    assert.equal(core.decide({tool:'shell',agent,input:{command:'git commit -m "fix"'}}), null);
+  }
+});
+
+test('Alex rejects an explicit verification/commit handoff to Pau, not documentation of results', () => {
+  const core = createCore();
+  for (const description of ['Pau corre checks pendientes', 'Ejecuta pnpm vitest run',
+    'Pau hace el commit', 'Run ESLint']) {
+    assert.match(core.decide({tool:'subagent',agent:'Alex',input:{agent:'Pau',description}}), /Pau.*Jhon/, description);
+  }
+  assert.equal(core.decide({tool:'subagent',agent:'Alex',input:{agent:'Pau',
+    description:'Documenta la decisión', prompt:'Documenta resultados de pnpm vitest run y el commit de Teo.'}}), null);
+  assert.equal(core.decide({tool:'subagent',agent:'Alex',input:{agent:'Pau',description:'Ejecuta pnpm --version'}}), null);
+});
+
 test('bloquea git push/reset/etc. encadenado detrás de un prefijo permitido', () => {
   assert.equal(blocksChainedSensitiveGit('git add . && git push'), true);
   assert.equal(blocksChainedSensitiveGit('git add -A && git commit -m "x" && git push'), true);

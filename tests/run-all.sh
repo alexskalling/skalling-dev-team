@@ -28,6 +28,7 @@ source "$ROOT/tests/lib/with-timeout.sh"
 SUITE_TIMEOUT="${SKALLING_TEST_TIMEOUT:-900}"
 
 COMMANDS=(
+  "python3 tests/commands-behavior.test.py"
   "python3 tests/agent-outcomes.test.py"
   "python3 tests/test-selection.test.py"
   "bash tests/setup.test.sh"

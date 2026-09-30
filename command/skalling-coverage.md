@@ -6,7 +6,7 @@ description: Corre la cobertura de tests del proyecto y guarda el resultado real
 
 ```bash
 SK_ROOT="${SKALLING_ROOT:-${SKALLING_OPENCODE_DIR:-$HOME/.config/opencode}}"
-bash "$SK_ROOT/scripts/skalling-coverage.sh" "$(pwd)"
+bash "$SK_ROOT/scripts/skalling-coverage.sh" "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 ```
 
 Corre el comando de cobertura detectado en `project.yaml` (`testing.coverage.command`).

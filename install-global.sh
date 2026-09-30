@@ -264,25 +264,8 @@ install_skills_core() {
         log INFO "Skill skalling-models retirada (configuración insegura desactivada)"
     fi
 
-    # Las skills core son las listadas en data/skills-by-stack.yaml bajo "core:".
-    # Stack-specific NO se instalan acá — se instalan on-demand.
-    local skills_by_stack="$SCRIPT_DIR/data/skills-by-stack.yaml"
-    local core_skills
-    core_skills="$(skalling_core_skills "$skills_by_stack" 2>/dev/null || true)"
+    run python3 "$SCRIPT_DIR/scripts/skalling_skills.py" repair --root "$SCRIPT_DIR" --target "$OPENCODE_DIR"
 
-    local skill_count=0
-    local name
-    for name in $core_skills; do
-        local skill_dir="$SCRIPT_DIR/skills-base/$name"
-        if [[ -d "$skill_dir" ]]; then
-            run mkdir -p "$SKILLS_DIR/$name"
-            run cp -R "$skill_dir/." "$SKILLS_DIR/$name/"
-            skill_count=$((skill_count + 1))
-        else
-            log WARN "Core skill declarada en YAML pero no existe: $name"
-        fi
-    done
-    log OK "$skill_count skills core instaladas (data-driven desde skills-by-stack.yaml)"
 }
 
 install_commands() {
@@ -738,11 +721,21 @@ do_install() {
     install_memory_helpers
     install_gitattributes_template
     install_data_files
+    run mkdir -p "$OPENCODE_DIR/scripts"
+    local early_helper
+    for early_helper in "$SCRIPT_DIR"/scripts/skalling_*.py; do run cp "$early_helper" "$OPENCODE_DIR/scripts/"; done
     install_teamdb
     install_teamdb_hooks
     install_skalling_scripts
     install_web_dashboard
     install_global_config
+    local helper
+    for helper in "$SCRIPT_DIR"/scripts/skalling_*.py; do run cp "$helper" "$OPENCODE_DIR/scripts/"; done
+    run cp "$SCRIPT_DIR/data/skills-managed-legacy.json" "$OPENCODE_DIR/skalling-data/"
+    if [[ "$DRY_RUN" == false ]]; then
+        python3 "$SCRIPT_DIR/scripts/skalling_skills.py" sync
+        python3 "$SCRIPT_DIR/scripts/skalling-runtime.py" record --root "$SCRIPT_DIR" --target "$OPENCODE_DIR"
+    fi
 
     if [[ "$DRY_RUN" == true ]]; then
         log INFO "Dry-run completo. Nada fue modificado."

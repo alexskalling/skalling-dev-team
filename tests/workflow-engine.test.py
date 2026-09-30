@@ -150,6 +150,32 @@ class Workflow(unittest.TestCase):
             self.call('luz', 'check', argv=['bash', 'tests/check.test.sh'], method='risk', criterion='value stays 1')
             self.call('luz', 'approve', evidence='risk checked', findings='no additional risk')
         before = self.call('alex', 'status')
+        # A project agent replaces the global header in OpenCode. Exercise the
+        # minimal local override that previously dropped commit permissions.
+        config_spec = importlib.util.spec_from_file_location('project_config', ROOT / 'scripts/skalling-project-config.py')
+        config = importlib.util.module_from_spec(config_spec)
+        config_spec.loader.exec_module(config)
+        name = actor.capitalize()
+        agent_dir = self.root / '.opencode/agents'
+        agent_dir.mkdir()
+        (agent_dir / f'{name}.md').write_text('---\nmodel: fixture/local\n---\nFixture\n')
+        config.apply_test_commands(self.root)
+        script = '''
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const {configBashRules, agentBashRules, decideRules} = await import(process.argv[1] + '/plugins/lib/workflow.mjs');
+const {createCore} = await import(process.argv[1] + '/plugins/lib/git-guard.mjs');
+const fixture = JSON.parse(fs.readFileSync(0, 'utf8'));
+const rules = [...configBashRules(JSON.stringify({permission:fixture.policy})), ...agentBashRules(fixture.header)];
+assert.equal(decideRules(rules, 'git commit -m fix'), 'allow');
+assert.equal(decideRules(rules, 'git push origin main'), 'ask');
+assert.equal(createCore().decide({tool:'shell',agent:fixture.actor,input:{command:'git commit -m fix'}}), null);
+'''
+        policy_check = subprocess.run(['node', '--input-type=module', '-e', script, str(ROOT)],
+            input=json.dumps({'policy': config.policy_permissions(), 'header': (agent_dir / f'{name}.md').read_text(),
+                              'actor': actor}), text=True, capture_output=True)
+        self.assertEqual(policy_check.returncode, 0, policy_check.stderr)
+        self.assertTrue(self.engine.public_response(before)['local_commit']['ready'])
         prepared = self.call(actor, 'prepare_commit')
         self.assertEqual(prepared['state'], before['state'], 'Commit preparation must not bypass workflow completion')
         self.assertEqual(len(prepared['checks']), len(before['checks']), 'Do not rerun verification to commit')
@@ -164,11 +190,20 @@ class Workflow(unittest.TestCase):
         completed = self.call('alex', 'complete')
         self.assertEqual(completed['state'], 'completed')
         self.assertEqual(completed['receipt_tree_hash'], prepared['receipt_tree_hash'])
+        # A model may ask to prepare again after Alex completed. This is a
+        # recovery, not a reason to repeat review or discard the valid receipt.
+        resumed = self.call(actor, 'prepare_commit')
+        self.assertEqual(resumed['state'], 'completed')
+        self.assertEqual(resumed['receipt_tree_hash'], prepared['receipt_tree_hash'])
+        self.assertEqual(len(resumed['checks']), len(before['checks']))
         head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=self.root, text=True).strip()
         push_gate = subprocess.run(['python3', str(ROOT / 'scripts/hooks/git-gate.py'), 'pre-push'],
                                    input=f'refs/heads/main {head} refs/heads/main {base}\n',
                                    cwd=self.root, capture_output=True, text=True)
         self.assertEqual(push_gate.returncode, 0, push_gate.stderr)
+        (self.root / 'app.py').write_text('value = 2\n')
+        with self.assertRaisesRegex(ValueError, 'Candidate changed'):
+            self.call(actor, 'prepare_commit')
 
     def test_teo_can_commit_auto_verified_unit_without_waiting_for_alex(self):
         self.assert_role_can_commit_verified_unit('teo', 'low')
@@ -798,6 +833,7 @@ class Workflow(unittest.TestCase):
         proc = subprocess.Popen([sys.executable, str(ROOT / 'scripts/skalling-workflow.py')], stdin=subprocess.PIPE,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         proc.stdin.write(json.dumps(request)); proc.stdin.close()
+        proc.stdin = None  # Python 3.12 communicate() otherwise flushes the closed pipe.
         for _ in range(50):
             if subprocess.run(['pgrep', '-f', marker], capture_output=True).stdout:
                 break

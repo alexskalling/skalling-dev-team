@@ -11,7 +11,7 @@ Si el usuario confirma restaurar el dump versionado:
 
 ```bash
 SK_ROOT="${SKALLING_ROOT:-${SKALLING_OPENCODE_DIR:-$HOME/.config/opencode}}"
-bash "$SK_ROOT/scripts/teamdb-restore.sh" "$(pwd)" --force
+bash "$SK_ROOT/scripts/teamdb-restore.sh" "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" --force
 ```
 
 Usa `--full-reset` únicamente para corrupción confirmada y con autorización explícita.

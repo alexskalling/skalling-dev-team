@@ -147,14 +147,14 @@ test_pau_consolidation_block() {
     local pau="$AGENTS_DIR/Pau.md"
 
     # Menciona consolidación (case-insensitive para tolerar variantes)
-    if [[ -f "$pau" ]] && grep -qiE "consolida[cr]ión" "$pau"; then
+    if [[ -f "$pau" ]] && grep -qiE "consolida" "$pau"; then
         pass "Pau.md menciona consolidación"
     else
         fail "Pau.md NO menciona consolidación"
     fi
 
     # El bloque describe el rol específico de Pau con palabras clave del spec
-    if [[ -f "$pau" ]] && grep -qE "trabajo-en-curso.*decisiones|Luz.*Quality Gate" "$pau"; then
+    if [[ -f "$pau" ]] && grep -qE "trabajo-en-curso.*decisiones|Luz.*Quality Gate|Quality Gate.*Luz" "$pau"; then
         pass "Pau.md describe el rol de consolidación con keywords del spec"
     else
         fail "Pau.md NO describe el rol de consolidación con keywords del spec"

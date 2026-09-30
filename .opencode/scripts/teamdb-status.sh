@@ -25,13 +25,18 @@ PROJECT="${2:-${PROJECT:-$(pwd)}}"
 DB="$(teamdb_project_path "$PROJECT")"
 [ -f "$DB" ] || { echo "ERROR: DB no existe: $DB (corré bash scripts/teamdb-init.sh $PROJECT)" >&2; exit 1; }
 
-python3 - "$DB" "$PLAN_FILTER" <<'PYEOF'
+python3 - "$DB" "$PLAN_FILTER" "$SCRIPT_DIR" <<'PYEOF'
 import datetime
 import sqlite3
 import sys
 
+sys.path.insert(0, sys.argv[3])
+from skalling_status import display
+if display(sys.argv[1], sys.argv[2] or None):
+    sys.exit(0)
+
 db, plan_filter = sys.argv[1], sys.argv[2] or None
-TERMINAL = ('approved', 'resolved', 'rejected', 'blocked')
+TERMINAL = ('approved', 'resolved', 'rejected')
 today = datetime.date.today().isoformat()
 
 conn = sqlite3.connect(db)

@@ -30,6 +30,9 @@ DRY_RUN=false
 SKALLING_REPO=""
 CHANNEL="${SKALLING_UPDATE_CHANNEL:-release}"
 TARGET=""
+PROJECT_TARGET=""
+LOCAL_ONLY=false
+ASSUME_YES=false
 
 c_green='\033[32m'
 c_yellow='\033[33m'
@@ -48,6 +51,9 @@ info() { printf "  ${c_blue}ℹ${c_reset} %s\n" "$*"; }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --project) PROJECT_TARGET="${2:?Falta ruta del proyecto}"; shift 2 ;;
+        --local-only) LOCAL_ONLY=true; shift ;;
+        --yes) ASSUME_YES=true; shift ;;
         --repo) SKALLING_REPO="$2"; shift 2 ;;
         --check-only) CHECK_ONLY=true; shift ;;
         --dry-run) DRY_RUN=true; shift ;;
@@ -212,6 +218,20 @@ do_update() {
 # MAIN
 # ──────────────────────────────────────────────────────────────────────────────
 
+sync_project() {
+    [[ -n "$PROJECT_TARGET" ]] || { info "Solo instalación global; proyectos locales no sincronizados."; return 0; }
+    if [[ "$CHECK_ONLY" == true || "$DRY_RUN" == true ]]; then
+        python3 "$REPO_DIR/scripts/skalling-runtime.py" check --root "$REPO_DIR" --target "$PROJECT_TARGET/.opencode"
+        return $?
+    fi
+    if [[ "$ASSUME_YES" != true ]]; then
+        err "Sincronización local pendiente: usar --project <ruta> --yes después de aprobar el cambio"
+        return 1
+    fi
+    bash "$REPO_DIR/setup.sh" --target "$PROJECT_TARGET" </dev/null
+    python3 "$REPO_DIR/scripts/skalling-runtime.py" check --root "$REPO_DIR" --target "$PROJECT_TARGET/.opencode"
+}
+
 main() {
     echo ""
     info "=== Skalling Update ==="
@@ -221,13 +241,19 @@ main() {
         exit 1
     fi
 
+    if [[ "$LOCAL_ONLY" == true ]]; then
+        [[ -n "$PROJECT_TARGET" ]] || { err "--local-only requiere --project <ruta>"; exit 2; }
+        sync_project
+        exit $?
+    fi
     set +e
     check_updates
     local check_result=$?
     set -e
 
     if [[ $check_result -eq 0 ]]; then
-        exit 0
+        sync_project
+        exit $?
     fi
 
     if [[ $check_result -eq 1 ]]; then
@@ -240,6 +266,11 @@ main() {
         exit 0
     fi
 
+    if [[ "$ASSUME_YES" == true ]]; then
+        do_update
+        sync_project
+        exit $?
+    fi
     echo ""
     warn "Se requiere confirmación para instalar."
     echo ""
@@ -250,6 +281,7 @@ main() {
     case "$respuesta" in
         s|S|si|sí|y|yes)
             do_update
+            sync_project
             ;;
         *)
             info "Actualización cancelada por el usuario."

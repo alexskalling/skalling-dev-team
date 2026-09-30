@@ -43,7 +43,7 @@ else
   exit 1
 fi
 
-MODE="${1:-}"
+MODE="${1:-status}"
 PROJECT="${2:-$(pwd)}"
 
 # Alias en español -- para que instrucciones de agente en español ("interno"/
@@ -92,6 +92,15 @@ if [ "$MODE" = "status" ]; then
   else
     echo "gitignore: sin bloque de Skalling"
   fi
+  if [ "$mode" = external ]; then
+    tracked="$(git -C "$PROJECT" ls-files -- .opencode db/teamdb 2>/dev/null || true)"
+    if [ -n "$tracked" ]; then
+      echo "protection: incomplete — archivos aún rastreados; pueden entrar en commits/push" >&2
+      printf '%s\n' "$tracked" >&2
+      exit 3
+    fi
+    echo "protection: archivos actuales excluidos; historial remoto no verificado"
+  fi
   exit 0
 fi
 
@@ -126,7 +135,7 @@ if [ "$MODE" = "external" ]; then
       echo "db/teamdb/"
       echo "$MARK_END"
     } >> "$GITIGNORE"
-    echo "OK: .gitignore actualizado (.opencode/ y db/teamdb/ ya no se commitean)"
+    echo "OK: exclusiones añadidas; comprobando archivos que Git ya rastrea"
   else
     echo "OK: .gitignore ya tenía el bloque de Skalling (sin cambios)"
   fi
@@ -150,8 +159,10 @@ if [ "$MODE" = "external" ]; then
       # shellcheck disable=SC2001
       echo "$TRACKED" | sed 's/^/  - /' >&2
       echo "" >&2
+      echo "PROTECCIÓN INCOMPLETA: los archivos rastreados siguen entrando en commits; decidir su retirada del índice." >&2
       echo "Si ya se pusheó al remoto, sacarlo del historial es una operación aparte (git rm --cached + commit," >&2
       echo "y si ya está en el remoto, reescribir historia) -- pedí ayuda explícita para eso, no se hace solo." >&2
+      exit 3
     fi
   fi
   echo "privacy_mode: external"

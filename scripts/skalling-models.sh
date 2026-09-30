@@ -108,12 +108,13 @@ PY
 }
 
 cmd_show() {
-  python3 - "$AGENTS_DIR" "$OVERRIDES_FILE" "${AGENTS[@]}" <<'PYSHOW'
+  python3 - "$AGENTS_DIR" "$OVERRIDES_FILE" "$PROJECT_DIR" "${AGENTS[@]}" <<'PYSHOW'
 import json, re, sys
 from pathlib import Path
 agents, config = Path(sys.argv[1]), Path(sys.argv[2])
 overrides = json.loads(config.read_text()) if config.is_file() else {}
-for name in sys.argv[3:]:
+project = Path(sys.argv[3])
+for name in sys.argv[4:]:
     path = agents / f'{name}.md'
     if not path.is_file():
         print(f'{name:<6} (no instalado)')
@@ -125,7 +126,15 @@ for name in sys.argv[3:]:
     desired = overrides.get(name)
     shown = desired or metadata or '(default de la sesión)'
     drift = ' [JSON; archivo global desactualizado: ejecutar apply]' if desired and desired != metadata else ''
-    print(f'{name:<6} {shown}{drift}')
+    local = project / '.opencode/agents' / f'{name}.md'
+    local_model = None
+    if local.is_file():
+        local_header = re.match(r'\A---\r?\n(.*?)\r?\n---(?:\r?\n|$)', local.read_text(), re.S)
+        value = re.search(r'(?m)^model:\s*(.+)$', local_header[1]) if local_header else None
+        local_model = value[1].strip() if value else '(default de la sesión)'
+    local_note = f' | proyecto={local_model}' if local.is_file() else ' | sin override local'
+    print(f'{name:<6} {shown}{drift}{local_note}')
+print('Configuración en disco; disponibilidad del proveedor y modelo de la sesión activa no verificados.')
 PYSHOW
 }
 

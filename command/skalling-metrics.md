@@ -6,7 +6,7 @@ description: Muestra mediciones reales de tiempo, rutas, agentes, permisos y con
 
 ```bash
 SK_ROOT="${SKALLING_ROOT:-${SKALLING_OPENCODE_DIR:-$HOME/.config/opencode}}"
-bash "$SK_ROOT/scripts/skalling-metrics.sh" report "$(pwd)"
+bash "$SK_ROOT/scripts/skalling-metrics.sh" report "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 ```
 
 Resume únicamente los datos existentes. Si todavía no hay muestras, dilo con

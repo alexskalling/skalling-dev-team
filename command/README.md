@@ -4,7 +4,7 @@ La interfaz pública está organizada por intención:
 
 - Empezar: `/skalling-init`, `/skalling-help`.
 - Privacidad: `/skalling-privacy` (proyecto interno o externo — si la memoria se comparte por git o no).
-- Completar un objetivo hasta un commit local, sin push: `/skalling-goal`.
+- Completar un objetivo hasta un commit local, sin push: `/skalling-goal` solo en OpenCode 1.x. En 2.x usar el workflow normal con Alex; el bucle Goal todavía no está implementado para ese runtime.
 - Entender: `/skalling-status`, `/skalling-codegraph`, `/skalling-dashboard`, `/skalling-coverage`.
 - Memoria: `/skalling-memory`, `/skalling-resume`, `/skalling-metrics`.
 - Mantener: `/skalling-refresh`, `/skalling-doctor`, `/skalling-update`, `/skalling-models`.

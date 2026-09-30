@@ -426,6 +426,21 @@ test_find_stale() {
         fail "stale NO detecta stale.md (output: '$out')"
     fi
 
+    # GNU stat -f writes partial filesystem output even when the invocation
+    # fails. It must never be concatenated into an arithmetic timestamp.
+    out="$(
+        stat() {
+            if [[ "$1" == '-c' ]]; then echo 1; return 0; fi
+            echo 'File: filesystem metadata'; return 1
+        }
+        skalling_find_stale "$FIXTURE_DIR/.opencode/context" 6
+    )"
+    if [[ "$out" == *"stale.md"* ]]; then
+        pass "GNU stat: timestamp numérico sin mezclar salida parcial"
+    else
+        fail "GNU stat rompe la detección de memoria antigua"
+    fi
+
     # NO debe detectar a.md (está en index)
     if [[ "$out" == *"a.md"* ]] && [[ "$out" != *"stale.md"* ]]; then
         fail "stale detecta a.md (false positive — está en index)"

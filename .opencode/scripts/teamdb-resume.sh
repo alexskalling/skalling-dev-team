@@ -10,7 +10,7 @@ PROJECT="${1:-$(pwd)}"
 DB="$(teamdb_project_path "$PROJECT")"
 [ -f "$DB" ] || { echo "ERROR: DB no existe: $DB" >&2; exit 1; }
 
-python3 - "$DB" "${2:-}" <<'PY'
+python3 - "$DB" "${2:-}" "$SCRIPT_DIR" <<'PY'
 import sqlite3
 import json
 import sys
@@ -18,30 +18,12 @@ import sys
 conn = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
 conn.row_factory = sqlite3.Row
 
-# Current workflows carry the user's objective; the legacy singleton does not.
-if conn.execute("SELECT 1 FROM sqlite_master WHERE name='agent_workflows'").fetchone():
-    requested = sys.argv[2]
-    if requested:
-        rows = conn.execute('SELECT id,body FROM agent_workflows WHERE id=?', (requested,)).fetchall()
-        if not rows:
-            raise SystemExit('Workflow desconocido: ' + requested)
-    else:
-        rows = conn.execute("SELECT id,body FROM agent_workflows WHERE json_extract(body,'$.state') "
-                            "NOT IN ('completed','superseded','abandoned') ORDER BY id LIMIT 6").fetchall()
-    if rows:
-        print('━━━ Workflows de Skalling (objetivo persistido)')
-        for row in rows[:5]:
-            workflow = json.loads(row['body'])
-            print(f"- {row['id']} [{workflow['state']}]: {workflow.get('intent') or workflow.get('acceptance', '')}")
-            for outcome in workflow.get('outcomes', []):
-                print(f"  Resultado {outcome['id']}: {outcome['expected']}")
-        if len(rows) > 5:
-            print('Hay más workflows: consultar por id.')
-        if len(rows) == 1:
-            print('Siguiente: skalling_workflow status con id=' + rows[0]['id'] + '; entrega contexto y siguiente acción.')
-        else:
-            print('Siguiente: asociar el pedido actual a su id y consultar status; no elegir por recencia.')
-        raise SystemExit(0)
+sys.path.insert(0, sys.argv[3])
+from skalling_status import display
+if display(sys.argv[1], sys.argv[2] or None):
+    raise SystemExit(0)
+if sys.argv[2]:
+    raise SystemExit('Workflow desconocido: ' + sys.argv[2])
 
 state = conn.execute(
     "SELECT active_cycle_slug, phase, actor, updated_at FROM workflow_state WHERE id=1"

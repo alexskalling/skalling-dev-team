@@ -220,7 +220,8 @@ export async function setupWorkflowV2(ctx, execute = run, agentsDir = fileURLToP
               if (decideRules(await effectiveRules(context.agent, directory), pattern) !== 'allow') {
                 throw new Error('En OpenCode v2 un check solo corre comandos que tu política ya permite (un plugin no '
                   + 'puede pedir aprobación). Para el comando de verificación del proyecto usá check con configured: true; '
-                  + 'si hace falta otro comando, informalo a Alex. Comando rechazado: ' + pattern);
+                  + 'si hace falta otro comando, informalo a Alex para corregir el permiso del mismo verificador. '
+                  + 'No lo delegues a Pau ni apruebes como ejecutado un check pendiente. Comando rechazado: ' + pattern);
               }
             }}, execute),
         };

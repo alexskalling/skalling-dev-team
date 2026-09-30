@@ -92,7 +92,10 @@ for candidate in "${CANDIDATES[@]}"; do
   found=0
   for f in "${SEARCH_FILES[@]}"; do
     [ "$f" = "$candidate" ] && continue
-    if grep -q -- "$name" "$f" 2>/dev/null; then
+    if grep -q -- "$name" "$f" 2>/dev/null || {
+      [[ "$name" == *.py && "${name%.py}" =~ ^[a-zA-Z_][a-zA-Z_0-9]*$ ]] &&
+      grep -qE "^[[:space:]]*(from ${name%.py} import|import ${name%.py}([[:space:],]|$))" "$f" 2>/dev/null
+    }; then
       found=1
       break
     fi

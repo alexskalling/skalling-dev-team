@@ -186,7 +186,12 @@ check_global_install() {
     # Skills core
     if [[ -d "$OPENCODE_DIR/skills" ]]; then
         local count; count="$(find "$OPENCODE_DIR/skills" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')"
-        ok "$count skills core instaladas"
+        info "$count carpetas de skills; se valida su metadata a continuación"
+        if python3 "$SCRIPT_DIR/scripts/skalling_skills.py" check-core --root "$SCRIPT_DIR" --target "$OPENCODE_DIR"; then
+            ok "Metadatos de skills globales verificados"
+        else
+            err "Skills globales inválidas"
+        fi
     else
         warn "Falta directorio skills (no es crítico)"
     fi
@@ -619,6 +624,10 @@ check_scripts_parity() {
     if [[ "$GLOBAL_ONLY" == true ]]; then
         return 0
     fi
+    if [[ ! -d "$SCRIPT_DIR/agents-base" ]]; then
+        info "Paridad de fuentes: no aplica al paquete instalado; se verifica su inventario de runtime."
+        return 0
+    fi
 
     section "Scripts parity (bundle local)"
 
@@ -654,6 +663,10 @@ check_scripts_parity() {
 
 check_dead_code() {
     if [[ "$GLOBAL_ONLY" == true ]]; then
+        return 0
+    fi
+    if [[ ! -d "$SCRIPT_DIR/agents-base" ]]; then
+        info "Análisis de callers: requiere el repositorio fuente completo; no se infiere código muerto del paquete instalado."
         return 0
     fi
 
@@ -708,6 +721,18 @@ main() {
 
     echo ""
     printf "${c_blue}━━━ Resumen ━━━${c_reset}\n"
+    if [[ "$GLOBAL_ONLY" == false && -d "$PROJECT_DIR/.opencode" ]]; then
+        if python3 "$SCRIPT_DIR/scripts/skalling_skills.py" audit --root "$SCRIPT_DIR" --project "$PROJECT_DIR"; then
+            ok "Skills del proyecto válidas y registro reconciliado"
+        else
+            err "Skills del proyecto incompletas o inválidas; ejecutar /skalling-refresh"
+        fi
+        if python3 "$SCRIPT_DIR/scripts/skalling-runtime.py" check --root "$SCRIPT_DIR" --target "$PROJECT_DIR/.opencode"; then
+            ok "Runtime local coincide con el inventario y la versión"
+        else
+            warn "Runtime local pendiente de sincronizar; /skalling-update --project"
+        fi
+    fi
     printf "  ${c_green}OK:${c_reset}       %d\n" "$OK_COUNT"
     printf "  ${c_yellow}Warnings:${c_reset} %d\n" "$WARN_COUNT"
     if [[ "$WARN_ENV_COUNT" -gt 0 ]]; then
@@ -730,7 +755,11 @@ main() {
     fi
 
     echo ""
-    ok "Doctor completo. Skalling está saludable."
+    if [[ "$WARN_COUNT" -gt 0 ]]; then
+        info "Doctor completo con advertencias pendientes; no equivale a una instalación plenamente verificada."
+    else
+        ok "Doctor completo. Comprobaciones ejecutadas sin errores."
+    fi
     exit 0
 }
 

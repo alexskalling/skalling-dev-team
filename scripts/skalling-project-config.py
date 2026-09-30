@@ -14,13 +14,15 @@
   última: un allow en la config del proyecto lo pisaba el `"python3 *": ask`
   del agente, y cada corrida de tests pedía permiso. Solo comandos simples
   (sin encadenar, redirigir ni sustituir): project.yaml viaja por git.
+- commits locales: repone la política canónica de Teo/Jhon/Luz también en
+  cabeceras locales mínimas, que reemplazan las globales. No habilita push.
 
 Mezcla sin pisar el resto de la config del usuario.
 
 Uso: skalling-project-config.py <proyecto> [--check | --remove | --sync-agents]
   --sync-agents actualiza los prompts locales con backup; conserva sus cabeceras.
-  --remove  (desinstalación) devuelve build/plan/general y el agente por
-            defecto de OpenCode; conserva los permisos, que solo restringen.
+  --remove devuelve build/plan/general y el agente por defecto de OpenCode;
+           retira los bloques de permisos propios de las cabeceras locales.
 """
 import json
 import hashlib
@@ -36,8 +38,13 @@ from skalling_config import TESTING_KINDS, testing_config  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 DISABLED = ('build', 'plan', 'general')
 TEST_AGENTS = ('Teo', 'Jhon', 'Luz')
+ALL_AGENTS = ('Alex', 'Pol', 'Jes', 'Sol', 'Teo', 'Jhon', 'Luz', 'Pau')
+COMMAND_BEGIN = '    # skalling: comandos de mantenimiento del rol (inicio)'
+COMMAND_END = '    # skalling: comandos de mantenimiento del rol (fin)'
 BEGIN = '    # skalling: comandos de tests del proyecto (inicio)'
 END = '    # skalling: comandos de tests del proyecto (fin)'
+COMMIT_BEGIN = '    # skalling: commits locales del rol (inicio)'
+COMMIT_END = '    # skalling: commits locales del rol (fin)'
 UNSAFE = re.compile(r'[;&|<>`$\n\r\\]|\b(?:rm|sudo|curl|wget|ssh|scp|chmod|chown|dd|mkfs|eval|git\s+push)\b')
 
 
@@ -62,15 +69,15 @@ def sync_agents(project, force=False, check=False):
         return []
     target = project / '.opencode/agents'
     manifest = target / '.skalling-sync.json'
-    hashes = json.loads(manifest.read_text()) if manifest.is_file() else {}
+    hashes = json.loads(manifest.read_text(encoding='utf-8')) if manifest.is_file() else {}
     drift = []
     for source in agent_sources():
         path = target / source.name
         if not source.is_file() or not path.is_file():
             continue  # Projects without a local override inherit the global agent.
-        old = path.read_text()
+        old = path.read_text(encoding='utf-8')
         body = agent_body(old)
-        wanted = agent_body(source.read_text())
+        wanted = agent_body(source.read_text(encoding='utf-8'))
         digest = hashlib.sha256(body.encode()).hexdigest()
         if body == wanted:
             if not check:
@@ -82,20 +89,20 @@ def sync_agents(project, force=False, check=False):
         stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
         backup = project / '.opencode/.skalling-backups/agents' / stamp / source.name
         backup.parent.mkdir(parents=True, exist_ok=True)
-        backup.write_text(old)
+        backup.write_text(old, encoding='utf-8')
         header = old[:-len(body)] if body else old
         if not header:
-            rendered = source.read_text()
+            rendered = source.read_text(encoding='utf-8')
             header = rendered[:-len(wanted)] if wanted else rendered
         # Refuse to overwrite an editor's concurrent change.
-        if path.read_text() != old:
+        if path.read_text(encoding='utf-8') != old:
             raise SystemExit(f'ERROR: {path} cambió durante la sincronización; reintentar')
         temporary = path.with_suffix('.md.skalling-tmp')
-        temporary.write_text(header + wanted)
+        temporary.write_text(header + wanted, encoding='utf-8')
         os.replace(temporary, path)
         hashes[source.name] = hashlib.sha256(wanted.encode()).hexdigest()
     if not check and target.is_dir():
-        manifest.write_text(json.dumps(hashes, indent=2) + '\n')
+        manifest.write_text(json.dumps(hashes, indent=2) + '\n', encoding='utf-8')
     return drift
 
 
@@ -120,22 +127,58 @@ def configured_commands(project):
                     equivalent = prefix + alias[1] + alias[2]
                     if equivalent not in commands:
                         commands.append(equivalent)
-    return commands
+    return commands + local_verification_commands(project, commands)
 
 
-def rules_for(commands):
+def local_verification_commands(project, commands):
+    """Allow local binaries, never package downloads or arbitrary exec.
+
+    pnpm's shorthand prefers package scripts over binaries: only grant it
+    when there is no colliding script. Other managers keep explicit commands
+    from project.yaml until their local-only invocation is supported.
+    """
+    if not any(command.startswith('pnpm ') for command in commands):
+        return []
+    try:
+        package = json.loads((project / 'package.json').read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return []
+    if not isinstance(package, dict):
+        return []
+    dependencies = set()
+    for field in ('dependencies', 'devDependencies'):
+        if isinstance(package.get(field), dict):
+            dependencies.update(package[field])
+    scripts = package.get('scripts') or {}
+    result = []
+    for tool, suffix in (('vitest', ' run'), ('eslint', '')):
+        if tool not in dependencies:
+            continue
+        result.append(f'pnpm exec {tool}{suffix}')
+        if isinstance(scripts, dict) and tool not in scripts:
+            result.append(f'pnpm {tool}{suffix}')
+    return result
+
+
+def rules_for(commands, readonly=False):
     rules = []
     for command in commands:
         for pattern in (command, command.rstrip(' *') + ' *'):
             line = f'    {json.dumps(pattern, ensure_ascii=False)}: allow'
             if line not in rules:
                 rules.append(line)
+    if readonly:
+        for command in commands:
+            options = ('--fix', '--output-file', '-o') if command.endswith(' eslint') else (
+                ('--update', '-u') if command.endswith(' vitest run') else ())
+            for option in options:
+                rules.append(f'    {json.dumps(command + " *" + option + "*")}: deny')
     # Líneas propias de comentario (no al final de una regla: el parser de
     # permisos del plugin v2 ignoraría la regla entera).
     return [BEGIN, *rules, END] if rules else []
 
 
-def patched_agent(text, rules):
+def patched_agent(text, rules, begin=BEGIN, end_marker=END):
     """Reemplaza las líneas marcadas por las vigentes, al FINAL del bloque bash
     del frontmatter (gana la última regla que coincide)."""
     if not text.startswith('---\n'):
@@ -148,12 +191,23 @@ def patched_agent(text, rules):
     if not sep:
         return text
     lines = head.split('\n')
-    if BEGIN in lines and END in lines and lines.index(BEGIN) < lines.index(END):
-        del lines[lines.index(BEGIN):lines.index(END) + 1]
+    if begin in lines and end_marker in lines and lines.index(begin) < lines.index(end_marker):
+        del lines[lines.index(begin):lines.index(end_marker) + 1]
         if not rules and lines == ['permission:', '  bash:']:
             return rest
     if '  bash:' not in lines:
-        return text
+        if not rules:
+            return text
+        scalar = next((i for i, line in enumerate(lines) if re.fullmatch(r'  bash: (allow|ask|deny)', line)), None)
+        if scalar is not None:
+            effect = lines[scalar].split(': ')[1]
+            lines[scalar:scalar + 1] = ['  bash:', f'    "*": {effect}']
+        elif 'permission:' in lines:
+            lines[lines.index('permission:') + 1:lines.index('permission:') + 1] = ['  bash:']
+        elif any(line.startswith('permission:') for line in lines):
+            return text  # Preserve an explicit scalar permission policy.
+        else:
+            lines += ['permission:', '  bash:']
     end = lines.index('  bash:') + 1
     while end < len(lines) and lines[end].startswith('    '):
         end += 1
@@ -161,39 +215,66 @@ def patched_agent(text, rules):
     return '---\n' + '\n'.join(lines) + sep + rest
 
 
+def local_commit_rules(name):
+    policy = permission_policy()
+    profile = policy['profiles'][name]
+    patterns = [p for p in profile['bash_patterns'] if re.match(r'^git (?:-C \* )?(?:add|commit)(?: |$)', p)]
+    return [COMMIT_BEGIN, *[f'    {json.dumps(p)}: {profile["overrides"].get(p, policy["rules"][p])}'
+                           for p in patterns], COMMIT_END]
+
+
+def patched_project_agent(text, commands, name, project, remove=False):
+    if name in TEST_AGENTS:
+        text = patched_agent(text, [] if remove else rules_for(commands, readonly=name != 'Teo'))
+        rules = [] if remove or (project / 'agents-base').is_dir() else local_commit_rules(name)
+        text = patched_agent(text, rules, COMMIT_BEGIN, COMMIT_END)
+    policy = permission_policy()
+    profile = policy['profiles'][name]
+    helpers = ('skalling-refresh.sh', 'teamdb-status.sh', 'teamdb-resume.sh', 'mem-review.sh',
+               'merge-helper.sh', 'skalling-metrics.sh', 'skalling-models.sh', 'skalling-privacy.sh',
+               'setup-team-doctor.sh', 'bootstrap-context.sh')
+    patterns = [p for p in profile['bash_patterns'] if p.startswith('bash ') and any(h in p for h in helpers)]
+    rules = [] if remove or (project / 'agents-base').is_dir() else [COMMAND_BEGIN, *[
+        f'    {json.dumps(p)}: {profile["overrides"].get(p, policy["rules"][p])}' for p in patterns], COMMAND_END]
+    return patched_agent(text, rules, COMMAND_BEGIN, COMMAND_END)
+
+
 def test_command_drift(project):
-    rules = rules_for(configured_commands(project))
+    commands = configured_commands(project)
     drift = []
-    for name in TEST_AGENTS:
+    for name in ALL_AGENTS:
         path = project / '.opencode/agents' / f'{name}.md'
         if path.is_file():
             text = path.read_text(encoding='utf-8')
-            if patched_agent(text, rules) != text:
+            if patched_project_agent(text, commands, name, project) != text:
                 drift.append(name)
     return drift
 
 
 def apply_test_commands(project, remove=False):
-    rules = [] if remove else rules_for(configured_commands(project))
-    for name in TEST_AGENTS:
+    commands = [] if remove else configured_commands(project)
+    for name in ALL_AGENTS:
         path = project / '.opencode/agents' / f'{name}.md'
         if path.is_file():
             text = path.read_text(encoding='utf-8')
-            patched = patched_agent(text, rules)
+            patched = patched_project_agent(text, commands, name, project, remove)
             if patched != text:
                 path.write_text(patched, encoding='utf-8')
 
 
-def policy_permissions():
+def permission_policy():
     # Repo: data/. Instalación global: ~/.config/opencode/skalling-data/.
     for candidate in (ROOT / 'data/permission-policy.json', ROOT / 'skalling-data/permission-policy.json'):
         if candidate.is_file():
-            policy = json.loads(candidate.read_text(encoding='utf-8'))
-            profile = policy['profiles']['project']
-            result = dict(profile['permissions'])
-            result['bash'] = {p: profile['overrides'].get(p, policy['rules'][p]) for p in profile['bash_patterns']}
-            return result
+            return json.loads(candidate.read_text(encoding='utf-8'))
     raise SystemExit('ERROR: no se encontró data/permission-policy.json')
+
+
+def policy_permissions():
+    policy = permission_policy()
+    profile = policy['profiles']['project']
+    return {**profile['permissions'], 'bash': {
+        p: profile['overrides'].get(p, policy['rules'][p]) for p in profile['bash_patterns']}}
 
 
 def expected(config):
@@ -247,7 +328,7 @@ def main():
     if check:
         missing = [key for key in ('default_agent', 'agent', 'permission') if current.get(key) != wanted[key]]
         if test_command_drift(project):
-            missing.append('comandos de tests en ' + ', '.join(test_command_drift(project)))
+            missing.append('permisos de verificación/commit en ' + ', '.join(test_command_drift(project)))
         drift = sync_agents(project, check=True)
         if drift:
             missing.append('protocolo de agentes: ' + ', '.join(drift) + ' (usar --sync-agents; conserva backup)')

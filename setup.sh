@@ -254,39 +254,8 @@ step_install_agents() {
 }
 
 step_install_skills() {
-    log INFO "Sincronizando skills core (stack-specific se instalan on-demand)"
-    local count=0
-    for skill_dir in "$SKILLS_BASE_DIR"/*/; do
-        [[ -d "$skill_dir" ]] || continue
-        local name; name="$(basename "$skill_dir")"
-        case "$name" in
-            next-cache-components|shadcn-ui|tailwind-design-system|\
-            vercel-composition-patterns|ui-ux-pro-max|firecrawl|\
-            vitest|webapp-testing)
-                continue
-                ;;
-        esac
-        if [[ -d "$SKILLS_DEST_DIR/$name" ]]; then
-            # Existe — sync solo si hay diff
-            local diff_files
-            diff_files="$(diff -rq "$skill_dir" "$SKILLS_DEST_DIR/$name" 2>/dev/null || true)"
-            if [[ -n "$diff_files" ]]; then
-                if [[ "$DRY_RUN" == true ]]; then
-                    echo "    [dry-run] sync $name (tiene diffs)"
-                elif ask_yes_no "    ¿Actualizar skill $name?" "n"; then
-                    cp -r "$skill_dir"/. "$SKILLS_DEST_DIR/$name/"
-                    log OK "Skill actualizada: $name"
-                fi
-            else
-                log INFO "Skill idéntica, skip: $name"
-            fi
-        else
-            run cp -r "$skill_dir" "$SKILLS_DEST_DIR/$name"
-            log OK "Skill instalada: $name"
-        fi
-        count=$((count+1))
-    done
-    log OK "Skills core sincronizadas"
+    log INFO "Reconciliando skills core; preservando personalizaciones"
+    run python3 "$SCRIPT_DIR/scripts/skalling_skills.py" repair --root "$SCRIPT_DIR" --target "$OPENCODE_DIR"
 }
 
 step_install_scripts() {
@@ -799,8 +768,18 @@ main() {
     step_install_gitattributes
     step_install_scripts
     step_install_hooks
+    run cp "$SCRIPT_DIR/scripts/mem-review.sh" "$SCRIPT_DIR/scripts/merge-helper.sh" "$SCRIPT_DIR/scripts/dashboard-server.py" "$SCRIPTS_DEST_DIR/"
+    local helper
+    for helper in "$SCRIPT_DIR"/scripts/skalling_*.py; do run cp "$helper" "$SCRIPTS_DEST_DIR/"; done
+    for helper in "$SCRIPT_DIR"/command/skalling-*.md; do run cp "$helper" "$OPENCODE_DIR/command/"; done
+    run mkdir -p "$OPENCODE_DIR/skalling-data"
+    run cp "$SCRIPT_DIR/data/skills-by-stack.yaml" "$SCRIPT_DIR/data/skills-managed-legacy.json" "$OPENCODE_DIR/skalling-data/"
     step_install_project_config
     step_init_teamdb
+    if [[ "$DRY_RUN" == false ]]; then
+        python3 "$SCRIPT_DIR/scripts/skalling_skills.py" sync --project "$TARGET_DIR"
+        python3 "$SCRIPT_DIR/scripts/skalling-runtime.py" record --root "$SCRIPT_DIR" --target "$OPENCODE_DIR"
+    fi
     step_install_agents_md
     if [[ "$WITH_CI" == true ]]; then step_install_ci; fi
 

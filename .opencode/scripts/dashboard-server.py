@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 """Servidor local y de solo lectura para el centro de control TeamDB."""
 
+from contextlib import closing
 import hashlib
 import http.server
 import json
 import os
+import sys
+import datetime
 import sqlite3
 import urllib.parse
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from skalling_status import workflows, describe
 
 PORT = int(os.environ.get("TDB_PORT", "3741"))
 DB_PATH = os.environ.get("TDB_DB", "")
@@ -49,7 +55,7 @@ class DashboardData:
 
     def query(self, sql, params=()):
         try:
-            with self._connect() as conn:
+            with closing(self._connect()) as conn:
                 return [dict(row) for row in conn.execute(sql, params).fetchall()]
         except DashboardError:
             raise
@@ -72,6 +78,16 @@ class DashboardData:
         return counts
 
     def overview(self):
+        current = describe(workflows(self.db_path))
+        if current:
+            return {
+                'workflows': current, 'workflow': {'phase': 'workflows activos'},
+                'plan': {'title': current[0].get('intent', '') if len(current) == 1 else f'{len(current)} objetivos activos'},
+                'progress': {'done': None, 'total': None, 'percent': None},
+                'active_tasks': self.workflow_tasks(current),
+                'blockers': [s for s in self.workflow_tasks(current) if s['status'] == 'blocked'],
+                'next_tasks': [], 'status_counts': self._status_counts(self.workflow_tasks(current)),
+            }
         workflow = self.one("SELECT * FROM workflow_state WHERE id=1", default={}) if self.table_exists("workflow_state") else {}
         plan = None
         if workflow.get("active_cycle_slug"):
@@ -110,9 +126,18 @@ class DashboardData:
             "ORDER BY CASE p.status WHEN 'in_progress' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END, p.updated_at DESC"
         )
 
+    @staticmethod
+    def workflow_tasks(current):
+        return [{'id': 'workflow:' + s['id'], 'slug': s['id'], 'title': s.get('intent', s.get('acceptance', '')),
+                 'status': 'blocked' if s['state'] == 'blocked' else 'pending',
+                 'workflow_state': s['state'], 'owner': s['recommended_action']['agent'],
+                 'priority': 1, 'source': 'workflow', 'next_step': s['next_step'],
+                 'blocked_reason': s.get('last_rejection', {}).get('reason') if s['state'] == 'blocked' else None}
+                for s in current]
+
     def tasks(self):
         claim_join = "LEFT JOIN task_claims c ON c.task_id=t.id AND c.status='active'" if self.table_exists("task_claims") else "LEFT JOIN (SELECT NULL task_id, NULL actor, NULL lease_until) c ON 0"
-        return self.query(
+        return self.workflow_tasks(describe(workflows(self.db_path))) + self.query(
             "SELECT t.*, p.slug AS plan_slug, p.title AS plan_title, c.actor AS claimed_by, c.lease_until "
             f"FROM tasks t LEFT JOIN plans p ON p.id=t.plan_id {claim_join} "
             "ORDER BY t.priority, t.order_index, t.id"
@@ -143,8 +168,9 @@ class DashboardData:
             result.append({
                 "name": name,
                 "role": TEAM_ROLES.get(name, "Colaborador"),
-                "state": "working" if current else "waiting",
-                "current_task": current,
+                "state": "working" if current else ("assigned" if any(t.get("source") == "workflow" for t in assigned) else "waiting"),
+                "activity_source": "persisted_assignment",
+                "current_task": current or next((t for t in assigned if t.get("source") == "workflow"), None),
                 "assigned": len(assigned),
                 "completed": sum(task.get("status") in TERMINAL_TASK_STATES for task in assigned),
                 "blocked": sum(task.get("status") == "blocked" for task in assigned),
@@ -154,6 +180,11 @@ class DashboardData:
     def timeline(self, limit=100):
         limit = max(1, min(int(limit), 500))
         events = []
+        if self.table_exists("agent_workflow_events"):
+            for row in self.query("SELECT * FROM agent_workflow_events ORDER BY ts DESC LIMIT ?", (limit,)):
+                events.append({'kind': 'workflow', 'ts': datetime.datetime.fromtimestamp(row['ts'], datetime.timezone.utc).isoformat(),
+                               'agent': row['actor'], 'summary': f"{row['request_id']}: {row['action']} → {row['state']}",
+                               'detail': row['evidence']})
         if self.table_exists("audit_log"):
             for row in self.query("SELECT * FROM audit_log ORDER BY ts DESC LIMIT ?", (limit,)):
                 events.append({"kind": "activity", "ts": row.get("ts"), "agent": row.get("agent") or "sistema", "summary": f"{row.get('action') or 'cambio'} en {row.get('table_name') or 'TeamDB'}", "detail": row.get("details") or ""})
@@ -268,7 +299,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.wfile.write(body)
             else:
                 self.send_json({"error": "Ruta no encontrada."}, 404)
-        except (DashboardError, OSError, ValueError) as exc:
+        except (DashboardError, OSError, ValueError, sqlite3.Error) as exc:
             self.send_json({"error": str(exc), "action": "Revisa /skalling-doctor y vuelve a intentar."}, 500)
 
     def do_POST(self):

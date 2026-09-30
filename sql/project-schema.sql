@@ -114,7 +114,7 @@ CREATE TABLE schema_meta (
   value TEXT NOT NULL
 );
 
-INSERT INTO schema_meta VALUES ('version', '0.15.2');
+INSERT INTO schema_meta VALUES ('version', '0.15.3');
 
 CREATE TABLE IF NOT EXISTS data_revisions (
   id INTEGER PRIMARY KEY,

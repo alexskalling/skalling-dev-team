@@ -271,7 +271,12 @@ skalling_find_stale() {
         fi
 
         local mtime_epoch
-        mtime_epoch="$(stat -f %m "$md_file" 2>/dev/null || stat -c %Y "$md_file" 2>/dev/null || echo 0)"
+        # GNU stat -f prints filesystem details before failing on %m. A single
+        # command substitution with `||` would concatenate that text with %Y.
+        if ! mtime_epoch="$(stat -c %Y "$md_file" 2>/dev/null)"; then
+            mtime_epoch="$(stat -f %m "$md_file" 2>/dev/null || echo 0)"
+        fi
+        [[ "$mtime_epoch" =~ ^[0-9]+$ ]] || continue
         [[ "$mtime_epoch" -gt 0 ]] || continue
 
         local age_days=$(( (now_epoch - mtime_epoch) / 86400 ))

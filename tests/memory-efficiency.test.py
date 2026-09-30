@@ -115,5 +115,22 @@ class MemoryEfficiency(unittest.TestCase):
         config.sync_agents(self.project)
         self.assertIn('Custom instructions', path.read_text())
 
+    def test_sync_uses_utf8_under_a_windows_legacy_locale(self):
+        agents = self.project / '.opencode/agents'
+        agents.mkdir()
+        path = agents / 'Teo.md'
+        old = '---\nmodel: custom/model\n---\nMemoria: 🚀\n'
+        path.write_text(old, encoding='utf-8')
+        read, write = Path.read_text, Path.write_text
+        def windows_read(target, encoding=None, **kwargs):
+            return read(target, encoding=encoding or 'cp1252', **kwargs)
+        def windows_write(target, data, encoding=None, **kwargs):
+            return write(target, data, encoding=encoding or 'cp1252', **kwargs)
+        with patch.object(Path, 'read_text', windows_read), patch.object(Path, 'write_text', windows_write):
+            config.sync_agents(self.project, force=True)
+        self.assertIn('model: custom/model', path.read_text(encoding='utf-8'))
+        backup = next(self.project.glob('.opencode/.skalling-backups/agents/*/Teo.md'))
+        self.assertEqual(backup.read_text(encoding='utf-8'), old)
+
 if __name__ == '__main__':
     unittest.main()

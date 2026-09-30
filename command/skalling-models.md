@@ -2,6 +2,8 @@
 description: Asigna un modelo de OpenCode a cada agente de Skalling, individualmente.
 ---
 
+Pedido del usuario: $ARGUMENTS
+
 # Skalling Models
 
 Cada uno de los 8 agentes (Alex, Jes, Jhon, Luz, Pau, Pol, Sol, Teo) puede usar un
@@ -15,7 +17,7 @@ disponibles en tu instalación antes de asignar.
 
 ```bash
 SK_ROOT="${SKALLING_ROOT:-${SKALLING_OPENCODE_DIR:-$HOME/.config/opencode}}"
-bash "$SK_ROOT/scripts/skalling-models.sh" "$@"
+bash "$SK_ROOT/scripts/skalling-models.sh" <argumentos validados del pedido>
 ```
 
 Uso:

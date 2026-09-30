@@ -2,6 +2,8 @@
 description: Marca un proyecto como interno (memoria compartida vía git) o externo (memoria nunca sale de la máquina local).
 ---
 
+Pedido del usuario: $ARGUMENTS
+
 # Skalling Privacy
 
 Por diseño, Skalling commitea una fotografía completa de TeamDB
@@ -11,7 +13,7 @@ empresa), eso es exactamente lo que no se quiere.
 
 ```bash
 SK_ROOT="${SKALLING_ROOT:-${SKALLING_OPENCODE_DIR:-$HOME/.config/opencode}}"
-bash "$SK_ROOT/scripts/skalling-privacy.sh" "$@"
+bash "$SK_ROOT/scripts/skalling-privacy.sh" <argumentos validados del pedido>
 ```
 
 Uso (acepta `interno`/`externo` o `internal`/`external`, indistinto):
@@ -26,3 +28,5 @@ Uso (acepta `interno`/`externo` o `internal`/`external`, indistinto):
 
 No inventar excepciones a mano en `.gitignore`: si alguien pide ajustar qué
 se ignora, usar este comando, no editar el archivo directamente.
+
+Una salida 3 indica protección incompleta: hay archivos rastreados. No decir que están protegidos ni retirarlos del índice sin una instrucción explícita. El estado tampoco certifica que el historial remoto esté limpio.

@@ -46,7 +46,7 @@ else
 fi
 
 # ── B) Migración 005 idempotente sobre DB minima ──────────────
-TMP="$(mktemp -d /var/folders/0k/fn8hdjkd03s5jhp5j5hlp47m0000gn/T/opencode/skills-reg-XXXXXX)"
+TMP="$(mktemp -d "${TMPDIR:-/tmp}/skills-reg-XXXXXX")" || exit 1
 export HOME="$TMP/home"
 mkdir -p "$HOME/.config/opencode"
 
@@ -154,17 +154,17 @@ P_ROWS=$(sqlite3 "$P_DB" "SELECT COUNT(*) FROM skills_registry")
 P_FOO_DESC=$(sqlite3 "$P_DB" "SELECT description FROM skills_registry WHERE name='foo'")
 P_REMOTE_SRC=$(sqlite3 "$P_DB" "SELECT source FROM skills_registry WHERE name='remote-only'")
 P_REMOTE_DESC=$(sqlite3 "$P_DB" "SELECT COALESCE(description,'NULL') FROM skills_registry WHERE name='remote-only'")
-if [ "$P_ROWS" = "2" ] && [ "$P_FOO_DESC" = "Skill local del proyecto" ] && [ "$P_REMOTE_SRC" = "some/repo" ] && [ "$P_REMOTE_DESC" = "NULL" ]; then
-  assert_pass "skills_registry proyecto: local con descripción + locked remoto sin SKILL.md local"
+if [ "$P_ROWS" = "1" ] && [ "$P_FOO_DESC" = "Skill local del proyecto" ] && [ -z "$P_REMOTE_SRC" ]; then
+  assert_pass "skills_registry proyecto: solo skills disponibles; lock remoto ausente no se anuncia"
 else
-  assert_fail "skills_registry proyecto: local con descripción + locked remoto sin SKILL.md local" \
+  assert_fail "skills_registry proyecto: solo skills disponibles; lock remoto ausente no se anuncia" \
     "rows=$P_ROWS foo=$P_FOO_DESC remote_src=$P_REMOTE_SRC remote_desc=$P_REMOTE_DESC"
 fi
 
 bash "$ROOT/scripts/teamdb-skills-sync.sh" "$PROJ" >/dev/null 2>&1
 G_ROWS2=$(sqlite3 "$G_DB" "SELECT COUNT(*) FROM skills_active")
 P_ROWS2=$(sqlite3 "$P_DB" "SELECT COUNT(*) FROM skills_registry")
-if [ "$G_ROWS2" = "3" ] && [ "$P_ROWS2" = "2" ]; then
+if [ "$G_ROWS2" = "3" ] && [ "$P_ROWS2" = "1" ]; then
   assert_pass "sync idempotente (2da pasada sin duplicados)"
 else
   assert_fail "sync idempotente (2da pasada sin duplicados)" "global=$G_ROWS2 proj=$P_ROWS2"

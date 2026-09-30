@@ -373,7 +373,7 @@ export function riskyInvocation(raw, norm) {
   return null;
 }
 
-const HELPER_PATH = /(?:^|\/)(?:\.opencode|\.config\/opencode)\/scripts\/|teamdb-destructive\.py/;
+const HELPER_PATH = /(?:^|\/)(?:\.opencode|\.config\/opencode)\/(?:scripts\/|(?:bootstrap-context|setup-team-doctor)\.sh$)|teamdb-destructive\.py/;
 
 // Lo que realmente se ejecuta: el script de un intérprete o un programa por
 // ruta. null si es un programa del PATH que no recibe un script.
@@ -745,9 +745,10 @@ export function hookBypassViolation(command) {
     || /\bgit\s+(?:-C\s+\S+\s+)?commit\b[^\n;&|]*\s-[a-zA-Z]*n[a-zA-Z]*(?=\s|$)/.test(masked)
     || /\bcore\.hooksPath\b|\bHUSKY=0\b/.test(masked);
   if (!bypass) return null;
-  return 'Los hooks de git no se saltan (--no-verify, -n, core.hooksPath): son el gate que exige la '
-    + 'verificación de Jhon o Luz sobre el candidato exacto. Si el commit o el push se bloquea, falta esa '
-    + 'verificación: pedísela a Jhon (o a Luz con skalling-review.sh). Tampoco se le sugiere al usuario saltarlos.';
+  return 'Quitá --no-verify/-n/core.hooksPath; los hooks siguen activos. Teo/Jhon/Luz usan '
+    + 'skalling_workflow prepare_commit con el id verificado y luego git commit -m "mensaje", como comando separado. '
+    + 'Si el hook falla, usá su error concreto: no implica siempre falta de pruebas y no se repiten checks ya válidos. '
+    + 'Pau no prepara commits; el push requiere autorización del usuario.';
 }
 
 export function identityViolation(command) {
@@ -892,6 +893,33 @@ const WORKFLOW_BLOCKED = 'Use skalling_workflow: identidad y evidencia provienen
 const APPROVER_BLOCKED = 'La aprobación de un commit la registra skalling_workflow (Jhon o Luz). skalling-approve.sh y '
   + 'teamdb-seal-receipt.sh son para una persona en su propia terminal; no se sugieren ni se corren desde un agente.';
 
+const PAU_ENGINEERING_BLOCKED = 'Pau documenta evidencia existente; las pruebas corresponden a Jhon/Luz y el commit local a Teo/Jhon/Luz. '
+  + 'Un permiso bloqueado se resuelve para el mismo rol: no se delega a Pau ni se declara verificado un check sin ejecutar.';
+
+// Detect execution, not quoted mentions in evidence or documentation. This
+// catches accidental role substitution; it is not a sandbox for arbitrary code.
+function engineeringCommand(words) {
+  const [program, ...args] = words;
+  if (program === 'git') return new RegExp(`^git${GIT_OPT}\\s+commit(?:\\s|$)`).test(words.join(' '));
+  if (['pnpm', 'npm', 'yarn', 'bun', 'npx'].includes(program)) {
+    const nested = args[0] === 'run' || args[0] === 'exec' ? args.slice(1) : args;
+    return /^(?:test|lint|check|typecheck|coverage)(?::|$)/.test(nested[0] || '') || engineeringCommand(nested);
+  }
+  if (['vitest', 'eslint', 'jest', 'pytest', 'tsc', 'ruff'].includes(program)) return true;
+  if (/^python[\d.]*$/.test(program || '')) return args[0] === '-m' && ['pytest', 'unittest'].includes(args[1]);
+  return ['cargo', 'go'].includes(program) && ['test', 'check', 'clippy', 'vet'].includes(args[0]);
+}
+
+function pauEngineeringHandoff(input) {
+  // Only the opening directive, not the handoff's quoted test evidence.
+  return [input?.description, input?.prompt].some(value => {
+    const opening = String(value || '').split('\n')[0].normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+    const directive = opening.match(/^(?:pau[, :]*)?(?:corre|ejecuta|ejecutar|run|hace|hacer|haz|realiza)\s+(?:(?:el|los|las)\s+)?(.+)/i);
+    return Boolean(directive && (/^(?:checks?|pruebas?|tests?|lint|coverage|commit)\b/i.test(directive[1])
+      || engineeringCommand(commandWords(directive[1].toLowerCase()))));
+  });
+}
+
 function parseState(output) {
   // v1: string. v2: { output?, content } con content string o partes de texto.
   const content = output?.content;
@@ -926,6 +954,7 @@ export function createCore(options = {}) {
       // porque un texto antes no habilita el binario del segmento siguiente.
       const segments = splitSegments(command).segments;
       for (const seg of segments) {
+        if (who === 'pau' && engineeringCommand(commandWords(seg))) return PAU_ENGINEERING_BLOCKED;
         const program = commandProgram(seg);
         if (program === 'skalling-workflow.py') {
           return 'Use skalling_workflow: identidad y evidencia provienen del runtime, no de --by ni de variables shell.';
@@ -954,6 +983,7 @@ export function createCore(options = {}) {
         return `Alex delega solo al equipo (Pol, Sol, Teo, Jhon, Luz, Pau, Jes); "${target || '?'}" no es parte del flujo `
           + 'y podría editar sin clasificación ni verificación.';
       }
+      if (target === 'pau' && pauEngineeringHandoff(input)) return PAU_ENGINEERING_BLOCKED;
       // Pedido DIRIGIDO a otro rol ("Jhon verifica...", "Sos Jhon...") pero
       // enviado a otro agente: caso real en 2.0.18 (el trabajo de Jhon a Teo,
       // dos veces). Solo cuenta el rol con que EMPIEZA el pedido; mencionarlo
