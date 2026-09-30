@@ -2,7 +2,14 @@
 
 Skalling es un equipo de **8 agentes de IA** que trabajan juntos adentro de [OpenCode](https://opencode.ai). Cada agente tiene un rol específico y siguen un ciclo ordenado para construir software bien hecho.
 
-**Versión actual: 0.14.3**
+**Versión actual: 0.15.0**
+
+Desde 0.15.0 cada funcionalidad conserva el pedido original y sus resultados
+observables hasta la entrega. Aprobar exige relacionarlos con evidencia; el contexto
+avisa si sus fuentes cambiaron y permite reutilizar lecturas y pruebas idénticas.
+Las correcciones humanas se registran explícitamente, separadas de nuevas tareas.
+[Contratos, medición y límites](docs/agent-effectiveness-plan.md#entrega-0150-objetivo-contexto-repetición-y-medición).
+
 
 ---
 
@@ -15,7 +22,8 @@ Toda implementación pasa por la herramienta `skalling_workflow`, que es la **ú
 | Pedido | Ejemplo | Ruta |
 |---|---|---|
 | Trivial (`low`): local, claro, reversible | cambiar una mayúscula o un texto | **Alex → Teo**, más la verificación configurada del proyecto que corre el motor (Jhon si no hay comando) |
-| Mediano (`medium`): módulo o contrato conocido | cambiar un componente | **Alex → Sol → Teo → Jhon** |
+| Local y claro (`medium`): cambio reversible sin plan ni decisión | ajustar un componente conocido | **Alex → Teo → Jhon** |
+| De módulo o con dependencias (`medium`) | feature con varios pasos | **Alex → Sol → Teo → Jhon** |
 | Complejo o sensible (`high`) | feature transversal, auth, datos, CI/CD | **Alex → Pol → Sol → Teo → Jhon → Luz → Pau** (Jes si hace falta investigar) |
 
 Investigación → Jes. Auditoría → Luz. Con una decisión tuya pendiente o un pedido ambiguo, el motor no deja implementar: Alex te pregunta primero.
@@ -91,8 +99,8 @@ plana, así que el costo figura 0:
 Son corridas puntuales en un proyecto chico, no un promedio: sirven para comparar tamaños de
 pedido, no para prometer un costo. En la misma tanda, un pedido trivial que contradecía una
 decisión guardada no se ejecutó: Alex detectó el conflicto y preguntó. El mínimo son dos agentes
-(Alex y Teo); sin `testing.fast`, la verificación automática del carril trivial corre
-`testing.unit` completo.
+(Alex y Teo); el motor automatiza solo `testing.fast`. Sin ese comando, Jhon elige una prueba
+focal y usa `testing.unit` completo cuando el impacto lo justifica.
 
 Esas corridas destaparon y corrigieron defectos que ningún test unitario veía (plugins que
 2.0.x no cargaba, herramienta escondida en code mode, booleanos como texto, Jhon sin forma de
@@ -135,7 +143,7 @@ Instalar **siempre un release publicado** (`vX.Y.Z`), nunca `main`. La lista est
 **1. Instalar (una vez por máquina)**
 
 ```bash
-VERSION=v0.14.3   # último release publicado
+VERSION=v0.15.0   # último release publicado
 git clone --branch "$VERSION" --depth 1 https://github.com/alexskalling/skalling-dev-team.git ~/skalling-dev-team
 bash ~/skalling-dev-team/install-global.sh
 ```
@@ -160,7 +168,7 @@ config locales, que reemplazan a los globales) y el paso 3.
 **Windows** (Git Bash o WSL2, no nativo; en CI solo tiene smoke test):
 
 ```powershell
-git clone --branch v0.14.3 --depth 1 https://github.com/alexskalling/skalling-dev-team.git $HOME\skalling-dev-team
+git clone --branch v0.15.0 --depth 1 https://github.com/alexskalling/skalling-dev-team.git $HOME\skalling-dev-team
 .\skalling-dev-team\install-global.ps1
 ```
 
@@ -286,14 +294,21 @@ document  Pau guarda decisiones y memoria durable
 complete  Alex cierra: prepara en Git lo revisado y sella la aprobación
 ```
 
-Para cosas chicas (un typo, un color, un texto) la ruta es Alex → Teo y la verificación la corre el motor con el comando del proyecto (`testing.fast` en `.opencode/project.yaml`, o `testing.unit`). Para auditorías, Alex manda a Luz directo.
+Para cosas chicas (un typo, un color, un texto) la ruta es Alex → Teo y el motor corre `testing.fast` si el proyecto lo declara. Si no existe, Jhon escoge una verificación focal y amplía a `testing.unit` cuando el impacto lo justifica. Para auditorías, Alex manda a Luz directo.
 
 ### Flujo adaptativo y contexto económico
 
+Teo, Jhon y Luz pueden crear commits locales cuando una unidad de trabajo está
+verificada y conviene dejarla organizada, sin pedirte permiso por cada commit.
+`prepare_commit` prepara y sella esa unidad sin repetir pruebas ni esperar el
+cierre de Alex; después el agente hace `git commit`. Incluyen código, pruebas y
+documentación relacionados y respetan cualquier instrucción de no commitear.
+El usuario decide cuándo autorizar el push. Commitear no autoriza publicación.
+
 Alex clasifica cada pedido por riesgo, no solo por cantidad de archivos:
 
-- Bajo: Alex → Teo; la verificación la corre el motor con el comando configurado (una corrida, sin repetir la suite completa para sellar).
-- Medio: Alex → Sol → Teo → Jhon, con pruebas del módulo.
+- Bajo: Alex → Teo; el motor corre `testing.fast` si existe. Sin él, Jhon elige una verificación focal y recurre a la suite completa solo cuando el impacto lo justifica.
+- Medio local, claro y reversible: Alex → Teo → Jhon. Si requiere varios pasos o dependencias: Alex → Sol → Teo → Jhon.
 - Alto: ciclo completo con Pol, Luz y Pau. Ambiguo o con decisión pendiente: primero se pregunta.
 
 Antes del primer handoff se crea una cápsula de hasta 8 KB: resumen general, memoria relacionada y ubicaciones obtenidas con Code Intelligence. Esa cápsula se reutiliza; los agentes amplían contexto solo bajo demanda. Pau revisa todos los cierres, pero escribe memoria únicamente cuando hay conocimiento duradero. Markdown sigue siendo documentación o export explícito, nunca transporte entre agentes.
@@ -311,7 +326,7 @@ Antes del primer handoff se crea una cápsula de hasta 8 KB: resumen general, me
 | R3 | Tipado y validación proporcionales al lenguaje y al riesgo |
 | R4 | TDD para comportamiento y bugs; verificación equivalente para configuración |
 | R5 | Verificación independiente proporcional al riesgo |
-| R6 | SDD formal para cambios medianos, altos o ambiguos |
+| R6 | SDD para features que cruzan módulos, requieren decisiones/dependencias o tienen riesgo alto; los cambios locales, claros y reversibles usan focused. Lo ambiguo se aclara antes de implementar. |
 | R7 | Clean Architecture cuando el proyecto adopta arquitectura por capas |
 | R8 | Nombres descriptivos — nada de abreviaciones crípticas |
 | R9 | Revisar funciones extensas por responsabilidad, no por una cifra aislada |
@@ -321,7 +336,7 @@ Antes del primer handoff se crea una cápsula de hasta 8 KB: resumen general, me
 | R13 | Si hay interfaz gráfica, necesita un `design-system.md` en `.opencode/context/proyecto/` |
 | R15 | Siempre la solución más simple posible (Escalera de Ponytail) |
 | R16 | Reglas para trabajar en equipo sin pisarse |
-| R17 | No se hace commit sin preguntarte antes |
+| R17 | Teo, Jhon y Luz pueden crear commits locales de unidades verificadas; push y publicación requieren tu autorización |
 
 ---
 

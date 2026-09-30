@@ -77,7 +77,7 @@ good = {
     "readiness": "ready",
     "implementation_allowed": True,
     "route": "INLINE",
-    "request_context": {"files": ["src/login.ts"], "acceptance": "Login conserva sesiones válidas", "reuse": "Reutilizar el servicio actual"},
+    "request_context": {"intent": "Implementar login seguro", "outcomes": [{"id": "login", "expected": "Login conserva sesiones válidas"}], "files": ["src/login.ts"], "acceptance": "Login conserva sesiones válidas", "reuse": "Reutilizar el servicio actual"},
     "project_context": {
         "stack": {"language": "ts", "test_runner": "vitest"},
         "has_ui": True,

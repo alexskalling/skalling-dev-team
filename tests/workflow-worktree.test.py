@@ -62,6 +62,11 @@ class WorkflowFromWorktree(unittest.TestCase):
         return subprocess.run(['git', *args], cwd=cwd, env=ENV, capture_output=True, text=True, check=True)
 
     def call(self, actor, action, **payload):
+        if action == 'start':
+            payload.setdefault('intent', 'Preserve the declared fixture value')
+        if action in {'approve', 'complete'}:
+            payload.setdefault('coverage', [{'outcome_id': 'acceptance', 'check_index': 0,
+                                            'observation': 'Fixture value assertion passed'}])
         return self.engine.operate({'project': str(self.worktree), 'actor': actor, 'session': actor + '-s',
                                     'action': action, 'payload': {'id': 'wt-1', **payload}})
 

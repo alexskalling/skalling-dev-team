@@ -58,9 +58,11 @@ async function handle(args, runtime, execute) {
     session:runtime.sessionID, action:args.action, payload}, runtime.signal));
 }
 
+const WORKFLOW_DESCRIPTION = 'Autoridad del flujo: start requiere intent (pedido original), files, acceptance, reuse; outcomes [{id,expected}] separa resultados múltiples. Seguir recommended_action de cada respuesta y last_rejection, máximo tres entregas. focused para local claro sin plan/memoria; staged para el resto. Teo deliver ejecuta auto_verify cuando existe: no duplicar ese comando antes. Jhon oracle → check → approve; Luz según riesgo, Pau según estado. approve y cierre automático requieren coverage [{outcome_id,check_index,observation}] para TODOS los outcomes; un verde genérico no demuestra el pedido. check configured=true usa configuración congelada; reusable=true solo pruebas deterministas locales; Luz reuse check_index con evidence. evidence recupera un log. ready requiere plan_id aprobado. prepare_commit de Teo/Jhon/Luz sella unidad verificada; luego commit local permitido, push solo autorizado. Alex complete cierra; feedback registra feedback_id de mensaje humano, kind accepted/correction/scope_change/new_task y evidence sin inferir satisfacción. Payload con id; identidad la aporta el runtime.';
+
 export function workflowTool(tool, execute = run) {
   return tool({
-    description: 'Única autoridad del flujo de código, con evidencia ejecutada. Orden: start (Alex) → clarify (Pol, solo alto) → plan (Sol) → ready (Sol, con el plan_id REAL que devolvió teamdb-plan.sh y aprobado con teamdb-plan-approve.sh) → deliver/rescope (Teo) → oracle/check/approve o reject (Jhon, DESPUÉS del deliver; Luz además en alto) → document (Pau, alto) → complete (Alex sella). Bajo: Teo + verificación automática; medio: Sol → Teo → Jhon; alto: Pol → Sol → Teo → Jhon → Luz → Pau. Cada respuesta y cada rechazo traen el siguiente paso (quién y qué acción): seguilo; no hay otras acciones. Payload JSON con id; nunca actor.',
+    description: WORKFLOW_DESCRIPTION,
     args: {action:tool.schema.string(), payload:tool.schema.string()},
     async execute(args, context) {
       return handle(args, {agent:context.agent, sessionID:context.sessionID, directory:context.directory,
@@ -150,7 +152,7 @@ export function policyDecision(agentMarkdown, command) {
 }
 
 const WORKFLOW_ACTIONS = ['start', 'status', 'clarify', 'plan', 'ready', 'deliver', 'rescope', 'oracle', 'check',
-  'approve', 'reject', 'document', 'complete'];
+  'approve', 'reject', 'document', 'complete', 'prepare_commit', 'reuse', 'evidence', 'feedback'];
 const text = { type: 'string' };
 const PAYLOAD_SCHEMA = {
   type: 'object',
@@ -161,9 +163,16 @@ const PAYLOAD_SCHEMA = {
     decision: { type: 'string', enum: ['none', 'pending', 'resolved'] },
     sensitive: { type: 'boolean' }, visual: { type: 'boolean' },
     files: { type: 'array', items: text }, argv: { type: 'array', items: text },
+    outcomes: {type: 'array', items: {type: 'object', properties: {id: text, expected: text}, required: ['id', 'expected']}},
+    coverage: {type: 'array', items: {type: 'object', properties: {outcome_id: text, check_index: {type: 'integer'}, observation: text}, required: ['outcome_id', 'check_index', 'observation']}},
+    feedback_id: text, kind: {type: 'string', enum: ['accepted', 'correction', 'scope_change', 'new_task']},
     acceptance: text, reuse: text, intent: text, task: text, supersedes: text, evidence: text,
     plan_id: { type: 'integer' }, method: text, criterion: text, expected: text, negative: text,
     invariant: text, refutation: text, findings: text, configured: { type: 'boolean' },
+    execution_mode: { type: 'string', enum: ['focused', 'staged'] },
+    planning_required: { type: 'boolean' }, memory_required: { type: 'boolean' },
+    reusable: { type: 'boolean' }, check_index: { type: 'integer' }, retry_of: { type: 'integer' },
+    failure_kind: { type: 'string', enum: ['infrastructure', 'flaky'] },
   },
   required: ['id'],
   additionalProperties: true,
@@ -194,7 +203,7 @@ export async function setupWorkflowV2(ctx, execute = run, agentsDir = fileURLToP
       // `execute` los modelos no la encontraban (prueba real: varios intentos
       // fallidos antes del primer start).
       options: { codemode: false },
-      description: 'Única autoridad del flujo de código, con evidencia ejecutada. Orden: start (Alex) → clarify (Pol, solo alto) → plan (Sol) → ready (Sol, con el plan_id REAL que devolvió teamdb-plan.sh y aprobado con teamdb-plan-approve.sh) → deliver/rescope (Teo) → oracle/check/approve o reject (Jhon, DESPUÉS del deliver; Luz además en alto) → document (Pau, alto) → complete (Alex sella). Bajo: Teo + verificación automática; medio: Sol → Teo → Jhon; alto: Pol → Sol → Teo → Jhon → Luz → Pau. Cada respuesta y cada rechazo traen el siguiente paso (quién y qué acción): seguilo; no hay otras acciones. Payload JSON con id; nunca actor.',
+      description: WORKFLOW_DESCRIPTION,
       // Esquema completo: OpenCode 2.x repara los tipos antes de llamar
       // ("false" → false, string JSON → objeto). Sin él, un modelo mandó
       // "visual": "false" y el motor lo leyó como visual (prueba real).

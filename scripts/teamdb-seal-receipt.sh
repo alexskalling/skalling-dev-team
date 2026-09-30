@@ -198,6 +198,13 @@ if [ "$AGENT" = "jhon" ] || [ "$AGENT" = "humano" ]; then
     exit 1
   fi
   trap 'rm -f "$VERIFY_OUT_FILE"; teamdb_unlock "$LOCK_DIR"' EXIT  # lens:ok: VERIFY_OUT_FILE viene de mktemp, ruta propia, nunca input externo
+  # Keep failures visible to the caller; the bounded DB summary alone can
+  # discard the first failing suite and force a costly diagnostic rerun.
+  if [ "$VERIFY_RC" != "0" ]; then
+    cat "$VERIFY_OUT_FILE" >&2
+  else
+    tail -n 5 "$VERIFY_OUT_FILE" >&2
+  fi
   VERIFY_OUT="$(tail -c 4000 "$VERIFY_OUT_FILE")"  # lens:ok: output_summary no es una columna sin limite, evita filas gigantes
   # El candidato tiene que ser el mismo antes y después del test: mismo diff
   # staged y working tree todavía igual al índice. Si no, lo que pasó el test

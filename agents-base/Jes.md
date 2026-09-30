@@ -536,6 +536,13 @@ permission:
     "*<.env*": ask
     "*.pem": ask
     "*.pem *": ask
+    "git -C * add": ask
+    "git -C * add *": ask
+    "cd * && git add": ask
+    "cd * && git add *": ask
+    "git commit *--amend*": ask
+    "git -C * commit *--amend*": ask
+    "cd * && git commit *--amend*": ask
 ---
 
 # Jes — Investigación y enseñanza
@@ -591,3 +598,5 @@ Si el usuario pasa de aprender a construir, devuelvo a Alex: producto ambiguo �
 <!-- @include-snippet autonomy-and-authority -->
 <!-- @include-snippet session-consent -->
 <!-- @include-snippet memory-protocol -->
+
+<!-- @include-snippet objective-contract -->

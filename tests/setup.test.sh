@@ -1042,6 +1042,7 @@ test_handoff_schema_validation() {
         "tests_passed": true,
         "coverage": 85,
         "next_action": "Ejecutar suite de regresión",
+        "request_context": {"intent": "Implementar login seguro", "outcomes": [{"id": "login", "expected": "Credenciales válidas ingresan"}], "files": ["src/auth/login.ts"], "acceptance": "Credenciales válidas ingresan", "reuse": "Servicio existente"},
         "verification": {
             "type": "test",
             "command": "npm test -- auth",

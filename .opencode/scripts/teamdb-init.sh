@@ -52,26 +52,14 @@ _run_sql() {
   fi
 
   if [ "$DB_WAS_MISSING" = true ]; then
-    if ! teamdb_exec_write "$DB" \
-          "INSERT OR IGNORE INTO applied_migrations(name, applied_at) VALUES(?, datetime('now'))" \
-          "$mig_name" >/dev/null; then
-      echo "ERROR: no se pudo registrar $mig_name como incluida en el schema base. El baseline recién creado ya tiene sus cambios (viene de project-schema.sql); si esta fila no queda registrada, un bootstrap futuro va a intentar aplicar $mig_name de nuevo y va a fallar con 'ya existe'/'duplicate column'." >&2
-      return 1
-    fi
     echo "    [baseline] $mig_name (incluida en schema actual)"
     return 0
   fi
-
-  # Verificar si ya se aplicó (applied_migrations; tabla creada por schema v0.9.1)
-  # `|| true`: en DBs pre-v0.9.1 la tabla no existe y el query falla; eso no debe
-  # matar el script con set -e (bash 3.2 aborta en command substitution fallida).
-  local already_applied
-  already_applied="$(teamdb_exec_value "$DB" "SELECT 1 FROM applied_migrations WHERE name=? LIMIT 1" "$mig_name" 2>/dev/null || true)"
-
-  if [ "$already_applied" = "1" ]; then
-    echo "    [skip] $mig_name (ya aplicada)"
-    return 0
-  fi
+  case $'\n'"$APPLIED_MIGRATIONS"$'\n' in
+    *$'\n'"$mig_name"$'\n'*)
+      echo "    [skip] $mig_name (ya aplicada)"
+      return 0 ;;
+  esac
 
   local migration_error
   migration_error="$(mktemp)"
@@ -112,8 +100,43 @@ _run_sql() {
 # Si la DB existe pero le faltan tablas nuevas (migrations), aplicarlas (T-2.9)
 DB="$(teamdb_project_path "$PROJECT")"
 
+# Leer el inventario una vez: no lanzar tres Python por cada migración.
+MIG_DIR="$SKALLING_ROOT_DIR/sql/migrations"
+MIGRATIONS="$(python3 - "$MIG_DIR" <<'PYLIST'
+from pathlib import Path
+import sys
+root = Path(sys.argv[1])
+print('\n'.join(sorted(p.name for p in root.iterdir() if p.suffix in {'.sql', '.py'}))) if root.is_dir() else None
+PYLIST
+)"
+APPLIED_MIGRATIONS="$(sqlite3 "$DB" 'SELECT name FROM applied_migrations' 2>/dev/null || true)"
+PENDING=false
+while IFS= read -r mig_base; do
+  [ -n "$mig_base" ] || continue
+  case $'\n'"$APPLIED_MIGRATIONS"$'\n' in
+    *$'\n'"${mig_base%.*}"$'\n'*) ;;
+    *) PENDING=true ;;
+  esac
+done <<< "$MIGRATIONS"
+
+# El schema nuevo ya contiene las migraciones: registrar el baseline de modo
+# atómico por la misma frontera protegida que las escrituras individuales.
+if [ "$DB_WAS_MISSING" = true ] && [ "$DRY_RUN" = false ]; then
+  BASELINE_BATCHES="$(python3 - "$MIGRATIONS" <<'PYBASE'
+import json, sys
+print(json.dumps([{'sql': "INSERT OR IGNORE INTO applied_migrations(name, applied_at) VALUES(?, datetime('now'))",
+                   'params': [name.rsplit('.', 1)[0]]} for name in sys.argv[1].splitlines() if name]))
+PYBASE
+)"
+  if ! teamdb_exec_multi "$DB" "$BASELINE_BATCHES" >/dev/null; then
+    echo "ERROR: no se pudo registrar el baseline de migraciones; inicialización incompleta" >&2
+    exit 1
+  fi
+fi
+
+# Respaldar solo antes de modificar una base existente.
 # Backup automático antes de migrar (protege 6 meses de trabajo del usuario)
-if [ -f "$DB" ]; then
+if [ "$DB_WAS_MISSING" = false ] && [ "$PENDING" = true ] && [ "$DRY_RUN" = false ]; then
   BACKUP_DIR="$(dirname "$DB")/.backups"
   mkdir -p "$BACKUP_DIR" 2>/dev/null || true
   STAMP="$(date +%Y%m%d-%H%M%S)"
@@ -135,7 +158,7 @@ if [ -d "$MIG_DIR" ]; then
   while IFS= read -r mig_base; do
     [ -n "$mig_base" ] || continue
     _run_sql "$MIG_DIR/$mig_base"
-  done < <(find "$MIG_DIR" -maxdepth 1 -type f \( -name '*.sql' -o -name '*.py' \) -exec basename {} \; | sort)
+  done <<< "$MIGRATIONS"
 fi
 
 # FASE 0: si la DB no existía (clon fresco / nunca instalado) y el repo trae un
@@ -172,7 +195,7 @@ fi
 # Verificar que las migrations dejaron el schema correcto; si no, fallar en vez
 # de seguir con una DB degradada (los errores de migración idempotentes, como el
 # "duplicate column" de 004 sobre DBs nuevas, se toleran arriba).
-EXPECTED_VERSION="0.14.3"
+EXPECTED_VERSION="0.15.0"
 VERSION="$(sqlite3 "$DB" "SELECT value FROM schema_meta WHERE key='version'" 2>/dev/null || true)"
 if [ "$VERSION" != "$EXPECTED_VERSION" ]; then
   echo "ERROR: teamdb schema version=$VERSION, esperado $EXPECTED_VERSION (migrations incompletas)" >&2

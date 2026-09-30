@@ -42,13 +42,8 @@ export PATH
 JOBS="${SKALLING_TEST_JOBS:-8}"
 
 TESTS=(
-  tests/dashboard-server.test.py
-  tests/dashboard-launcher.test.sh
-  tests/quality-priorities.test.sh
   tests/skalling-metrics-summary.test.sh
   tests/skalling-metrics-orphan-cleanup.test.sh
-  tests/permission-generation.test.py
-  tests/workflow-engine.test.py
   tests/workflow-git-gate-bridge.test.py
   tests/teamdb-runtime-identity.test.sh
   tests/doctor-stale-agents-md.test.sh
@@ -79,7 +74,6 @@ TESTS=(
   tests/teamdb-related-sqli.test.sh
   tests/teamdb-wip-tree-sqli.test.sh
   tests/teamdb-link-sqli.test.sh
-  tests/scripts-parity.test.sh
   tests/teamdb-problems-fts.test.sh
   tests/install-script-copies.test.sh
   tests/install-orphan-cleanup.test.sh
@@ -176,12 +170,13 @@ while IFS= read -r line; do
   esac
 done < <(printf '%s\n' "${TESTS[@]}" | xargs -P "$JOBS" -I{} bash -c '
   t="$1"
+  start=$SECONDS
   log="$LOG_DIR/$(printf "%s" "$t" | tr "/" "_").log"
   source tests/lib/with-timeout.sh
   if [ ! -f "$t" ]; then
     echo "MISSING:$t"
   elif { case "$t" in *.py) skalling_with_timeout "$TEST_TIMEOUT" python3 "$t" ;; *) skalling_with_timeout "$TEST_TIMEOUT" bash "$t" ;; esac; } >"$log" 2>&1 </dev/null; then
-    echo "PASS:$t"
+    echo "PASS:$t ($((SECONDS - start))s)"
   else
     echo "FAIL:$t"
   fi

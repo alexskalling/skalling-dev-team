@@ -70,6 +70,22 @@ class AgentAutonomyContract(unittest.TestCase):
         ):
             self.assertIn(marker, constitution)
 
+    def test_microchange_contract_does_not_reintroduce_planning_chain(self):
+        teo = (ROOT / "agents-base" / "Teo.md").read_text(encoding="utf-8")
+        alex = (ROOT / "agents-base" / "Alex.md").read_text(encoding="utf-8")
+        self.assertIn("### Microcambio — carril mínimo", teo)
+        self.assertIn("No convoco Pol, Sol, Luz ni Pau", teo)
+        self.assertIn("### Modo staged — plan de Sol", teo)
+        self.assertIn("No se activa por la etiqueta `medium/high` por sí sola", teo)
+        self.assertIn("no creo plan y no delego a Pol/Sol/Pau", alex)
+
+    def test_handoff_contract_matches_the_payload_teo_receives(self):
+        handoff = (ROOT / ".opencode/skills/skalling-handoff/SKILL.md").read_text(encoding="utf-8")
+        teo = (ROOT / "agents-base/Teo.md").read_text(encoding="utf-8")
+        for field in ("readiness", "implementation_allowed", "route", "request_context"):
+            self.assertIn(f'"{field}"', teo)
+        self.assertIn("En un microcambio focused", handoff)
+
 
 if __name__ == "__main__":
     unittest.main()

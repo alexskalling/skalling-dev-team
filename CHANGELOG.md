@@ -4,6 +4,94 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-09-30
+
+### Changed
+- Cada workflow nuevo conserva el pedido original y resultados observables. La
+  aprobación y el cierre exigen relacionar todos los resultados con evidencia
+  del candidato actual; una regresión genérica no certifica el pedido.
+- Contexto del proyecto basado en directorios reales, detección de lenguaje sin
+  confundir campos YAML vacíos y huella de fuentes con aviso de vigencia. La
+  memoria humana se preserva y sus divergencias quedan pendientes de revisión.
+- Cápsulas de tareas incluyen propósito, excluyen problemas resueltos y limitan
+  descubrimiento en SQL. Lecturas repetidas por petición pueden usar `--seen`
+  para recibir solo memorias nuevas o modificadas.
+- Checks deterministas idénticos pueden reutilizarse durante diez minutos si
+  candidato, entorno, comando, criterio y revisor no cambiaron. Teo conoce el
+  comando automático y evita ejecutarlo también antes de entregar.
+- Prompts compartidos compactados dentro del presupuesto de 72 KiB; errores de
+  verificación completos visibles sin perder el primer fallo en el resumen.
+- Feedback explícito e idempotente distingue aceptación, corrección humana,
+  cambio de alcance y nueva tarea. Las evaluaciones comparan comportamiento,
+  entrega completa, tiempo y consumo disponible con un baseline por caso.
+- Ruta directa para cambios locales medium, máximo tres entregas por workflow,
+  pruebas focalizadas y evidencia compacta. No se declara ahorro medido sin
+  evaluación real comparable.
+- Teo, Jhon y Luz pueden crear commits locales por unidad verificada sin pedir
+  permiso por cada commit. Push y publicación conservan autorización explícita.
+- `skalling_workflow prepare_commit` prepara y sella el candidato aprobado sin
+  repetir pruebas ni esperar a que Alex cierre el objetivo. El motor conserva
+  la revisión por riesgo, detecta cambios fuera del alcance aunque ya estén
+  commiteados y revoca el sello si se reabre la revisión.
+
+## [0.14.4] - 2026-09-29
+
+Correctivo de seguridad del guard de OpenCode, sobre los dos hallazgos
+(MEDIA-1 y MEDIA-2) de la auditoría de Luz sobre 0.14.3. Los dos eran
+demasiado restrictivos o demasiado permisivos según de dónde se miraran, y
+ninguno de los dos se resolvía mirando la cadena completa del comando ni el
+único mapa en memoria.
+
+#### Fixed
+- **MEDIA-1 — nombrar el aprobador o el sellador ya no bloquea (de más)**:
+  `skalling-approve.sh`, `teamdb-seal-receipt.sh` y `skalling-workflow.py`
+  estaban prohibidos comparando la cadena COMPLETA del comando, así que un
+  comando de solo lectura que NOMBRA el script como argumento quedaba
+  bloqueado sin motivo: `git diff --stat scripts/skalling-approve.sh`,
+  `git log -- scripts/teamdb-seal-receipt.sh`, `rg skalling-workflow.py
+  scripts/` o `grep -rn skalling-approve.sh scripts/`. Ahora la prohibición
+  se ancla al token de comando de cada segmento (tras envoltorios como
+  `command`/`env`/`sudo`/`timeout` y con el intérprete delante, el script que
+  se le pasa), que es lo que realmente se ejecuta. Accionar el binario sigue
+  bloqueado para todo agente, `;` sigue siendo separador explícito
+  (`echo <ruta>; bash scripts/teamdb-seal-receipt.sh t humano` bloquea) y una
+  sustitución de comando que lo invoque también (`git commit -m "$(bash
+  scripts/skalling-approve.sh)"` bloquea).
+- **MEDIA-2 — el reject de Jhon ya no deja la delegación abierta**: el mapa
+  local de workflows de la sesión de Alex solo lo actualiza lo que Alex ve
+  (`observe()` es "solo Alex cuenta", para que Teo no se autorice a sí
+  mismo), así que después de un reject de Jhon o un approve negativo de Luz
+  seguía diciendo `implementation_ready` y delegar a Teo pasaba sin un
+  `skalling_workflow status` previo. `decide()` ahora consulta el estado
+  vigente en `agent_workflows` con sqlite de solo lectura (~1 ms, sin crear
+  nada, resolviendo el worktree a la raíz principal donde vive `team.db`).
+  TeamDB solo puede ENDURECER la decisión: si el mapa local ya cerró el
+  workflow, una fila vieja no lo reabre. Si la base existe pero no se puede
+  leer, se falla cerrado y no se delega a ciegas.
+
+#### Security
+- La prohibición de accionar el aprobador humano, el sellador de receipts y
+  el motor del workflow se mantiene para todos los agentes: los casos de
+  regresión cubren las siete invocaciones directas (con y sin intérprete,
+  con ruta absoluta y tras envoltorios) además de los de solo lectura que
+  ahora pasan.
+- **Cierre de MEDIA-1: las familias que EJECUTAN sus argumentos también
+  bloquean (de menos)**. El fail-closed de ejecución indirecta solo cubría
+  `eval`, `exec` y los intérpretes pelados, así que el resto de los
+  constructores que corren lo que reciben —`xargs`, `find -exec`/`-execdir`
+  (y `-ok`/`-okdir`), `source`, `.` y `parallel`— quedaba fuera: accionaban
+  el binario prohibido sin que su nombre fuera el token de ningún segmento,
+  que es exactamente lo que la regla prohíbe (lo prohibido es ACCIONAR el
+  binario, no nombrarlo). `xargs` y `source` caían al permiso `ask` por
+  defecto, pero `find -exec` no: `data/permission-policy.json` tiene
+  `"find *": "allow"`, así que no preguntaba. Ahora el fail-closed se
+  dispara por cualquier segmento cuya semántica sea ejecutar sus
+  argumentos, con el nombre evaluado sobre la cadena completa. Los lectores
+  de solo lectura no cambian (`rg`, `grep -rn`, `git diff --stat <ruta>`,
+  `git log -- <ruta>`, `echo` siguen nombrando el binario sin bloquearse) y
+  un ejecutor de argumentos que NO nombra el binario tampoco se bloquea
+  (`find . -name "*.md" -print0 | xargs -0 grep TODO`).
+
 ## [0.14.3] - 2026-09-28
 
 Correctivo del release anterior: el cambio de "ejemplos sin números reales" de
@@ -1527,7 +1615,8 @@ Sesiones que pedían "plan X" generaban `.md` huérfanos en `.opencode/changes/<
 - Templates OKF (6 tipos: Concept, Decision, Preference, Workaround, WorkInProgress, Context)
 - `setup.sh` inicial (legacy, sin idempotencia)
 
-[Unreleased]: https://github.com/alexskalling/skalling-dev-team/compare/v0.10.4...HEAD
+[Unreleased]: https://github.com/alexskalling/skalling-dev-team/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/alexskalling/skalling-dev-team/compare/5540f3e9221210e91a12db77cac27b744199ed75...v0.15.0
 [0.10.4]: https://github.com/alexskalling/skalling-dev-team/compare/v0.10.3...v0.10.4
 [0.10.3]: https://github.com/alexskalling/skalling-dev-team/compare/v0.10.2...v0.10.3
 [0.10.2]: https://github.com/alexskalling/skalling-dev-team/compare/v0.8.3...v0.10.2

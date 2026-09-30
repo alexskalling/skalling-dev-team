@@ -1,0 +1,20 @@
+[
+  {
+    "id": "empty-total",
+    "prompt": "Corrige total en app.py: la lista vacía debe devolver 0 y las listas con importes deben devolver su suma. Mantén la API. Implementa y verifica, sin commit ni publicación.",
+    "source": "def total(values):\n    return sum(values) if values else None\n",
+    "oracle": "from app import total; assert total([]) == 0; assert total([2, 3]) == 5; assert total([-2, 2]) == 0"
+  },
+  {
+    "id": "zero-limit",
+    "prompt": "Corrige take en app.py: limit=None significa todos, limit=0 significa ninguno, un entero positivo limita la cantidad. No cambies los datos de entrada ni la API. Implementa y verifica, sin commit ni publicación.",
+    "source": "def take(values, limit=None):\n    return values[:limit] if limit else values[:]\n",
+    "oracle": "from app import take; x=[1,2,3]; assert take(x,0)==[]; assert take(x,None)==x; assert take(x,2)==[1,2]; assert x==[1,2,3]"
+  },
+  {
+    "id": "unicode-slug",
+    "prompt": "Corrige slug en app.py para conservar letras Unicode, convertir espacios en guiones y poner minúsculas. Mantén el comportamiento ASCII y la API. Implementa y verifica, sin commit ni publicación.",
+    "source": "def slug(text):\n    return '-'.join(text.encode('ascii', 'ignore').decode().lower().split())\n",
+    "oracle": "from app import slug; assert slug('Niño Feliz')=='niño-feliz'; assert slug(' Hello  World ')=='hello-world'; assert slug('東京')=='東京'; assert slug('')==''"
+  }
+]

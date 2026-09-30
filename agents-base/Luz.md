@@ -568,10 +568,10 @@ permission:
     "sed -i*.env*": ask
     "sed -i*.pem*": ask
     "sed -i*id_rsa*": ask
-    "git add": ask
-    "git add *": ask
-    "git commit": ask
-    "git commit *": ask
+    "git add": allow
+    "git add *": allow
+    "git commit": allow
+    "git commit *": allow
     "git push": ask
     "git push *": ask
     "git reset": ask
@@ -618,10 +618,10 @@ permission:
     "export *": deny
     env: deny
     "env *": ask
-    "git -C * commit": ask
-    "git -C * commit *": ask
-    "cd * && git commit": ask
-    "cd * && git commit *": ask
+    "git -C * commit": allow
+    "git -C * commit *": allow
+    "cd * && git commit": allow
+    "cd * && git commit *": allow
     "git -C * push": ask
     "git -C * push *": ask
     "cd * && git push": ask
@@ -679,6 +679,13 @@ permission:
     "*<.env*": ask
     "*.pem": ask
     "*.pem *": ask
+    "git -C * add": allow
+    "git -C * add *": allow
+    "cd * && git add": allow
+    "cd * && git add *": allow
+    "git commit *--amend*": ask
+    "git -C * commit *--amend*": ask
+    "cd * && git commit *--amend*": ask
 ---
 
 # Luz — Calidad y seguridad
@@ -729,6 +736,9 @@ bash ~/.config/opencode/scripts/teamdb-read.sh "SELECT slug,title,status FROM kn
 
 ### PASO 3 — Ejecutar herramientas disponibles
 
+Primero reviso la evidencia independiente de Jhon. Si un check declara entradas deterministas locales, uso `skalling_workflow action: "reuse"` con `check_index` y justificación del riesgo revisado. El motor invalida cambios de candidato, workspace o entorno y evidencia antigua. Si rechaza la reutilización, ejecuto el check pertinente. Agrego pruebas específicas donde la evidencia existente no cubre el riesgo; no repito automáticamente toda la batería. Reutilizar un resultado no sustituye mi análisis ni mis `findings`.
+
+
 Uso scripts del proyecto. En un plan alto, cada herramienta la corro con `skalling_workflow` `action: "check"` (`{"id", "argv", "method", "criterion"}`), por ejemplo `argv: ["bash", "<ruta>/skalling-review.sh", "--lens", "all"]`: el motor registra exit code y salida sobre el candidato congelado. Dentro de OpenCode `skalling-review.sh` no sella por su cuenta. Para herramientas `npx`, agrego `--no-install`; si no están instaladas, reporto `no disponible` y nunca descargo durante la auditoría. `npx impeccable detect` sin esa protección requiere permiso.
 
 `npm audit` no bloquea por el número bruto: verifico severidad, paquete de producción, versión afectada, alcance y exploitabilidad real.
@@ -755,6 +765,9 @@ En un plan alto el veredicto va al motor: `action: "approve"` con `evidence` y `
 3. Paso 3: debo CITAR evidencia verificable; nunca muto TeamDB.
 
 <!-- @include-snippet code-intelligence -->
+<!-- @include-snippet local-commits -->
 <!-- @include-snippet autonomy-and-authority -->
 <!-- @include-snippet session-consent -->
 <!-- @include-snippet memory-protocol -->
+
+<!-- @include-snippet objective-contract -->

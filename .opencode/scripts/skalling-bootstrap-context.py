@@ -16,10 +16,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from skalling_config import testing_config  # noqa: E402
+from skalling_context import modules as source_modules, source_fingerprint
 
 
 IGNORED = {".git", ".next", ".open-next", ".opencode", "node_modules", "dist", "build", "coverage"}
-MODULE_CANDIDATES = ("app", "src", "pages", "components", "packages", "lib", "tests", "docs", "public")
 STYLE_SUFFIXES = {".css", ".scss", ".sass", ".less"}
 
 
@@ -43,7 +43,7 @@ def package_metadata(project: Path) -> dict:
 
 
 def yaml_value(text: str, key: str) -> str:
-    match = re.search(rf"^\s*{re.escape(key)}:\s*([^#\n]*)", text, re.MULTILINE)
+    match = re.search(rf"^[ \t]*{re.escape(key)}:[ \t]*([^#\n]*)", text, re.MULTILINE)
     return match.group(1).strip().strip('"\'') if match else ""
 
 
@@ -130,9 +130,18 @@ def write_context(project: Path, context: Path, yaml_path: Path) -> dict:
     package = package_metadata(project)
     name = str(package.get("name") or project.name).strip()
     description, description_source = source_description(project, package, framework)
-    modules = [candidate for candidate in MODULE_CANDIDATES if (project / candidate).is_dir()]
-    if not modules:
-        modules = sorted(path.name for path in project.iterdir() if path.is_dir() and path.name not in IGNORED)[:12]
+    modules = source_modules(project)
+    if not language:
+        extensions = set()
+        for folder in [project] + [project / name for name in modules]:
+            extensions.update(p.suffix for p in folder.iterdir() if p.is_file())
+        names = {'.py': 'Python', '.sh': 'Shell', '.js': 'JavaScript', '.mjs': 'JavaScript',
+                 '.ts': 'TypeScript', '.tsx': 'TypeScript', '.go': 'Go', '.rs': 'Rust'}
+        language = ', '.join(sorted({names[e] for e in extensions if e in names}))
+        if language:
+            yaml_text = re.sub(r'^(  language:)[ \t]*[^\n]*$',
+                               lambda m: m[1] + ' ' + json.dumps(language), yaml_text, flags=re.M)
+            atomic_write(yaml_path, yaml_text)
     update_project_yaml(yaml_path, modules, has_ui)
     # Derive test commands from actual package scripts, never from a template claim.
     yaml_text = yaml_path.read_text(encoding="utf-8")
@@ -235,6 +244,7 @@ canónica, comparar antes/después y pedir decisión al usuario si hay dos ident
 
 
     return {
+        "source_fingerprint": source_fingerprint(project),
         "name": name,
         "description": description,
         "description_source": description_source,
@@ -286,7 +296,8 @@ def seed_database(db: Path, facts: dict, codegraph: str) -> str:
                 # separate observation for review rather than overwriting it.
                 conn.execute("INSERT INTO schema_meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                              ("bootstrap.pending." + slug, json.dumps({"title": title, "body": body, "reason": "existing-memory-preserved"}, ensure_ascii=False)))
-        for key, value in (("project_readiness", status), ("codegraph_status", codegraph)):
+        for key, value in (("project_readiness", status), ("codegraph_status", codegraph),
+                           ("bootstrap.sources", facts["source_fingerprint"])):
             conn.execute(
                 "INSERT INTO schema_meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                 (key, value),

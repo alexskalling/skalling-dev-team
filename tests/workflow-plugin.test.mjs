@@ -26,6 +26,17 @@ test('verification consults native permission before executing exact argv', asyn
   assert.deepEqual(events, ['bash']);
 });
 
+test('prepare_commit forwards runtime identity without asking for publication permission', async () => {
+  let received;
+  const definition = workflowTool(tool, async request => { received = request; return {state:'verified'}; });
+  await definition.execute({action:'prepare_commit', payload:'{"id":"unit"}'}, {
+    agent:'Jhon', sessionID:'jhon-s', directory:'/project', abort:new AbortController().signal,
+    ask: async () => { throw new Error('Local commit preparation should not ask for publication permission'); },
+  });
+  assert.equal(received.action, 'prepare_commit');
+  assert.equal(received.actor, 'jhon');
+});
+
 test('bash gate blocks the raw engine script but not the live plans/tasks approval path', () => {
   // Regression: the gate used to also block teamdb-claim.sh --advance and
   // teamdb-seal-receipt.sh, which are Jhon/Pau's real, currently-used way
@@ -61,6 +72,9 @@ test('v2: check corre si la política del agente lo permite y se rechaza si pedi
     async (request) => { calls.push(request); return { ok: true }; }, dir + '/', join(dir, 'no-global'));
   const [wf] = tools;
   const context = { agent: 'Jhon', sessionID: 'jhon-s', signal: new AbortController().signal };
+  assert.ok(wf.input.properties.action.enum.includes('prepare_commit'));
+  await wf.execute({ action: 'prepare_commit', payload: { id: 'unit' } }, context);
+  assert.equal(calls.pop().action, 'prepare_commit');
   const ok = await wf.execute({ action: 'check', payload: JSON.stringify({ id: 'x', argv: ['npm', 'test'] }) }, context);
   assert.match(ok.content, /ok/);
   assert.equal(calls[0].actor, 'jhon');

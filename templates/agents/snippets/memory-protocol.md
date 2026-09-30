@@ -1,18 +1,16 @@
-<!-- SINCRONIZADO CON: single source para los 8 agentes. -->
+<!-- SINCRONIZADO CON: single source. -->
 # 🧠 Memory Protocol
 
 ## Cuándo guardar
-
-Solo ante una decisión arquitectónica, preferencia confirmada, contradicción, workaround, problema conocido o aprendizaje no evidente en el código. Los agentes proponen candidatos; Pau consolida.
+Decisiones arquitectónicas, preferencias confirmadas, problemas, workarounds y
+lecciones no evidentes; Pau consolida con `teamdb-memory.sh`.
 
 ## Dónde guardar
-
-TeamDB es la fuente. Pau usa `teamdb-memory.sh` para `concepts`, `decisions`, `preferences` y `known_problems`. `.opencode/context/` contiene únicamente exports derivados.
+TeamDB es la fuente; `.opencode/context/` solo exports.
 
 ## Cómo marcar contradicciones
-
-Incluí en el handoff la tabla/slug, la regla anterior, la evidencia nueva y la decisión humana requerida. Nunca sobrescribas historia silenciosamente; usá relaciones `contradicts` o `supersedes`.
+Tabla/slug, regla anterior, evidencia y decisión; `contradicts`/`supersedes`.
 
 ## Qué NO guardar
-
-No guardes secretos, PII, conversaciones, código reproducible desde el repo, hechos genéricos, resultados transitorios ni resúmenes rutinarios. Si no hay conocimiento durable: `MEMORY_CHECK: NO_CHANGE`.
+Secretos, PII, conversaciones, código, hechos genéricos, resultados transitorios.
+Sin novedad: `MEMORY_CHECK: NO_CHANGE`.

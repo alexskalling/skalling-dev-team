@@ -38,6 +38,14 @@ class RoutingSafety(unittest.TestCase):
     def test_proven_local_change_is_fast_track(self):
         self.assertEqual(self.classify('--risk', 'low', '--scope', 'local')['route'], 'FAST-TRACK')
 
+    def test_clear_local_medium_change_uses_direct_verified_route(self):
+        data = self.classify('--risk', 'medium', '--scope', 'local')
+        self.assertEqual(data['route'], 'DIRECT')
+        self.assertEqual(data['agents'], 'Alex → Teo → Jhon')
+
+    def test_medium_module_still_uses_planned_route(self):
+        self.assertEqual(self.classify('--risk', 'medium', '--scope', 'module')['route'], 'INLINE')
+
     def test_cross_cutting_change_escalates_even_if_labelled_low(self):
         self.assertEqual(self.classify('--risk', 'low', '--scope', 'cross-cutting')['risk'], 'high')
 

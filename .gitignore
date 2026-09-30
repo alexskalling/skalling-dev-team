@@ -54,3 +54,6 @@ coverage/
 # TeamDB locks (flock para evitar race conditions entre agentes)
 .opencode/context/team.lock
 .opencode/context/*.lock
+
+# Real-agent evaluation fixtures, logs and reports
+.opencode/evals/

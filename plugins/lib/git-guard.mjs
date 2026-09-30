@@ -1,5 +1,9 @@
 // git-guard.mjs — guardia de comandos bash sensibles + identidad del agente.
-//
+
+import fs from 'node:fs';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+
 // Por qué existe: data/permission-policy.json compara el comando COMPLETO
 // contra globs. Una lista de patrones "ask" nunca cubre todas las formas de
 // escribir lo mismo: `git add . && git push` matchea el allow de "git add *";
@@ -538,6 +542,47 @@ function commandWords(seg) {
   return words;
 }
 
+// Basename del programa que el segmento REALMENTE ejecuta: tras los
+// envoltorios, el nombre del intérprete; con un intérprete delante, el script
+// que se le pasa. Lo prohibido es accionar el binario, no nombrarlo (MEDIA-1:
+// la comparación era sobre la cadena completa, y `git diff --stat
+// scripts/skalling-approve.sh` — de solo lectura — quedaba bloqueado).
+function commandProgram(seg) {
+  const words = commandWords(seg);
+  const head = words[0] || '';
+  // Intérprete sin script (`bash` pelado, que lee de stdin): el programa a la
+  // vista sigue siendo el intérprete, no "nada".
+  if (INTERPRETER.test(head)) {
+    const script = words.slice(1).find((w) => !w.startsWith('-'));
+    return (script || head).replace(/^.*\//, '');
+  }
+  return head || null;
+}
+
+// Un segmento EJECUTA lo que viene detrás de su nombre: un intérprete, o un
+// constructor que corre lo que recibe (xargs, find -exec/-execdir/-ok/-okdir,
+// source, `.`, parallel). Ahí el programa real no es ningún token de la línea
+// —se decide con lo que el constructor recibe—, así que no se puede probar por
+// palabra suelta que sea de solo lectura y la condición del binario prohibido
+// se evalúa sobre la CADENA COMPLETA del comando: se falla cerrado. Ese
+// criterio era el de 0.14.3, pero al anclar la prohibición al token de cada
+// segmento (MEDIA-1) el fail-closed quedó reducido a eval/exec/intérpretes y
+// las demás familias seguían accionando el binario prohibido. No aplica a los
+// lectores comunes: rg/grep/git/echo no ejecutan sus argumentos. `nohup` no
+// está en la lista porque commandWords lo ve como envoltorio y el programa
+// real queda expuesto en el token del segmento.
+const ARG_EXECUTORS = /^(?:eval|exec|source|parallel|xargs|\.)$|^(?:bash|sh|zsh|dash|ksh|fish)$/;
+const FIND_EXEC = /^-exec(?:dir)?$|^-ok(?:dir)?$/;
+
+function indirectExec(command) {
+  return splitSegments(command).segments.some((seg) => {
+    const words = commandWords(seg);
+    // find solo ejecuta si trae el constructor; `find . -name x` solo lista.
+    if (words[0] === 'find') return words.slice(1).some((w) => FIND_EXEC.test(w));
+    return ARG_EXECUTORS.test(words[0] || '');
+  });
+}
+
 function isSecretPath(word) {
   const value = word.includes('=') && !word.startsWith('-') ? word.slice(word.indexOf('=') + 1) : word;
   const clean = value.replace(/^--?[\w-]+=/, '');
@@ -716,6 +761,89 @@ export function identityViolation(command) {
   return null;
 }
 
+// ─── Estado vigente del workflow en TeamDB (MEDIA-2) ──────────────────────────
+// El mapa local de workflows solo refleja lo que Alex VIÓ: lo actualiza
+// observe(), y observe() es "solo Alex cuenta" (Teo no se autoriza a sí
+// mismo). Después de un reject de Jhon el mapa seguía diciendo
+// implementation_ready y la delegación a Teo pasaba sin un status previo
+// (auditoría de Luz sobre 0.14.3). El estado real vive en agent_workflows
+// (id, body JSON con "state") y lo escribe el motor en cada acción, así que se
+// lee de solo lectura acá. TeamDB solo puede ENDURECER la decisión: nunca la
+// afloja, y un mapa local que ya cerró sigue mandando aunque la fila exista.
+const WORKFLOW_STATE_QUERY = 'SELECT body FROM agent_workflows WHERE id = ?';
+const requireModule = createRequire(import.meta.url);
+
+// Raíz del proyecto donde vive su TeamDB. Un worktree enlazado tiene .git como
+// archivo "gitdir: …/.git/worktrees/x"; team.db es gitignored y solo existe en
+// la raíz principal, igual que resuelve _teamdb_project_root en lib-teamdb.sh.
+function projectRoot(directory) {
+  let dir = path.resolve(String(directory || process.cwd()));
+  for (;;) {
+    const dot = path.join(dir, '.git');
+    let isDirectory = false;
+    try { isDirectory = fs.statSync(dot).isDirectory(); } catch { /* seguir subiendo */ }
+    if (isDirectory) return dir;
+    try {
+      const link = fs.readFileSync(dot, 'utf8').match(/gitdir:\s*(\S+)/);
+      if (link) {
+        // …/.git/worktrees/x -> la raíz principal es un nivel más arriba.
+        const common = path.resolve(dir, link[1]);
+        const wt = common.lastIndexOf(path.sep + 'worktrees' + path.sep);
+        return wt === -1 ? path.dirname(common) : path.dirname(common.slice(0, wt));
+      }
+      return dir;
+    } catch { /* sin .git legible: seguir subiendo */ }
+    const parent = path.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+// Driver sqlite del runtime: node:sqlite (Node ≥ 22.5) o bun:sqlite (el
+// runtime de OpenCode v2). Se resuelve una vez; si el runtime no trae ninguno,
+// no se puede verificar el estado y se falla cerrado.
+let sqliteOpeners;
+function openReadOnly(dbPath) {
+  if (sqliteOpeners === undefined) {
+    sqliteOpeners = [];
+    for (const spec of ['node:sqlite', 'bun:sqlite']) {
+      try {
+        const Open = requireModule(spec).DatabaseSync || requireModule(spec).Database;
+        if (typeof Open === 'function') sqliteOpeners.push(Open);
+      } catch { /* driver ausente en este runtime */ }
+    }
+  }
+  for (const Open of sqliteOpeners) {
+    for (const options of [{ readOnly: true }, { readonly: true }]) {
+      try { return new Open(dbPath, options); } catch { /* siguiente driver u opciones */ }
+    }
+  }
+  return null;
+}
+
+// { ok: true, state } con el estado vigente, { ok: true, state: null } si el
+// proyecto no tiene TeamDB o la fila no existe (nada que reconciliar), y
+// { ok: false, reason } si la base existe pero no se pudo leer.
+export function teamdbWorkflowState(id, directory) {
+  const root = projectRoot(directory);
+  if (!root) return { ok: true, state: null };
+  const dbPath = path.join(root, '.opencode', 'context', 'team.db');
+  if (!fs.existsSync(dbPath)) return { ok: true, state: null };
+  let db = null;
+  try {
+    db = openReadOnly(dbPath);
+    if (!db) return { ok: false, reason: 'el runtime no abre sqlite de solo lectura' };
+    const row = db.prepare(WORKFLOW_STATE_QUERY).get(id);
+    if (!row) return { ok: true, state: null };
+    const state = JSON.parse(String(row.body || '')).state;
+    return typeof state === 'string' && state ? { ok: true, state } : { ok: true, state: null };
+  } catch (error) {
+    return { ok: false, reason: String(error?.message || error) };
+  } finally {
+    try { db?.close(); } catch { /* ya cerrada */ }
+  }
+}
+
 // ─── Núcleo compartido por OpenCode v1 y v2 ──────────────────────────────────
 // Cada versión entrega los mismos datos con otra forma; los adaptadores de
 // abajo los traducen a { tool, agent, sessionID, input } y aplican la
@@ -729,6 +857,12 @@ const WORKFLOW_TOOL = 'skalling_workflow';
 // build, explore...) editan sin pasar por Teo ni por la clasificación.
 const TEAM = new Set(['pol', 'sol', 'teo', 'jhon', 'luz', 'pau', 'jes']);
 
+// Los dos motivos de bloqueo del aprobador/sellador y del motor del flujo:
+// textos únicos para que el mensaje no cambie según cómo se invoque.
+const WORKFLOW_BLOCKED = 'Use skalling_workflow: identidad y evidencia provienen del runtime, no de --by ni de variables shell.';
+const APPROVER_BLOCKED = 'La aprobación de un commit la registra skalling_workflow (Jhon o Luz). skalling-approve.sh y '
+  + 'teamdb-seal-receipt.sh son para una persona en su propia terminal; no se sugieren ni se corren desde un agente.';
+
 function parseState(output) {
   // v1: string. v2: { output?, content } con content string o partes de texto.
   const content = output?.content;
@@ -741,25 +875,42 @@ function parseState(output) {
   } catch { return null; }
 }
 
-export function createCore() {
+// options.readState permite aislar la TeamDB en las pruebas; el de verdad lee
+// agent_workflows de solo lectura.
+export function createCore(options = {}) {
+  const readState = typeof options?.readState === 'function' ? options.readState : teamdbWorkflowState;
   // Último workflow que vio cada sesión de Alex (start/status/complete de
   // skalling_workflow). Delegar implementación exige que ESE workflow esté
   // en implementation_ready: la autorización es del pedido vigente, no un
   // "esta sesión clasificó alguna vez" (auditoría externa v0.12.0 #1).
   const workflows = new Map();
 
-  function decide({ tool, agent, sessionID, input }) {
+  function decide({ tool, agent, sessionID, input, directory }) {
     const who = normalizeAgent(agent);
     if (SHELL_TOOLS.has(tool)) {
       const command = String(input?.command || '');
       const identity = identityViolation(command) || hookBypassViolation(command);
       if (identity) return identity;
-      if (/skalling-workflow\.py/.test(command)) {
-        return 'Use skalling_workflow: identidad y evidencia provienen del runtime, no de --by ni de variables shell.';
+      // Por SEGMENTO y sobre el programa que se ejecuta (MEDIA-1): nombrar el
+      // archivo como argumento de git/rg/grep/echo es de solo lectura y pasa;
+      // accionar el binario sigue bloqueado, y `;` sigue siendo separador
+      // porque un texto antes no habilita el binario del segmento siguiente.
+      const segments = splitSegments(command).segments;
+      for (const seg of segments) {
+        const program = commandProgram(seg);
+        if (program === 'skalling-workflow.py') {
+          return 'Use skalling_workflow: identidad y evidencia provienen del runtime, no de --by ni de variables shell.';
+        }
+        if (program === 'skalling-approve.sh' || program === 'teamdb-seal-receipt.sh') {
+          return APPROVER_BLOCKED;
+        }
       }
-      if (/skalling-approve\.sh|teamdb-seal-receipt\.sh/.test(command)) {
-        return 'La aprobación de un commit la registra skalling_workflow (Jhon o Luz). skalling-approve.sh y '
-          + 'teamdb-seal-receipt.sh son para una persona en su propia terminal; no se sugieren ni se corren desde un agente.';
+      // El binario se ejecuta sin ser el token de comando (eval, | sh): no se
+      // puede probar que sea de solo lectura, así que se mantiene el criterio
+      // anterior sobre la cadena completa.
+      if (indirectExec(command)
+          && (/skalling-approve\.sh|teamdb-seal-receipt\.sh/.test(command) || /skalling-workflow\.py/.test(command))) {
+        return /skalling-workflow\.py/.test(command) ? WORKFLOW_BLOCKED : APPROVER_BLOCKED;
       }
       const finding = guardCommand(command);
       if (finding) return guardMessage(finding);
@@ -794,10 +945,22 @@ export function createCore() {
           return 'Sin workflow no se delega implementación: skalling_workflow start (Alex) con riesgo, alcance, '
             + 'archivos, aceptación y reutilización. Una decisión pendiente se resuelve con el usuario antes.';
         }
-        if (current.state !== 'implementation_ready') {
-          return `El workflow ${current.id} está en ${current.state}, no en implementation_ready: Teo implementa `
-            + 'cuando la ruta lo habilita (low: ya; medium: tras Sol ready; high: Pol → Sol). '
-            + 'Si cambió (Jhon rechazó), consultá skalling_workflow status.';
+        // El estado vigente de TeamDB manda sobre el mapa local (MEDIA-2): tras
+        // el reject de Jhon el mapa de Alex seguía diciendo implementation_ready.
+        // Solo puede ENDURECER: si el mapa local ya cerró el workflow, ni una
+        // fila vieja que lo diga implementation_ready lo reabre.
+        const live = readState(current.id, directory) || { ok: true, state: null };
+        if (live.ok === false) {
+          return `No se pudo verificar el estado del workflow ${current.id} en TeamDB (${live.reason}): se falla `
+            + 'cerrado y no se delega implementación a ciegas. Reintentá, o pedile a Jhon skalling_workflow status '
+            + 'para confirmar el estado vigente.';
+        }
+        const vigente = [live.state, current.state].find((s) => s && s !== 'implementation_ready')
+          || current.state;
+        if (vigente !== 'implementation_ready') {
+          return `El workflow ${current.id} está en ${vigente}, no en implementation_ready: Teo implementa `
+            + 'cuando la ruta vigente lo habilita (focused: directo según next_action; staged: después de las fases Pol/Sol que indique el estado). '
+            + 'Si cambió (Jhon rechazó), el estado vigente sale de TeamDB: no hace falta un status previo en la sesión.';
         }
         const text = `${input?.prompt || ''} ${input?.description || ''}`;
         if (!text.includes(current.id)) {
@@ -835,7 +998,8 @@ export function createGuard(agentBySession = new Map(), core = createCore()) {
     },
     'tool.execute.before': async (input, output) => {
       const agent = agentBySession.get(input.sessionID);
-      const blocked = core.decide({ tool: input.tool, agent, sessionID: input.sessionID, input: output.args });
+      const blocked = core.decide({ tool: input.tool, agent, sessionID: input.sessionID, input: output.args,
+        directory: input.directory || input.cwd });
       if (blocked) throw new Error(blocked);
     },
     'tool.execute.after': async (input, output) => {
@@ -903,8 +1067,12 @@ export function createIdentityQueue(now = () => Date.now()) {
 }
 
 export async function setupGuardV2(ctx, core = createCore(), identities = createIdentityQueue()) {
+  // Dónde está el proyecto: de ahí sale la TeamDB que fija el estado vigente
+  // del workflow (MEDIA-2). Mismo origen que usa el motor en workflow.mjs.
+  const directory = ctx.location?.directory || process.cwd();
   await ctx.tool.hook('execute.before', async (event) => {
-    const blocked = core.decide({ tool: event.tool, agent: event.agent, sessionID: event.sessionID, input: event.input });
+    const blocked = core.decide({ tool: event.tool, agent: event.agent, sessionID: event.sessionID, input: event.input,
+      directory });
     if (blocked) {
       event.tool = 'shell';
       event.input = { command: blockedShell(blocked) };

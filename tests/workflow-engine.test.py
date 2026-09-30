@@ -52,6 +52,53 @@ class Workflow(unittest.TestCase):
             db.execute("INSERT INTO plans(slug,title,design_md,status) VALUES('plan','Plan','# diseño','approved')")
             self.plan_id = db.execute("SELECT id FROM plans WHERE slug='plan'").fetchone()[0]
 
+    def test_goal_survives_handoffs_and_requires_all_outcomes(self):
+        self.call('alex', 'start', risk='low', scope='local', files=['app.py'],
+                  acceptance='value remains one', reuse='existing', intent='Keep totals correct',
+                  outcomes=[{'id': 'value', 'expected': 'value is one'},
+                            {'id': 'type', 'expected': 'value is integer'}])
+        delivered = self.call('teo', 'deliver')
+        self.assertEqual(self.engine.public_response(delivered)['intent'], 'Keep totals correct')
+        self.call('jhon', 'oracle', expected='one', negative='two', invariant='int', refutation='assert')
+        self.call('jhon', 'check', argv=['python3', '-c', 'from app import value; assert value == 1'],
+                  method='assertion', criterion='value')
+        request = {'project': str(self.root), 'actor': 'jhon', 'session': 'jhon-session',
+                   'action': 'approve', 'payload': {'id': 'request', 'evidence': 'checked',
+                       'coverage': [{'outcome_id': 'value', 'check_index': 0, 'observation': 'one'}]}}
+        with self.assertRaisesRegex(ValueError, 'Every outcome'):
+            self.engine.operate(request)
+        request['payload']['coverage'].append({'outcome_id': 'type', 'check_index': 0, 'observation': 'integer'})
+        approved = self.engine.operate(request)
+        self.assertEqual(len(approved['coverage']), 2)
+
+    def test_identical_deterministic_check_executes_once_and_invalidates_on_change(self):
+        self.start()
+        self.call('teo', 'deliver')
+        self.call('jhon', 'oracle', expected='one', negative='two', invariant='integer', refutation='assert')
+        payload = dict(argv=['bash', 'tests/check.test.sh'], method='assert', criterion='value', reusable=True)
+        self.call('jhon', 'check', **payload)
+        from unittest.mock import patch
+        with patch.object(self.engine, 'run_bounded', side_effect=AssertionError('duplicate execution')):
+            result = self.call('jhon', 'check', **payload)
+        self.assertEqual(result['checks'][-1]['reused_from'], 0)
+        (self.root / 'configuration.txt').write_text('changed dependency')
+        with patch.object(self.engine, 'run_bounded', return_value=(0, 'fresh')) as run:
+            result = self.call('jhon', 'check', **payload)
+        run.assert_called_once()
+        self.assertNotIn('reused_from', result['checks'][-1])
+
+    def test_feedback_is_explicit_idempotent_and_does_not_reopen_completion(self):
+        self.start()
+        self.verify()
+        self.call('alex', 'complete')
+        result = self.call('alex', 'feedback', feedback_id='user-message-1', kind='correction',
+                           evidence='User says the empty state is still wrong')
+        self.assertEqual(result['human_corrections'], 1)
+        again = self.call('alex', 'feedback', feedback_id='user-message-1', kind='correction',
+                          evidence='User says the empty state is still wrong')
+        self.assertEqual(again['human_corrections'], 1)
+        self.assertEqual(again['state'], 'completed')
+
     def configure(self, **commands):
         lines = ['testing:']
         for name, command in commands.items():
@@ -59,18 +106,197 @@ class Workflow(unittest.TestCase):
         (self.root / '.opencode/project.yaml').write_text('\n'.join(lines) + '\n')
 
     def call(self, actor, action, **payload):
+        if action == 'start':
+            payload.setdefault('intent', 'Preserve the fixture API and value')
+        if action in {'approve', 'complete', 'prepare_commit'} and 'coverage' not in payload:
+            with closing(sqlite3.connect(self.db_path)) as db:
+                row = db.execute("SELECT body FROM agent_workflows WHERE id='request'").fetchone()
+            state = json.loads(row[0]) if row else {}
+            checks = state.get('checks', [])
+            eligible = [i for i, c in enumerate(checks) if c['agent'] == actor or actor in {'alex', 'teo'}]
+            if eligible:
+                payload['coverage'] = [{'outcome_id': o['id'], 'check_index': eligible[-1],
+                                        'observation': 'Fixture assertion verified value remains one'}
+                                       for o in state.get('outcomes', [{'id': 'acceptance'}])]
         return self.engine.operate({'project': str(self.root), 'actor': actor, 'session': actor+'-session',
                                     'action': action, 'payload': {'id': 'request', **payload}})
 
-    def start(self, risk='low'):
-        return self.call('alex', 'start', risk=risk, files=['app.py', 'tests/check.test.sh'],
-                         acceptance='value remains one', scope='local', decision='none', reuse='app.py existente')
+    def start(self, risk='low', execution_mode=None):
+        payload = {'risk': risk, 'files': ['app.py', 'tests/check.test.sh'],
+                   'acceptance': 'value remains one', 'scope': 'local', 'decision': 'none',
+                   'reuse': 'app.py existente'}
+        if execution_mode:
+            payload['execution_mode'] = execution_mode
+        return self.call('alex', 'start', **payload)
 
     def verify(self):
         self.call('teo', 'deliver')
         self.call('jhon', 'oracle', expected='value one', negative='value two', invariant='integer', refutation='test value')
         self.call('jhon', 'check', argv=['bash', 'tests/check.test.sh'], method='falsification', criterion='value stays 1')
         return self.call('jhon', 'approve', evidence='falsification check covers the declared acceptance criterion')
+
+    def assert_role_can_commit_verified_unit(self, actor, risk):
+        if risk == 'low':
+            self.configure(fast='bash tests/check.test.sh')
+        self.start(risk, execution_mode='focused')
+        (self.root / 'tests/check.test.sh').write_text('test "$(cat app.py)" = "value = 1"  # verificado\n')
+        if risk == 'low':
+            self.call('teo', 'deliver')
+        else:
+            self.verify()
+        if risk == 'high':
+            with self.assertRaisesRegex(ValueError, 'verification for this risk'):
+                self.call('jhon', 'prepare_commit')
+            self.call('luz', 'check', argv=['bash', 'tests/check.test.sh'], method='risk', criterion='value stays 1')
+            self.call('luz', 'approve', evidence='risk checked', findings='no additional risk')
+        before = self.call('alex', 'status')
+        prepared = self.call(actor, 'prepare_commit')
+        self.assertEqual(prepared['state'], before['state'], 'Commit preparation must not bypass workflow completion')
+        self.assertEqual(len(prepared['checks']), len(before['checks']), 'Do not rerun verification to commit')
+        self.assertTrue(prepared['receipt_tree_hash'])
+        base = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=self.root, text=True).strip()
+        hook = self.root / '.git/hooks/pre-commit'
+        hook.write_text(f'#!/bin/sh\nexec python3 "{ROOT / "scripts/hooks/git-gate.py"}" pre-commit\n')
+        hook.chmod(0o755)
+        committed = subprocess.run(['git', 'commit', '-qm', f'fix: unidad verificada por {actor}'],
+                                   cwd=self.root, capture_output=True, text=True)
+        self.assertEqual(committed.returncode, 0, committed.stderr)
+        completed = self.call('alex', 'complete')
+        self.assertEqual(completed['state'], 'completed')
+        self.assertEqual(completed['receipt_tree_hash'], prepared['receipt_tree_hash'])
+        head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=self.root, text=True).strip()
+        push_gate = subprocess.run(['python3', str(ROOT / 'scripts/hooks/git-gate.py'), 'pre-push'],
+                                   input=f'refs/heads/main {head} refs/heads/main {base}\n',
+                                   cwd=self.root, capture_output=True, text=True)
+        self.assertEqual(push_gate.returncode, 0, push_gate.stderr)
+
+    def test_teo_can_commit_auto_verified_unit_without_waiting_for_alex(self):
+        self.assert_role_can_commit_verified_unit('teo', 'low')
+
+    def test_jhon_can_commit_verified_unit_without_waiting_for_alex(self):
+        self.assert_role_can_commit_verified_unit('jhon', 'medium')
+
+    def test_luz_can_commit_reviewed_high_risk_unit_without_waiting_for_alex(self):
+        self.assert_role_can_commit_verified_unit('luz', 'high')
+
+    def test_commit_preparation_rejects_unverified_candidate_or_wrong_role(self):
+        self.start('medium')
+        with self.assertRaises(ValueError):
+            self.call('teo', 'prepare_commit')
+        self.verify()
+        for actor in ('alex', 'pol', 'sol', 'jes', 'pau'):
+            with self.subTest(actor=actor), self.assertRaises(ValueError):
+                self.call(actor, 'prepare_commit')
+        (self.root / 'app.py').write_text('value = 2\n')
+        with self.assertRaisesRegex(ValueError, 'Candidate changed'):
+            self.call('jhon', 'prepare_commit')
+
+    def test_local_commit_does_not_hide_undeclared_changes_from_workflow(self):
+        self.start()
+        (self.root / 'extra.py').write_text('value = 5\n')
+        subprocess.run(['git', 'add', 'extra.py'], cwd=self.root, check=True)
+        subprocess.run(['git', 'commit', '-qm', 'unrelated unit'], cwd=self.root, check=True)
+        with self.assertRaisesRegex(ValueError, 'Scope creep'):
+            self.call('teo', 'deliver')
+
+    def test_reopening_review_revokes_prepared_commit_approval(self):
+        self.configure(fast='test -f app.py')
+        self.start()
+        (self.root / 'app.py').write_text('value = 2\n')
+        self.call('teo', 'deliver')
+        prepared = self.call('teo', 'prepare_commit')
+        reviewed = self.call('jhon', 'oracle', expected='one', negative='two', invariant='int', refutation='test value')
+        self.assertNotIn('receipt_tree_hash', reviewed)
+        with closing(sqlite3.connect(self.db_path)) as db:
+            verdict = db.execute('SELECT exit_code, command FROM receipts WHERE tree_hash=? ORDER BY ts DESC, rowid DESC',
+                                 (prepared['receipt_tree_hash'],)).fetchone()
+        self.assertEqual(verdict, (1, 'skalling_workflow:review-reopened'))
+
+    def test_prepare_commit_does_not_include_unreviewed_staged_files(self):
+        self.start('medium')
+        self.verify()
+        extra = self.root / '.opencode/plugin.js'
+        extra.write_text('unreviewed();\n')
+        subprocess.run(['git', 'add', str(extra)], cwd=self.root, check=True)
+        with self.assertRaisesRegex(ValueError, 'outside the reviewed scope'):
+            self.call('jhon', 'prepare_commit')
+
+    def test_focused_sensitive_work_has_review_without_mandatory_planning(self):
+        state = self.call('alex', 'start', risk='high', scope='local', files=['app.py'],
+                          acceptance='value stays one', reuse='existing app', execution_mode='focused')
+        self.assertEqual(state['state'], 'implementation_ready')
+        self.call('teo', 'deliver')
+        self.call('jhon', 'oracle', expected='one', negative='two', invariant='integer', refutation='test')
+        self.call('jhon', 'check', argv=['python3', '-B', '-c', 'import app; assert app.value == 1'],
+                  method='test', criterion='value one', reusable=True)
+        self.call('jhon', 'approve', evidence='value verified')
+        self.call('luz', 'reuse', check_index=0, evidence='same deterministic local check; risk reviewed')
+        self.call('luz', 'approve', evidence='reviewed', findings='no additional data or privilege path')
+        self.assertEqual(self.call('alex', 'complete')['state'], 'completed')
+
+    def test_reuse_invalidates_when_an_undeclared_dependency_changes(self):
+        self.call('alex', 'start', risk='high', scope='local', files=['app.py'],
+                  acceptance='value one', reuse='app', execution_mode='focused')
+        self.call('teo', 'deliver')
+        self.call('jhon', 'oracle', expected='one', negative='two', invariant='integer', refutation='test')
+        self.call('jhon', 'check', argv=['true'], method='test', criterion='one', reusable=True)
+        self.call('jhon', 'approve', evidence='reviewed')
+        (self.root / 'dependency.py').write_text('changed = True')
+        with self.assertRaisesRegex(ValueError, 'environment|workspace'):
+            self.call('luz', 'reuse', check_index=0, evidence='reuse')
+
+    def test_infrastructure_retry_keeps_history_without_returning_to_implementation(self):
+        self.start()
+        self.call('teo', 'deliver')
+        self.call('jhon', 'oracle', expected='one', negative='two', invariant='integer', refutation='test')
+        argv = ['python3', '-c', 'import os,sys; sys.exit(0 if os.environ.get("SKALLING_TEST_READY") else 1)']
+        self.call('jhon', 'check', argv=argv, method='test', criterion='environment ready')
+        from unittest.mock import patch
+        with patch.dict(os.environ, {'SKALLING_TEST_READY': '1'}):
+            state = self.call('jhon', 'check', argv=argv, method='test', criterion='environment ready',
+                              retry_of=0, failure_kind='infrastructure', evidence='dependency environment repaired')
+        self.assertEqual(len(state['checks']), 2)
+        self.assertEqual(state['checks'][0]['superseded_by'], 1)
+        self.assertEqual(self.call('jhon', 'approve', evidence='retry verified')['state'], 'verified')
+
+    def test_compact_response_does_not_repeat_success_logs(self):
+        state = {'id': 'x', 'state': 'verified', 'risk': 'low', 'files': ['app.py'],
+                 'oracle': {'expected': 'value one', 'negative': 'value two',
+                            'invariant': 'integer', 'refutation': 'test value'},
+                 'checks': [{'output': 'x' * 16000, 'exit_code': 0,
+                             'criterion': 'value stays 1', 'method': 'falsification'}],
+                 'verification': {'output': 'x' * 16000, 'exit_code': 0}}
+        response = self.engine.public_response(state)
+        self.assertLess(len(json.dumps(response)), 2000)
+        self.assertEqual(response['check_count'], 1)
+        self.assertNotIn('output', response['checks'][0])
+        self.assertEqual(response['oracle'], state['oracle'])
+        self.assertEqual(response['checks'][0]['criterion'], 'value stays 1')
+        self.assertEqual(response['checks'][0]['method'], 'falsification')
+
+    def test_clear_local_request_defaults_to_focused_when_model_omits_mode(self):
+        state = self.call('alex', 'start', risk='low', scope='local', files=['app.py'],
+                          acceptance='value remains one', reuse='existing app')
+        self.assertEqual(state['execution_mode'], 'focused')
+        self.assertEqual(state['state'], 'implementation_ready')
+        self.assertEqual(state['route'], 'FAST-TRACK')
+
+    def test_clear_local_medium_defaults_to_focused_and_dispatches_jhon(self):
+        state = self.call('alex', 'start', risk='medium', scope='local', files=['app.py'],
+                          acceptance='value remains one', reuse='existing app')
+        self.assertEqual(state['execution_mode'], 'focused')
+        self.assertEqual(state['state'], 'implementation_ready')
+        self.assertEqual(state['route'], 'DIRECT')
+        self.assertIn('Jhon', state['agents'])
+        self.assertNotIn('Sol', state['agents'])
+
+    def test_focused_cannot_bypass_module_scope_or_sensitive_review(self):
+        with self.assertRaisesRegex(ValueError, 'focused requires'):
+            self.call('alex', 'start', risk='medium', scope='module', files=['app.py'],
+                      acceptance='value remains one', reuse='existing app', execution_mode='focused')
+        with self.assertRaisesRegex(ValueError, 'focused requires'):
+            self.call('alex', 'start', risk='high', scope='local', files=['app.py'], sensitive=True,
+                      acceptance='value remains one', reuse='existing app', execution_mode='focused')
 
     def test_medium_route_reaches_implementation_with_real_plan_helpers(self):
         # Caso real (sesión 2026-09-28): Sol mandó ready con plan_id 1 (el
@@ -79,7 +305,7 @@ class Workflow(unittest.TestCase):
         # insertan el plan directo en la base; este usa los helpers reales.
         scripts = ROOT / 'scripts'
         env = {k: v for k, v in os.environ.items() if not k.startswith(('SKALLING_', 'TEAMDB_'))}
-        self.assertEqual(self.start(risk='medium')['state'], 'clarified')
+        self.assertEqual(self.start(risk='medium', execution_mode='staged')['state'], 'clarified')
         self.assertIn('Sol: plan', self.call('alex', 'status')['next_step'])
         self.assertEqual(self.call('sol', 'plan', evidence='diseño: cambiar app.py; rollback: git revert')['state'], 'planned')
         with self.assertRaises(ValueError) as wrong:
@@ -101,7 +327,7 @@ class Workflow(unittest.TestCase):
         self.assertIn('Teo', ready['next_step'])
 
     def test_rejection_says_state_and_who_acts_next(self):
-        self.start(risk='medium')
+        self.start(risk='medium', execution_mode='staged')
         with self.assertRaises(ValueError) as early:
             self.call('jhon', 'approve', evidence='antes de tiempo')
         self.assertIn('Estado del workflow: clarified', str(early.exception))
@@ -246,9 +472,34 @@ class Workflow(unittest.TestCase):
     def test_delivery_number_increments_on_redelivery(self):
         self.start()
         self.call('teo', 'deliver')
-        self.assertEqual(self.call('jhon', 'reject', evidence='needs another pass')['delivery']['delivery_number'], 1)
+        rejected = self.call('jhon', 'reject', evidence='needs another pass',
+                             findings='La salida conserva el centrado; alinear el wrapper a la derecha')
+        self.assertEqual(rejected['delivery']['delivery_number'], 1)
         second = self.call('teo', 'deliver')
         self.assertEqual(second['delivery']['delivery_number'], 2)
+
+    def test_rejection_carries_specific_fix_and_delivery_budget(self):
+        self.start()
+        self.call('teo', 'deliver')
+        state = self.call('jhon', 'reject', evidence='computed style still centered',
+                          findings='Cambiar el wrapper .users-table a justify-content:flex-end')
+        public = self.engine.public_response(state)
+        self.assertEqual(public['last_rejection']['reason'], 'Cambiar el wrapper .users-table a justify-content:flex-end')
+        self.assertEqual(public['recommended_action']['agent'], 'teo')
+        self.assertEqual(public['recommended_action']['deliveries_remaining'], 2)
+
+    def test_third_rejected_delivery_blocks_same_workflow(self):
+        self.start()
+        for attempt in range(1, self.engine.MAX_DELIVERIES + 1):
+            self.call('teo', 'deliver')
+            result = self.call('jhon', 'reject', evidence=f'candidate {attempt} still fails',
+                               findings=f'failure detail {attempt}')
+        self.assertEqual(result['state'], 'blocked')
+        public = self.engine.public_response(result)
+        self.assertEqual(public['recommended_action']['action'], 'stop_and_reclassify')
+        self.assertEqual(public['recommended_action']['deliveries_remaining'], 0)
+        with self.assertRaisesRegex(ValueError, 'blocked'):
+            self.call('teo', 'deliver')
 
     def test_rescope_into_a_new_area_escalates_risk(self):
         (self.root / 'src').mkdir()
@@ -284,7 +535,7 @@ class Workflow(unittest.TestCase):
         self.engine.operate({'project': str(self.root), 'actor': 'alex', 'session': 'other-session',
                              'action': 'start', 'payload': {'id': 'other-request', 'risk': 'low',
                              'files': ['app.py'], 'acceptance': 'x', 'scope': 'local', 'decision': 'none',
-                             'reuse': 'x'}})
+                             'reuse': 'x', 'intent': 'Preserve value'}})
         concurrent_duration = time.monotonic() - concurrent_start
         thread.join()
 
@@ -339,6 +590,18 @@ class Workflow(unittest.TestCase):
         self.assertEqual(row[3], completed['receipt_tree_hash'])
         self.assertEqual(metric[0], 'success')
 
+    def test_unit_suite_is_not_started_automatically_without_fast_command(self):
+        self.configure(unit='bash tests/check.test.sh')
+        started = self.start()
+        self.assertIsNone(started['auto_verify'])
+        self.assertEqual(started['configured_verification'], ['bash', '-c', 'bash tests/check.test.sh'])
+        (self.root / 'app.py').write_text('value = 1  # ajuste local\n')
+        delivered = self.call('teo', 'deliver')
+        self.assertEqual(delivered['state'], 'verification_ready')
+        self.assertIsNone(delivered['auto_verify'])
+        self.assertEqual(delivered['checks'], [])
+        self.assertEqual(self.engine.next_action(delivered)['agent'], 'jhon')
+
     def test_trivial_route_failure_returns_to_teo(self):
         self.configure(fast='bash tests/check.test.sh')
         self.start()
@@ -348,6 +611,32 @@ class Workflow(unittest.TestCase):
         self.assertEqual(delivered['verification']['exit_code'], 1)
         with self.assertRaises(ValueError):
             self.call('alex', 'complete')
+
+    def test_generic_green_check_can_be_reviewed_against_the_actual_request(self):
+        self.configure(fast='test -f app.py')
+        self.start()
+        (self.root / 'app.py').write_text('value = 2\n')
+        auto = self.call('teo', 'deliver')
+        self.assertEqual(auto['state'], 'verified')
+        self.assertIn('oracle', auto['next_step'])
+        self.assertNotEqual(auto['checks'][0]['criterion'], auto['acceptance'])
+        with self.assertRaises(ValueError):
+            self.call('teo', 'oracle', expected='one', negative='two', invariant='int', refutation='test value')
+        reviewed = self.call('jhon', 'oracle', expected='one', negative='two', invariant='int', refutation='test value')
+        self.assertEqual(reviewed['state'], 'verification_ready')
+        self.assertEqual(len(reviewed['checks']), 1, 'Keep the valid generic check as evidence')
+        self.assertIsNone(reviewed['auto_verify'])
+        with self.assertRaises(ValueError):
+            self.call('alex', 'complete')
+        checked = self.call('jhon', 'check', argv=['bash', 'tests/check.test.sh'], method='behavior', criterion='value stays 1')
+        self.assertEqual(checked['verification']['exit_code'], 1)
+        self.call('jhon', 'reject', evidence='The file exists, but value is 2 instead of 1')
+        (self.root / 'app.py').write_text('value = 1\n')
+        self.assertEqual(self.call('teo', 'deliver')['state'], 'verification_ready')
+        self.call('jhon', 'oracle', expected='one', negative='two', invariant='int', refutation='test value')
+        self.call('jhon', 'check', argv=['bash', 'tests/check.test.sh'], method='behavior', criterion='value stays 1')
+        self.call('jhon', 'approve', evidence='Observed the requested value one')
+        self.assertEqual(self.call('alex', 'complete')['state'], 'completed')
 
     def test_verification_command_is_frozen_at_start(self):
         self.configure(fast='bash tests/check.test.sh')
@@ -364,12 +653,12 @@ class Workflow(unittest.TestCase):
         self.start()
         other = self.engine.operate({'project': str(self.root), 'actor': 'alex', 'session': 'b', 'action': 'start',
                                      'payload': {'id': 'other', 'risk': 'low', 'files': ['app.py'], 'acceptance': 'x',
-                                                 'scope': 'local', 'decision': 'none', 'reuse': 'x'}})
+                                                 'scope': 'local', 'decision': 'none', 'reuse': 'x', 'intent': 'Preserve value'}})
         self.assertEqual(other['state'], 'implementation_ready')
         self.assertEqual(self.call('alex', 'status')['state'], 'implementation_ready')
         self.engine.operate({'project': str(self.root), 'actor': 'alex', 'session': 'a', 'action': 'start',
                              'payload': {'id': 'request-2', 'risk': 'medium', 'files': ['app.py'], 'acceptance': 'x',
-                                         'scope': 'local', 'decision': 'none', 'reuse': 'x', 'supersedes': 'request'}})
+                                         'scope': 'local', 'decision': 'none', 'reuse': 'x', 'intent': 'Preserve value', 'supersedes': 'request'}})
         self.assertEqual(self.call('alex', 'status')['state'], 'superseded')
         with self.assertRaises(ValueError):
             self.call('teo', 'deliver')
@@ -408,7 +697,7 @@ class Workflow(unittest.TestCase):
         with self.assertRaises(ValueError) as caught:
             self.engine.operate({'project': str(self.root), 'actor': 'alex', 'session': 's', 'action': 'start',
                                  'payload': {'id': 'x2', 'risk': 'low', 'files': {'item': ['app.py']}, 'acceptance': 'x',
-                                             'scope': 'local', 'decision': 'none', 'reuse': 'x'}})
+                                             'scope': 'local', 'decision': 'none', 'reuse': 'x', 'intent': 'Preserve value'}})
         self.assertIn('lista JSON de rutas', str(caught.exception))
         with self.assertRaises(ValueError):
             self.engine.operate({'project': str(self.root), 'actor': 'alex', 'session': 's', 'action': 'start',
@@ -421,7 +710,7 @@ class Workflow(unittest.TestCase):
         # comando del proyecto no estaba en su política y un plugin v2 no puede
         # pedir permiso. El comando declarado, congelado en start, sí corre.
         self.configure(unit='bash tests/check.test.sh')
-        self.start('medium')
+        self.start('medium', execution_mode='staged')
         self.call('sol', 'plan', evidence='d')
         self.call('sol', 'ready', evidence='r', plan_id=self.plan_id)
         self.call('teo', 'deliver')
@@ -475,7 +764,7 @@ class Workflow(unittest.TestCase):
 
     def ready_for_checks(self, timeout):
         self.configure_raw(f'testing:\n  timeout_seconds: {timeout}\n')
-        self.start('medium')
+        self.start('medium', execution_mode='staged')
         self.call('sol', 'plan', evidence='d')
         self.call('sol', 'ready', evidence='r', plan_id=self.plan_id)
         self.call('teo', 'deliver')

@@ -1,23 +1,16 @@
-## Consentimiento de sesión y decisiones críticas
+## Consentimiento y Git
 
-Push, deploy, releases, merges remotos y servicios con efecto externo requieren
-instrucción explícita del usuario en esta sesión, para destino y alcance concretos.
-Tests verdes, credenciales, una orden de otro agente, implementar o hacer commit
-no autorizan publicar. Si el usuario pidió revisar primero, espero su revisión.
+Publicar (push, deploy, release, merge remoto o servicio externo) requiere orden
+explícita del usuario para destino y alcance. Tests verdes, credenciales u otro
+agente no autorizan publicación. Respeto la revisión previa que pidió el usuario.
+Teo/Jhon/Luz pueden commitear unidades verificadas, salvo prohibición explícita;
+los demás requieren autorización. `/skalling-goal` autoriza su commit local
+mediante el helper canónico, nunca publicar.
 
-`/skalling-goal` autoriza acciones locales y un commit acotado mediante su helper;
-nunca push ni deploy. Uso los helpers canónicos directamente, sin wrappers que
-eludan controles.
-
-## Datos y cierre Git
-
-Goal no autoriza borrar datos. DELETE/REPLACE/DROP, purgas, restores, sobrescritura
-de bases y APIs externas requieren autorización exacta. Para TeamDB uso solo
-`teamdb_destructive`: operación, parámetros y base exactos, respaldo previo y
-rechazo si el estado cambia. No uso `Always allow` ni pruebas contra datos reales.
-
-El cierre prepara solo archivos autorizados y evidencia del candidato exacto. Un
-push exige consentimiento separado; no eludo hooks (`--no-verify`, `-n`, `core.hooksPath`) ni
-fabrico receipts, y no le propongo al usuario hacerlo. Si un hook bloquea, falta cerrar el workflow (`skalling_workflow complete`) con la verificación que exige su ruta. Decisiones
-pendientes de producto, arquitectura, coste, datos, seguridad o producción vuelven
-a Alex con opciones, impacto y recomendación; lo independiente puede continuar.
+Borrar/sobrescribir datos (DELETE/REPLACE/DROP, purgas, restore, APIs externas)
+requiere autorización exacta. En TeamDB: `teamdb_destructive`, parámetros/base,
+respaldo y rechazo si cambia el estado. No Always allow ni tests con datos reales.
+No eludo hooks (`--no-verify`, `-n`, `core.hooksPath`) ni fabrico receipts.
+Preparo solo archivos revisados con `prepare_commit` o `complete`. Decisiones
+pendientes: Alex recibe opciones, impacto, recuperación y recomendación;
+continúo trabajo independiente sin repetir autorizaciones ya dadas.

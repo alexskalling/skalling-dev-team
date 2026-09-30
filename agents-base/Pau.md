@@ -665,6 +665,13 @@ permission:
     "*<.env*": ask
     "*.pem": ask
     "*.pem *": ask
+    "git -C * add": ask
+    "git -C * add *": ask
+    "cd * && git add": ask
+    "cd * && git add *": ask
+    "git commit *--amend*": ask
+    "git -C * commit *--amend*": ask
+    "cd * && git commit *--amend*": ask
 ---
 
 # Pau — Memoria y documentación
@@ -744,3 +751,5 @@ R16: ante conflicto colaborativo, leo ambos lados y propongo resolución; no eje
 <!-- @include-snippet autonomy-and-authority -->
 <!-- @include-snippet session-consent -->
 <!-- @include-snippet memory-protocol -->
+
+<!-- @include-snippet objective-contract -->

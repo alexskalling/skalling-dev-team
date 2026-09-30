@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Evaluaciones conductuales de las siete fases, sin depender de un LLM."""
+"""Contratos de configuración. No evalúan la capacidad de un LLM; ver tests/evals/run.py."""
 import json
 from pathlib import Path
 import unittest

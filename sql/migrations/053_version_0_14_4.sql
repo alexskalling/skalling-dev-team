@@ -1,0 +1,17 @@
+-- v0.14.4: guard de OpenCode anclado al token de comando y estado vigente en
+-- TeamDB (29-09-2026).
+--
+-- 0.14.3 eliminó la línea `plan_id` de los ejemplos y renombró la migración
+-- de versión a 052. Esta migración es la que lleva una base existente a 0.14.4.
+-- El schema nuevo (sql/project-schema.sql y sql/global-schema.sql) ya declara
+-- 0.14.4, así que teamdb-init.sh sobre una base fresca no necesita correrla.
+--
+-- El fix en sí NO es de schema: vive en plugins/lib/git-guard.mjs.
+--   MEDIA-1: skalling-approve.sh / teamdb-seal-receipt.sh / skalling-workflow.py
+--     se comparaban contra la cadena completa del comando, así que un comando
+--     de solo lectura que nombraba el script como argumento quedaba bloqueado.
+--     Ahora la prohibición se ancla al token de comando de cada segmento.
+--   MEDIA-2: el mapa local de workflows de la sesión de Alex quedaba viejo tras
+--     un reject de Jhon; decide() consulta ahora el estado vigente en
+--     agent_workflows (de solo lectura, fail-closed).
+UPDATE schema_meta SET value = '0.14.4' WHERE key = 'version';

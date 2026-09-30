@@ -883,7 +883,14 @@
     "*=.env*": "ask",
     "*<.env*": "ask",
     "*.pem": "ask",
-    "*.pem *": "ask"
+    "*.pem *": "ask",
+    "git -C * add": "ask",
+    "git -C * add *": "ask",
+    "cd * && git add": "ask",
+    "cd * && git add *": "ask",
+    "git commit *--amend*": "ask",
+    "git -C * commit *--amend*": "ask",
+    "cd * && git commit *--amend*": "ask"
   },
   "profiles": {
     "Alex": {
@@ -1556,7 +1563,14 @@
         "*=.env*",
         "*<.env*",
         "*.pem",
-        "*.pem *"
+        "*.pem *",
+        "git -C * add",
+        "git -C * add *",
+        "cd * && git add",
+        "cd * && git add *",
+        "git commit *--amend*",
+        "git -C * commit *--amend*",
+        "cd * && git commit *--amend*"
       ],
       "overrides": {}
     },
@@ -2098,7 +2112,14 @@
         "*=.env*",
         "*<.env*",
         "*.pem",
-        "*.pem *"
+        "*.pem *",
+        "git -C * add",
+        "git -C * add *",
+        "cd * && git add",
+        "cd * && git add *",
+        "git commit *--amend*",
+        "git -C * commit *--amend*",
+        "cd * && git commit *--amend*"
       ],
       "overrides": {
         "sed -i*": "ask",
@@ -2799,12 +2820,19 @@
         "*=.env*",
         "*<.env*",
         "*.pem",
-        "*.pem *"
+        "*.pem *",
+        "git -C * add",
+        "git -C * add *",
+        "cd * && git add",
+        "cd * && git add *",
+        "git commit *--amend*",
+        "git -C * commit *--amend*",
+        "cd * && git commit *--amend*"
       ],
       "overrides": {
         "sed -i*": "ask",
-        "git add": "ask",
-        "git add *": "ask",
+        "git add": "allow",
+        "git add *": "allow",
         "git diff *--output*": "ask",
         "git show *--output*": "ask",
         "sort *-o*": "ask",
@@ -2816,7 +2844,17 @@
         "pnpm install *": "ask",
         "pnpm remove *": "ask",
         "yarn add *": "ask",
-        "yarn remove *": "ask"
+        "yarn remove *": "ask",
+        "git commit": "allow",
+        "git commit *": "allow",
+        "git -C * commit": "allow",
+        "git -C * commit *": "allow",
+        "cd * && git commit": "allow",
+        "cd * && git commit *": "allow",
+        "git -C * add": "allow",
+        "git -C * add *": "allow",
+        "cd * && git add": "allow",
+        "cd * && git add *": "allow"
       }
     },
     "Luz": {
@@ -3500,12 +3538,19 @@
         "*=.env*",
         "*<.env*",
         "*.pem",
-        "*.pem *"
+        "*.pem *",
+        "git -C * add",
+        "git -C * add *",
+        "cd * && git add",
+        "cd * && git add *",
+        "git commit *--amend*",
+        "git -C * commit *--amend*",
+        "cd * && git commit *--amend*"
       ],
       "overrides": {
         "sed -i*": "ask",
-        "git add": "ask",
-        "git add *": "ask",
+        "git add": "allow",
+        "git add *": "allow",
         "git diff *--output*": "ask",
         "git show *--output*": "ask",
         "sort *-o*": "ask",
@@ -3517,7 +3562,17 @@
         "pnpm install *": "ask",
         "pnpm remove *": "ask",
         "yarn add *": "ask",
-        "yarn remove *": "ask"
+        "yarn remove *": "ask",
+        "git commit": "allow",
+        "git commit *": "allow",
+        "git -C * commit": "allow",
+        "git -C * commit *": "allow",
+        "cd * && git commit": "allow",
+        "cd * && git commit *": "allow",
+        "git -C * add": "allow",
+        "git -C * add *": "allow",
+        "cd * && git add": "allow",
+        "cd * && git add *": "allow"
       }
     },
     "Pau": {
@@ -4188,7 +4243,14 @@
         "*=.env*",
         "*<.env*",
         "*.pem",
-        "*.pem *"
+        "*.pem *",
+        "git -C * add",
+        "git -C * add *",
+        "cd * && git add",
+        "cd * && git add *",
+        "git commit *--amend*",
+        "git -C * commit *--amend*",
+        "cd * && git commit *--amend*"
       ],
       "overrides": {}
     },
@@ -4730,7 +4792,14 @@
         "*=.env*",
         "*<.env*",
         "*.pem",
-        "*.pem *"
+        "*.pem *",
+        "git -C * add",
+        "git -C * add *",
+        "cd * && git add",
+        "cd * && git add *",
+        "git commit *--amend*",
+        "git -C * commit *--amend*",
+        "cd * && git commit *--amend*"
       ],
       "overrides": {
         "sed -i*": "ask",
@@ -5388,7 +5457,14 @@
         "*=.env*",
         "*<.env*",
         "*.pem",
-        "*.pem *"
+        "*.pem *",
+        "git -C * add",
+        "git -C * add *",
+        "cd * && git add",
+        "cd * && git add *",
+        "git commit *--amend*",
+        "git -C * commit *--amend*",
+        "cd * && git commit *--amend*"
       ],
       "overrides": {
         "sed -i*": "ask",
@@ -6092,9 +6168,29 @@
         "*=.env*",
         "*<.env*",
         "*.pem",
-        "*.pem *"
+        "*.pem *",
+        "git -C * add",
+        "git -C * add *",
+        "cd * && git add",
+        "cd * && git add *",
+        "git commit *--amend*",
+        "git -C * commit *--amend*",
+        "cd * && git commit *--amend*"
       ],
-      "overrides": {}
+      "overrides": {
+        "git commit": "allow",
+        "git commit *": "allow",
+        "git -C * commit": "allow",
+        "git -C * commit *": "allow",
+        "cd * && git commit": "allow",
+        "cd * && git commit *": "allow",
+        "git add": "allow",
+        "git add *": "allow",
+        "git -C * add": "allow",
+        "git -C * add *": "allow",
+        "cd * && git add": "allow",
+        "cd * && git add *": "allow"
+      }
     },
     "project": {
       "permissions": {
@@ -6963,7 +7059,14 @@
         "*=.env*",
         "*<.env*",
         "*.pem",
-        "*.pem *"
+        "*.pem *",
+        "git -C * add",
+        "git -C * add *",
+        "cd * && git add",
+        "cd * && git add *",
+        "git commit *--amend*",
+        "git -C * commit *--amend*",
+        "cd * && git commit *--amend*"
       ],
       "overrides": {}
     }

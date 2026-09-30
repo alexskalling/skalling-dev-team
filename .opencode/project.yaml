@@ -11,7 +11,7 @@ detected_by: alex-init
 # STACK
 # ────────────────────────────────────────────────────────────────────────────
 stack:
-  language: 
+  language: "JavaScript, Python, Shell"
   runtime: 
   framework: 
   package_manager: 
@@ -23,8 +23,19 @@ stack:
 # MÓDULOS TOP-LEVEL
 # ────────────────────────────────────────────────────────────────────────────
 modules:
-  - tests/
+  - agents-base/
+  - command/
+  - constitution/
+  - data/
+  - db/
   - docs/
+  - plugins/
+  - scripts/
+  - skills-base/
+  - sql/
+  - templates/
+  - tests/
+  - web/
 
 # ────────────────────────────────────────────────────────────────────────────
 # TESTING
@@ -35,6 +46,9 @@ testing:
     available: true
     command: "bash tests/run-all.sh"
     note: "Configurado a mano (preservado)"
+  fast:
+    available: true
+    command: "python3 tests/run-selected.py {files}"
   integration:
     available: false
     command: ""

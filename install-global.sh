@@ -576,6 +576,7 @@ install_teamdb() {
         run cp "$SCRIPT_DIR/scripts/teamdb_dump.py" "$OPENCODE_DIR/scripts/teamdb_dump.py"
         # Parser único de project.yaml (motor, verificador, bootstrap).
         run cp "$SCRIPT_DIR/scripts/skalling_config.py" "$OPENCODE_DIR/scripts/skalling_config.py"
+        run cp "$SCRIPT_DIR/scripts/skalling_context.py" "$OPENCODE_DIR/scripts/skalling_context.py"
         run cp "$SCRIPT_DIR/scripts/teamdb-destructive.py" "$OPENCODE_DIR/scripts/teamdb-destructive.py"
         run chmod +x "$OPENCODE_DIR/scripts/teamdb_exec.py"
     fi

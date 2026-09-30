@@ -37,6 +37,10 @@ BEFORE claiming any status or expressing satisfaction:
 Skip any step = lying, not verifying
 ```
 
+## Proportional verification
+
+Run the smallest set that covers the acceptance criteria and affected dependencies. Reuse recorded passing evidence only when candidate, command, relevant environment and inputs remain valid. Run the full suite for broad/unknown impact or integration, not automatically at every handoff. Report the actual scope and remaining gaps.
+
 ## Common Failures
 
 | Claim | Requires | Not Sufficient |
@@ -55,7 +59,7 @@ Skip any step = lying, not verifying
 - Expressing satisfaction before verification ("Great!", "Perfect!", "Done!", etc.)
 - About to commit/push/PR without verification
 - Trusting agent success reports
-- Relying on partial verification
+- Claiming broader coverage than the verification actually established
 - Thinking "just this once"
 - Tired and wanting work over
 - **ANY wording implying success without having run verification**
@@ -70,7 +74,7 @@ Skip any step = lying, not verifying
 | "Linter passed" | Linter ≠ compiler |
 | "Agent said success" | Verify independently |
 | "I'm tired" | Exhaustion ≠ excuse |
-| "Partial check is enough" | Partial proves nothing |
+| "A focused check proves everything" | Focused checks prove their declared scope; expand for shared or unknown impact |
 | "Different words so rule doesn't apply" | Spirit over letter |
 
 ## Key Patterns

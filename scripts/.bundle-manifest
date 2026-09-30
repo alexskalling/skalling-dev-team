@@ -21,6 +21,7 @@ skalling-route.sh	skalling-route.sh	57a703540e15771abc9a1c5cb6daeb13a869c846849c
 skalling-session-start.sh	skalling-session-start.sh	5d041b8bc4854bb2e7126815061b9fe654beedd31c2d5f3308b2029118939f20	5d041b8bc4854bb2e7126815061b9fe654beedd31c2d5f3308b2029118939f20
 skalling-verify.sh	skalling-verify.sh
 skalling-snapshot.sh	skalling-snapshot.sh	f8354abdfc91ddb267edce07700d096827db21c6f06813133405479339debc15	f8354abdfc91ddb267edce07700d096827db21c6f06813133405479339debc15
+skalling_context.py	skalling_context.py
 skalling_config.py	skalling_config.py		
 skalling_classify.py	skalling_classify.py		
 skalling-workflow.py	skalling-workflow.py	4442ac49053bb1be5b2a679d3218cc4a0178c319b596253a2a9545d3a72e53f1	

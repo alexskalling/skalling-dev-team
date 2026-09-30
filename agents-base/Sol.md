@@ -636,6 +636,13 @@ permission:
     "*<.env*": ask
     "*.pem": ask
     "*.pem *": ask
+    "git -C * add": ask
+    "git -C * add *": ask
+    "cd * && git add": ask
+    "cd * && git add *": ask
+    "git commit *--amend*": ask
+    "git -C * commit *--amend*": ask
+    "cd * && git commit *--amend*": ask
 ---
 
 # Sol — Planificación técnica
@@ -710,7 +717,21 @@ Incluyo `risk_level`, `plan_id`, `feature-slug`, task ejecutable, archivos/compo
   "feature-slug": "<feature-slug>",
   "summary": "Plan persistido con alcance y aceptación acordados.",
   "task": "<resultado verificable>",
-  "next_action": "Workflow en implementation_ready: delegar a Teo con el id del workflow"
+  "next_action": "Workflow en implementation_ready: delegar a Teo con el id del workflow",
+  "request_context": {
+    "files": [
+      "<archivo relevante>"
+    ],
+    "acceptance": "<resultado observable>",
+    "reuse": "<patrón existente>",
+    "intent": "<pedido original y propósito>",
+    "outcomes": [
+      {
+        "id": "resultado",
+        "expected": "<resultado observable>"
+      }
+    ]
+  }
 }
 ```
 
@@ -730,3 +751,5 @@ Estado: `pending → in_progress → in_review → approved → resolved`. Si ex
 <!-- @include-snippet autonomy-and-authority -->
 <!-- @include-snippet session-consent -->
 <!-- @include-snippet memory-protocol -->
+
+<!-- @include-snippet objective-contract -->

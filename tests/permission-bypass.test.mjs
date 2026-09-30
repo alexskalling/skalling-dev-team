@@ -115,6 +115,24 @@ test('los comandos legítimos de cada rol siguen sin pedir permiso', () => {
   }
 });
 
+test('Teo, Jhon y Luz pueden preparar y commitear localmente; publicar sigue preguntando', () => {
+  for (const role of ['Teo', 'Jhon', 'Luz']) {
+    for (const command of ['git add -- app.py', 'git commit -m "fix: corrige el total"',
+      'git -C /project add -- app.py', 'git -C /project commit -m "fix: corrige el total"',
+      'cd /project && git commit -m "fix: corrige el total"']) {
+      assert.equal(decision(role, command), 'allow', `${role}: ${command}`);
+    }
+    for (const command of ['git push', 'git -C /project push origin main',
+      'cd /project && git push origin main', 'git commit --amend -m "fix: reescribe"',
+      'git add app.py && git commit -m x && git push', 'git commit --no-verify -m x']) {
+      assert.notEqual(decision(role, command), 'allow', `${role}: ${command}`);
+    }
+  }
+  for (const role of ['Alex', 'Pol', 'Sol', 'Jes', 'Pau']) {
+    assert.equal(decision(role, 'git commit -m "fix: corrige el total"'), 'ask', role);
+  }
+});
+
 // Único `*` permitido antes del nombre del programa: el segmento del home en
 // la ruta de un helper global (el guard bloquea que ese `*` se trague otro
 // script: una ruta de helper solo vale como programa, no como argumento).

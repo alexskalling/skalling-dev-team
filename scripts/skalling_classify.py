@@ -45,6 +45,12 @@ def normalize(kind, risk, scope='unknown', clarity='clear', decision='none', sen
         route, agents, verification = 'DIRECT', 'Alex → Luz', 'audit'
     elif scope == 'unknown':
         route, agents, verification = ROUTES['high']
+    elif (scope == 'local' and risk == 'medium' and not sensitive
+          and not needs_user_decision):
+        # A clear local change needs independent verification, not an automatic
+        # planning handoff. The workflow can still opt into staged when its
+        # payload says a plan/task is required.
+        route, agents, verification = 'DIRECT', 'Alex → Teo → Jhon', 'focused'
     else:
         route, agents, verification = ROUTES[risk]
     return {

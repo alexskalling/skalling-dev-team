@@ -117,13 +117,14 @@ delegar a Teo cuando el workflow vigente de su sesión está en
 
 | Riesgo | Ruta | Verificación |
 |---|---|---|
-| low | Alex → Teo | el motor corre el comando del proyecto (`testing.fast` con `{files}`, o `testing.unit`), congelado en `start`; sin comando, Jhon |
-| medium | Alex → Sol → Teo → Jhon | checks de Jhon registrados por el motor |
-| high | Alex → Pol → Sol → Teo → Jhon → Luz → Pau | Jhon, Luz (con veredicto de riesgo) y documentación de Pau |
+| focused local y claro | Alex → Teo; Jhon se agrega para riesgo medio/alto | comprobación focal o comando `testing.fast`; sin comando, Jhon |
+| staged medium | Alex → Sol → Teo → Jhon | checks de Jhon registrados por el motor |
+| staged high | Alex → Pol → Sol → Teo → Jhon → Luz → Pau | Jhon, Luz (con veredicto de riesgo) y documentación de Pau |
 
 Estados: `requested → clarified → planned → implementation_ready →
 verification_ready → verified → quality_reviewed → documented → completed`
-(además `superseded` cuando una reclasificación explícita reemplaza al pedido).
+(además `blocked` cuando se agota el presupuesto de entregas y `superseded`
+cuando una reclasificación explícita reemplaza al pedido).
 
 1. **start** (Alex): reglas de `skalling_classify.py`; rechaza decisiones
    pendientes, ambigüedad, alcance desconocido y proyectos sin contexto.
@@ -136,8 +137,18 @@ verification_ready → verified → quality_reviewed → documented → complete
 5. **document** (Pau, alto) y **complete** (Alex): prepara en Git exactamente
    los archivos revisados y sella un receipt con el `tree_hash` del diff. Si no
    puede sellar, no completa.
+   Teo, Jhon y Luz también pueden **prepare_commit** después de la aprobación
+   exigida por el riesgo: prepara y sella sin cerrar ni repetir pruebas. Luego
+   crean un commit local sin aprobación humana por commit. El cierre conserva
+   ese sello si los cambios ya se commitearon; reabrir la revisión lo revoca.
+   El alcance incluye los cambios commiteados desde el inicio del workflow.
 6. Las tasks de un plan (`teamdb-claim.sh`) avanzan a `approved` con la
    verificación que registró el motor para el workflow de esa task.
+7. Un workflow permite tres entregas. Cada rechazo conserva el agente, el
+   motivo, el número de entrega y la siguiente acción tipada para que Teo
+   corrija el hallazgo concreto. Tras el tercer candidato rechazado, el motor
+   bloquea nuevas ediciones bajo ese workflow; Alex debe aclarar el criterio o
+   alcance y abrir uno nuevo que superseda al anterior.
 
 ## 4. Hooks de integridad
 
@@ -146,7 +157,7 @@ Instalados en `.git/hooks` por `bootstrap-context.sh` (loop que copia
 los scripts de `scripts/hooks/` por glob).
 
 - **`pre-commit`**: fail-closed. Compara el hash del diff staged contra
-  `receipts` y solo acepta evidencia calculada: `skalling_workflow:complete`,
+  `receipts` y solo acepta evidencia calculada: `skalling_workflow:complete` o `prepare_commit`,
   la verificación real de Jhon (`skalling-verify.sh`), la revisión real de Luz
   (`review --...`) o una dispensa humana (`waived:`). Un receipt hecho a mano
   no cuenta.

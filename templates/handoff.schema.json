@@ -72,6 +72,84 @@
       "minLength": 5,
       "description": "What the receiving agent should do next"
     },
+    "recommended_action": {
+      "type": "object",
+      "description": "Typed action returned by the workflow engine; copy it without reinterpretation",
+      "required": [
+        "agent",
+        "action",
+        "delivery_number",
+        "max_deliveries",
+        "deliveries_remaining"
+      ],
+      "properties": {
+        "agent": {
+          "type": "string",
+          "enum": [
+            "alex",
+            "pol",
+            "jes",
+            "sol",
+            "teo",
+            "jhon",
+            "luz",
+            "pau",
+            "auto",
+            "done"
+          ]
+        },
+        "action": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "delivery_number": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_deliveries": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "deliveries_remaining": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "last_rejection": {
+      "type": "object",
+      "description": "Exact last review failure carried into the next implementation attempt",
+      "required": [
+        "agent",
+        "reason",
+        "delivery_number",
+        "recorded_at"
+      ],
+      "properties": {
+        "agent": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "delivery_number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "recorded_at": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": false
+    },
     "risk_level": {
       "type": "string",
       "enum": [
@@ -263,7 +341,9 @@
       "required": [
         "files",
         "acceptance",
-        "reuse"
+        "reuse",
+        "intent",
+        "outcomes"
       ],
       "properties": {
         "files": {
@@ -281,6 +361,30 @@
         "reuse": {
           "type": "string",
           "minLength": 5
+        },
+        "intent": {
+          "type": "string",
+          "minLength": 1
+        },
+        "outcomes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "expected"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "expected": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
         }
       },
       "additionalProperties": false
@@ -332,7 +436,8 @@
       },
       "then": {
         "required": [
-          "verification"
+          "verification",
+          "request_context"
         ]
       }
     },
@@ -375,6 +480,20 @@
         "command": "npm test",
         "exit_code": 0,
         "output_summary": "8 tests pasan"
+      },
+      "request_context": {
+        "intent": "Permitir inicio de sesión seguro conservando la API",
+        "outcomes": [
+          {
+            "id": "login",
+            "expected": "Credenciales válidas ingresan, credenciales inválidas se rechazan"
+          }
+        ],
+        "files": [
+          "src/auth/application/login.ts"
+        ],
+        "acceptance": "Login funciona con credenciales válidas y rechaza inválidas",
+        "reuse": "LoginUseCase existente"
       }
     },
     {
@@ -396,6 +515,20 @@
         "command": "npm test",
         "exit_code": 0,
         "output_summary": "Regresión verificada"
+      },
+      "request_context": {
+        "intent": "Permitir inicio de sesión seguro conservando la API",
+        "outcomes": [
+          {
+            "id": "login",
+            "expected": "Credenciales válidas ingresan, credenciales inválidas se rechazan"
+          }
+        ],
+        "files": [
+          "src/auth/application/login.ts"
+        ],
+        "acceptance": "Login funciona con credenciales válidas y rechaza inválidas",
+        "reuse": "LoginUseCase existente"
       }
     }
   ]

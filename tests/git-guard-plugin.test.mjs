@@ -1,8 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import {
   blocksChainedSensitiveGit, guardCommand, identityViolation, createGuard, setupGuardV2,
-  writeViolation, hookBypassViolation, createCore, createIdentityQueue,
+  writeViolation, hookBypassViolation, createCore, createIdentityQueue, teamdbWorkflowState,
 } from '../plugins/lib/git-guard.mjs';
 
 test('bloquea git push/reset/etc. encadenado detrás de un prefijo permitido', () => {
@@ -377,6 +381,184 @@ test('auditoría 2026-09-27: ningún agente corre el aprobador humano', () => {
       assert.match(core.decide({ tool: 'bash', agent, sessionID: 's', input: { command } }) || '', /terminal/, `${agent}: ${command}`);
     }
   }
+});
+
+// MEDIA-1 (auditoría de Luz sobre 0.14.3): las reglas de skalling-workflow.py
+// y skalling-approve.sh/teamdb-seal-receipt.sh comparaban la cadena COMPLETA
+// del comando, así que un comando de solo lectura que NOMBRA el script como
+// argumento (git diff --stat <ruta>, rg <ruta>...) quedaba bloqueado sin
+// motivo. Lo prohibido es ACCIONAR el binario, no nombrarlo.
+test('MEDIA-1: nombrar los binarios prohibidos como argumento NO bloquea (solo lectura)', () => {
+  const core = createCore();
+  const run = (command) => core.decide({ tool: 'bash', agent: 'teo', sessionID: 's', input: { command } });
+  for (const command of [
+    'git diff --stat scripts/skalling-approve.sh',
+    'git log -- scripts/teamdb-seal-receipt.sh',
+    'rg skalling-workflow.py scripts/',
+    'grep -rn skalling-approve.sh scripts/skalling-workflow.py',
+    'echo scripts/skalling-approve.sh',
+    'git log -1 --format=%s -- scripts/skalling-workflow.py',
+    "bash scripts/skalling-review.sh --lens risk --scope 'scripts/**'",
+  ]) assert.equal(run(command), null, `no debía bloquear: ${command}`);
+
+  // El bloqueo SIGUE cuando el binario es el programa que se ejecuta.
+  for (const command of [
+    'bash scripts/skalling-approve.sh',
+    'bash .opencode/scripts/skalling-approve.sh',
+    'scripts/skalling-approve.sh',
+    'command bash scripts/skalling-approve.sh',
+    'sh scripts/teamdb-seal-receipt.sh t humano',
+    'python3 scripts/skalling-workflow.py',
+    'bash ~/.config/opencode/scripts/teamdb-seal-receipt.sh t humano',
+  ]) assert.match(run(command) || '', /terminal|skalling_workflow/, `debía bloquear: ${command}`);
+
+  // `;` sigue siendo separador explícito: nombrar en un segmento no habilita
+  // accionar el binario en el siguiente.
+  assert.match(run('echo scripts/skalling-approve.sh; bash scripts/teamdb-seal-receipt.sh t humano') || '', /terminal/);
+  // Ni dentro de una sustitución: eso SÍ ejecuta.
+  assert.match(run('git commit -m "$(bash scripts/skalling-approve.sh)"') || '', /terminal/);
+  // Ni armado para que lo corra un intérprete sin que sea el token de ningún
+  // segmento: ahí no se puede probar que sea de solo lectura, se falla cerrado.
+  for (const command of [
+    "eval 'bash scripts/skalling-approve.sh'",
+    'echo bash scripts/skalling-approve.sh | bash',
+    'cat scripts/teamdb-seal-receipt.sh | sh',
+    "printf 'python3 scripts/skalling-workflow.py' | sh",
+  ]) assert.ok(run(command), `debía bloquear: ${command}`);
+  // Un lector común que menciona el nombre sigue pasando, incluso con `|`.
+  for (const command of [
+    'git diff --stat scripts/skalling-approve.sh | tail -3',
+    'rg skalling-workflow.py scripts/ | head -5',
+  ]) assert.equal(run(command), null, `no debía bloquear: ${command}`);
+});
+
+// 0.14.4, cierre del reject de Jhon a la entrega 1: el fail-closed de
+// ejecución indirecta solo miraba eval/exec/intérpretes pelados. Las demás
+// familias que EJECUTAN sus argumentos —xargs, find -exec/-execdir/-ok, source,
+// `.` y parallel— siguen corriendo el binario prohibido sin que su nombre sea
+// el token de ningún segmento, así que la MEDIA-1 los dejó pasar. Es
+// justamente el caso que la regla prohíbe: lo que está prohibido es
+// ACCIONAR el binario, no nombrarlo.
+test('ejecución indirecta: ninguna familia que ejecuta sus argumentos acciona el binario prohibido', () => {
+  const core = createCore();
+  const run = (command) => core.decide({ tool: 'bash', agent: 'teo', sessionID: 's', input: { command } });
+
+  for (const command of [
+    // xargs: directo, por tubería y con las opciones que cambian su lectura.
+    'xargs scripts/skalling-approve.sh < f',
+    'echo y | xargs scripts/skalling-approve.sh',
+    'xargs -I{} scripts/skalling-approve.sh {}',
+    'xargs -n1 -P4 scripts/teamdb-seal-receipt.sh',
+    // find ejecuta su argumento: -exec, -execdir y las variantes que preguntan.
+    'find . -exec scripts/skalling-approve.sh \\;',
+    'find . -execdir scripts/teamdb-seal-receipt.sh t humano \\;',
+    'find . -ok scripts/skalling-approve.sh {} \\;',
+    // source y `.` ejecutan el archivo que nombran.
+    'source ./scripts/skalling-approve.sh',
+    'source scripts/teamdb-seal-receipt.sh t humano',
+    '. ./scripts/skalling-approve.sh',
+    '. scripts/skalling-approve.sh',
+    // parallel y nohup (nohup ya caía por el envoltorio; se fija igual).
+    'parallel scripts/skalling-approve.sh',
+    'nohup scripts/skalling-approve.sh',
+    'nohup bash scripts/skalling-approve.sh',
+    // El mismo camino hacia skalling-workflow.py, que exige la herramienta.
+    'xargs scripts/skalling-workflow.py',
+    'find . -exec python3 scripts/skalling-workflow.py \\;',
+    'source ./scripts/skalling-workflow.py',
+    '. ./scripts/skalling-workflow.py',
+  ]) assert.match(run(command) || '', /terminal|skalling_workflow/, `debía bloquear: ${command}`);
+
+  // Lo que 0.14.4 ya dejaba pasar sigue pasando: los lectores de solo lectura
+  // NO ejecutan sus argumentos, así que nombrar el binario sigue sin ser
+  // motivo de bloqueo, y un ejecutor de argumentos sin el nombre tampoco.
+  for (const command of [
+    'git diff --stat scripts/skalling-approve.sh',
+    'git log -- scripts/teamdb-seal-receipt.sh',
+    'rg skalling-workflow.py scripts/',
+    'grep -rn skalling-approve.sh scripts/',
+    'echo scripts/skalling-approve.sh',
+    'git diff --stat scripts/skalling-approve.sh | tail -3',
+    'find . -name "*.sh" -print | xargs echo hola',
+    'find . -name "*.md" -print0 | xargs -0 grep TODO',
+    'source ~/.zshrc',
+    '. ./scripts/teamdb-init.sh',
+    'find . -name "*.log" -print',
+  ]) assert.equal(run(command), null, `no debía bloquear: ${command}`);
+});
+
+// MEDIA-2 (misma auditoría): el mapa local de workflows solo lo actualiza lo
+// que ve Alex, así que después de un reject de Jhon seguía diciendo
+// implementation_ready y la delegación a Teo pasaba sin un status previo.
+// decide() consulta el estado vigente en TeamDB; este lector simula lo que
+// devuelve agent_workflows.
+test('MEDIA-2: tras el reject de Jhon, TeamDB bloquea delegar a Teo aunque el mapa local diga implementation_ready', () => {
+  const rejected = createCore({ readState: (id) => ({ ok: true, state: id === 'wf-1' ? 'rejected' : null }) });
+  rejected.observe({ tool: 'skalling_workflow', agent: 'Alex', sessionID: 's', output: ready('wf-1') });
+  const teo = (core, id) => core.decide({ tool: 'subagent', agent: 'Alex', sessionID: 's',
+    input: { agent: 'Teo', prompt: `implementar ${id}`, description: 'fix' } });
+  assert.match(teo(rejected, 'wf-1'), /está en rejected/, 'el reject de Jhon tiene que bloquear');
+
+  // approve negativo de Luz u otro estado terminal, igual.
+  for (const state of ['rejected', 'verification_ready', 'completed']) {
+    const core = createCore({ readState: () => ({ ok: true, state }) });
+    core.observe({ tool: 'skalling_workflow', agent: 'Alex', sessionID: 's', output: ready('wf-1') });
+    assert.match(teo(core, 'wf-1'), new RegExp(`está en ${state}`), state);
+  }
+  // implementation_ready en TeamDB habilita (y el mapa local tampoco contradice).
+  const ok = createCore({ readState: () => ({ ok: true, state: 'implementation_ready' }) });
+  ok.observe({ tool: 'skalling_workflow', agent: 'Alex', sessionID: 's', output: ready('wf-1') });
+  assert.equal(teo(ok, 'wf-1'), null);
+  // Sin fila para ese id TeamDB no contradice nada: manda el mapa local.
+  const unknown = createCore({ readState: () => ({ ok: true, state: null }) });
+  unknown.observe({ tool: 'skalling_workflow', agent: 'Alex', sessionID: 's', output: ready('wf-1') });
+  assert.equal(teo(unknown, 'wf-1'), null);
+  // TeamDB solo puede endurecer: si el mapa local ya lo cerró, tampoco pasa.
+  const localClosed = createCore({ readState: () => ({ ok: true, state: 'implementation_ready' }) });
+  localClosed.observe({ tool: 'skalling_workflow', agent: 'Alex', sessionID: 's', output: ready('wf-1', 'completed') });
+  assert.match(teo(localClosed, 'wf-1'), /está en completed/);
+  // No legible = se falla cerrado (no se delega por no poder verificar).
+  const broken = createCore({ readState: () => ({ ok: false, reason: 'no se pudo abrir team.db' }) });
+  broken.observe({ tool: 'skalling_workflow', agent: 'Alex', sessionID: 's', output: ready('wf-1') });
+  assert.match(teo(broken, 'wf-1'), /no se pudo abrir team\.db/);
+});
+
+// El lector por defecto: sqlite de solo lectura sobre agent_workflows del
+// proyecto (con worktree resuelto a la raíz principal), sin crear nada.
+test('MEDIA-2: el lector real lee agent_workflows y falla cerrado si la base no se puede leer', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'skworkflow-'));
+  fs.mkdirSync(path.join(root, '.git'), { recursive: true });
+  fs.mkdirSync(path.join(root, '.opencode', 'context'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.opencode', 'context', 'team.db'), 'esto no es una base');
+  const corrupt = teamdbWorkflowState('wf-1', root);
+  assert.equal(corrupt.ok, false, 'una base ilegible no habilita delegación');
+
+  const dbPath = path.join(root, '.opencode', 'context', 'team.db');
+  fs.rmSync(dbPath);
+  const db = new DatabaseSync(dbPath);
+  db.exec('CREATE TABLE agent_workflows(id TEXT PRIMARY KEY, body TEXT NOT NULL)');
+  db.prepare('INSERT INTO agent_workflows(id,body) VALUES(?,?)').run('wf-1', JSON.stringify({ state: 'rejected' }));
+  db.prepare('INSERT INTO agent_workflows(id,body) VALUES(?,?)').run('wf-2', JSON.stringify({ state: 'implementation_ready' }));
+  db.close();
+  assert.equal(teamdbWorkflowState('wf-1', root).state, 'rejected');
+  assert.equal(teamdbWorkflowState('wf-2', root).state, 'implementation_ready');
+  assert.deepEqual(teamdbWorkflowState('wf-9', root), { ok: true, state: null });
+  // Worktree enlazado: .git es un archivo y team.db (gitignored) solo existe
+  // en la raíz principal; sin resolverlo, el worktree leería sin estado.
+  const main = fs.mkdtempSync(path.join(os.tmpdir(), 'skmain-'));
+  const worktree = fs.mkdtempSync(path.join(os.tmpdir(), 'skwt-'));
+  fs.mkdirSync(path.join(main, '.git', 'worktrees', 'feature'), { recursive: true });
+  fs.mkdirSync(path.join(main, '.opencode', 'context'), { recursive: true });
+  const mainDb = new DatabaseSync(path.join(main, '.opencode', 'context', 'team.db'));
+  mainDb.exec('CREATE TABLE agent_workflows(id TEXT PRIMARY KEY, body TEXT NOT NULL)');
+  mainDb.prepare('INSERT INTO agent_workflows(id,body) VALUES(?,?)').run('wf-wt', JSON.stringify({ state: 'rejected' }));
+  mainDb.close();
+  fs.writeFileSync(path.join(worktree, '.git'), `gitdir: ${path.join(main, '.git', 'worktrees', 'feature')}\n`);
+  assert.equal(teamdbWorkflowState('wf-wt', worktree).state, 'rejected');
+  assert.equal(teamdbWorkflowState('wf-wt', path.join(worktree, 'src')).state, 'rejected');
+  // Sin TeamDB en el proyecto no hay nada que reconciliar: el mapa local manda.
+  assert.deepEqual(teamdbWorkflowState('wf-1', fs.mkdtempSync(path.join(os.tmpdir(), 'skempty-'))), { ok: true, state: null });
+  for (const dir of [root, main, worktree]) fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test('la revisión de Skalling con --scope de glob no se toma como lectura de credenciales', () => {

@@ -28,6 +28,46 @@ class ContextRegression(unittest.TestCase):
         return subprocess.run(['bash', str(ROOT / 'scripts/teamdb-context.sh'), 'for-request',
                                *args, str(self.project)], capture_output=True, text=True)
 
+    def test_file_anchor_recovers_a_constraint_without_query_word_overlap(self):
+        with closing(sqlite3.connect(self.db)) as db, db:
+            db.execute("INSERT INTO decisions(slug,title,body_md,status) VALUES('boundary','Límite','src/auth/token.py exige validar expiración','accepted')")
+        result = self.capsule('arreglar comportamiento', '--file=src/auth/token.py')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertIn('boundary', [x['slug'] for x in data['decisions']])
+
+    def test_exact_memory_revision_can_be_reused_but_changes_are_returned(self):
+        first = json.loads(self.capsule('contexto').stdout)
+        row = next(x for x in first['concepts'] if x['slug'] == 'project-summary')
+        second = json.loads(self.capsule('contexto', '--seen=' + row['read_key']).stdout)
+        reused = next(x for x in second['concepts'] if x['slug'] == 'project-summary')
+        self.assertTrue(reused['already_read'])
+        self.assertNotIn('body', reused)
+        with sqlite3.connect(self.db) as db:
+            db.execute("UPDATE concepts SET body_md='Changed project purpose' WHERE slug='project-summary'")
+        third = json.loads(self.capsule('contexto', '--seen=' + row['read_key']).stdout)
+        changed = next(x for x in third['concepts'] if x['slug'] == 'project-summary')
+        self.assertEqual(changed['body'], 'Changed project purpose')
+        self.assertNotEqual(changed['read_key'], row['read_key'])
+
+    def test_refresh_detects_actual_modules_and_source_drift(self):
+        for name in ('tests', 'docs', 'scripts', 'plugins', 'agents-base'):
+            (self.project / name).mkdir()
+        (self.project / 'scripts/run.py').write_text('pass')
+        (self.project / 'README.md').write_text('# Product\nA real development harness.\n')
+        yaml = self.project / '.opencode/project.yaml'
+        yaml.write_text('stack:\n  language: \nmodules:\n  - tests/\ntesting:\nfrontend:\n  has_ui: false\n')
+        subprocess.run(['python3', str(ROOT / 'scripts/skalling-bootstrap-context.py'),
+                        '--project', str(self.project)], check=True, capture_output=True)
+        self.assertIn('  - scripts/', yaml.read_text())
+        self.assertIn('  - plugins/', yaml.read_text())
+        self.assertIn('Python', yaml.read_text())
+        current = json.loads(self.capsule('contexto').stdout)['freshness']
+        self.assertEqual(current['status'], 'current')
+        self.assertIn('project-summary', current['pending_review'])
+        (self.project / 'README.md').write_text('# Changed purpose')
+        self.assertEqual(json.loads(self.capsule('contexto').stdout)['freshness']['status'], 'stale')
+
     def test_missing_query_is_an_error(self):
         self.assertNotEqual(self.capsule('--max-bytes=8000').returncode, 0)
 

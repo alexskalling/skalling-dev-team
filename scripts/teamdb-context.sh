@@ -22,7 +22,7 @@ usage() {
 Uso:
   teamdb-context.sh link <plan> <task> --concepts=c1,c2 [--decisions=d1,d2] [--preferences=p1] [--problems=k1,k2] [project]
   teamdb-context.sh for-task <plan> <task> [project]
-  teamdb-context.sh for-request <query> [--top-k=8] [--max-bytes=8000] [project]
+  teamdb-context.sh for-request <query> [--top-k=8] [--max-bytes=8000] [--file=path] [project]
 
 Subcomandos:
   link     Asocia memoria (concepts/decisions/preferences/known_problems) a una task
@@ -41,10 +41,12 @@ case "$OP" in
     QUERY="${1:?Falta query}"; shift
     case "$QUERY" in -*) echo "ERROR: falta el texto del pedido antes de las opciones" >&2; exit 2 ;; esac
     [ -n "$QUERY" ] || { echo "ERROR: pedido vacío" >&2; exit 2; }
-    PROJECT=""; TOP_K=8; MAX_BYTES=8000; VISUAL=false
+    PROJECT=""; TOP_K=8; MAX_BYTES=8000; VISUAL=false; FILE_ANCHORS=(); SEEN=()
     while [ "$#" -gt 0 ]; do
       case "$1" in
+        --seen=*) SEEN+=("${1#--seen=}") ;;
         --visual) VISUAL=true ;;
+        --file=*) FILE_ANCHORS+=("${1#--file=}") ;;
         --top-k=*) TOP_K="${1#--top-k=}" ;;
         --max-bytes=*) MAX_BYTES="${1#--max-bytes=}" ;;
         -*) echo "[ERROR] argumento desconocido: $1" >&2; exit 2 ;;
@@ -55,15 +57,19 @@ case "$OP" in
     [ -d "$PROJECT" ] || PROJECT="$(pwd)"
     DB="$(teamdb_project_path "$PROJECT")"
     [ -f "$DB" ] || { echo '{"concepts":[],"decisions":[],"known_problems":[],"preferences":[]}' ; exit 0; }
-    python3 - "$DB" "$QUERY" "$TOP_K" "$MAX_BYTES" "$VISUAL" <<'PYEOF'
+    python3 - "$DB" "$QUERY" "$TOP_K" "$MAX_BYTES" "$VISUAL" "$SCRIPT_DIR" "$PROJECT" "${SEEN[@]+${SEEN[@]/#/seen:}}" "${FILE_ANCHORS[@]+${FILE_ANCHORS[@]}}" <<'PYEOF'
 import json, re, sqlite3, sys
+sys.path.insert(0, sys.argv[6])
+from skalling_context import freshness, memory_item
 db, query = sys.argv[1:3]
 top_k, max_bytes = int(sys.argv[3]), int(sys.argv[4])
 if not 1 <= top_k <= 50 or not 512 <= max_bytes <= 100000:
     raise SystemExit("ERROR: top-k debe ser 1..50 y max-bytes 512..100000")
 terms = list(dict.fromkeys(re.findall(r"[a-z0-9áéíóúñü]{3,}", query.lower())))
 stop = {"para", "con", "que", "los", "las", "del", "una", "por", "the", "and"}
+stop.update({"quiero", "necesito", "hacer", "esto", "este", "esta", "como", "pero", "porque", "más", "sin", "del", "los", "las"})
 terms = [term for term in terms if term not in stop][:24]
+anchors = list(dict.fromkeys(x.lower() for x in sys.argv[8:] if x and not x.startswith("seen:")))[:16]
 visual = sys.argv[5] == 'true' or any(t in terms for t in
     ("estilos", "estilo", "diseño", "css", "tipografía", "paleta", "layout"))
 conn = sqlite3.connect("file:" + db + "?mode=ro", uri=True)
@@ -74,7 +80,8 @@ tables = {
     "preferences": ("slug", "body_md", ""),
 }
 result = {key: [] for key in tables}
-result.update(omitted=[], needs_expansion=False, more_matches=False)
+result.update(omitted=[], needs_expansion=False, more_matches=False, freshness=freshness(conn, sys.argv[7]))
+seen = {x[5:] for x in sys.argv[8:] if x.startswith("seen:")}
 def encode():
     return json.dumps(result, ensure_ascii=False, separators=(",", ":"))
 candidates = []
@@ -83,6 +90,9 @@ for table, (title, body, guard) in tables.items():
     for term in terms:
         clauses.append("(lower(slug) LIKE ? OR lower(" + title + ") LIKE ? OR lower(coalesce(" + body + ",'')) LIKE ?)")
         params.extend(["%" + term + "%"] * 3)
+    for anchor in anchors:
+        clauses.append("instr(lower(coalesce(" + body + ",'')), ?) > 0")
+        params.append(anchor)
     if table == "concepts":
         clauses.append("slug IN ('project-summary','project-stack'" + (",'design-system'" if visual else "") + ")")
     if not clauses:
@@ -93,6 +103,9 @@ for table, (title, body, guard) in tables.items():
     for term in terms:
         score_parts.append("(CASE WHEN lower(" + title + ") LIKE ? THEN 4 ELSE 0 END + CASE WHEN lower(coalesce(" + body + ",'')) LIKE ? THEN 1 ELSE 0 END)")
         score_params.extend(["%" + term + "%"] * 2)
+    for anchor in anchors:
+        score_parts.append("CASE WHEN instr(lower(coalesce(" + body + ",'')), ?) > 0 THEN 100 ELSE 0 END")
+        score_params.append(anchor)
     score = " + ".join(score_parts) or "0"
     priority = ("CASE slug WHEN 'project-summary' THEN 10000 WHEN 'design-system' THEN "
                 + ("9000" if visual else "0") + " WHEN 'project-stack' THEN 8000 ELSE 0 END") if table == "concepts" else "0"
@@ -108,6 +121,7 @@ for table, (title, body, guard) in tables.items():
     for slug, heading, body_text, rank in rows[:top_k]:
         candidates.append((rank, table, {"slug": slug, "title": heading, "body": body_text}))
 for _, table, item in sorted(candidates, key=lambda row: (-row[0], row[1], row[2]["slug"])):
+    item = memory_item(table, item, "body", seen)
     result[table].append(item)
     # Reserve space to identify omitted rows; never silently slice a decision.
     if len(encode().encode()) > max_bytes - 192:
@@ -205,22 +219,17 @@ PYEOF
       shift || break
     done
     [ -d "$PROJECT" ] || PROJECT="$(pwd)"
-    # Lock cross-platform (mkdir-based, sin flock). v0.8.3
-    LOCK_DIR="$PROJECT/.opencode/context/.locks/team"
-    mkdir -p "$(dirname "$LOCK_DIR")" 2>/dev/null || true
-    if ! teamdb_lock "$LOCK_DIR" 10; then
-      exit 1
-    fi
-    trap 'teamdb_unlock "$LOCK_DIR"' EXIT
     DB="$(teamdb_project_path "$PROJECT")"
     [ -f "$DB" ] || { echo "[]" ; exit 0; }
-    python3 - "$DB" "$PLAN_SLUG" "$TASK_SLUG" "$TOP_K" "$MAX_BYTES" "$DISCOVER" <<'PYEOF'
+    python3 - "$DB" "$PLAN_SLUG" "$TASK_SLUG" "$TOP_K" "$MAX_BYTES" "$DISCOVER" "$SCRIPT_DIR" "$PROJECT" <<'PYEOF'
 import sqlite3, sys, json, re
+sys.path.insert(0, sys.argv[7])
+from skalling_context import freshness
 db, plan_slug, task_slug = sys.argv[1], sys.argv[2], sys.argv[3]
 top_k = int(sys.argv[4])
 max_bytes = int(sys.argv[5])
 discover = sys.argv[6] == '1'
-conn = sqlite3.connect(db)
+conn = sqlite3.connect("file:" + db + "?mode=ro", uri=True)
 conn.row_factory = sqlite3.Row
 
 plan = conn.execute("SELECT id, slug, title FROM plans WHERE slug = ?", (plan_slug,)).fetchone()
@@ -228,7 +237,7 @@ if not plan:
     print(json.dumps({'concepts': [], 'decisions': [], 'preferences': [], 'known_problems': [], 'task': None, 'plan': None}, ensure_ascii=False))
     sys.exit(0)
 task = conn.execute("""
-    SELECT id, slug, title, description_md, acceptance_md, status
+    SELECT id, slug, title, description_md, acceptance_md, purpose, status
     FROM tasks WHERE plan_id = ? AND slug = ?
 """, (plan['id'], task_slug)).fetchone()
 if not task:
@@ -243,7 +252,7 @@ TABLES = {
     'decisions': ('decisions', 'slug', 'title', 'body_md', "status = 'accepted'"),
     'preferences': ('preferences', 'slug', 'scope', 'body_md', None),
     'known_problems': ('known_problems', 'slug', 'title',
-                       "coalesce(symptom_md,'') || char(10) || coalesce(workaround_md,'')", "status != 'wontfix'"),
+                       "coalesce(symptom_md,'') || char(10) || coalesce(workaround_md,'')", "status = 'open'"),
 }
 
 # Contrato común con for-request (auditoría v0.12.0 #6): el presupuesto mide
@@ -256,10 +265,12 @@ output = {
         'status': task['status'],
         'description_md': task['description_md'],
         'acceptance_md': task['acceptance_md'],
+        'purpose': task['purpose'],
     },
     'plan': {'slug': plan['slug'], 'title': plan['title']},
     'concepts': [], 'decisions': [], 'preferences': [], 'known_problems': [],
     'omitted': [], 'needs_expansion': False, 'more_matches': False,
+    'freshness': freshness(conn, sys.argv[8]),
 }
 RESERVE = 160  # espacio para anotar al menos una omisión
 
@@ -320,7 +331,8 @@ for row in linked:
 #    Busquedas LIKE con bound params (sin cargar tablas completas).
 if discover:
     haystack = ((task['title'] or '') + ' ' + (task['description_md'] or '')).lower()
-    terms = [t for t in re.findall(r"[a-z0-9]{3,}", haystack)]
+    terms = list(dict.fromkeys(t for t in re.findall(r"[a-z0-9áéíóúñü]{3,}", haystack)
+                              if t not in {"para", "con", "que", "los", "las", "del", "una", "the", "and"}))[:24]
     if terms:
         seen = {k: set(e['slug'] for e in output[k]) | {o['slug'] for o in output['omitted'] if o['table'] == k}
                 for k in TABLES}
@@ -334,7 +346,12 @@ if discover:
             sql = "SELECT id, %s, %s, %s FROM %s WHERE (%s)" % (t[1], t[2], t[3], t[0], ' OR '.join(like_clauses))
             if t[4]:
                 sql += " AND " + t[4]
-            hits = conn.execute(sql, params).fetchall()
+            # Rank before LIMIT so long descriptions cannot load entire tables.
+            score = ' + '.join("CASE WHEN lower(coalesce(%s,'')) LIKE ? THEN 1 ELSE 0 END" % t[2] for _ in terms)
+            sql += ' ORDER BY (' + score + ') DESC, ' + t[1] + ' LIMIT ?'
+            hits = conn.execute(sql, params + ['%' + term + '%' for term in terms] + [top_k + 1]).fetchall()
+            if len(hits) > top_k:
+                output['more_matches'] = output['needs_expansion'] = True
             scored = []
             for h in hits:
                 if h[1] in seen[tbl_key]:

@@ -58,6 +58,11 @@ class WorkflowSealsGitGateReceipt(unittest.TestCase):
         self.addCleanup(os.chdir, self.cwd)
 
     def call(self, actor, action, **payload):
+        if action == 'start':
+            payload.setdefault('intent', 'Preserve the declared fixture value')
+        if action in {'approve', 'complete'}:
+            payload.setdefault('coverage', [{'outcome_id': 'acceptance', 'check_index': 0,
+                                            'observation': 'Fixture value assertion passed'}])
         return self.workflow.operate({'project': str(self.root), 'actor': actor, 'session': actor + '-session',
                                        'action': action, 'payload': {'id': 'request', **payload}})
 

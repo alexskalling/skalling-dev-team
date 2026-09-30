@@ -46,7 +46,7 @@ case "$OP" in
     ;;
   report)
     project_from_last "${1:-$(pwd)}"
-    sqlite3 -separator ' ' "$DB" "SELECT request_id||' risk='||risk_level||' route='||COALESCE(route,'')||' agents='||agents_count||' handoffs='||handoffs||' permissions='||permission_prompts||' context_bytes='||context_bytes||' duration_ms='||COALESCE(duration_ms,0)||' outcome='||COALESCE(outcome,'pending')||' tokens_in='||COALESCE(tokens_input,'-')||' tokens_out='||COALESCE(tokens_output,'-')||' cache_read='||COALESCE(tokens_cache_read,'-')||' cost='||COALESCE(cost,'-')||' retries='||COALESCE(retries,'-')||' agents_used='||COALESCE(agents_used,'-') FROM workflow_metrics ORDER BY started_at DESC;"
+    sqlite3 -separator ' ' "$DB" "SELECT request_id||' risk='||risk_level||' route='||COALESCE(route,'')||' agents='||agents_count||' handoffs='||handoffs||' permissions='||COALESCE(permission_prompts,'-')||' context_bytes='||COALESCE(context_bytes,'-')||' duration_ms='||COALESCE(duration_ms,0)||' outcome='||COALESCE(outcome,'pending')||' tokens_in='||COALESCE(tokens_input,'-')||' tokens_out='||COALESCE(tokens_output,'-')||' cache_read='||COALESCE(tokens_cache_read,'-')||' cost='||COALESCE(cost,'-')||' retries='||COALESCE(retries,'-')||' agents_used='||COALESCE(agents_used,'-') FROM workflow_metrics ORDER BY started_at DESC;"
     ;;
   summary)
     project_from_last "${1:-$(pwd)}"
@@ -59,8 +59,8 @@ case "$OP" in
         ' success=' || SUM(CASE WHEN LOWER(outcome) = 'success' THEN 1 ELSE 0 END) ||
         ' avg_duration_ms=' || COALESCE(CAST(AVG(duration_ms) AS INTEGER),0) ||
         ' avg_handoffs=' || ROUND(AVG(handoffs), 2) ||
-        ' avg_permissions=' || ROUND(AVG(permission_prompts), 2) ||
-        ' avg_context_bytes=' || CAST(AVG(context_bytes) AS INTEGER) ||
+        ' avg_permissions=' || COALESCE(ROUND(AVG(permission_prompts), 2),'-') ||
+        ' avg_context_bytes=' || COALESCE(CAST(AVG(context_bytes) AS INTEGER),'-') ||
         ' avg_tokens_in=' || COALESCE(CAST(AVG(tokens_input) AS INTEGER),'-') ||
         ' avg_tokens_out=' || COALESCE(CAST(AVG(tokens_output) AS INTEGER),'-') ||
         ' avg_cost=' || COALESCE(ROUND(AVG(cost), 4),'-') ||

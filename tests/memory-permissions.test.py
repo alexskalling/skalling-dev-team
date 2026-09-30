@@ -40,7 +40,8 @@ class MemoryPermissions(unittest.TestCase):
                                 '~/.config/opencode/scripts/teamdb-read.sh "SELECT 1"',
                                 'bash .opencode/scripts/teamdb-read.sh "SELECT 1"'):
                     self.assertEqual(action(command), 'allow', (name, command))
-                for command in ('git push', 'git commit -m x', 'python3 arbitrary.py', 'bash arbitrary.sh',
+                self.assertEqual(action('git commit -m x'), 'allow' if name in ('Teo', 'Jhon', 'Luz') else 'ask')
+                for command in ('git push', 'python3 arbitrary.py', 'bash arbitrary.sh',
                                 'python3 .opencode/scripts/teamdb-destructive.py', 'cp source team.db', 'rm -rf data',
                                 'find . -delete', 'find . -exec rm {} ;', 'cat .env', 'sqlite3 team.db DROP'):
                     self.assertNotEqual(action(command), 'allow', (name, command))

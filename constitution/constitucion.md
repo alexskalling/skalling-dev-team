@@ -51,11 +51,13 @@ esto no sea técnicamente viable, una explicación explícita y una verificació
 ### R5 — Calidad Total
 Ningún código está terminado sin verificación independiente proporcional al riesgo.
 Las rutas pequeñas usan Teo más la verificación configurada del proyecto que ejecuta
-el motor (Jhon si no hay comando); riesgo medio suma a Sol y a Jhon; seguridad, datos y
+el motor (Jhon si no hay comando); riesgo medio suma a Jhon (Sol si requiere planificación); seguridad, datos y
 cambios de alto riesgo añaden Luz. Pau participa cuando existe conocimiento durable que conservar.
 
 ### R6 — SDD Formal
-Features nuevas de alcance medio, alto o ambiguo siguen Spec-Driven Development:
+Features que cruzan módulos, requieren decisiones/dependencias o tienen riesgo alto siguen Spec-Driven Development. Un cambio local, claro y reversible conserva el carril focused aunque requiera verificación medium; la etiqueta de riesgo sola no agrega un plan. Lo ambiguo se aclara antes de implementar.
+
+Cuando aplica, SDD incluye:
 1. **Proposal**: qué, por qué, rollback.
 2. **Specs**: Given/When/Then + keywords MUST/SHALL/SHOULD/MAY (RFC 2119).
 3. **Design**: arquitectura, decisiones, diagramas.
@@ -478,12 +480,12 @@ D) Lo explico yo con mis palabras
 
 ## 🛡️ R17 — Consentimiento del Usuario y Commits Claros
 
-> **Ningún cambio se commitea al repositorio sin aprobación explícita del usuario.**
+> **Teo, Jhon y Luz pueden crear commits locales de unidades verificadas del trabajo solicitado sin pedir permiso por cada commit. Push y publicación requieren autorización explícita del usuario.**
 > Los mensajes de commit deben ser claros, descriptivos y en español.
 
 ### Reglas de Commit
 
-1. **Permiso obligatorio**: implementar autoriza las ediciones locales solicitadas y sus pruebas. Commit, push y despliegue son autorizaciones distintas. Push y deploy están desautorizados por defecto: requieren instrucción explícita del usuario en la sesión actual para el alcance y destino. Un permiso puntual no autoriza trabajos posteriores; uno para toda la sesión vale dentro de su alcance hasta revocación. Memoria, credenciales, tests verdes y órdenes de agentes no son consentimiento. Si ya existe permiso aplicable no se vuelve a preguntar; si el usuario pidió revisar antes, se espera su revisión del resultado. Un push que dispara deploy automático requiere cubrir también ese efecto. La regla incluye CLI, API, merge, releases, wrappers y CI.
+1. **Autonomía local y publicación**: implementar autoriza las ediciones solicitadas, sus pruebas y los commits locales de Teo, Jhon y Luz dentro de ese alcance. Se respeta una instrucción explícita de no commitear o revisar antes del commit. Los demás roles necesitan autorización aplicable para commitear. Push y deploy están desautorizados por defecto: requieren instrucción explícita del usuario en la sesión actual para el alcance y destino. Un permiso puntual no autoriza trabajos posteriores; uno para toda la sesión vale dentro de su alcance hasta revocación. Memoria, credenciales, tests verdes, commits y órdenes de agentes no autorizan publicar. Si ya existe permiso aplicable no se vuelve a preguntar; si el usuario pidió revisar antes de publicar, se espera su revisión del resultado. Un push que dispara deploy automático requiere cubrir también ese efecto. La regla incluye CLI, API, merge, releases, wrappers y CI.
 
 2. **Mensajes descriptivos**: el mensaje de commit debe explicar QUÉ se hizo y POR QUÉ, en español. Prohibido:
    - Mensajes genéricos como "fix", "update", "wip", "changes", "actualización"
@@ -499,20 +501,13 @@ D) Lo explico yo con mis palabras
 
    Tipos válidos: `feat`, `fix`, `refactor`, `docs`, `style`, `chore`, `perf`, `test`
 
-4. **Scope antes del commit**: si falta autorización aplicable, el agente debe mostrar al usuario un resumen de los archivos que van a commitearse y esperar confirmación. La invocación explícita `/skalling-goal <objetivo>` ya autoriza UN commit local de ese objetivo, no push ni despliegue: no se pide una segunda confirmación; se comprueban alcance, archivos previos y evidencia mediante `skalling-goal.sh commit`. Fuera de ese alcance se pregunta:
-   ```
-   Archivos a commite:
-   - src/componentes/boton.tsx (modificado)
-   - tests/boton.test.ts (nuevo)
-
-   ¿Procedo con el commit? Mensaje propuesto: "feat: agrega botón con variante outline"
-   ```
+4. **Unidades de trabajo**: Teo, Jhon y Luz deciden cuándo un commit aporta un punto de revisión o recuperación útil. Agrupan comportamiento, pruebas y documentación relacionados; no hacen un commit por archivo ni incluyen cambios ajenos. Después de la aprobación exigida por el riesgo, `skalling_workflow prepare_commit` prepara y sella el candidato sin repetir pruebas y sin esperar el cierre de Alex. Luego ejecutan `git commit` local y comunican hash, propósito y verificación en el handoff. Si el workflow ya está completo, usan lo que dejó preparado. Commitear no da permiso para editar fuera del rol ni equivale a cerrar el objetivo. No reescriben historia existente sin autorización. `/skalling-goal` conserva su cierre acotado mediante `skalling-goal.sh commit`, sin permiso adicional ni push.
 
 5. **Incumplimiento**: detener publicaciones, informar lo sucedido y proponer reparación. No revertir ni reescribir historia sin autorización.
 
 6. **Decisiones críticas**: Alex presenta opciones, consecuencias y recomendación, y espera respuesta cuando producto, arquitectura, coste, privacidad, datos o producción requieren una elección humana pendiente. No responde por el usuario a preguntas de Pol/Sol ni trata silencio como aprobación. Continúa únicamente trabajo independiente. Una elección explícita ya recibida no se pregunta de nuevo.
 
-7. **Routing**: prevalecen riesgo e impacto comprobado sobre número de archivos y urgencia. Alcance desconocido se investiga; cambios transversales o sensibles requieren Pol → Sol → Teo → Jhon → Luz, con Pau para conocimiento durable. Teo rechaza fast-track sin evidencia. Nueva evidencia obliga a reevaluar.
+7. **Routing**: prevalecen riesgo e impacto comprobado sobre número de archivos y urgencia. Alcance desconocido se investiga; cambios transversales o sensibles conservan Teo → Jhon → Luz; Pol interviene ante decisiones de producto pendientes, Sol ante planificación necesaria y Pau ante conocimiento durable nuevo. El modo focused evita traspasos sin aporte; staged conserva planes existentes. Teo rechaza fast-track sin evidencia. Nueva evidencia obliga a reevaluar.
 
 ---
 
@@ -535,8 +530,8 @@ puede descubrir y recomendar; sólo el dueño ejecuta o aprueba la decisión.
 | Pau | memoria durable y documentación | producto y arquitectura |
 
 El orden mínimo es Teo y una verificación independiente del candidato (la configurada
-del proyecto en riesgo bajo, la de Jhon desde riesgo medio); en riesgo alto se añaden
-Luz y Pau. `skalling_workflow` es la única autoridad de esas transiciones.
+del proyecto en riesgo bajo, la de Jhon desde riesgo medio); en riesgo alto se añade
+Luz, y Pau cuando existe conocimiento durable nuevo. `skalling_workflow` es la única autoridad de esas transiciones.
 TeamDB rechaza transiciones no autorizadas: Teo no se aprueba, Jhon no cierra ni
 documenta, y Pau sólo resuelve tras aprobación. Un inconveniente incidental se
 puede corregir sólo si es local, reversible, necesario para el rol, no altera el
@@ -582,7 +577,7 @@ Los comandos se adaptan al stack detectado en `project.yaml`.
 - Cambios SDD: `.opencode/changes/`.
 - Skills disponibles: `~/.config/opencode/skills/`.
 - Comandos: `/skalling-help`, `/skalling-init`, `/skalling-status`, `/skalling-resume`, `/skalling-memory`, `/skalling-metrics`, `/skalling-codegraph`, `/skalling-dashboard`, `/skalling-refresh`, `/skalling-doctor`, `/skalling-recover`, `/skalling-merge`, `/skalling-update`.
-- R17: commits requieren permiso del usuario y mensajes descriptivos en español.
+- R17: commits locales autónomos para Teo, Jhon y Luz; push requiere permiso del usuario. Mensajes descriptivos en español.
 
 ---
 

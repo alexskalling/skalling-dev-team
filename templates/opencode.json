@@ -865,7 +865,14 @@
       "*=.env*": "ask",
       "*<.env*": "ask",
       "*.pem": "ask",
-      "*.pem *": "ask"
+      "*.pem *": "ask",
+      "git -C * add": "ask",
+      "git -C * add *": "ask",
+      "cd * && git add": "ask",
+      "cd * && git add *": "ask",
+      "git commit *--amend*": "ask",
+      "git -C * commit *--amend*": "ask",
+      "cd * && git commit *--amend*": "ask"
     }
   }
 }

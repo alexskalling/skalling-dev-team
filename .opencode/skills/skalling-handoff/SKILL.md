@@ -12,7 +12,9 @@ Siempre incluir from, to, task, summary y next_action.
 Para planes conservar plan_id y feature-slug.
 Para ingeniería incluir project_context y evidencia verification cuando corresponda.
 Toda entrega a Teo incluye readiness, implementation_allowed, route y
-request_context con files, acceptance y reuse. Copiar el resultado real del clasificador;
+request_context con files, acceptance y reuse. En un microcambio focused, esos
+campos se mantienen compactos: no se agrega plan_id, feature-slug ni contexto
+opcional. Copiar el resultado real del clasificador;
 nunca inventar true, aprobación ni evidencia.
 
 initialized significa almacenamiento preparado. La comprensión depende de los
