@@ -690,7 +690,9 @@ lens_risk() {
     elif printf '%s' "$content" | grep -qE "$pat_sqli_dq"; then
       add_finding "BLOCKER" "risk" "$file:$ln" "posible SQL injection: variable interpolada en query sqlite3 (comillas dobles)"
     fi
-  done <<< "$(added_lines "$diff_text")"
+  # Prefiltro conservador: toda regla de este lens contiene uno de estos
+  # literales. Evita arrancar varios grep/sed por cada línea irrelevante.
+  done <<< "$(added_lines "$diff_text" | grep -iE 'eval|rm|curl|wget|http://|chmod|sqlite3|api.?key|secret|password|passwd' || true)"
 }
 
 # ── Lens resilience ──

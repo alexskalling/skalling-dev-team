@@ -101,6 +101,11 @@ class DashboardDataTest(unittest.TestCase):
         conn.commit()
         conn.close()
 
+    def test_expired_claim_does_not_appear_as_current_owner(self):
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("UPDATE task_claims SET lease_until=1 WHERE status='active'")
+        self.assertTrue(all(not t.get('claimed_by') for t in dashboard.DashboardData(self.db_path).tasks()))
+
     def test_overview_uses_canonical_terminal_states_and_reports_next_work(self):
         data = dashboard.DashboardData(self.db_path).overview()
         self.assertEqual(data["progress"], {"done": 1, "total": 4, "percent": 25})

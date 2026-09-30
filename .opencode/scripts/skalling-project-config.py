@@ -190,7 +190,9 @@ def patched_agent(text, rules, begin=BEGIN, end_marker=END):
     head, sep, rest = text[4:].partition('\n---\n')
     if not sep:
         return text
-    lines = head.split('\n')
+    shadow = '    # skalling: shadowed rule '
+    lines = [json.loads(line[len(shadow):]) if line.startswith(shadow) else line
+             for line in head.split('\n')]
     if begin in lines and end_marker in lines and lines.index(begin) < lines.index(end_marker):
         del lines[lines.index(begin):lines.index(end_marker) + 1]
         if not rules and lines == ['permission:', '  bash:']:
@@ -212,6 +214,25 @@ def patched_agent(text, rules, begin=BEGIN, end_marker=END):
     while end < len(lines) and lines[end].startswith('    '):
         end += 1
     lines[end:end] = rules
+    # YAML mappings cannot repeat keys. OpenCode otherwise treats the entire
+    # frontmatter as prompt text and silently loses role permissions/models.
+    # Keep the LAST occurrence in its original position (permission precedence).
+    start = lines.index('  bash:') + 1
+    end = start
+    while end < len(lines) and lines[end].startswith('    '):
+        end += 1
+    seen = set()
+    kept = []
+    for line in reversed(lines[start:end]):
+        match = re.fullmatch(r'    ("(?:[^"\\]|\\.)*"|[^:#][^:]*):\s*(allow|ask|deny)\s*', line)
+        if match:
+            key = json.loads(match[1]) if match[1].startswith('"') else match[1].strip()
+            if key in seen:
+                kept.append(shadow + json.dumps(line))
+                continue
+            seen.add(key)
+        kept.append(line)
+    lines[start:end] = reversed(kept)
     return '---\n' + '\n'.join(lines) + sep + rest
 
 
@@ -234,6 +255,9 @@ def patched_project_agent(text, commands, name, project, remove=False):
                'merge-helper.sh', 'skalling-metrics.sh', 'skalling-models.sh', 'skalling-privacy.sh',
                'setup-team-doctor.sh', 'bootstrap-context.sh')
     patterns = [p for p in profile['bash_patterns'] if p.startswith('bash ') and any(h in p for h in helpers)]
+    # Cabeceras antiguas pueden anular las lecturas permitidas globalmente.
+    # Son conteos exactos, nunca xargs * ni find -exec arbitrario.
+    patterns.extend(policy.get('audit_read_patterns', []))
     rules = [] if remove or (project / 'agents-base').is_dir() else [COMMAND_BEGIN, *[
         f'    {json.dumps(p)}: {profile["overrides"].get(p, policy["rules"][p])}' for p in patterns], COMMAND_END]
     return patched_agent(text, rules, COMMAND_BEGIN, COMMAND_END)

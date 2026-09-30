@@ -57,3 +57,10 @@ coverage/
 
 # Real-agent evaluation fixtures, logs and reports
 .opencode/evals/
+
+# Runtime de desarrollo instalado localmente; fuentes en plugins/ y command/.
+/.opencode/plugins/
+/.opencode/command/
+/.opencode/VERSION
+/.opencode/runtime-manifest.json
+/.opencode/skills/.skalling-managed.json

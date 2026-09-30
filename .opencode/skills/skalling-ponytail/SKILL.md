@@ -1,6 +1,6 @@
 ---
 name: skalling-ponytail
-description: Apply the Ponytail ladder before writing any code — lazy about solution, never about reading. Trigger: Teo about to implement, Jhon reviewing, Luz auditing, code complexity check.
+description: "Apply the Ponytail ladder before writing any code — lazy about solution, never about reading. Trigger: Teo about to implement, Jhon reviewing, Luz auditing, code complexity check."
 ---
 
 # Skalling Ponytail Integration

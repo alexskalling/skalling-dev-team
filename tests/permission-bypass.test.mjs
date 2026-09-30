@@ -36,6 +36,16 @@ function decision(role, command) {
 
 // Ninguno puede quedar en "allow" para ningún rol.
 const MUST_NOT_RUN_SILENTLY = [
+  'set',
+  'set -o',
+  'xargs rm -rf', // # lens:ok: literal de prueba; solo se consulta el permiso, nunca se ejecuta
+  'xargs -0 sh -c "echo pwn"',
+  'xargs wc -l --files0-from=.env',
+  'find src -delete -type f -exec wc -l {} +',
+  'find src -exec touch /tmp/pwn \\; -type f -exec wc -l {} +',
+  'find src -fprint /tmp/pwn -type f -exec wc -l {} +',
+  'find src -type f -exec sh -c "echo pwn" {} +',
+  'find src -type f -execdir wc -l {} +',
   'bash /Users/x.sh /Users/a/.config/opencode/bootstrap-context.sh',
   'bash /Users/x.sh /Users/a/.config/opencode/setup-team-doctor.sh',
   // Comodín antes de la ruta del helper: cualquier script con una ruta de helper como argumento.
@@ -78,6 +88,23 @@ const MUST_NOT_RUN_SILENTLY = [
   // Identidad armada en tiempo de ejecución.
   'v=SKALLING_RUNTIME; export ${v}_AGENT=jhon',
 ];
+
+test('inventario y conteo de líneas no piden permiso para auditar', () => {
+  for (const role of ROLES) {
+    for (const command of ['echo "=== all src files ==="', 'find src -type f',
+      'sort', 'find public -type f', 'head -30', 'tail -5',
+      'cat .github/workflows/ci.yml', 'sort -rn', 'head -20',
+      'bash /Users/ana/.config/opencode/scripts/skalling-privacy.sh verify-internal /project',
+      'set -o pipefail', 'set -euo pipefail', 'set -eu', 'set -e', 'set -u',
+      "rg -n 'secret|token|password|key' supabase/seed.sql supabase/README.md",
+      'xargs wc -l', 'xargs -0 wc -l', 'xargs wc -l --', 'xargs -0 wc -l --',
+      'find src -type f -exec wc -l {} +',
+      'find src public -type f -exec wc -l {} +',
+      'find "source files" -type f -exec wc -l {} +']) {
+      assert.equal(decision(role, command), 'allow', `${role}: ${command}`);
+    }
+  }
+});
 
 test('ninguna evasión conocida corre sin pedir permiso', () => {
   const leaks = [];
@@ -131,7 +158,7 @@ test('Teo, Jhon y Luz pueden preparar y commitear localmente; publicar sigue pre
     }
   }
   for (const role of ['Alex', 'Pol', 'Sol', 'Jes', 'Pau']) {
-    assert.equal(decision(role, 'git commit -m "fix: corrige el total"'), role === 'Pau' ? 'block' : 'ask', role);
+    assert.equal(decision(role, 'git commit -m "fix: corrige el total"'), 'block', role);
   }
 });
 

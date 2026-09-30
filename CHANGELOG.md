@@ -2,6 +2,22 @@
 
 Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) y el proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.0] - 2026-09-30
+
+- La actualización de permisos evita claves YAML duplicadas en cabeceras completas: OpenCode ya no descarta silenciosamente permisos, modo y modelo del agente. Conserva la precedencia de reglas y permite retirar los bloques gestionados sin perder la configuración anterior. Regresión verificada contra OpenCode real.
+
+- El commit local tiene destinatario explícito: Jhon o Luz reciben el workflow verificado; Alex no intenta ejecutarlo ni pide autorización para suplir la delegación. Teo conserva commits desde su sesión activa. El guard comunica la ruta y los hooks siguen validando el candidato.
+
+- `skalling-privacy.sh verify-internal` comprueba reglas efectivas de Git, atributos de merge y exclusión de estado privado sin abrir TeamDB ni modificar el índice. El verificador puede ejecutarlo sin Python inline; los rechazos del workflow ofrecen esa ruta y no repiten programas completos en el error.
+
+- Las auditorías pueden contar líneas con `find <rutas> -type f -exec wc -l {} +` sin pedir permiso. Se actualizan las reglas locales antiguas; otras acciones de `find` siguen controladas y no pueden ocultarse antes del conteo.
+- También se permiten `xargs wc -l` y `xargs -0 wc -l`, con `--` opcional, para conteos de archivos; no se habilita `xargs` con programas arbitrarios.
+- Activar comprobaciones de errores (`set -o pipefail`, `set -euo pipefail`, `set -eu`, `set -e`, `set -u`) no interrumpe auditorías. Los permisos de lectura añadidos se sincronizan desde un catálogo común; `set` sin argumentos sigue restringido porque imprime variables del entorno.
+
+- Cierre transaccional de routing, métricas y tareas explícitas; planes completos solo con todas sus tareas terminadas. Reintentar complete no duplica efectos.
+- Cancelación y fallo con evidencia, recuperación de reservas vencidas y dashboard sin propietarios caducados.
+- Doctor reconcilia relaciones demostrables con backup; conserva incertidumbre histórica sin fabricar aprobaciones. CI comprueba también paridad de skills.
+
 ## [0.15.3] - 2026-09-30
 
 - Refresh/init/doctor comparten inventario de skills: core faltantes, metadatos inválidos, recomendaciones según dependencias y registro reconciliado. Las skills personalizadas se conservan.
@@ -11,8 +27,6 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 - Privacy informa y bloquea candidatos externos con memoria aún rastreada; coverage usa el parser común y conserva fallos de ejecución.
 - Models muestra configuración global/local; help advierte que Goal no está disponible en OpenCode 2.x. Metrics distingue tiempo medido de tiempo sin instrumentación.
 - Se incluyen las correcciones del flujo de commits locales de Teo/Jhon/Luz y del rol documental de Pau pendientes de publicación.
-
-## [Unreleased]
 
 ## [0.15.2] - 2026-09-30
 

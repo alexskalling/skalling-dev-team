@@ -35,7 +35,7 @@ MAX_TIMEOUT = 3600
 # burning more model calls in the same loop.
 MAX_DELIVERIES = 3
 _ACTIVE = None  # comando en curso, para cancelarlo con todo su grupo
-TERMINAL = {'completed', 'superseded'}
+from skalling_lifecycle import TERMINAL, bind_tasks, finish as finish_lifecycle, expire_claims, progress
 TRANSITIONS = {
     'clarify': ('pol', 'requested', 'clarified'),
     'plan': ('sol', 'clarified', 'planned'),
@@ -61,6 +61,8 @@ NEXT_STEP = {
 
 def next_step(state):
     current = state.get('state')
+    if current in {'cancelled', 'failed', 'abandoned'}:
+        return 'cerrado sin éxito: ' + state.get('terminal_reason', 'consultar evidencia del cierre')
     if current == 'blocked':
         return 'Alex: detener el ciclo; aclarar alcance o criterio y abrir otro workflow con supersedes'
     if current == 'implementation_ready' and state.get('last_rejection'):
@@ -90,6 +92,7 @@ def next_action(state):
         'quality_reviewed': ('alex', 'complete'), 'verified': ('alex', 'complete'),
         'documented': ('alex', 'complete'), 'completed': ('done', 'none'),
         'superseded': ('done', 'follow_superseding_workflow'),
+        'cancelled': ('done', 'none'), 'failed': ('done', 'none'), 'abandoned': ('done', 'none'),
         'blocked': ('alex', 'stop_and_reclassify'),
     }
     if current == 'quality_reviewed' and state.get('risk') == 'high' and state.get('memory_required'):
@@ -384,9 +387,10 @@ def auto_verification_from_template(template, files):
 def record_start_metrics(db, identifier, classification, intent, supersedes):
     tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     if 'routing_decisions' in tables:
-        db.execute("INSERT INTO routing_decisions (ts, user_intent, chosen_route, route_reason, agents_involved) "
+        cursor = db.execute("INSERT INTO routing_decisions (ts, user_intent, chosen_route, route_reason, agents_involved) "
                    "VALUES (datetime('now'), ?, ?, 'skalling_workflow start', ?)",
                    (intent or identifier, classification['route'], classification['agents']))
+    routing_id = cursor.lastrowid if 'routing_decisions' in tables else None
     if 'workflow_metrics' in tables:
         if supersedes:
             db.execute("UPDATE workflow_metrics SET outcome='superseded', completed_at=datetime('now') "
@@ -396,6 +400,7 @@ def record_start_metrics(db, identifier, classification, intent, supersedes):
                    (identifier, classification['risk'], classification['route'],
                     classification['agents'].count('→') + 1))
         db.execute('UPDATE workflow_metrics SET context_bytes=NULL, permission_prompts=NULL WHERE request_id=?', (identifier,))
+    return routing_id
 
 
 def opencode_db():
@@ -510,7 +515,7 @@ def record_finish_metrics(db, identifier, duration_ms, handoffs, usage=None, ret
 
 PLAN_STEPS = ('1) bash ~/.config/opencode/scripts/teamdb-plan.sh crea el plan y devuelve su número (plan_id); '
               '2) bash ~/.config/opencode/scripts/teamdb-plan-approve.sh "$PWD" <plan_id> "<diseño>" "<aceptación>" '
-              '"<aprobación del usuario>" lo aprueba con diseño; 3) ready con {"id", "plan_id": <ese número>, "evidence"}. '
+              '"<aprobación del usuario>" lo aprueba con diseño; 3) ready con {"id", "plan_id": <ese número>, "task_ids": [ids de las tareas cubiertas], "evidence"}. '
               'El plan_id es el número real que devolvió el paso 1, nunca el de un ejemplo.')
 
 
@@ -560,6 +565,10 @@ def save(db, identifier, actor, session, action, state, evidence, now):
     if actor != AUTO_VERIFIER and action not in {'feedback', 'status'}:
         state['handoffs'] += int(state.get('actor', actor) != actor)
         state['actor'] = actor
+    if action in {'complete', 'cancel', 'fail', 'superseded'}:
+        finish_lifecycle(db, state, now)
+    progress(db, state)
+    expire_claims(db, now)
     state['updated_at'] = now
     if action in {'ready', 'deliver', 'check', 'approve', 'reject', 'reuse', 'status'}:
         state['usage'] = workflow_usage(db, state, now)
@@ -984,9 +993,15 @@ def operate(request):
                 if risk == 'high':
                     state['agents'] += ' → Luz' + (' → Pau' if state['memory_required'] else '')
                 classification = {**classification, 'route': state['route'], 'agents': state['agents']}
-            record_start_metrics(db, identifier, classification, payload.get('intent'), supersedes)
+            state['routing_id'] = record_start_metrics(db, identifier, classification, payload.get('intent'), supersedes)
+            if task and risk == 'low':
+                bind_tasks(db, state)
+                require_approved_plan(db, state['plan_id'])
         else:
             require(state is not None, 'Unknown workflow')
+            if state['state'] == 'completed' and action == 'complete' and actor == 'alex':
+                db.rollback()
+                return with_next_step(state)
             require(state['state'] not in TERMINAL or (state['state'] == 'completed' and action == 'prepare_commit'),
                     f"{state['state']} workflows are immutable")
             if action in TRANSITIONS:
@@ -996,6 +1011,7 @@ def operate(request):
                 if action == 'ready':
                     require_approved_plan(db, payload.get('plan_id'))
                     state['plan_id'] = payload['plan_id']
+                    bind_tasks(db, state, payload.get('task_ids'))
                 if action == 'deliver':
                     require_scope(root, state['files'], state.get('base_head'))
                     invalidate_prepared_receipt(db, state)
@@ -1120,6 +1136,12 @@ def operate(request):
                 state['receipt_tree_hash'] = receipt or state.get('receipt_tree_hash')
                 state['prepared_receipt_verifier'] = verifier
                 evidence = 'Verified local unit staged and sealed; git commit is allowed, push needs user authorization'
+            elif action in {'cancel', 'fail'}:
+                require(actor == 'alex' and bool(str(evidence).strip()), 'Only Alex terminates with concrete evidence')
+                invalidate_prepared_receipt(db, state)
+                state['state'] = 'cancelled' if action == 'cancel' else 'failed'
+                state['completed_at'] = now
+                state['terminal_reason'] = evidence
             elif action == 'complete':
                 require(actor == 'alex', 'Only Alex completes a workflow')
                 expected = ('quality_reviewed' if state.get('execution_mode') == 'focused' and not state.get('memory_required')
@@ -1168,7 +1190,7 @@ def public_response(state):
     if not isinstance(state, dict) or 'state' not in state:
         return state
     fields = ('id', 'state', 'risk', 'route', 'agents', 'files', 'acceptance', 'reuse',
-              'task', 'plan_id', 'digest', 'delivery_number', 'next_step', 'receipt_tree_hash',
+              'task', 'plan_id', 'task_ids', 'routing_id', 'terminal_reason', 'digest', 'delivery_number', 'next_step', 'receipt_tree_hash',
               'duration_ms', 'execution_mode', 'memory_required', 'planning_required',
               'last_rejection', 'blocked_reason', 'rejection_count', 'oracle',
               'intent', 'outcomes', 'coverage', 'human_corrections', 'user_acceptance', 'usage', 'auto_verify', 'context')
@@ -1179,6 +1201,8 @@ def public_response(state):
     if state['state'] in commit_states:
         response['local_commit'] = {
             'ready': True, 'agents': ['teo', 'jhon', 'luz'], 'prepare_action': 'prepare_commit',
+            'delegate_to': 'luz' if state.get('risk') == 'high' else 'jhon',
+            'handoff': f"Conservar workflow {state['id']}: prepare_commit y commit local; no repetir checks válidos",
             'then': 'git commit -m "mensaje"', 'repeat_checks': False, 'push': 'user_approval',
             'coverage_required': not bool(state.get('coverage')),
         }

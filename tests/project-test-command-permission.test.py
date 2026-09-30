@@ -79,6 +79,25 @@ class ProjectTestCommand(unittest.TestCase):
             self.assertEqual(decide(rules, 'python3 otro_script.py'), 'ask', name)
         self.assertNotIn('test_app.py', self.agent('Alex'))
 
+    def test_full_headers_have_unique_yaml_keys_and_preserve_last_rule_order(self):
+        self.yaml(unit='pnpm test')
+        config.apply_test_commands(self.project)
+        for name in ('Alex', 'Teo', 'Jhon', 'Luz', 'Pau'):
+            rules = bash_rules(self.agent(name))
+            keys = [key for key, _ in rules]
+            self.assertEqual(len(keys), len(set(keys)), name)
+        target = self.project / '.opencode/agents/Teo.md'
+        original = '---\nmodel: custom/provider\npermission:\n  bash:\n    "git commit *": ask\n    "git *": ask\n---\nCustom body\n'
+        target.write_text(original)
+        config.apply_test_commands(self.project)
+        self.assertEqual(decide(bash_rules(self.agent('Teo')), 'git commit -m fix'), 'allow')
+        self.assertEqual(decide(bash_rules(self.agent('Teo')), 'git commit --amend'), 'ask')
+        once = self.agent('Teo')
+        config.apply_test_commands(self.project)
+        self.assertEqual(self.agent('Teo'), once)
+        config.apply_test_commands(self.project, remove=True)
+        self.assertEqual(self.agent('Teo'), original)
+
     def test_minimal_local_headers_receive_commit_policy_without_changing_models(self):
         self.yaml(unit='pnpm test')
         for name in ('Teo', 'Jhon', 'Luz'):
@@ -172,10 +191,18 @@ class ProjectTestCommand(unittest.TestCase):
     def test_minimal_headers_receive_role_scoped_command_permissions(self):
         for name in ('Alex', 'Teo', 'Pau'):
             target = self.project / '.opencode/agents' / f'{name}.md'
-            target.write_text('---\nmodel: custom/provider\npermission:\n  bash: ask\n---\nCustom body\n')
+            target.write_text('---\nmodel: custom/provider\npermission:\n  bash:\n    "*": ask\n    "find *-exec*": ask\n---\nCustom body\n')
         config.apply_test_commands(self.project)
         for name in ('Alex', 'Teo', 'Pau'):
             rules = bash_rules(self.agent(name))
+            self.assertEqual(decide(rules, 'find src -type f -exec wc -l {} +'), 'allow')
+            self.assertEqual(decide(rules, 'xargs wc -l'), 'allow')
+            self.assertEqual(decide(rules, 'xargs -0 wc -l --'), 'allow')
+            self.assertEqual(decide(rules, 'xargs rm -rf'), 'ask')  # lens:ok: literal de prueba; solo se consulta el permiso, nunca se ejecuta
+            self.assertEqual(decide(rules, 'set -o pipefail'), 'allow')
+            self.assertEqual(decide(rules, 'set -euo pipefail'), 'allow')
+            self.assertEqual(decide(rules, 'set'), 'ask')
+            self.assertEqual(decide(rules, 'find src -exec touch /tmp/example {} +'), 'ask')
             self.assertEqual(decide(rules, 'bash /Users/example/.config/opencode/scripts/skalling-refresh.sh --check /work'), 'allow')
             self.assertEqual(decide(rules, 'bash /Users/example/.config/opencode/scripts/skalling-refresh.sh --apply /work'), 'allow' if name == 'Alex' else 'ask')
             self.assertIn('model: custom/provider', self.agent(name))

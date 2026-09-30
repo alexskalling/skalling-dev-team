@@ -738,6 +738,26 @@ permission:
     "bash /home/*/.config/opencode/scripts/skalling-privacy.sh external *": ask
     "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh external *": ask
     "bash .opencode/scripts/skalling-privacy.sh external *": ask
+    "find * -type f -exec wc -l {} +": allow
+    "xargs wc -l": allow
+    "xargs -0 wc -l": allow
+    "xargs wc -l --": allow
+    "xargs -0 wc -l --": allow
+    "set -o pipefail": allow
+    "set -euo pipefail": allow
+    "set -eu": allow
+    "set -e": allow
+    "set -u": allow
+    "bash ~/.config/opencode/scripts/skalling-privacy.sh verify-internal": allow
+    "bash ~/.config/opencode/scripts/skalling-privacy.sh verify-internal *": allow
+    "bash /Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal": allow
+    "bash /Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal *": allow
+    "bash /home/*/.config/opencode/scripts/skalling-privacy.sh verify-internal": allow
+    "bash /home/*/.config/opencode/scripts/skalling-privacy.sh verify-internal *": allow
+    "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal": allow
+    "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal *": allow
+    "bash .opencode/scripts/skalling-privacy.sh verify-internal": allow
+    "bash .opencode/scripts/skalling-privacy.sh verify-internal *": allow
 ---
 
 # Sol — Planificación técnica
@@ -800,7 +820,7 @@ adicional si el usuario ya autorizó ese alcance.
 bash ~/.config/opencode/scripts/teamdb-plan-approve.sh "$PWD" "<plan_id>" "<diseño concreto y reutilización>" "<aceptación observable>" "<referencia al pedido o aprobación real>"
 ```
 
-Con el plan aprobado, avanzo el workflow del pedido: `skalling_workflow` `action: "plan"` (evidencia: diseño y rollback) y después `action: "ready"` con `{"id", "plan_id": <plan_id>, "evidence"}`. El `plan_id` es el número que imprimió `teamdb-plan.sh` (`plan_id=N`), ya aprobado con `teamdb-plan-approve.sh`; nunca el de un ejemplo. Si el motor rechaza, lista los planes y el siguiente paso: lo sigo.
+Con el plan aprobado, avanzo el workflow del pedido: `skalling_workflow` `action: "plan"` (evidencia: diseño y rollback) y después `action: "ready"` con `{"id", "plan_id": <plan_id>, "task_ids": [ids de las tareas cubiertas], "evidence"}`. El `plan_id` es el número que imprimió `teamdb-plan.sh` (`plan_id=N`), ya aprobado con `teamdb-plan-approve.sh`; nunca el de un ejemplo. Si el motor rechaza, lista los planes y el siguiente paso: lo sigo.
 
 Incluyo `risk_level`, `plan_id`, `feature-slug`, task ejecutable, archivos/componentes previstos, restricciones, `project_context` y prueba esperada. Debo CITAR el plan consultado y el número de tasks persistidas.
 

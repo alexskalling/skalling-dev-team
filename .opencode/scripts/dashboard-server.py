@@ -136,7 +136,7 @@ class DashboardData:
                 for s in current]
 
     def tasks(self):
-        claim_join = "LEFT JOIN task_claims c ON c.task_id=t.id AND c.status='active'" if self.table_exists("task_claims") else "LEFT JOIN (SELECT NULL task_id, NULL actor, NULL lease_until) c ON 0"
+        claim_join = "LEFT JOIN task_claims c ON c.task_id=t.id AND c.status='active' AND CAST(c.lease_until AS INTEGER)>CAST(strftime('%s','now') AS INTEGER)" if self.table_exists("task_claims") else "LEFT JOIN (SELECT NULL task_id, NULL actor, NULL lease_until) c ON 0"
         return self.workflow_tasks(describe(workflows(self.db_path))) + self.query(
             "SELECT t.*, p.slug AS plan_slug, p.title AS plan_title, c.actor AS claimed_by, c.lease_until "
             f"FROM tasks t LEFT JOIN plans p ON p.id=t.plan_id {claim_join} "

@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import sqlite3
 
-TERMINAL = {'completed', 'superseded', 'abandoned'}
+from skalling_lifecycle import TERMINAL
 
 
 def workflows(db_path, identifier=None):

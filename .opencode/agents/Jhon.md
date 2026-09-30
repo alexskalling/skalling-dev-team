@@ -785,6 +785,26 @@ permission:
     "bash /home/*/.config/opencode/scripts/skalling-privacy.sh external *": ask
     "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh external *": ask
     "bash .opencode/scripts/skalling-privacy.sh external *": ask
+    "find * -type f -exec wc -l {} +": allow
+    "xargs wc -l": allow
+    "xargs -0 wc -l": allow
+    "xargs wc -l --": allow
+    "xargs -0 wc -l --": allow
+    "set -o pipefail": allow
+    "set -euo pipefail": allow
+    "set -eu": allow
+    "set -e": allow
+    "set -u": allow
+    "bash ~/.config/opencode/scripts/skalling-privacy.sh verify-internal": allow
+    "bash ~/.config/opencode/scripts/skalling-privacy.sh verify-internal *": allow
+    "bash /Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal": allow
+    "bash /Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal *": allow
+    "bash /home/*/.config/opencode/scripts/skalling-privacy.sh verify-internal": allow
+    "bash /home/*/.config/opencode/scripts/skalling-privacy.sh verify-internal *": allow
+    "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal": allow
+    "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal *": allow
+    "bash .opencode/scripts/skalling-privacy.sh verify-internal": allow
+    "bash .opencode/scripts/skalling-privacy.sh verify-internal *": allow
 ---
 
 # Jhon — Verificación

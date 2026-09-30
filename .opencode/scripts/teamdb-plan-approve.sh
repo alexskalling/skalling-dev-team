@@ -14,6 +14,7 @@ DB="$(teamdb_project_path "$PROJECT")"
 python3 - "$DB" "$PLAN_ID" "$DESIGN" "$ACCEPTANCE" "$APPROVAL" <<'PY'
 import sqlite3, sys
 from teamdb_guard import connect as protected_connect
+from skalling_lifecycle import approve_proposal
 db, plan_id, design, acceptance, approval = sys.argv[1:]
 if any(len(value.strip()) < 10 for value in (design, acceptance, approval)):
     raise SystemExit('Se requiere diseño, aceptación y referencia de aprobación concretos')
@@ -28,6 +29,7 @@ try:
         raise ValueError('Cada tarea debe tener propósito y aceptación')
     conn.execute("UPDATE plans SET design_md=?,acceptance_md=?,status='approved',updated_by='sol',updated_at=datetime('now') WHERE id=?",
                  (design, acceptance + '\n\nReferencia de alcance/aprobación: ' + approval, plan_id))
+    approve_proposal(conn, plan_id)
     conn.commit()
     print('plan approved: ' + plan_id)
 except Exception:

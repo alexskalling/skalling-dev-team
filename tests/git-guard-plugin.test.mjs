@@ -9,6 +9,22 @@ import {
   writeViolation, hookBypassViolation, createCore, createIdentityQueue, teamdbWorkflowState,
 } from '../plugins/lib/git-guard.mjs';
 
+test('Alex delegates a verified local commit instead of asking to execute it himself', () => {
+  const core = createCore();
+  const command = 'git commit -m "chore: install Skalling project bundle and make it trackable"';
+  for (const agent of ['Alex', 'Pol', 'Sol', 'Jes']) {
+    assert.match(core.decide({tool:'shell', agent, input:{command}}) || '', /deleg.*Jhon.*Luz/);
+  }
+  core.observe({tool:'skalling_workflow',agent:'Alex',sessionID:'s',
+    output:JSON.stringify({id:'req',state:'verified'})});
+  for (const agent of ['Jhon', 'Luz']) {
+    assert.equal(core.decide({tool:'subagent',agent:'Alex',sessionID:'s',input:{agent,
+      prompt:'req: prepare_commit y commit local; conservar evidencia existente'}}), null);
+    assert.equal(core.decide({tool:'shell',agent,input:{command}}), null);
+  }
+  assert.equal(core.decide({tool:'shell',agent:'Alex',input:{command:'git log --oneline'}}), null);
+});
+
 test('Pau cannot substitute verification or local commits; reading evidence stays allowed', () => {
   const core = createCore();
   for (const command of [

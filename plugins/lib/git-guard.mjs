@@ -224,6 +224,14 @@ function xargsInner(s) {
 
 function classify(norm) {
   if (!norm) return null;
+  // La excepción de permisos para contar líneas solo acepta rutas y el
+  // predicado -type f. El '*' de un glob también podría absorber otra
+  // acción de find (-delete, -exec, -fprint); no basta con mirar el sufijo.
+  if (/^find .* -type f -exec wc -l \{\} \+$/.test(norm)) {
+    const words = shellWords(norm);
+    const roots = words.slice(1, -7);
+    if (!roots.length || roots.some((word) => !word || /^[-!()]/.test(word))) return 'find-count';
+  }
   if (/^\$/.test(norm)) return 'indirecto';
   // El motor de borrado de TeamDB solo corre en su forma de terminal, con el
   // SQL a la vista del permiso; mandarle JSON por stdin esquivaba la aprobación.
@@ -391,6 +399,7 @@ function executedPath(raw) {
 }
 
 function isCanonical(raw, kind) {
+  if (kind === 'find-count') return false;
   if (kind === 'ruta' || kind === 'helper-arg') return false;
   if (kind === 'git') return GIT_CANONICAL.test(raw);
   if (kind === 'indirecto') return false;
@@ -896,6 +905,12 @@ const APPROVER_BLOCKED = 'La aprobación de un commit la registra skalling_workf
 const PAU_ENGINEERING_BLOCKED = 'Pau documenta evidencia existente; las pruebas corresponden a Jhon/Luz y el commit local a Teo/Jhon/Luz. '
   + 'Un permiso bloqueado se resuelve para el mismo rol: no se delega a Pau ni se declara verificado un check sin ejecutar.';
 
+const COMMIT_DELEGATION_REQUIRED = 'El commit local se delega a Jhon o Luz con el id del workflow existente: '
+  + 'prepare_commit y luego git commit, conservando la evidencia válida y sin repetir pruebas. '
+  + 'Alex orquesta; Pol/Sol/Jes no commitean. No pedir al usuario otro permiso para suplir esta delegación '
+  + 'ni enviar el commit a Pau. Teo también puede commitear desde su sesión de implementación ya activa. '
+  + 'Si falta revisión o el índice contiene archivos fuera del alcance, resolver ese bloqueo sin eludir el hook.';
+
 // Detect execution, not quoted mentions in evidence or documentation. This
 // catches accidental role substitution; it is not a sandbox for arbitrary code.
 function engineeringCommand(words) {
@@ -954,6 +969,10 @@ export function createCore(options = {}) {
       // porque un texto antes no habilita el binario del segmento siguiente.
       const segments = splitSegments(command).segments;
       for (const seg of segments) {
+        if (['alex', 'pol', 'sol', 'jes'].includes(who)
+            && new RegExp(`^git${GIT_OPT}\\s+commit(?:\\s|$)`).test(commandWords(seg).join(' '))) {
+          return COMMIT_DELEGATION_REQUIRED;
+        }
         if (who === 'pau' && engineeringCommand(commandWords(seg))) return PAU_ENGINEERING_BLOCKED;
         const program = commandProgram(seg);
         if (program === 'skalling-workflow.py') {

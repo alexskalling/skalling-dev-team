@@ -32,6 +32,8 @@ OPENCODE_DIR="$SKALLING_OPENCODE_DIR"
 PROJECT_DIR="$(pwd)"
 GLOBAL_ONLY=false
 STRICT=false
+RECONCILE=false
+APPLY=false
 WARN_COUNT=0
 WARN_ENV_COUNT=0
 ERROR_COUNT=0
@@ -46,12 +48,22 @@ while [[ $# -gt 0 ]]; do
         --project) PROJECT_DIR="$2"; shift 2 ;;
         --global-only) GLOBAL_ONLY=true; shift ;;
         --strict) STRICT=true; shift ;;
+        --reconcile) RECONCILE=true; shift ;;
+        --apply) APPLY=true; shift ;;
         --help|-h)
             sed -n '2,12p' "${BASH_SOURCE[0]}"
             exit 0 ;;
         *) echo "Argumento desconocido: $1"; exit 1 ;;
     esac
 done
+
+if [[ "$RECONCILE" == true ]]; then
+    if [[ "$APPLY" == true ]]; then
+        exec python3 "$SCRIPT_DIR/scripts/skalling-reconcile.py" "$PROJECT_DIR" --apply
+    fi
+    exec python3 "$SCRIPT_DIR/scripts/skalling-reconcile.py" "$PROJECT_DIR"
+fi
+if [[ "$APPLY" == true ]]; then echo '--apply requiere --reconcile' >&2; exit 2; fi
 
 # ──────────────────────────────────────────────────────────────────────────────
 # HELPERS
@@ -718,6 +730,13 @@ main() {
     check_dead_code
     check_receipts
     check_routing
+    if [[ "$GLOBAL_ONLY" == false && -f "$PROJECT_DIR/.opencode/context/team.db" ]]; then
+        if python3 "$SCRIPT_DIR/scripts/skalling-reconcile.py" "$PROJECT_DIR"; then
+            ok "Ciclo de vida coherente"
+        else
+            warn "Ciclo de vida requiere revisión: /skalling-doctor --reconcile"
+        fi
+    fi
 
     echo ""
     printf "${c_blue}━━━ Resumen ━━━${c_reset}\n"

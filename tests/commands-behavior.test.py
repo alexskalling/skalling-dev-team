@@ -33,6 +33,76 @@ class CommandsTest(unittest.TestCase):
         return subprocess.run(['bash', str(ROOT / 'scripts' / name), *map(str, args)],
                               text=True, capture_output=True, timeout=30)
 
+    def test_prune_retains_new_and_legacy_backups_without_touching_database(self):
+        before = self.db.read_bytes()
+        for index in range(7):
+            (self.db.parent/f'team.db.pre-migration-{index}').write_text(str(index))
+        sentinel = self.db.parent/'unrelated.backup'; sentinel.write_text('keep')
+        result = self.command('teamdb-prune-backups.sh', self.project, '--keep', 5)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(list(self.db.parent.glob('team.db.pre-migration-*'))), 5)
+        self.assertEqual(self.db.read_bytes(), before)
+        self.assertEqual(sentinel.read_text(), 'keep')
+
+    def test_reconcile_repairs_links_without_inventing_task_completion(self):
+        import time
+        spec = importlib.util.spec_from_file_location('reconcile', ROOT/'scripts/skalling-reconcile.py')
+        reconcile = importlib.util.module_from_spec(spec); spec.loader.exec_module(reconcile)
+        now = time.time()
+        state = {'id': 'done', 'state': 'completed', 'intent': 'objective', 'started_at': now,
+                 'completed_at': now, 'plan_id': 1}
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("INSERT INTO proposals(id,slug,title,intent_md) VALUES(1,'proposal','Proposal','User objective')")
+            conn.execute("INSERT INTO plans(id,slug,title,status,proposal_id) VALUES(1,'plan','Plan','approved',1)")
+            conn.execute("INSERT INTO tasks(id,plan_id,slug,title) VALUES(1,1,'task','Task')")
+            conn.execute("INSERT INTO task_claims(task_id,actor,input_hash,lease_until,claimed_at) VALUES(1,'teo','hash',1,'1')")
+            conn.execute('INSERT INTO agent_workflows VALUES(?,?)', ('done',json.dumps(state)))
+            conn.execute("INSERT INTO routing_decisions(ts,user_intent,chosen_route) VALUES(datetime(?,'unixepoch'),'objective','SDD')", (now,))
+            conn.execute("INSERT INTO workflow_metrics(request_id,risk_level,route,agents_count,started_at) VALUES('done','low','FAST-TRACK',2,datetime('now'))")
+        before = self.db.read_bytes()
+        with sqlite3.connect(self.db) as conn:
+            report = reconcile.inspect(conn)
+        self.assertEqual(self.db.read_bytes(), before)
+        with sqlite3.connect(self.db) as conn:
+            reconcile.repair(conn, report)
+        with sqlite3.connect(self.db) as conn:
+            after = reconcile.inspect(conn)
+            self.assertEqual(after['repairs'], [])
+            self.assertFalse(after['ready'])  # uncertainty remains visible
+            self.assertEqual(conn.execute('SELECT status FROM tasks').fetchone()[0], 'pending')
+            self.assertEqual(conn.execute('SELECT status FROM proposals').fetchone()[0], 'approved')
+            self.assertEqual(conn.execute('SELECT outcome FROM routing_decisions').fetchone()[0], 'SUCCESS')
+            self.assertEqual(conn.execute('SELECT status FROM task_claims').fetchone()[0], 'expired')
+            self.assertEqual(conn.execute('SELECT outcome FROM workflow_metrics').fetchone()[0], 'success')
+
+    def test_legacy_route_link_requires_unique_timestamp_and_engine_provenance(self):
+        import time
+        spec = importlib.util.spec_from_file_location('reconcile', ROOT/'scripts/skalling-reconcile.py')
+        reconcile = importlib.util.module_from_spec(spec); spec.loader.exec_module(reconcile)
+        now = time.time()
+        with sqlite3.connect(self.db) as conn:
+            state = {'id': 'old', 'state': 'completed', 'started_at': now, 'route': 'SDD'}
+            conn.execute('INSERT INTO agent_workflows VALUES(?,?)', ('old', json.dumps(state)))
+            sql = "INSERT INTO routing_decisions(ts,user_intent,chosen_route,route_reason) VALUES(datetime(?,'unixepoch'),'old intent','SDD','skalling_workflow start')"
+            conn.execute(sql, (now,))
+            self.assertTrue(any(r['kind'] == 'link_route' for r in reconcile.inspect(conn)['repairs']))
+            conn.execute(sql, (now,))
+            self.assertFalse(any(r['kind'] == 'link_route' for r in reconcile.inspect(conn)['repairs']))
+
+    def test_managed_valid_skill_drift_is_reported_and_repaired(self):
+        from skalling_skills import repair, audit, sync_registry, inventory
+        repair(ROOT, self.project/'.opencode')
+        target = self.project/'.opencode/skills/skalling-ponytail/SKILL.md'
+        target.write_text(target.read_text() + '\nPrevious shipped instruction.\n')
+        from skalling_skills import digest
+        manifest = target.parent.parent/'.skalling-managed.json'
+        saved = json.loads(manifest.read_text()); saved['skalling-ponytail'] = digest(target.parent)
+        manifest.write_text(json.dumps(saved))
+        sync_registry(self.db, inventory(target.parent.parent))
+        self.assertIn('skalling-ponytail', audit(ROOT, self.project)['managed_drift'])
+        repair(ROOT, self.project/'.opencode')
+        self.assertEqual(audit(ROOT, self.project)['managed_drift'], [])
+
     def test_status_and_dashboard_show_current_objective(self):
         body = {'id': 'current', 'state': 'implementation_ready', 'intent': 'Alinear tabla',
                 'outcomes': [{'id': 'one', 'expected': 'Columnas alineadas'}]}
@@ -57,6 +127,43 @@ class CommandsTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('one', result.stdout)
         self.assertIn('two', result.stdout)
+
+    def test_internal_privacy_verification_is_readonly_and_accepts_tracked_bundle(self):
+        subprocess.run(['git', 'init', '-q', str(self.project)], check=True)
+        (self.project/'.gitignore').write_text('.opencode/context/\n.skalling-backups/\n__pycache__/\n')
+        (self.project/'.gitattributes').write_text('db/teamdb/team.dump.sql merge=union\n/AGENTS.md merge=union\n*.txt text\n')
+        (self.project/'AGENTS.md').write_text('Project guidance\n')
+        (self.project/'.opencode/project.yaml').write_text('stack: python\n')
+        (self.project/'.opencode/agents').mkdir()
+        (self.project/'.opencode/agents/Alex.md').write_text('Agent\n')
+        (self.project/'unrelated.txt').write_text('Unrelated work must not fail verification\n')
+        args = ['git', '-C', str(self.project)]
+        before_db = self.db.read_bytes()
+        result = self.command('skalling-privacy.sh', 'verify-internal', self.project)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse(json.loads(result.stdout)['dump_exists'])
+        subprocess.run(args + ['add', '.opencode/project.yaml', '.opencode/agents/Alex.md'], check=True)
+        index = subprocess.check_output(args + ['ls-files', '--stage'])
+        result = self.command('skalling-privacy.sh', 'verify-internal', self.project)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(index, subprocess.check_output(args + ['ls-files', '--stage']))
+        self.assertEqual(before_db, self.db.read_bytes())
+        attributes = (self.project/'.gitattributes').read_text()
+        (self.project/'.gitattributes').write_text('*.txt text\n')
+        local_attributes = self.project/'.git/info/attributes'
+        local_attributes.write_text(attributes)
+        result = self.command('skalling-privacy.sh', 'verify-internal', self.project)
+        self.assertEqual(result.returncode, 1, 'Local Git config cannot substitute for shared attributes')
+        local_attributes.unlink()
+        (self.project/'.gitattributes').write_text(attributes)
+        subprocess.run(args + ['add', '-f', '.opencode/context/team.db'], check=True)
+        result = self.command('skalling-privacy.sh', 'verify-internal', self.project)
+        self.assertEqual(result.returncode, 1)
+        self.assertFalse(json.loads(result.stdout)['passed'])
+        subprocess.run(args + ['rm', '--cached', '-f', '.opencode/context/team.db'], check=True, capture_output=True)
+        (self.project/'.gitignore').write_text('.opencode/\n.skalling-backups/\n__pycache__/\n')
+        result = self.command('skalling-privacy.sh', 'verify-internal', self.project)
+        self.assertEqual(result.returncode, 1, 'A tracked file still matches ignore rules with --no-index')
 
     def test_merge_reports_dump_and_root_instructions(self):
         subprocess.run(['git', 'init', '-q', str(self.project)], check=True)

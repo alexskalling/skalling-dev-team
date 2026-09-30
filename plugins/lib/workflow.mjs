@@ -58,7 +58,7 @@ async function handle(args, runtime, execute) {
     session:runtime.sessionID, action:args.action, payload}, runtime.signal));
 }
 
-const WORKFLOW_DESCRIPTION = 'Autoridad del flujo: start requiere intent (pedido original), files, acceptance, reuse; outcomes [{id,expected}] separa resultados múltiples. Seguir recommended_action de cada respuesta y last_rejection, máximo tres entregas. focused para local claro sin plan/memoria; staged para el resto. Teo deliver ejecuta auto_verify cuando existe: no duplicar ese comando antes. Jhon oracle → check → approve; Luz según riesgo, Pau según estado. approve y cierre automático requieren coverage [{outcome_id,check_index,observation}] para TODOS los outcomes; un verde genérico no demuestra el pedido. check configured=true usa configuración congelada; reusable=true solo pruebas deterministas locales; Luz reuse check_index con evidence. evidence recupera un log. ready requiere plan_id aprobado. rescope requiere files adicionales y evidence: por qué son necesarios para el objetivo; Teo completa esa justificación técnica. prepare_commit de Teo/Jhon/Luz sella unidad verificada; luego commit local permitido, push solo autorizado. Alex complete cierra; feedback registra feedback_id de mensaje humano, kind accepted/correction/scope_change/new_task y evidence sin inferir satisfacción. Al retomar una sesión, Alex consulta status con el id existente antes de delegar; no repite start ni crea otro plan. start/status/ready entregan context automáticamente; no repetir for-task/for-request si ya está. status context_seen omite solo revisiones que aún tienes completas. Payload con id; identidad la aporta el runtime.';
+const WORKFLOW_DESCRIPTION = 'Autoridad del flujo: start requiere intent (pedido original), files, acceptance, reuse; outcomes [{id,expected}] separa resultados múltiples. Seguir recommended_action de cada respuesta y last_rejection, máximo tres entregas. focused para local claro sin plan/memoria; staged para el resto. Teo deliver ejecuta auto_verify cuando existe: no duplicar ese comando antes. Jhon oracle → check → approve; Luz según riesgo, Pau según estado. approve y cierre automático requieren coverage [{outcome_id,check_index,observation}] para TODOS los outcomes; un verde genérico no demuestra el pedido. check configured=true usa configuración congelada; reusable=true solo pruebas deterministas locales; Luz reuse check_index con evidence. evidence recupera un log. ready requiere plan_id aprobado y task_ids explícitos; cada tarea agrega un outcome verificable. complete cierra solo esas tareas; cancel/fail de Alex exigen evidence y nunca certifican éxito. rescope requiere files adicionales y evidence: por qué son necesarios para el objetivo; Teo completa esa justificación técnica. prepare_commit de Teo/Jhon/Luz sella unidad verificada; luego commit local permitido, push solo autorizado. Alex complete cierra; feedback registra feedback_id de mensaje humano, kind accepted/correction/scope_change/new_task y evidence sin inferir satisfacción. Al retomar una sesión, Alex consulta status con el id existente antes de delegar; no repite start ni crea otro plan. start/status/ready entregan context automáticamente; no repetir for-task/for-request si ya está. status context_seen omite solo revisiones que aún tienes completas. Payload con id; identidad la aporta el runtime.';
 
 export function workflowTool(tool, execute = run) {
   return tool({
@@ -152,7 +152,7 @@ export function policyDecision(agentMarkdown, command) {
 }
 
 const WORKFLOW_ACTIONS = ['start', 'status', 'clarify', 'plan', 'ready', 'deliver', 'rescope', 'oracle', 'check',
-  'approve', 'reject', 'document', 'complete', 'prepare_commit', 'reuse', 'evidence', 'feedback'];
+  'approve', 'reject', 'document', 'complete', 'prepare_commit', 'reuse', 'evidence', 'feedback', 'cancel', 'fail'];
 const text = { type: 'string' };
 const PAYLOAD_SCHEMA = {
   type: 'object',
@@ -168,6 +168,7 @@ const PAYLOAD_SCHEMA = {
     coverage: {type: 'array', items: {type: 'object', properties: {outcome_id: text, check_index: {type: 'integer'}, observation: text}, required: ['outcome_id', 'check_index', 'observation']}},
     feedback_id: text, kind: {type: 'string', enum: ['accepted', 'correction', 'scope_change', 'new_task']},
     acceptance: text, reuse: text, intent: text, task: text, supersedes: text, evidence: {type: 'string', description: 'En rescope es obligatorio: explica por qué cada archivo o grupo añadido es necesario para el objetivo.'},
+    task_ids: {type: 'array', items: {type: 'integer'}},
     plan_id: { type: 'integer' }, method: text, criterion: text, expected: text, negative: text,
     invariant: text, refutation: text, findings: text, configured: { type: 'boolean' },
     execution_mode: { type: 'string', enum: ['focused', 'staged'] },
@@ -214,14 +215,23 @@ export async function setupWorkflowV2(ctx, execute = run, agentsDir = fileURLToP
         const directory = ctx.location?.directory || process.cwd();
         return {
           content: await handle(input, {agent:context.agent, sessionID:context.sessionID, directory, signal: context.signal,
-            approve: async (pattern) => {
+            approve: async (pattern, argv) => {
               // Un plugin v2 no puede abrir un pedido de permiso: solo corre
               // lo que la política efectiva ya permite; todo lo demás, fuera.
               if (decideRules(await effectiveRules(context.agent, directory), pattern) !== 'allow') {
+                const ignoreCheck = /^python[\d.]*$/.test(argv[0]) && argv[1] === '-c'
+                  && argv[2]?.includes('check-ignore');
+                const guidance = ignoreCheck
+                  ? 'Para comprobar las exclusiones de Skalling, usá check con argv '
+                    + '["bash", "<SKALLING_ROOT>/scripts/skalling-privacy.sh", "verify-internal", "<proyecto>"]. '
+                    + 'Es de solo lectura y verifica reglas efectivas; no habilites python3 -c de forma general. '
+                  : '';
+                const commandSummary = argv[1] === '-c' ? `${argv[0]} -c [código inline omitido]`
+                  : pattern.slice(0, 400) + (pattern.length > 400 ? '…' : '');
                 throw new Error('En OpenCode v2 un check solo corre comandos que tu política ya permite (un plugin no '
-                  + 'puede pedir aprobación). Para el comando de verificación del proyecto usá check con configured: true; '
+                  + 'puede pedir aprobación). Usá configured: true solo si el comando configurado demuestra este criterio; '
                   + 'si hace falta otro comando, informalo a Alex para corregir el permiso del mismo verificador. '
-                  + 'No lo delegues a Pau ni apruebes como ejecutado un check pendiente. Comando rechazado: ' + pattern);
+                  + guidance + 'No lo delegues a Pau ni apruebes como ejecutado un check pendiente. Comando rechazado: ' + commandSummary);
               }
             }}, execute),
         };

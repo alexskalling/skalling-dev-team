@@ -156,6 +156,24 @@ def audit(root, project):
     if len(names) != len(rows):
         errors.append('Nombres de skill duplicados')
     entries = catalog(root)
+    # A syntactically valid but old managed skill is still drift. Customized
+    # skills remain untouched and are reported separately.
+    source = root / ('skills-base' if (root/'skills-base').is_dir() else 'skills')
+    manifest = directory/'.skalling-managed.json'
+    managed = json.loads(manifest.read_text()) if manifest.is_file() else {}
+    legacy_file = root/('data' if (root/'data').is_dir() else 'skalling-data')/'skills-managed-legacy.json'
+    legacy = json.loads(legacy_file.read_text()) if legacy_file.is_file() else {}
+    drift, customized = [], []
+    for entry in entries['core']:
+        name = entry['name']
+        src, dst = source/name, directory/name
+        if src.is_dir() and dst.is_dir() and digest(src) != digest(dst):
+            if (root/'skills-base').is_dir() and root.resolve() == project.resolve():
+                drift.append(name)
+            elif digest(dst) in {managed.get(name), legacy.get(name)}:
+                drift.append(name)
+            else:
+                customized.append(name)
     missing = [e['name'] for e in entries['core'] if e['name'] != '_shared' and e['name'] not in names]
     if not (directory/'_shared').is_dir():
         missing.append('_shared (referencias compartidas)')
@@ -199,16 +217,29 @@ def audit(root, project):
     return {'skills': len(rows), 'missing_core': missing, 'invalid': errors,
             'unregistered': sorted(names-registry), 'stale_registry': sorted(registry-names),
             'recommendations': list(recommendations.values()), 'global_skill_warnings': global_warnings,
-            'ready': not (missing or errors or names != registry)}
+            'managed_drift': drift, 'customized': customized,
+            'ready': not (missing or errors or names != registry or drift)}
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('action', choices=['audit','repair','sync','check-core'])
+    parser.add_argument('action', choices=['audit','repair','sync','check-core','check-parity'])
     parser.add_argument('--root', type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument('--project', type=Path)
     parser.add_argument('--target', type=Path)
     args = parser.parse_args()
+    if args.action == 'check-parity':
+        source = args.root/'skills-base'
+        drift = []
+        for entry in catalog(args.root)['core']:
+            name = entry['name']
+            src, dst = source/name, args.target/'skills'/name
+            if not src.is_dir() or not dst.is_dir() or digest(src) != digest(dst):
+                drift.append(name)
+            if dst.is_dir() and name != '_shared':
+                metadata(dst/'SKILL.md')
+        print(json.dumps({'skill_drift': drift}))
+        return 1 if drift else 0
     if args.action == 'check-core':
         rows = inventory(args.target/'skills')
         names = {r['name'] for r in rows}

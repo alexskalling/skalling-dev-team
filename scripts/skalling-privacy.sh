@@ -28,6 +28,7 @@
 #   skalling-privacy.sh status [project]
 #   skalling-privacy.sh internal [project]
 #   skalling-privacy.sh external [project]
+#   skalling-privacy.sh verify-internal [project]  (solo lectura)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -45,6 +46,9 @@ fi
 
 MODE="${1:-status}"
 PROJECT="${2:-$(pwd)}"
+if [ "$MODE" = verify-internal ]; then
+  exec python3 "$SCRIPT_DIR/skalling-privacy-check.py" "$PROJECT"
+fi
 
 # Alias en español -- para que instrucciones de agente en español ("interno"/
 # "externo") no dependan de traducir bien antes de invocar el script.
@@ -59,6 +63,7 @@ Uso:
   skalling-privacy.sh status [project]
   skalling-privacy.sh internal|interno [project]
   skalling-privacy.sh external|externo [project]
+  skalling-privacy.sh verify-internal [project]  (solo lectura)
 EOF
 }
 

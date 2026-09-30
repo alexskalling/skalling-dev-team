@@ -90,6 +90,18 @@ test('v2: check corre si la política del agente lo permite y se rechaza si pedi
   assert.equal(calls.at(-1).payload.configured, true);
   assert.equal(calls.at(-1).payload.argv, undefined);
   assert.equal(wf.options?.codemode, false);
+  const privacy = await wf.execute({ action: 'check', payload: { id: 'x', argv: [
+    'bash', '/Users/example/.config/opencode/scripts/skalling-privacy.sh', 'verify-internal', '/project'] } }, context);
+  assert.match(privacy.content, /ok/);
+  const beforeRejected = calls.length;
+  await assert.rejects(wf.execute({ action: 'check', payload: { id: 'x', argv: [
+    'python3', '-c', 'import subprocess; # check-ignore ' + 'x'.repeat(5000)] } }, context), error => {
+    assert.match(error.message, /verify-internal/);
+    assert.match(error.message, /código inline omitido/);
+    assert.ok(error.message.length < 1200);
+    return true;
+  });
+  assert.equal(calls.length, beforeRejected, 'Rejected inline code never reaches the engine');
 });
 
 test('auditoría A09: gana la ÚLTIMA regla que coincide, como en OpenCode', () => {

@@ -240,5 +240,11 @@ fi
 # Resumen
 # ──────────────────────────────────────────────────────────────────────────────
 
+if python3 "$ROOT/scripts/skalling_skills.py" check-parity --root "$ROOT" --target "$ROOT/.opencode"; then
+    assert_pass "skills core locales coinciden con fuente y tienen metadata válida"
+else
+    assert_fail "skills core locales divergentes o inválidas"
+fi
+
 echo "PASS=$PASS FAIL=$FAIL"
 [[ "$FAIL" -eq 0 ]]

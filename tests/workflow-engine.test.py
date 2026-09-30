@@ -52,6 +52,67 @@ class Workflow(unittest.TestCase):
             db.execute("INSERT INTO plans(slug,title,design_md,status) VALUES('plan','Plan','# diseño','approved')")
             self.plan_id = db.execute("SELECT id FROM plans WHERE slug='plan'").fetchone()[0]
 
+    def test_complete_reconciles_only_bound_tasks_and_finishes_routing(self):
+        with sqlite3.connect(self.db_path) as db:
+            ids = [db.execute("INSERT INTO tasks(plan_id,slug,title,acceptance_md) VALUES(?,?,?,?)",
+                              (self.plan_id, slug, slug, 'value remains one')).lastrowid for slug in ('first', 'second')]
+        self.call('alex', 'start', risk='medium', scope='module', files=['app.py'],
+                  acceptance='value remains one', reuse='existing', execution_mode='staged')
+        self.call('sol', 'plan', evidence='reuse the current module')
+        self.call('sol', 'ready', plan_id=self.plan_id, task_ids=[ids[0]], evidence='only first task')
+        self.verify()
+        self.call('alex', 'complete')
+        self.call('alex', 'complete')  # retries after a lost response must be harmless
+        with sqlite3.connect(self.db_path) as db:
+            self.assertEqual(db.execute('SELECT status FROM tasks ORDER BY id').fetchall(), [('resolved',), ('pending',)])
+            self.assertEqual(db.execute('SELECT status FROM plans WHERE id=?', (self.plan_id,)).fetchone()[0], 'in_progress')
+            self.assertEqual(db.execute('SELECT outcome FROM routing_decisions').fetchone()[0], 'SUCCESS')
+            self.assertEqual(db.execute("SELECT count(*) FROM agent_workflow_events WHERE action='complete'").fetchone()[0], 1)
+
+    def test_plan_binding_requires_explicit_tasks_and_rolls_back_invalid_selection(self):
+        with sqlite3.connect(self.db_path) as db:
+            db.execute("INSERT INTO tasks(plan_id,slug,title) VALUES(?,'first','First')", (self.plan_id,))
+        self.call('alex', 'start', risk='medium', scope='module', files=['app.py'], acceptance='one', reuse='existing')
+        self.call('sol', 'plan', evidence='approved design')
+        for extra in ({}, {'task_ids': [999]}):
+            with self.assertRaisesRegex(ValueError, 'task'):
+                self.call('sol', 'ready', plan_id=self.plan_id, evidence='ready', **extra)
+        self.assertEqual(self.call('alex', 'status')['state'], 'planned')
+
+    def test_last_task_completes_plan_and_failure_rolls_back_all_state(self):
+        from unittest.mock import patch
+        with sqlite3.connect(self.db_path) as db:
+            task = db.execute("INSERT INTO tasks(plan_id,slug,title,acceptance_md) VALUES(?,'only','Only task','value one')", (self.plan_id,)).lastrowid
+        self.call('alex', 'start', risk='medium', scope='module', files=['app.py'], acceptance='value one', reuse='existing')
+        self.call('sol', 'plan', evidence='design is approved')
+        self.call('sol', 'ready', plan_id=self.plan_id, task_ids=[task], evidence='all work selected')
+        self.verify()
+        original = self.engine.finish_lifecycle
+        def interrupted(db, state, now):
+            original(db, state, now)
+            raise ValueError('Simulated interruption before commit')
+        with patch.object(self.engine, 'finish_lifecycle', side_effect=interrupted):
+            with self.assertRaisesRegex(ValueError, 'Simulated interruption'):
+                self.call('alex', 'complete')
+        with sqlite3.connect(self.db_path) as db:
+            self.assertEqual(db.execute('SELECT status FROM tasks').fetchone()[0], 'in_review')
+            self.assertEqual(db.execute('SELECT outcome FROM routing_decisions').fetchone()[0], 'PENDING')
+        self.assertEqual(self.call('alex', 'status')['state'], 'verified')
+        self.call('alex', 'complete')
+        with sqlite3.connect(self.db_path) as db:
+            self.assertEqual(db.execute('SELECT status FROM plans').fetchone()[0], 'completed')
+            self.assertEqual(db.execute('SELECT status FROM tasks').fetchone()[0], 'resolved')
+
+    def test_cancel_closes_metrics_without_claiming_success(self):
+        self.start()
+        result = self.call('alex', 'cancel', evidence='User cancelled this request')
+        self.assertEqual(result['state'], 'cancelled')
+        with sqlite3.connect(self.db_path) as db:
+            self.assertEqual(db.execute('SELECT outcome FROM workflow_metrics').fetchone()[0], 'cancelled')
+            self.assertEqual(db.execute('SELECT outcome FROM routing_decisions').fetchone()[0], 'FAIL')
+        with self.assertRaises(ValueError):
+            self.call('teo', 'deliver')
+
     def test_goal_survives_handoffs_and_requires_all_outcomes(self):
         self.call('alex', 'start', risk='low', scope='local', files=['app.py'],
                   acceptance='value remains one', reuse='existing', intent='Keep totals correct',
@@ -176,6 +237,9 @@ assert.equal(createCore().decide({tool:'shell',agent:fixture.actor,input:{comman
                               'actor': actor}), text=True, capture_output=True)
         self.assertEqual(policy_check.returncode, 0, policy_check.stderr)
         self.assertTrue(self.engine.public_response(before)['local_commit']['ready'])
+        self.assertEqual(self.engine.public_response(before)['local_commit']['delegate_to'],
+                         'luz' if before['risk'] == 'high' else 'jhon')
+        self.assertIn(before['id'], self.engine.public_response(before)['local_commit']['handoff'])
         prepared = self.call(actor, 'prepare_commit')
         self.assertEqual(prepared['state'], before['state'], 'Commit preparation must not bypass workflow completion')
         self.assertEqual(len(prepared['checks']), len(before['checks']), 'Do not rerun verification to commit')
@@ -357,7 +421,9 @@ assert.equal(createCore().decide({tool:'shell',agent:fixture.actor,input:{comman
                                    'Diseño: app.py conserva el valor uno', 'Aceptación: value remains one',
                                    'Aprobado por el usuario en el pedido'], capture_output=True, text=True, env=env)
         self.assertEqual(approved.returncode, 0, approved.stderr)
-        ready = self.call('sol', 'ready', evidence='plan aprobado', plan_id=plan_id)
+        with sqlite3.connect(self.db_path) as db:
+            task_ids = [r[0] for r in db.execute('SELECT id FROM tasks WHERE plan_id=?', (plan_id,))]
+        ready = self.call('sol', 'ready', evidence='plan aprobado', plan_id=plan_id, task_ids=task_ids)
         self.assertEqual(ready['state'], 'implementation_ready')
         self.assertIn('Teo', ready['next_step'])
 

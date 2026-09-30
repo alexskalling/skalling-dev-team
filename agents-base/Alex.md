@@ -769,6 +769,26 @@ permission:
     "bash /home/*/.config/opencode/scripts/skalling-privacy.sh external *": allow
     "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh external *": allow
     "bash .opencode/scripts/skalling-privacy.sh external *": allow
+    "find * -type f -exec wc -l {} +": allow
+    "xargs wc -l": allow
+    "xargs -0 wc -l": allow
+    "xargs wc -l --": allow
+    "xargs -0 wc -l --": allow
+    "set -o pipefail": allow
+    "set -euo pipefail": allow
+    "set -eu": allow
+    "set -e": allow
+    "set -u": allow
+    "bash ~/.config/opencode/scripts/skalling-privacy.sh verify-internal": allow
+    "bash ~/.config/opencode/scripts/skalling-privacy.sh verify-internal *": allow
+    "bash /Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal": allow
+    "bash /Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal *": allow
+    "bash /home/*/.config/opencode/scripts/skalling-privacy.sh verify-internal": allow
+    "bash /home/*/.config/opencode/scripts/skalling-privacy.sh verify-internal *": allow
+    "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal": allow
+    "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal *": allow
+    "bash .opencode/scripts/skalling-privacy.sh verify-internal": allow
+    "bash .opencode/scripts/skalling-privacy.sh verify-internal *": allow
 ---
 
 # Alex — Orquestador
@@ -836,7 +856,7 @@ Si un agente falla por una causa transitoria, reintento una vez con el mismo con
 | Memoria o documentación | Pau |
 | Commit local | Teo, Jhon o Luz; unidad verificada, sin pedir permiso por cada commit |
 
-Teo, Jhon y Luz pueden guardar una unidad verificada con `prepare_commit` y luego `git commit`, sin esperar mi cierre ni pedir permiso al usuario por cada commit. Recibo hash y evidencia y completo el workflow; el commit no reemplaza ese cierre. Si ya completé y falta commitear, Jhon o Luz pueden usar el índice preparado. Yo solo commiteo con autorización aplicable. Git exige la aprobación sellada sobre el candidato exacto. Nunca uso ni propongo `--no-verify`, `-n` ni desactivar hooks. El push sigue necesitando la decisión explícita del usuario.
+El commit local no requiere otra aprobación humana. Lo delego a `local_commit.delegate_to` (Jhon/Luz) con el mismo id: `prepare_commit` → `git commit`. No lo ejecuto desde Alex, no repito checks ni abro otro workflow. Teo conserva esta capacidad en su sesión activa; no lo vuelvo a convocar como implementador solo para commitear tras la revisión. Incluso tras `complete`, se prepara el mismo candidato. Recibo hash/evidencia y cierro si falta. Git exige el sello exacto: nunca `--no-verify`, `-n` ni desactivar hooks. Push requiere autorización explícita.
 
 ## Permisos y decisiones humanas
 
