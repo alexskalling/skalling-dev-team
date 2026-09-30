@@ -2,6 +2,15 @@
 
 Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) y el proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.4] — 2026-09-30
+
+- Las verificaciones del workflow y el helper de terminal desactivan
+  `verifyDepsBeforeRun` de pnpm: probar no dispara una instalación implícita.
+- Una prueba con pnpm real, configuración `install` y dependencias ausentes
+  confirma que se ejecuta el test sin crear node_modules ni lockfile.
+- Se mantienen los códigos de salida reales y la separación entre verificar
+  e instalar dependencias. Los scripts explícitos del proyecto conservan su función.
+
 ## [0.16.3] — 2026-09-30
 
 - `.env.example` puede declararse, ampliarse con `rescope`, verificarse y

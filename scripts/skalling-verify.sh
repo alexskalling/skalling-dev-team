@@ -21,6 +21,10 @@ set -euo pipefail
 # durante la verificación aparecía como cambio sin stagear y la aprobación
 # se rechazaba (auditoría 2026-09-27).
 export PYTHONDONTWRITEBYTECODE=1
+# pnpm 11 can auto-install before running a test. Verification must not
+# resolve or upgrade dependencies as a side effect of `run`/`exec`.
+export PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN=false
+export npm_config_verify_deps_before_run=false
 
 PROJECT="${1:?Uso: skalling-verify.sh <project>}"
 YAML="$PROJECT/.opencode/project.yaml"

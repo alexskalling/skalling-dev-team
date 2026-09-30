@@ -166,6 +166,24 @@ class Workflow(unittest.TestCase):
             lines += [f'  {name}:', '    available: true', f'    command: "{command}"']
         (self.root / '.opencode/project.yaml').write_text('\n'.join(lines) + '\n')
 
+    def test_verifiers_disable_implicit_pnpm_installs_even_with_inherited_install_setting(self):
+        env = {**os.environ, 'PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN': 'install',
+               'npm_config_verify_deps_before_run': 'install'}
+        script = self.root / 'dependency_check.py'
+        script.write_text('import os, pathlib\n'
+                          'if any(os.environ.get(k) != "false" for k in '
+                          '("PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN", "npm_config_verify_deps_before_run")):\n'
+                          '    pathlib.Path("unexpected-install").write_text("dependencies changed")\n')
+        self.configure(unit='python3 dependency_check.py')
+        commands = [lambda: self.engine.run_bounded(['python3', str(script)], self.root, env, 10),
+                    lambda: subprocess.run(['bash', str(ROOT / 'scripts/skalling-verify.sh'), str(self.root)],
+                                           env=env, capture_output=True, check=True)]
+        for execute in commands:
+            with self.subTest(verifier=execute):
+                (self.root / 'unexpected-install').unlink(missing_ok=True)
+                execute()
+                self.assertFalse((self.root / 'unexpected-install').exists())
+
     def call(self, actor, action, **payload):
         if action == 'start':
             payload.setdefault('intent', 'Preserve the fixture API and value')

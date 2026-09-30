@@ -351,6 +351,10 @@ def run_bounded(argv, root, env, timeout):
     si el plugin cancela y llega SIGTERM) se termina el grupo entero, sin
     dejar pruebas huérfanas corriendo."""
     global _ACTIVE
+    # pnpm can install/upgrade dependencies before `run` or `exec`. A check
+    # must use the prepared environment, never repair it implicitly.
+    env = {**env, 'PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN': 'false',
+           'npm_config_verify_deps_before_run': 'false'}
     proc = subprocess.Popen(argv, cwd=root, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             start_new_session=True)
     _ACTIVE = proc
