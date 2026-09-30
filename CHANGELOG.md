@@ -2,6 +2,17 @@
 
 Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) y el proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.2] — 2026-09-30
+
+- `skalling_workflow commit` permite a Teo/Jhon/Luz crear su commit local con
+  hooks y evidencia vigentes, preservando el staging y los archivos de otras tareas.
+- El workflow registra cambios previos; no los confunde con scope creep. Los
+  flujos antiguos pueden reconocer cambios externos con procedencia explícita.
+- El runtime de Skalling puede revisarse y commitearse como una unidad high
+  separada; context, bases privadas y secretos siguen excluidos.
+- Alex delega la operación al verificador; no pide al usuario ejecutar commits
+  ni helpers humanos. No se repiten checks válidos para resolver un índice mixto.
+
 ## [0.16.1] — 2026-09-30
 
 - Corrige instalación y auditoría de skills en Windows: catálogo, manifiestos y

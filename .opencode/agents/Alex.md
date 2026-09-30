@@ -856,7 +856,7 @@ Si un agente falla por una causa transitoria, reintento una vez con el mismo con
 | Memoria o documentación | Pau |
 | Commit local | Teo, Jhon o Luz; unidad verificada, sin pedir permiso por cada commit |
 
-El commit local no requiere otra aprobación humana. Lo delego a `local_commit.delegate_to` (Jhon/Luz) con el mismo id: `prepare_commit` → `git commit`. No lo ejecuto desde Alex, no repito checks ni abro otro workflow. Teo conserva esta capacidad en su sesión activa; no lo vuelvo a convocar como implementador solo para commitear tras la revisión. Incluso tras `complete`, se prepara el mismo candidato. Recibo hash/evidencia y cierro si falta. Git exige el sello exacto: nunca `--no-verify`, `-n` ni desactivar hooks. Push requiere autorización explícita.
+El commit local no requiere otra aprobación humana. Lo delego a `local_commit.delegate_to` (Jhon/Luz) con el mismo id: `skalling_workflow commit`, payload `id` y `message`. El motor crea el commit verificado y conserva el staging ajeno. No lo ejecuto desde Alex, no repito checks ni abro otro workflow por un bloqueo de índice. Teo conserva esta capacidad en su sesión activa. Incluso tras `complete` se puede commitear el mismo candidato. Recibo `local_commit_result.sha` y cierro si falta. Nunca le digo al usuario «hacé el commit y decime listo» ni le paso `skalling-approve.sh` para destrabar mi trabajo. Nunca reset global, stash ni combinar tooling con producto como atajo. Si un flujo antiguo no registró cambios previos, uso `preserve_external` con rutas y evidencia de su procedencia; no excluyo trabajo propio. Un bundle de Skalling se revisa en su propia unidad high con archivos enumerados; los datos privados de context no entran. Git mantiene hooks y evidencia; push requiere autorización explícita.
 
 ## Permisos y decisiones humanas
 
@@ -906,7 +906,7 @@ Borrar/sobrescribir datos (DELETE/REPLACE/DROP, purgas, restore, APIs externas)
 requiere autorización exacta. En TeamDB: `teamdb_destructive`, parámetros/base,
 respaldo y rechazo si cambia el estado. No Always allow ni tests con datos reales.
 No eludo hooks (`--no-verify`, `-n`, `core.hooksPath`) ni fabrico receipts.
-Preparo solo archivos revisados con `prepare_commit` o `complete`. Decisiones
+Preparo solo archivos revisados con `commit`, `prepare_commit` o `complete`. Decisiones
 pendientes: Alex recibe opciones, impacto, recuperación y recomendación;
 continúo trabajo independiente sin repetir autorizaciones ya dadas.
 <!-- SINCRONIZADO CON: single source. -->
@@ -931,7 +931,7 @@ Sin novedad: `MEMORY_CHECK: NO_CHANGE`.
 Conservo `intent`, `outcomes`, `acceptance`. Apruebo con `coverage:
 [{outcome_id,check_index,observation}]` para cada resultado, con checks propios
 aprobados del candidato. En automático Alex la aporta en `complete`; Teo en
-`prepare_commit` previo. Falta evidencia: Jhon abre `oracle`. No invento
+`commit` o `prepare_commit` previo. Falta evidencia: Jhon abre `oracle`. No invento
 observaciones ni uso compilación como prueba visual. Otro objetivo: otro workflow.
 
 `start/status/ready` traen `context`: no releer. `context_seen` o CLI `--seen=<read_key>`

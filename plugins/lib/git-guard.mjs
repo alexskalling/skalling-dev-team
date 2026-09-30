@@ -755,7 +755,7 @@ export function hookBypassViolation(command) {
     || /\bcore\.hooksPath\b|\bHUSKY=0\b/.test(masked);
   if (!bypass) return null;
   return 'Quitá --no-verify/-n/core.hooksPath; los hooks siguen activos. Teo/Jhon/Luz usan '
-    + 'skalling_workflow prepare_commit con el id verificado y luego git commit -m "mensaje", como comando separado. '
+    + 'skalling_workflow commit con id verificado y message; el motor conserva staging ajeno y ejecuta los hooks. '
     + 'Si el hook falla, usá su error concreto: no implica siempre falta de pruebas y no se repiten checks ya válidos. '
     + 'Pau no prepara commits; el push requiere autorización del usuario.';
 }
@@ -906,10 +906,10 @@ const PAU_ENGINEERING_BLOCKED = 'Pau documenta evidencia existente; las pruebas 
   + 'Un permiso bloqueado se resuelve para el mismo rol: no se delega a Pau ni se declara verificado un check sin ejecutar.';
 
 const COMMIT_DELEGATION_REQUIRED = 'El commit local se delega a Jhon o Luz con el id del workflow existente: '
-  + 'prepare_commit y luego git commit, conservando la evidencia válida y sin repetir pruebas. '
+  + 'skalling_workflow commit con id y message, conservando staging ajeno y evidencia válida sin repetir pruebas. '
   + 'Alex orquesta; Pol/Sol/Jes no commitean. No pedir al usuario otro permiso para suplir esta delegación '
   + 'ni enviar el commit a Pau. Teo también puede commitear desde su sesión de implementación ya activa. '
-  + 'Si falta revisión o el índice contiene archivos fuera del alcance, resolver ese bloqueo sin eludir el hook.';
+  + 'Si falta revisión, completarla; archivos ajenos en el índice se preservan con action commit. No pedir al usuario ejecutar Git.';
 
 // Detect execution, not quoted mentions in evidence or documentation. This
 // catches accidental role substitution; it is not a sandbox for arbitrary code.

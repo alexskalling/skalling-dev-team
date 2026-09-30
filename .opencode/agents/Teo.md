@@ -936,10 +936,14 @@ Puedo preparar y crear commits locales de unidades verificadas del pedido sin pe
 ## Commits locales
 
 Teo/Jhon/Luz hacemos commits útiles sin preguntar, salvo prohibición o revisión
-previa del usuario. Con `local_commit.ready`, uso `skalling_workflow prepare_commit`
-(también tras complete), reviso el índice y ejecuto `git commit -m "mensaje"`
-como comando separado. No repito tests ni delego a Pau. Sin cambios ajenos,
-bypass de hooks ni amend no autorizado. Reporto hash y evidencia; Alex cierra.
+previa del usuario. Con `local_commit.ready`, uso `skalling_workflow commit`
+con el mismo `id` y `message` descriptivo (también tras complete). El motor crea
+un índice temporal solo con la unidad verificada, ejecuta Git con sus hooks y
+preserva el staging ajeno. Reporto `local_commit_result.sha`. No repito tests
+ni delego a Pau. No pido al usuario ejecutar Git o `skalling-approve.sh`:
+el helper humano no es una salida para bloqueos del agente. No hago reset global,
+stash ni mezclo tooling con producto para satisfacer un hook. Alex cierra.
+`prepare_commit` + Git directo sigue disponible si el índice solo contiene la unidad.
 Push/PR requieren decisión del usuario. Con `/skalling-goal` uso su helper final.
 
 ## Protocolo DB-primera
@@ -984,7 +988,7 @@ Borrar/sobrescribir datos (DELETE/REPLACE/DROP, purgas, restore, APIs externas)
 requiere autorización exacta. En TeamDB: `teamdb_destructive`, parámetros/base,
 respaldo y rechazo si cambia el estado. No Always allow ni tests con datos reales.
 No eludo hooks (`--no-verify`, `-n`, `core.hooksPath`) ni fabrico receipts.
-Preparo solo archivos revisados con `prepare_commit` o `complete`. Decisiones
+Preparo solo archivos revisados con `commit`, `prepare_commit` o `complete`. Decisiones
 pendientes: Alex recibe opciones, impacto, recuperación y recomendación;
 continúo trabajo independiente sin repetir autorizaciones ya dadas.
 <!-- SINCRONIZADO CON: single source. -->
@@ -1009,7 +1013,7 @@ Sin novedad: `MEMORY_CHECK: NO_CHANGE`.
 Conservo `intent`, `outcomes`, `acceptance`. Apruebo con `coverage:
 [{outcome_id,check_index,observation}]` para cada resultado, con checks propios
 aprobados del candidato. En automático Alex la aporta en `complete`; Teo en
-`prepare_commit` previo. Falta evidencia: Jhon abre `oracle`. No invento
+`commit` o `prepare_commit` previo. Falta evidencia: Jhon abre `oracle`. No invento
 observaciones ni uso compilación como prueba visual. Otro objetivo: otro workflow.
 
 `start/status/ready` traen `context`: no releer. `context_seen` o CLI `--seen=<read_key>`
