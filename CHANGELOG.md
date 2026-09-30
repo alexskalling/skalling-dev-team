@@ -2,6 +2,16 @@
 
 Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) y el proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.3] — 2026-09-30
+
+- `.env.example` puede declararse, ampliarse con `rescope`, verificarse y
+  commitearse por Teo/Jhon/Luz sin pedir una autorización humana inexistente.
+- La excepción es exacta: no incluye `.env`, variantes privadas, backups ni
+  enlaces simbólicos. Los hooks siguen revisando secretos dentro de la plantilla.
+- El rechazo de archivos sensibles aclara que `skalling-approve.sh` no modifica
+  el alcance ni autoriza archivos; evita recomendar ese helper como desbloqueo.
+- Regresiones crean commits reales con hooks y conservan staging de otras tareas.
+
 ## [0.16.2] — 2026-09-30
 
 - `skalling_workflow commit` permite a Teo/Jhon/Luz crear su commit local con

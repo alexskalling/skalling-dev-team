@@ -145,7 +145,8 @@ def runtime_file(root, name):
 
 
 def scoped(root, name):
-    path = (root / name).resolve()
+    declared = root / name
+    path = declared.resolve()
     if not path.is_relative_to(root) or '.git' in path.relative_to(root).parts:
         raise ValueError('Scope must stay in product files within the project')
     parts = path.relative_to(root).parts
@@ -154,8 +155,14 @@ def scoped(root, name):
         raise ValueError('Private Skalling context is not a commit unit; enumerate only runtime files')
     if path.is_dir():
         raise ValueError('Enumerate individual files; directories cannot identify an exact reviewed candidate')
-    if path.name.startswith('.env') or path.suffix in {'.pem', '.db', '.sqlite', '.sqlite3'}:
-        raise ValueError('Sensitive files require a separate authorized operation')
+    # The public example is already readable under the agent policy. Treat it
+    # as a regular reviewed file, never as an alias for a credential file.
+    if declared.name == '.env.example' and declared.is_symlink():
+        raise ValueError('.env.example must be a regular template, not a symbolic link')
+    if any((p.name.startswith('.env') and p.name != '.env.example')
+           or p.suffix in {'.pem', '.db', '.sqlite', '.sqlite3'} for p in (declared, path)):
+        raise ValueError('Sensitive files are excluded from workflow scope; .env.example is allowed as a regular template. '
+                         'skalling-approve.sh seals verification, it cannot authorize or change this scope')
     return path
 
 

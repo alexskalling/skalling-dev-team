@@ -657,6 +657,84 @@ assert.equal(createCore().decide({tool:'shell',agent:fixture.actor,input:{comman
         self.call('teo', 'rescope', files=['extra.py'], evidence='needed a shared helper module')
         self.assertEqual(self.call('teo', 'deliver')['state'], 'verification_ready')
 
+    def commit_env_example(self, actor, secret=False):
+        other = self.root / 'other.txt'
+        other.write_text('unrelated user work\n')
+        subprocess.run(['git', 'add', 'other.txt'], cwd=self.root, check=True)
+        staged = subprocess.check_output(['git', 'ls-files', '-s', '--', 'other.txt'], cwd=self.root)
+        self.start('medium', execution_mode='focused')
+        content = 'PUBLIC_SITE_WORLD=https://example.org\n'
+        if secret:
+            content += 'TOKEN=' + 'ghp_' + 'x' * 30 + '\n'
+        (self.root / '.env.example').write_text(content)
+        subprocess.run(['git', 'add', '.env.example'], cwd=self.root, check=True)
+        with self.assertRaisesRegex(ValueError, 'Scope creep'):
+            self.call('teo', 'deliver')
+        self.call('teo', 'rescope', files=['.env.example'],
+                  evidence='Public site URL template is part of the requested configuration')
+        self.call('teo', 'deliver')
+        self.call('jhon', 'oracle', expected='example.org URL', negative='missing URL',
+                  invariant='public configuration example', refutation='compare template bytes')
+        self.call('jhon', 'check', argv=['python3', '-c',
+                  'from pathlib import Path; assert Path(".env.example").read_text() == ' + repr(content)],
+                  method='exact template assertion', criterion='public URL configured')
+        self.call('jhon', 'approve', evidence='template assertion passed')
+        hook = self.root / '.git/hooks/pre-commit'
+        hook.write_text(f'#!/bin/sh\nexec python3 "{ROOT / "scripts/hooks/git-gate.py"}" pre-commit\n')
+        hook.chmod(0o755)
+        head = self.engine.base_head(self.root)
+        if secret:
+            index = (self.root / '.git/index').read_bytes()
+            with self.assertRaisesRegex(ValueError, 'posible secreto'):
+                self.call(actor, 'commit', message='fix: plantilla de configuración')
+            self.assertEqual(self.engine.base_head(self.root), head)
+            self.assertEqual((self.root / '.git/index').read_bytes(), index)
+        else:
+            result = self.call(actor, 'commit', message='fix: plantilla de configuración')
+            self.assertTrue(result['local_commit_result']['created'])
+            changed = subprocess.check_output(['git', 'diff', '--name-only', head, 'HEAD'], cwd=self.root, text=True)
+            self.assertEqual(changed.strip(), '.env.example')
+            self.assertEqual(subprocess.check_output(['git', 'show', 'HEAD:.env.example'], cwd=self.root, text=True), content)
+            self.assertEqual(self.call('alex', 'complete')['state'], 'completed')
+        self.assertEqual(subprocess.check_output(['git', 'ls-files', '-s', '--', 'other.txt'], cwd=self.root), staged)
+
+    def test_teo_rescopes_and_commits_env_example_with_hooks(self):
+        self.commit_env_example('teo')
+
+    def test_jhon_rescopes_and_commits_env_example_with_hooks(self):
+        self.commit_env_example('jhon')
+
+    def test_luz_rescopes_and_commits_env_example_with_hooks(self):
+        self.commit_env_example('luz')
+
+    def test_env_example_still_passes_through_secret_scan(self):
+        self.commit_env_example('jhon', secret=True)
+
+    def test_env_example_allowed_at_start_but_real_env_and_similar_names_rejected(self):
+        self.call('alex', 'start', risk='low', scope='local', files=['.env.example'],
+                  acceptance='document public site URL', reuse='existing template')
+        for name in ('.env', '.env.local', '.env.production', '.env.example.local',
+                     '.env.example.bak', '.env.example-secret', 'config/.env',
+                     'config/.env.local', 'private.pem', 'data.sqlite'):
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, 'Sensitive files'):
+                self.call('teo', 'rescope', files=[name], evidence='must remain protected')
+        self.assertEqual(self.engine.scoped(self.root.resolve(), 'config/.env.example'), self.root.resolve() / 'config/.env.example')
+
+    @unittest.skipIf(os.name == 'nt', 'Windows symlinks require elevated privileges')
+    def test_env_example_cannot_alias_secrets_or_escape_project(self):
+        template = self.root / '.env.example'
+        for target in (self.root / '.env', self.root / 'app.py', self.root.parent / '.env.example'):
+            with self.subTest(target=target):
+                template.symlink_to(target)
+                try:
+                    with self.assertRaises(ValueError):
+                        self.engine.scoped(self.root.resolve(), '.env.example')
+                finally:
+                    template.unlink()
+        (self.root / '.env').symlink_to(template)
+        with self.assertRaisesRegex(ValueError, 'Sensitive files'):
+            self.engine.scoped(self.root.resolve(), '.env')
+
     def test_rescope_requires_evidence_and_new_files(self):
         self.start()
         with self.assertRaises(ValueError):
