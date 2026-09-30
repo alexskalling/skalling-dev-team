@@ -90,18 +90,23 @@ class WorkflowSealsGitGateReceipt(unittest.TestCase):
         self.call('jhon', 'oracle', expected='one', negative='two', invariant='integer', refutation='test')
         self.call('jhon', 'check', argv=['bash', 'tests/check.test.sh'], method='falsification', criterion='value stays 1')
         self.call('jhon', 'approve', evidence='falsification covers the declared criterion')
-        with self.assertRaisesRegex(ValueError, 'outside the reviewed scope'):
-            self.call('alex', 'complete')
-        self.assertEqual(self.call('alex', 'status')['state'], 'verified')
+        before = subprocess.check_output(['git', 'ls-files', '--stage', '-z'], cwd=self.root)
+        completed = self.call('alex', 'complete')
+        self.assertEqual(completed['state'], 'completed')
+        self.assertTrue(completed['receipt_tree_hash'])
+        self.assertEqual(before, subprocess.check_output(['git', 'ls-files', '--stage', '-z'], cwd=self.root))
         db = sqlite3.connect((self.root / '.opencode/context/team.db').as_uri() + '?mode=ro', uri=True)
         self.addCleanup(db.close)
-        self.assertEqual(db.execute('SELECT count(*) FROM receipts').fetchone()[0], 0)
+        # The isolated receipt must NEVER authorize the unrelated real index.
+        with self.assertRaises(ValueError):
+            self.gitgate.check(['--cached'], db, 'pre-commit')
         subprocess.run(['git', 'add', '--', 'app.py', 'tests/check.test.sh'], cwd=self.root, check=True)
         with self.assertRaises(ValueError):
             self.gitgate.check(['--cached'], db, 'pre-commit')
-        # Sacado del índice lo no revisado, el mismo flujo sí completa.
+        # The very same receipt authorizes exactly the declared files, proving
+        # completion did not bless the unreviewed tooling along with them.
         subprocess.run(['git', 'rm', '-q', '--cached', '--', '.opencode/unreviewed.py'], cwd=self.root, check=True)
-        self.assertEqual(self.call('alex', 'complete')['state'], 'completed')
+        self.gitgate.check(['--cached'], db, 'pre-commit')
 
     def test_uncompleted_workflow_still_blocks_git_gate(self):
         self.call('alex', 'start', risk='low', files=['app.py', 'tests/check.test.sh'],

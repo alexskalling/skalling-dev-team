@@ -189,8 +189,8 @@ def check(diff_args, db, label, equivalents=None, require_receipt=True):
         hint = (' Jhon no pudo correr tests (no hay testing.unit.command): configurarlo, pedir revisión de Luz '
                 '(skalling-review.sh) o que un humano selle con SKALLING_VERIFY_WAIVER="motivo".') if not_run and not decisive else ''
         raise ValueError(f'{label}: falta revisión aprobada para estos cambios ({digest}). '
-                         'Teo/Jhon/Luz pueden commitear: dentro de OpenCode usá skalling_workflow prepare_commit '
-                         'con el id del workflow verificado y luego git commit -m "mensaje". '
+                         'Teo/Jhon/Luz pueden commitear: dentro de OpenCode usá skalling_workflow commit '
+                         'con id del workflow verificado y message; preserva el staging ajeno y ejecuta este hook. '
                          'El motor sella la evidencia de Jhon/Luz o la verificación automática sobre el candidato exacto; '
                          'no repitas checks válidos ni delegues el commit a Pau. '
                          'No fabricar comprobantes ni limpiar memoria para desbloquear Git.' + hint
