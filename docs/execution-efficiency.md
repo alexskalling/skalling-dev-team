@@ -1,7 +1,9 @@
 # Ejecución con menos espera
 
 `skalling-execution-efficiency` aplica un contrato breve antes de cada llamada
-al modelo, también a los agentes nativos Build y Plan. No requiere TeamDB ni
+al modelo exclusivamente para Alex, Pol, Sol, Teo, Jhon, Luz, Jes y Pau.
+Build, Plan, General y cualquier otro agente conservan su contexto original y
+sus comandos no se observan. No requiere TeamDB ni
 un workflow. El instalador lo distribuye junto con los demás plugins.
 
 Prioriza agrupar consultas independientes, guardar y reutilizar logs de pruebas,
@@ -20,11 +22,12 @@ de latencia ya medida. No reutiliza automáticamente resultados, porque no puede
 demostrar que código, dependencias y entorno siguen iguales. Una repetición
 observada no se clasifica automáticamente como desperdicio.
 
-Puede instalarse solo en OpenCode v2 añadiendo la ruta del directorio
-`plugins/skalling-execution-efficiency` a `plugins` en la configuración, con
+El instalador de Skalling registra el directorio
+`plugins/skalling-execution-efficiency` en `plugins` en la configuración, con
 `plugins/skalling-execution-efficiency.js` y `plugins/lib/execution-efficiency.mjs`
 como hermanos. OpenCode 2.0.21 exige un directorio de paquete, no el archivo JS.
-No requiere instalar Alex ni cambia permisos o agentes disponibles. Las
+El complemento no se instala globalmente por separado. Se distribuye con
+Skalling y solo actúa sobre sus ocho agentes; no cambia permisos ni agentes disponibles. Las
 sesiones ya cargadas pueden necesitar reiniciar OpenCode para tomarlo.
 
 Validación focal: `node --test tests/execution-efficiency.test.mjs`.

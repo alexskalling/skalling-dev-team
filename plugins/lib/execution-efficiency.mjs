@@ -3,6 +3,8 @@
 import { createHash } from 'node:crypto';
 
 export const marker = 'SKALLING_EXECUTION_EFFICIENCY';
+const skallingAgents = new Set(['alex', 'pol', 'sol', 'teo', 'jhon', 'luz', 'jes', 'pau']);
+const isSkalling = agent => typeof agent === 'string' && skallingAgents.has(agent.toLowerCase());
 export const policy = `Trabaja con la menor latencia compatible con el resultado pedido y las verificaciones necesarias.
 - Resuelve primero el alcance y el criterio observable usando contexto ya disponible. Consulta memoria vigente y después solo los archivos o el estado remoto necesarios. No conviertas una pregunta en implementación ni añadas infraestructura de despliegue sin comprobar la existente.
 - Agrupa lecturas y consultas independientes en una llamada cuando sea posible. Paraleliza solo operaciones independientes; no escrituras sobre el mismo estado ni operaciones dependientes.
@@ -21,6 +23,7 @@ export async function setupEfficiency(ctx) {
   const sessions = new Map();
   try {
     await ctx.tool?.hook('execute.after', async event => {
+      if (!isSkalling(event.agent)) return;
       if (!event.sessionID || !['shell', 'bash', 'terminal'].includes(event.tool)) return;
       const command = event.input?.command;
       if (typeof command !== 'string') return;
@@ -38,15 +41,16 @@ export async function setupEfficiency(ctx) {
       state.waited = /\bsleep\s+(?:[3-9]\d|\d{3,})(?:s)?\b|\bgh\s+run\s+watch\b/.test(command);
     });
     await ctx.session.hook('context', async event => {
+      // Remove only our prior capsule, including when switching to a native agent.
+      for (let i = event.system.length - 1; i >= 0; i--) {
+        if (event.system[i].metadata?.skalling === marker) event.system.splice(i, 1);
+      }
+      if (!isSkalling(event.agent)) return;
       const state = sessions.get(event.sessionID);
       const hints = [];
       if (state?.filtered) hints.push('La última salida shell fue filtrada: consulta el log existente y comprueba el estado original antes de repetir el comando.');
       if (state?.waited) hints.push('El último comando incluía espera bloqueante: consulta el estado actual antes de programar otra espera.');
       if (state?.repeats) hints.push(`Se observaron ${state.repeats} repeticiones de comandos en esta sesión. No implica que sobren: verifica qué cambió antes de repetir pruebas.`);
-      // Preserve the shared array reference for other context hooks.
-      for (let i = event.system.length - 1; i >= 0; i--) {
-        if (event.system[i].metadata?.skalling === marker) event.system.splice(i, 1);
-      }
       event.system.push({ type: 'text', metadata: { skalling: marker }, text: marker + '\n' + policy + (hints.length ? '\n' + hints.join('\n') : '') });
       return event;
     });

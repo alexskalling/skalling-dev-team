@@ -9,14 +9,14 @@ async function fixture() {
     session: { hook: async (name, fn) => { hooks[name] = fn; } },
     tool: { hook: async (name, fn) => { hooks[name] = fn; } } };
   const cleanup = await setupEfficiency(ctx);
-  const event = (agent = 'build', sessionID = 's1') => ({ agent, sessionID, system: [{ type: 'text', text: 'original' }] });
+  const event = (agent = 'Alex', sessionID = 's1') => ({ agent, sessionID, system: [{ type: 'text', text: 'original' }] });
   return { ctx, hooks, cleanup, event };
 }
 
-test('native Build, Plan and all specialists receive policy once, without changing original instructions', async () => {
+test('only Skalling agents receive policy once, without changing original instructions', async () => {
   const f = await fixture();
   try {
-    for (const agent of ['build', 'plan', 'Alex', 'Teo', 'Jhon', 'Luz']) {
+    for (const agent of ['Alex', 'Pol', 'Sol', 'Teo', 'Jhon', 'Luz', 'Jes', 'Pau']) {
       const e = f.event(agent);
       const system = e.system;
       await f.hooks.context(e); await f.hooks.context(e);
@@ -33,7 +33,7 @@ test('native Build, Plan and all specialists receive policy once, without changi
 test('observes repeated commands and lossy output without executing, rewriting or declaring success', async () => {
   const f = await fixture();
   try {
-    const call = { sessionID: 's1', tool: 'shell', status: 'completed',
+    const call = { agent: 'Teo', sessionID: 's1', tool: 'shell', status: 'completed',
       input: { command: 'SECRET=private npm test | tail -8' }, result: { exit: 0 } };
     const before = structuredClone(call);
     await f.hooks['execute.after'](call); await f.hooks['execute.after'](call);
@@ -50,7 +50,7 @@ test('observes repeated commands and lossy output without executing, rewriting o
 test('long waits are advisory; next command clears transient hints and permissions remain untouched', async () => {
   const f = await fixture();
   try {
-    const call = { sessionID: 's1', tool: 'shell', input: { command: 'sleep 150; gh pr view 8' } };
+    const call = { agent: 'Teo', sessionID: 's1', tool: 'shell', input: { command: 'sleep 150; gh pr view 8' } };
     await f.hooks['execute.after'](call);
     const e = f.event(); await f.hooks.context(e);
     assert.match(e.system[1].text, /último comando incluía espera/);
@@ -66,11 +66,29 @@ test('bounded session history, cleanup and unsupported runtimes do not retain st
   assert.equal(await setupEfficiency({}), undefined);
   const f = await fixture();
   for (let i = 0; i < 65; i++) {
-    for (let j = 0; j < 2; j++) await f.hooks['execute.after']({ sessionID: 's' + i, tool: 'shell', input: { command: 'true' } });
+    for (let j = 0; j < 2; j++) await f.hooks['execute.after']({ agent: 'Teo', sessionID: 's' + i, tool: 'shell', input: { command: 'true' } });
   }
-  const e = f.event('build', 's0'); await f.hooks.context(e);
+  const e = f.event('Teo', 's0'); await f.hooks.context(e);
   assert.doesNotMatch(e.system[1].text, /Se observaron/);
   f.cleanup();
   const cleanup = await setupEfficiency(f.ctx);
   assert.equal(typeof cleanup, 'function'); cleanup();
+});
+
+test('Build, Plan, General and unknown agents are untouched and unobserved', async () => {
+  const f = await fixture();
+  try {
+    for (const agent of ['build', 'plan', 'Build', 'Plan', 'general', 'custom', undefined]) {
+      const e = { ...f.event(), agent };
+      const before = structuredClone(e);
+      const call = { agent, sessionID: 's1', tool: 'shell', input: { command: 'sleep 150; npm test | tail -8' } };
+      await f.hooks['execute.after'](call); await f.hooks['execute.after'](call);
+      await f.hooks.context(e);
+      assert.deepEqual(e, before);
+    }
+    const skalling = f.event(); await f.hooks.context(skalling);
+    assert.doesNotMatch(skalling.system[1].text, /Se observaron|última salida shell fue filtrada|último comando incluía espera/);
+    skalling.agent = 'build'; await f.hooks.context(skalling);
+    assert.deepEqual(skalling.system, [{ type: 'text', text: 'original' }]);
+  } finally { f.cleanup(); }
 });
