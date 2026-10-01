@@ -120,6 +120,7 @@ print("\t".join([r["risk"], r["route"], r["agents"], r["verification"],
     verification="readiness"
   fi
   if [ "$record" = true ]; then
+    [ "$kind" != query ] || { printf 'ERROR: query es de solo lectura; --record no aplica\n' >&2; return 2; }
     [ -n "$intent" ] || { printf 'ERROR: --record requiere --intent\n' >&2; return 2; }
     [ -n "$request_id" ] || request_id="req-$(date +%Y%m%d%H%M%S)-$$"
     persist_classification "$project_db" "$request_id" "$intent" "$route" "$agents" "$risk" "$supersedes"
@@ -154,7 +155,7 @@ if kind == "code" and allowed == "true":
             blockers.append("Sol debe preparar un plan aprobado: --plan-id")
     if blockers:
         allowed = "false"
-result = dict(risk=risk, route=route, agents=agents, verification=verification,
+result = dict(authorizes=False, risk=risk, route=route, agents=agents, verification=verification,
               needs_user_decision=decision == 'true', implementation_allowed=allowed == 'true',
               readiness=readiness, blockers=blockers,
               request_context=dict(files=files, acceptance=acceptance, reuse=reuse))
@@ -168,7 +169,7 @@ PY
 }
 
 usage() {
-    printf 'Uso:\n  %s classify --kind code|research|audit --risk low|medium|high --scope local|module|cross-cutting|unknown [--clarity clear|ambiguous] [--decision none|pending|resolved] [--sensitive] [--visual] [--file RUTA --acceptance TEXTO --reuse TEXTO --plan-id ID] [--record --intent TEXTO --project RUTA --supersedes REQUEST_ID]\n  --record solo para research/audit; para código la clasificación la registra skalling_workflow start.\n' "$0"
+    printf 'Uso:\n  %s classify --kind code|query|research|audit --risk low|medium|high --scope local|module|cross-cutting|unknown [--clarity clear|ambiguous] [--decision none|pending|resolved] [--sensitive] [--visual] [--file RUTA --acceptance TEXTO --reuse TEXTO --plan-id ID] [--record --intent TEXTO --project RUTA --supersedes REQUEST_ID]\n  --record solo para research/audit; para código la clasificación la registra skalling_workflow start.\n' "$0"
 }
 
 case "${1:-help}" in

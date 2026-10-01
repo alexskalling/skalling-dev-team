@@ -24,8 +24,8 @@ ROUTES = {
 
 
 def normalize(kind, risk, scope='unknown', clarity='clear', decision='none', sensitive=False, visual=False):
-    if kind not in {'code', 'research', 'audit'}:
-        raise ValueError('kind requerido: code, research o audit')
+    if kind not in {'code', 'query', 'research', 'audit'}:
+        raise ValueError('kind requerido: code, query, research o audit')
     if risk not in {'low', 'medium', 'high'}:
         raise ValueError('risk debe ser low, medium o high')
     if scope not in {'local', 'module', 'cross-cutting', 'unknown'}:
@@ -39,7 +39,9 @@ def normalize(kind, risk, scope='unknown', clarity='clear', decision='none', sen
         risk = 'high'
     elif scope == 'module' and risk == 'low':
         risk = 'medium'
-    if kind == 'research':
+    if kind == 'query':
+        route, agents, verification = 'ANSWER', 'Alex', 'memory-and-targeted-read'
+    elif kind == 'research':
         route, agents, verification = 'RESEARCH', 'Alex → Jes', 'sources'
     elif kind == 'audit':
         route, agents, verification = 'DIRECT', 'Alex → Luz', 'audit'
@@ -57,6 +59,7 @@ def normalize(kind, risk, scope='unknown', clarity='clear', decision='none', sen
         'kind': kind, 'risk': risk, 'scope': scope, 'route': route, 'agents': agents,
         'verification': verification, 'visual': bool(visual),
         'needs_user_decision': needs_user_decision,
+        'authorizes': False,
         'implementation_allowed': kind == 'code' and scope != 'unknown' and not needs_user_decision,
     }
 

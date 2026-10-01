@@ -69,7 +69,7 @@ def memory_item(table, item, body_key, seen=()):
     return item
 
 
-def request_context(conn, project, query, top_k=8, max_bytes=8000, visual=False, options=()):
+def request_context(conn, project, query, top_k=8, max_bytes=8000, visual=False, options=(), *, query_only=False):
     """Bounded retrieval, shared by CLI and workflow delivery."""
     if not 1 <= top_k <= 50 or not 512 <= max_bytes <= 100000:
         raise ValueError("top-k must be 1..50 and max-bytes 512..100000")
@@ -87,7 +87,10 @@ def request_context(conn, project, query, top_k=8, max_bytes=8000, visual=False,
         "preferences": ("slug", "body_md", ""),
     }
     result = {key: [] for key in tables}
-    result.update(omitted=[], needs_expansion=False, more_matches=False, freshness=freshness(conn, project))
+    status = ({'status': 'not_checked', 'proves_live_state': False,
+               'meaning': 'Memoria registrada; confirmar sólo el dato actual requerido en su fuente.'}
+              if query_only else freshness(conn, project))
+    result.update(omitted=[], needs_expansion=False, more_matches=False, freshness=status)
     seen = {x[5:] for x in options if x.startswith("seen:")}
     def encode():
         return json.dumps(result, ensure_ascii=False, separators=(",", ":"))
@@ -100,7 +103,7 @@ def request_context(conn, project, query, top_k=8, max_bytes=8000, visual=False,
         for anchor in anchors:
             clauses.append("instr(lower(coalesce(" + body + ",'')), ?) > 0")
             params.append(anchor)
-        if table == "concepts":
+        if table == "concepts" and not query_only:
             clauses.append("slug IN ('project-summary','project-stack'" + (",'design-system'" if visual else "") + ")")
         if not clauses:
             continue
@@ -115,9 +118,12 @@ def request_context(conn, project, query, top_k=8, max_bytes=8000, visual=False,
             score_params.append(anchor)
         score = " + ".join(score_parts) or "0"
         priority = ("CASE slug WHEN 'project-summary' THEN 10000 WHEN 'design-system' THEN "
-                    + ("9000" if visual else "0") + " WHEN 'project-stack' THEN 8000 ELSE 0 END") if table == "concepts" else "0"
+                    + ("9000" if visual else "0") + " WHEN 'project-stack' THEN 8000 ELSE 0 END") if table == "concepts" and not query_only else "0"
+        recorded = ({'concepts': 'updated_at', 'decisions': 'decided_at',
+                     'known_problems': 'discovered_at', 'preferences': 'NULL'}[table]
+                    if query_only else 'NULL')
         rows = conn.execute("SELECT slug," + title + ",coalesce(" + body + ",''),(" + priority +
-                            " + " + score + ") AS rank FROM " + table + " WHERE " + where +
+                            " + " + score + ") AS rank," + recorded + " FROM " + table + " WHERE " + where +
                             " ORDER BY rank DESC,slug LIMIT ?", score_params + params + [top_k + 1]).fetchall()
         if len(rows) > top_k:
             # Hay más coincidencias que top_k: nunca se esconde. Quien recibe la
@@ -125,8 +131,11 @@ def request_context(conn, project, query, top_k=8, max_bytes=8000, visual=False,
             result["more_matches"] = True
             result["needs_expansion"] = True
             result["omitted"].append({"table": table, "slug": rows[top_k][0]})
-        for slug, heading, body_text, rank in rows[:top_k]:
-            candidates.append((rank, table, {"slug": slug, "title": heading, "body": body_text}))
+        for slug, heading, body_text, rank, recorded_at in rows[:top_k]:
+            item = {"slug": slug, "title": heading, "body": body_text}
+            if query_only:
+                item.update(source=f'TeamDB:{table}/{slug}', recorded_at=recorded_at)
+            candidates.append((rank, table, item))
     for _, table, item in sorted(candidates, key=lambda row: (-row[0], row[1], row[2]["slug"])):
         item = memory_item(table, item, "body", seen)
         result[table].append(item)

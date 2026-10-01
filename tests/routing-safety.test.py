@@ -35,6 +35,18 @@ class RoutingSafety(unittest.TestCase):
     def test_unknown_scope_is_not_fast_track(self):
         self.assertEqual(self.classify('--risk', 'low')['route'], 'SDD')
 
+    def test_simple_query_is_answered_by_alex_without_authorizing_implementation(self):
+        result = self.classify('--kind', 'query', '--risk', 'low')
+        self.assertEqual(result['route'], 'ANSWER')
+        self.assertEqual(result['agents'], 'Alex')
+        self.assertFalse(result['implementation_allowed'])
+        self.assertFalse(result['authorizes'])
+        recorded = subprocess.run(['bash', str(ROOT / 'scripts/skalling-route.sh'), 'classify',
+                                   '--kind', 'query', '--risk', 'low', '--record', '--intent', 'estado',
+                                   '--project', str(self.project)], capture_output=True, text=True)
+        self.assertEqual(recorded.returncode, 2)
+        self.assertIn('solo lectura', recorded.stderr)
+
     def test_proven_local_change_is_fast_track(self):
         self.assertEqual(self.classify('--risk', 'low', '--scope', 'local')['route'], 'FAST-TRACK')
 

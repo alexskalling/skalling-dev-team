@@ -45,6 +45,39 @@ class MemoryEfficiency(unittest.TestCase):
         self.assertEqual(data['decisions'][0]['provenance'], 'discovered')
         self.assertEqual(task_context(self.db, self.project, 'plan', 'task', discover=False)['decisions'], [])
 
+    def test_query_finds_specific_memory_without_scanning_sources_or_certifying_live_state(self):
+        self.db.execute("INSERT INTO concepts(slug,title,body_md,updated_at) VALUES(?,?,?,?)",
+                        ('project-summary', 'Resumen', 'Texto general ' * 900, '2026-09-01'))
+        self.db.execute("INSERT INTO decisions(slug,title,body_md,status,decided_at) VALUES(?,?,?,?,?)",
+                        ('deployment', 'Cloudflare', 'Worker aurora, wrangler.jsonc; despliegue con Wrangler.',
+                         'accepted', '2026-09-01'))
+        self.db.commit()
+        with patch('skalling_context.source_fingerprint', side_effect=AssertionError('No source crawl')):
+            data = request_context(self.db, self.project, 'Cloudflare despliegue', top_k=4,
+                                   max_bytes=4000, query_only=True)
+        self.assertEqual(data['concepts'], [])
+        item = data['decisions'][0]
+        self.assertEqual(item['slug'], 'deployment')
+        self.assertEqual(item['recorded_at'], '2026-09-01')
+        self.assertEqual(item['source'], 'TeamDB:decisions/deployment')
+        self.assertEqual(data['freshness']['status'], 'not_checked')
+        self.assertFalse(data['freshness']['proves_live_state'])
+        self.assertLessEqual(len(json.dumps(data, ensure_ascii=False).encode()), 4000)
+
+    def test_query_cli_is_read_only_and_missing_memory_does_not_bootstrap(self):
+        before = self.path.read_bytes()
+        result = subprocess.run(['bash', str(ROOT / 'scripts/teamdb-context.sh'), 'for-query',
+                                 'Campañas', str(self.project)], capture_output=True, text=True, timeout=3)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)['decisions'][0]['slug'], 'unique')
+        self.assertEqual(self.path.read_bytes(), before)
+        with tempfile.TemporaryDirectory() as empty:
+            result = subprocess.run(['bash', str(ROOT / 'scripts/teamdb-context.sh'), 'for-query',
+                                     'Cloudflare', empty], capture_output=True, text=True, timeout=3)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout)['freshness']['status'], 'missing')
+            self.assertFalse((Path(empty) / '.opencode').exists())
+
     def test_exact_revision_reuses_between_request_and_task_but_never_other_callers(self):
         item = request_context(self.db, self.project, 'Campañas')['decisions'][0]
         key = item['read_key']

@@ -23,11 +23,13 @@ Uso:
   teamdb-context.sh link <plan> <task> --concepts=c1,c2 [--decisions=d1,d2] [--preferences=p1] [--problems=k1,k2] [project]
   teamdb-context.sh for-task <plan> <task> [--linked-only] [--seen=read_key] [--max-bytes=8000] [project]
   teamdb-context.sh for-request <query> [--top-k=8] [--max-bytes=8000] [--file=path] [project]
+  teamdb-context.sh for-query <query> [--top-k=4] [--max-bytes=4000] [project]
 
 Subcomandos:
   link     Asocia memoria (concepts/decisions/preferences/known_problems) a una task
   for-task Emite la cápsula JSON con task + plan + memoria filtrada
   for-request Emite memoria relevante para un pedido antes de que exista plan
+  for-query Consulta ligera: sin escaneo de fuentes; memoria no equivale a estado remoto vigente
 EOF
   exit 2
 }
@@ -37,11 +39,12 @@ OP="${1:-}"
 shift
 
 case "$OP" in
-  for-request)
+  for-request|for-query)
     QUERY="${1:?Falta query}"; shift
     case "$QUERY" in -*) echo "ERROR: falta el texto del pedido antes de las opciones" >&2; exit 2 ;; esac
     [ -n "$QUERY" ] || { echo "ERROR: pedido vacío" >&2; exit 2; }
     PROJECT=""; TOP_K=8; MAX_BYTES=8000; VISUAL=false; FILE_ANCHORS=(); SEEN=()
+    [ "$OP" != for-query ] || { TOP_K=4; MAX_BYTES=4000; }
     while [ "$#" -gt 0 ]; do
       case "$1" in
         --seen=*) SEEN+=("${1#--seen=}") ;;
@@ -56,13 +59,13 @@ case "$OP" in
     done
     [ -d "$PROJECT" ] || PROJECT="$(pwd)"
     DB="$(teamdb_project_path "$PROJECT")"
-    [ -f "$DB" ] || { echo '{"concepts":[],"decisions":[],"known_problems":[],"preferences":[]}' ; exit 0; }
-    python3 - "$DB" "$QUERY" "$TOP_K" "$MAX_BYTES" "$VISUAL" "$SCRIPT_DIR" "$PROJECT" "${SEEN[@]+${SEEN[@]/#/seen:}}" "${FILE_ANCHORS[@]+${FILE_ANCHORS[@]}}" <<'PYEOF'
+    [ -f "$DB" ] || { echo '{"concepts":[],"decisions":[],"known_problems":[],"preferences":[],"freshness":{"status":"missing","proves_live_state":false}}' ; exit 0; }
+    python3 - "$DB" "$QUERY" "$TOP_K" "$MAX_BYTES" "$VISUAL" "$SCRIPT_DIR" "$PROJECT" "$OP" "${SEEN[@]+${SEEN[@]/#/seen:}}" "${FILE_ANCHORS[@]+${FILE_ANCHORS[@]}}" <<'PYEOF'
 import json, sqlite3, sys
 sys.path.insert(0, sys.argv[6])
 from skalling_context import request_context
 with sqlite3.connect("file:" + sys.argv[1] + "?mode=ro", uri=True) as conn:
-    result = request_context(conn, sys.argv[7], sys.argv[2], int(sys.argv[3]), int(sys.argv[4]), sys.argv[5] == 'true', sys.argv[8:])
+    result = request_context(conn, sys.argv[7], sys.argv[2], int(sys.argv[3]), int(sys.argv[4]), sys.argv[5] == 'true', sys.argv[9:], query_only=sys.argv[8] == 'for-query')
 print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
 PYEOF
     ;;

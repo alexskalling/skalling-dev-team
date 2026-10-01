@@ -2,6 +2,17 @@
 
 Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) y el proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.6] — 2026-10-01
+
+- OpenCode v2 entrega memoria pertinente a Alex antes de la primera inferencia,
+  con lectura acotada, caché por turno y errores explícitos sin bloquear.
+- Consultas acotadas: Alex responde con memoria y comprobación puntual, sin
+  activar automáticamente investigación, planificación o implementación.
+- `teamdb-context.sh for-query` recupera memoria pertinente, con procedencia y
+  fecha, sin recorrer el árbol de código ni certificar estado remoto vigente.
+- El protocolo limita la investigación inicial a tres comprobaciones y exige
+  responder hechos y límites; no amplía una pregunta de estado a una auditoría.
+
 ## [0.16.5] — 2026-09-30
 
 - Teo puede ejecutar RED con `skalling_workflow probe`: usa la prueba del
