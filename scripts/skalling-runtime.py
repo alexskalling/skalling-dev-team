@@ -6,7 +6,9 @@ from pathlib import Path
 import re
 import sys
 
-REQUIRED = ('scripts/skalling-workflow.py', 'scripts/skalling_skills.py',
+REQUIRED = ('plugins/skalling-execution-efficiency.js', 'plugins/lib/execution-efficiency.mjs',
+            'plugins/skalling-execution-efficiency/index.js', 'plugins/skalling-execution-efficiency/package.json',
+            'scripts/skalling-workflow.py', 'scripts/skalling_skills.py',
             'scripts/skalling-refresh.sh', 'plugins/skalling-workflow.js',
             'plugins/skalling-git-guard.js', 'plugins/skalling-query-memory.js',
             'plugins/lib/query-memory.mjs', 'scripts/skalling_review_cycle.py', 'hooks/git-gate.py')

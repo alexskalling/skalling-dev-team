@@ -12,6 +12,19 @@ spec=importlib.util.spec_from_file_location('project_config',ROOT/'scripts/skall
 config=importlib.util.module_from_spec(spec);spec.loader.exec_module(config)
 
 class NativeAgents(unittest.TestCase):
+    def test_efficiency_plugin_registered_once_and_removed_without_other_plugins(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);path=root/'.opencode/opencode.json'
+            plugin=path.parent/'plugins/skalling-execution-efficiency'
+            plugin.mkdir(parents=True);(plugin/'index.js').write_text('export default {}')
+            path.write_text(json.dumps({'plugins':['other-plugin']}))
+            for args in ([],[],['--check']):
+                result=subprocess.run(['python3',str(ROOT/'scripts/skalling-project-config.py'),str(root),*args],capture_output=True,text=True)
+                self.assertEqual(result.returncode,0,result.stderr+result.stdout)
+            self.assertEqual(json.loads(path.read_text())['plugins'],['other-plugin',str(plugin.resolve())])
+            subprocess.run(['python3',str(ROOT/'scripts/skalling-project-config.py'),str(root),'--remove'],check=True,capture_output=True)
+            self.assertEqual(json.loads(path.read_text())['plugins'],['other-plugin'])
+
     def test_selector_and_upgrade_preserve_models(self):
         old={'agent':{'build':{'disable':True,'model':'custom/model'},'plan':{'disable':True},'general':{'disable':True},'Teo':{'mode':'primary'}}}
         result=config.expected(old)

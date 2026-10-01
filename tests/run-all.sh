@@ -52,6 +52,7 @@ COMMANDS=(
   "node --test tests/workflow-plugin.test.mjs"
   "node --test tests/model-fallback.test.mjs"
   "node --test tests/query-memory.test.mjs"
+  "node --test tests/execution-efficiency.test.mjs"
   "node --test tests/git-guard-plugin.test.mjs"
   "node --test tests/permission-bypass.test.mjs"
   "python3 tests/skalling-goal.test.py"

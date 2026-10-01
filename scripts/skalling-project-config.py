@@ -363,13 +363,23 @@ def main():
         raise SystemExit(f'ERROR: {path} no es JSON válido ({error}); corregirlo antes de continuar')
     if '--remove' in sys.argv[2:]:
         if path.is_file():
+            plugin = str((path.parent / 'plugins/skalling-execution-efficiency').resolve())
+            if plugin in current.get('plugins', []):
+                current['plugins'] = [p for p in current['plugins'] if p != plugin]
             path.write_text(json.dumps(removed(current), ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
         apply_test_commands(project, remove=True)
         print(f'OK: {path} sin overrides de agentes de Skalling')
         return
     wanted = expected(current)
+    plugin = path.parent / 'plugins/skalling-execution-efficiency'
+    if (plugin / 'index.js').is_file():
+        wanted['plugins'] = list(current.get('plugins', []))
+        if str(plugin.resolve()) not in wanted['plugins']:
+            wanted['plugins'].append(str(plugin.resolve()))
     if check:
         missing = [key for key in ('default_agent', 'agent', 'permission') if current.get(key) != wanted[key]]
+        if current.get('plugins') != wanted.get('plugins'):
+            missing.append('plugin de eficiencia')
         if test_command_drift(project):
             missing.append('permisos de verificación/commit en ' + ', '.join(test_command_drift(project)))
         drift = sync_agents(project, check=True)

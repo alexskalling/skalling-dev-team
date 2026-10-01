@@ -326,12 +326,15 @@ step_install_scripts() {
 # global y en modo proyecto: sin skalling-git-guard no hay identidad del
 # runtime ni bloqueo de ediciones por rol, y los helpers caen al actor que
 # declare el comando (pensado para la CLI humana).
-SKALLING_PLUGINS=(skalling-query-memory.js skalling-model-fallback.js skalling-goal.js skalling-data-safety.js skalling-workflow.js skalling-git-guard.js)
-SKALLING_PLUGIN_LIBS=(query-memory.mjs model-fallback.mjs data-safety.mjs workflow.mjs git-guard.mjs)
+SKALLING_PLUGINS=(skalling-execution-efficiency.js skalling-query-memory.js skalling-model-fallback.js skalling-goal.js skalling-data-safety.js skalling-workflow.js skalling-git-guard.js)
+SKALLING_PLUGIN_LIBS=(execution-efficiency.mjs query-memory.mjs model-fallback.mjs data-safety.mjs workflow.mjs git-guard.mjs)
 SKALLING_GIT_HOOKS=(pre-commit pre-push post-merge post-rewrite)
 
 step_install_hooks() {
     run mkdir -p "$TARGET_DIR/.opencode/plugins/lib" "$TARGET_DIR/.opencode/command"
+    run mkdir -p "$TARGET_DIR/.opencode/plugins/skalling-execution-efficiency"
+    run cp "$SCRIPT_DIR/plugins/skalling-execution-efficiency/index.js" "$TARGET_DIR/.opencode/plugins/skalling-execution-efficiency/index.js"
+    run cp "$SCRIPT_DIR/plugins/skalling-execution-efficiency/package.json" "$TARGET_DIR/.opencode/plugins/skalling-execution-efficiency/package.json"
     local plugin
     for plugin in "${SKALLING_PLUGINS[@]}"; do
         run cp "$SCRIPT_DIR/plugins/$plugin" "$TARGET_DIR/.opencode/plugins/$plugin"
@@ -669,6 +672,10 @@ do_uninstall() {
     for plugin in "${SKALLING_PLUGIN_LIBS[@]}"; do
         [[ -f "$OPENCODE_DIR/plugins/lib/$plugin" ]] && run rm -f "$OPENCODE_DIR/plugins/lib/$plugin"
     done
+    for plugin in index.js package.json; do
+        [[ -f "$OPENCODE_DIR/plugins/skalling-execution-efficiency/$plugin" ]] && run rm -f "$OPENCODE_DIR/plugins/skalling-execution-efficiency/$plugin"
+    done
+    rmdir "$OPENCODE_DIR/plugins/skalling-execution-efficiency" 2>/dev/null || true
     rmdir "$OPENCODE_DIR/plugins/lib" "$OPENCODE_DIR/plugins" 2>/dev/null || true
     [[ -f "$OPENCODE_DIR/command/skalling-goal.md" ]] && run rm -f "$OPENCODE_DIR/command/skalling-goal.md"
     # Devolver a OpenCode su agente por defecto y los agentes nativos: sin
