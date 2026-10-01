@@ -393,7 +393,7 @@ step_install_project_config() {
         return 0
     fi
     if python3 "$SCRIPT_DIR/scripts/skalling-project-config.py" "$TARGET_DIR" >/dev/null; then
-        log OK "Config de OpenCode del proyecto: Alex por defecto; build/plan/general deshabilitados"
+        log OK "Config de OpenCode del proyecto: Alex por defecto; Build/Plan disponibles y especialistas como subagentes"
     else
         log ERROR "No se pudo escribir .opencode/opencode.json del proyecto"
         return 1

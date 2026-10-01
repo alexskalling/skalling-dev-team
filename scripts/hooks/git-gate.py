@@ -15,6 +15,7 @@ más allá del candidato exacto. Vive en CI → `.github/workflows/lint-sqli.yml
 Justificación en AGENTS.md § "Hooks (separación de scopes)".
 """
 import hashlib
+import os
 import re
 import sqlite3
 import subprocess
@@ -147,8 +148,13 @@ def equivalent_digests(commit):
     return [commit_digest(other) for other in same if not other.startswith(commit)]
 
 
-def check(diff_args, db, label, equivalents=None, require_receipt=True):
+def check(diff_args, db, label, equivalents=None, require_receipt=None):
     # Inspect the actual candidate, not mutable live memory. No git add/export.
+    if require_receipt is None:
+        # Identity comes from the runtime hook. Choosing a native agent is an
+        # explicit route outside Skalling; never manufacture a review receipt.
+        require_receipt = os.environ.get('SKALLING_RUNTIME_AGENT', '').lower() not in {
+            'build', 'plan', 'general', 'explore'}
     full_patch = git('diff', *diff_args, '--', '.')
     for line in full_patch.splitlines():
         if line.startswith(b'+') and not line.startswith(b'+++') and SECRET.search(line.decode('utf-8', 'replace')):

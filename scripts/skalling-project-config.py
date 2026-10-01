@@ -2,8 +2,8 @@
 """Config de OpenCode del proyecto (.opencode/opencode.json) que Skalling exige.
 
 - default_agent: Alex (el punto de entrada, no el `build` nativo).
-- build, plan y general deshabilitados: editan sin clasificación, sin Teo y
-  sin verificación (auditoría v0.12.0). explore queda: es de solo lectura.
+- Build y Plan siguen disponibles como primarios fuera del flujo Skalling.
+  Los siete especialistas son subagentes; General conserva su rol nativo.
 - permission: la política de proyecto (data/permission-policy.json). Antes
   solo existía como config GLOBAL y se instalaba únicamente si no había una:
   los cambios de permisos no llegaban a instalaciones existentes.
@@ -36,7 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from skalling_config import TESTING_KINDS, testing_config  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-DISABLED = ('build', 'plan', 'general')
+LEGACY_DISABLED = ('build', 'plan', 'general')
 TEST_AGENTS = ('Teo', 'Jhon', 'Luz')
 ALL_AGENTS = ('Alex', 'Pol', 'Jes', 'Sol', 'Teo', 'Jhon', 'Luz', 'Pau')
 COMMAND_BEGIN = '    # skalling: comandos de mantenimiento del rol (inicio)'
@@ -245,6 +245,15 @@ def local_commit_rules(name):
 
 
 def patched_project_agent(text, commands, name, project, remove=False):
+    if not remove:
+        mode = 'primary' if name == 'Alex' else 'subagent'
+        if text.startswith('---\n'):
+            head, sep, body = text[4:].partition('\n---\n')
+            if sep:
+                head = re.sub(r'(?m)^mode:.*$', 'mode: ' + mode, head) if re.search(r'(?m)^mode:', head) else 'mode: ' + mode + '\n' + head
+                text = '---\n' + head + sep + body
+        else:
+            text = '---\nmode: ' + mode + '\n---\n' + text
     if name in TEST_AGENTS:
         text = patched_agent(text, [] if remove else rules_for(commands, readonly=name != 'Teo'))
         rules = [] if remove or (project / 'agents-base').is_dir() else local_commit_rules(name)
@@ -304,10 +313,16 @@ def policy_permissions():
 def expected(config):
     merged = dict(config)
     merged['default_agent'] = 'Alex'
-    agents = dict(merged.get('agent') or {})
-    for name in DISABLED:
-        agents[name] = {**(agents.get(name) or {}), 'disable': True}
-    merged['agent'] = agents
+    # Repair legacy overrides in both supported configuration formats.
+    for key in ('agent', 'agents'):
+        if key == 'agents' and key not in merged:
+            continue
+        agents = dict(merged.get(key) or {})
+        for name in ('Alex', 'build', 'plan'):
+            agents[name] = {**(agents.get(name) or {}), 'disable': False, 'hidden': False, 'mode': 'primary'}
+        for name in (*ALL_AGENTS[1:], 'general'):
+            agents[name] = {**(agents.get(name) or {}), 'disable': False, 'mode': 'subagent'}
+        merged[key] = agents
     merged['permission'] = policy_permissions()
     merged.setdefault('$schema', 'https://opencode.ai/config.json')
     return merged
@@ -317,19 +332,23 @@ def removed(config):
     cleaned = dict(config)
     if cleaned.get('default_agent') == 'Alex':
         cleaned.pop('default_agent')
-    agents = dict(cleaned.get('agent') or {})
-    for name in DISABLED:
-        entry = dict(agents.get(name) or {})
-        if entry.get('disable') is True:
-            entry.pop('disable')
-        if entry:
-            agents[name] = entry
+    for key in ('agent', 'agents'):
+        agents = dict(cleaned.get(key) or {})
+        for name in (*ALL_AGENTS, *LEGACY_DISABLED):
+            entry = dict(agents.get(name) or {})
+            entry.pop('disable', None)
+            if entry.get('mode') == ('primary' if name in ('Alex', 'build', 'plan') else 'subagent'):
+                entry.pop('mode')
+            if name in ('Alex', 'build', 'plan') and entry.get('hidden') is False:
+                entry.pop('hidden')
+            if entry:
+                agents[name] = entry
+            else:
+                agents.pop(name, None)
+        if agents:
+            cleaned[key] = agents
         else:
-            agents.pop(name, None)
-    if agents:
-        cleaned['agent'] = agents
-    else:
-        cleaned.pop('agent', None)
+            cleaned.pop(key, None)
     return cleaned
 
 

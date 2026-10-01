@@ -164,7 +164,11 @@ bash ~/skalling-dev-team/setup.sh
 ```
 
 Esto instala hooks, plugins y la config de OpenCode del proyecto: Alex queda como agente
-por defecto y se deshabilitan `build`, `plan` y `general`, que editarían sin pasar por el flujo.
+por defecto, junto con **Build** y **Plan** en el selector. Los siete especialistas de
+Skalling son subagentes de Alex. Elegir Build o Plan permite trabajar fuera del flujo
+de Skalling, conservando las restricciones nativas de Plan. Los commits desde
+agentes nativos no necesitan un workflow ni un receipt Skalling; los controles de
+secretos y la autorización de push siguen vigentes.
 `/skalling-init`, dentro de OpenCode, aplica la misma config y además crea la memoria.
 
 **3. Reiniciar OpenCode** para cargar agentes y plugins. Después: `bash ~/skalling-dev-team/setup-team-doctor.sh`.

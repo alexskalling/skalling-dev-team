@@ -499,7 +499,7 @@ check_controls() {
         if [[ -f "$config_tool" ]]; then
             local drift
             if drift="$(python3 "$config_tool" "$PROJECT_DIR" --check 2>&1)"; then
-                ok "Config del proyecto: Alex por defecto; build/plan/general deshabilitados"
+                ok "Config del proyecto: Alex por defecto; Build/Plan disponibles y especialistas como subagentes"
             else
                 warn "Config de OpenCode del proyecto desactualizada ($drift): correr setup.sh en el proyecto"
             fi

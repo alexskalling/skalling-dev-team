@@ -1000,6 +1000,10 @@ export function createCore(options = {}) {
     if (EDIT_TOOLS.has(tool) && NO_EDIT_AGENTS.has(who)) {
       return noEditMessage(who, `herramienta ${tool}`);
     }
+    if (SUBAGENT_TOOLS.has(tool) && TEAM.has(who)
+        && ['build', 'plan', 'general', 'explore'].includes(normalizeAgent(input?.agent || input?.subagent_type))) {
+      return 'Los especialistas de Skalling conservan su flujo; Build y Plan se eligen directamente por el usuario, no como atajo de delegación.';
+    }
     if (SUBAGENT_TOOLS.has(tool) && who === 'alex') {
       const target = normalizeAgent(input?.agent || input?.subagent_type);
       if (!TEAM.has(target)) {

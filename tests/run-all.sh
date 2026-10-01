@@ -45,6 +45,7 @@ COMMANDS=(
   "python3 tests/permission-generation.test.py"
   "python3 tests/workflow-engine.test.py"
   "python3 tests/review-cycle.test.py"
+  "python3 tests/native-agents.test.py"
   "python3 tests/data-safety.test.py"
   "node --test tests/data-safety-plugin.test.mjs"
   "node --test tests/data-safety-v2.test.mjs"

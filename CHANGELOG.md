@@ -4,6 +4,9 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 
 ## [0.17.0] — 2026-10-01
 
+- Selector con Alex, Build y Plan; especialistas como subagentes. Los agentes
+  nativos pueden trabajar y commitear sin workflow Skalling; push conserva permiso.
+
 - Revisiones de Jhon/Luz sobre el mismo candidato, con hallazgos reunidos antes
   de la corrección y respuestas obligatorias de Teo a todos los pendientes.
 - Conserva criterios e historial de evidencia; nunca aprueba con checks de una

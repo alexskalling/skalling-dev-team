@@ -692,3 +692,15 @@ test('WAL recovery is query-only and observes committed changes in the live jour
   assert.throws(() => readWorkflowRow(file,'wf',[]), /SQLITE_DRIVER_UNAVAILABLE/);
   fs.rmSync(root, {recursive:true,force:true});
 });
+
+test('native Build/Plan are standalone choices, not a delegation escape for Skalling', () => {
+  const core=createCore();
+  for (const agent of ['build','plan']) {
+    assert.equal(core.decide({tool:'shell',agent,input:{command:'git commit -m "fix: local"'}}),null);
+    assert.equal(core.decide({tool:'subagent',agent,input:{agent:'general'}}),null);
+    assert.match(core.decide({tool:'shell',agent,input:{command:'SKALLING_RUNTIME_AGENT=build git commit -m x'}}),/identidad/);
+  }
+  for (const agent of ['Alex','Teo','Jhon','Luz']) {
+    assert.ok(core.decide({tool:'subagent',agent,input:{agent:'build'}}));
+  }
+});
