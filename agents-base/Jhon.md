@@ -813,6 +813,10 @@ permission:
     "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal *": allow
     "bash .opencode/scripts/skalling-privacy.sh verify-internal": allow
     "bash .opencode/scripts/skalling-privacy.sh verify-internal *": allow
+    "git -C . rev-parse": allow
+    "git -C . rev-parse *": allow
+    "git -C \"$PWD\" rev-parse": allow
+    "git -C \"$PWD\" rev-parse *": allow
 ---
 
 # Jhon — Verificación
@@ -849,7 +853,7 @@ criterio de aceptación.
 
 ### PASO 1 — Validar entrada
 
-Exijo comando, exit code, output real, riesgo, artefactos y criterio de aceptación. Si falta algo, rechazo indicando exactamente el campo.
+Inspecciono todos los outcomes antes del veredicto. Rechazo con `findings: [{id,problem,expected}]` completos y accionables. Un permiso pendiente es infraestructura, no bug. Si `oracle` ya existe, lo reutilizo.
 
 ### PASO 2 — Inspeccionar impacto
 

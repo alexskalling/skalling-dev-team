@@ -36,6 +36,7 @@ MAX_TIMEOUT = 3600
 # burning more model calls in the same loop.
 MAX_DELIVERIES = 3
 _ACTIVE = None  # comando en curso, para cancelarlo con todo su grupo
+from skalling_review_cycle import adopt_active_review, pending_reviewers, archive_review, add_findings, submit_resolutions, resolve_findings, validate_start
 from skalling_lifecycle import TERMINAL, bind_tasks, finish as finish_lifecycle, expire_claims, progress
 TRANSITIONS = {
     'clarify': ('pol', 'requested', 'clarified'),
@@ -62,6 +63,11 @@ NEXT_STEP = {
 
 def next_step(state):
     current = state.get('state')
+    action = next_action(state)
+    if action['action'] == 'commit':
+        return f"{action['agent']}: commit con id y message; conservar evidencia vigente; si falta cobertura, Jhon oracle/check. Después Alex complete. Push requiere autorización"
+    if state.get('review_protocol') == 2 and current in {'verification_ready', 'verified'} and state['risk'] == 'high':
+        return ', '.join(pending_reviewers(state)) + ': completar revisión del mismo candidato; reunir veredictos antes de corregir'
     if current in {'cancelled', 'failed', 'abandoned'}:
         return 'cerrado sin éxito: ' + state.get('terminal_reason', 'consultar evidencia del cierre')
     if current == 'blocked':
@@ -71,7 +77,7 @@ def next_step(state):
         remaining = max(0, MAX_DELIVERIES - state.get('delivery_number', 0))
         return (f"Teo: corregir rechazo de {rejection['agent']} (entrega {rejection['delivery_number']}); "
                 f"quedan {remaining} entrega(s), luego vuelve a entregar")
-    if current == 'quality_reviewed' and state.get('execution_mode') == 'focused' and not state.get('memory_required'):
+    if current == 'quality_reviewed' and state.get('execution_mode') in {'focused', 'direct'} and not state.get('memory_required'):
         return 'Alex: complete (sin conocimiento durable nuevo que documentar)'
     if current == 'verified':
         if state.get('risk') == 'low' and (state.get('verification') or {}).get('agent') == AUTO_VERIFIER:
@@ -81,6 +87,12 @@ def next_step(state):
     if current == 'verification_ready' and state.get('auto_verify'):
         return 'verificación automática del proyecto (la corre el motor al deliver); si falló, Teo corrige y vuelve a deliver'
     return NEXT_STEP.get(current, 'status para ver el estado').replace('{plan_steps}', PLAN_STEPS)
+
+
+def commit_owner(state):
+    if state.get('risk') == 'high':
+        return 'luz'
+    return 'teo' if (state.get('verification') or {}).get('agent') == AUTO_VERIFIER else 'jhon'
 
 
 def next_action(state):
@@ -98,19 +110,27 @@ def next_action(state):
     }
     if current == 'quality_reviewed' and state.get('risk') == 'high' and state.get('memory_required'):
         routes[current] = ('pau', 'document')
-    elif current == 'quality_reviewed' and state.get('risk') == 'high' and state.get('execution_mode') != 'focused':
+    elif current == 'quality_reviewed' and state.get('risk') == 'high' and state.get('execution_mode') not in {'focused', 'direct'}:
         routes[current] = ('pau', 'document')
     if current == 'verified' and state.get('risk') == 'high':
         routes[current] = ('luz', 'check/approve')
     if current == 'verification_ready' and state.get('auto_verify'):
         routes[current] = ('auto', 'verify')
+    commit_states = {'quality_reviewed', 'documented', 'completed'} if state.get('risk') == 'high' else {'verified', 'completed'}
+    if current in commit_states and not state.get('local_commit_result'):
+        routes[current] = (commit_owner(state), 'commit')
+    parallel = []
+    if state.get('review_protocol') == 2 and state['risk'] == 'high' and current in {'verification_ready', 'verified'}:
+        parallel = pending_reviewers(state)
+        if parallel:
+            routes[current] = (parallel[0], 'check/approve-or-reject' if state.get('oracle') else 'oracle/check/approve-or-reject')
     agent, action = routes.get(current, ('alex', 'status'))
     rejection = state.get('last_rejection') if current == 'implementation_ready' else None
     reason = rejection.get('reason') if rejection else None
     if current == 'verified' and state.get('risk') == 'low' and (state.get('verification') or {}).get('agent') == AUTO_VERIFIER:
         reason = 'Contrastar acceptance; si falta cobertura, Jhon abre oracle sobre este workflow antes del cierre.'
     return {
-        'agent': agent, 'action': action,
+        'agent': agent, 'action': action, 'parallel_agents': parallel if state.get('oracle') else [],
         'reason': reason,
         'delivery_number': state.get('delivery_number', 0),
         'max_deliveries': MAX_DELIVERIES,
@@ -118,16 +138,29 @@ def next_action(state):
     }
 
 
-def record_rejection(state, actor, reason):
+def record_rejection(state, actor, reason, findings=None):
     delivery_number = state.get('delivery_number', 0)
-    state['rejection_count'] = state.get('rejection_count', 0) + 1
+    if state.get('review_protocol') == 2:
+        add_findings(state, actor, findings, reason)
+        state.setdefault('review_verdicts', {})[actor] = 'rejected'
     state['last_rejection'] = {
         'agent': actor, 'reason': str(reason).strip()[:2000],
         'delivery_number': delivery_number, 'recorded_at': time.time(),
     }
-    state['state'] = 'blocked' if delivery_number >= MAX_DELIVERIES else 'implementation_ready'
-    state['oracle'] = None
-    state['checks'] = []
+    if state.get('review_protocol') == 2 and state['risk'] == 'high' and pending_reviewers(state):
+        return state
+    finish_rejection(state)
+    return state
+
+
+def finish_rejection(state):
+    state['rejection_count'] = state.get('rejection_count', 0) + 1
+    state['state'] = 'blocked' if state.get('delivery_number', 0) >= MAX_DELIVERIES else 'implementation_ready'
+    if state.get('review_protocol') == 2:
+        archive_review(state)
+    else:
+        state['oracle'] = None
+        state['checks'] = []
     if state['state'] == 'blocked':
         state['blocked_reason'] = 'Se agotó el presupuesto de entregas; requiere aclarar alcance o criterio.'
     return state
@@ -325,6 +358,9 @@ def seal_receipt(db, root, identifier, files, verifier, digest, action='complete
 
 def invalidate_prepared_receipt(db, state):
     """Reopening review revokes a prepared approval, including a local commit's."""
+    commit = state.pop('local_commit_result', None)
+    if commit:
+        state.setdefault('local_commit_history', []).append(commit)
     digest = state.pop('receipt_tree_hash', None)
     if not digest:
         return
@@ -620,7 +656,7 @@ def save(db, identifier, actor, session, action, state, evidence, now):
 
 def read(db, identifier):
     row = db.execute('SELECT body FROM agent_workflows WHERE id=?', (identifier,)).fetchone()
-    return json.loads(row[0]) if row else None
+    return adopt_active_review(json.loads(row[0])) if row else None
 
 
 def evidence_context(root):
@@ -671,8 +707,10 @@ def evidence_context(root):
 def reuse_evidence(db, root, actor, session, identifier, payload):
     db.execute('BEGIN IMMEDIATE')
     state = read(db, identifier)
-    require(state is not None and actor == 'luz' and state['state'] == 'verified',
-            'Only Luz reuses independently executed evidence after Jhon approval')
+    require(state is not None and actor == 'luz' and (state['state'] == 'verified'
+            or (state.get('review_protocol') == 2 and state['risk'] == 'high' and state['state'] == 'verification_ready'
+                and actor in pending_reviewers(state))),
+            'Only Luz reuses independently executed Jhon evidence on an active review')
     require(session != state.get('implementation_session'), 'Independent verifier session required')
     require(bool(str(payload.get('evidence', '')).strip()), 'Reuse requires a risk-specific justification')
     index = payload.get('check_index')
@@ -747,7 +785,10 @@ def check(db, root, actor, session, identifier, payload, request):
     require(state is not None, 'Unknown workflow')
     require(state['state'] not in TERMINAL, f"{state['state']} workflows are immutable")
     expected = 'verification_ready' if actor == 'jhon' else 'verified'
-    require(actor in {'jhon', 'luz'} and state['state'] == expected, 'Check role/order invalid')
+    parallel_review = state.get('review_protocol') == 2 and state['risk'] == 'high'
+    allowed_states = {'verification_ready', 'verified'} if parallel_review else {expected}
+    require(actor in {'jhon', 'luz'} and state['state'] in allowed_states
+            and (not parallel_review or actor in pending_reviewers(state)), 'Check role/order invalid')
     require(bool(state['oracle']), 'Jhon must derive an oracle before checks')
     require(session != state['implementation_session'], 'Independent verifier session required')
     digest = state['digest']
@@ -804,7 +845,8 @@ def check(db, root, actor, session, identifier, payload, request):
 
     db.execute('BEGIN IMMEDIATE')
     state = read(db, identifier)
-    require(state is not None and state['state'] == expected, 'Workflow changed during verification; retry check')
+    require(state is not None and state['state'] in allowed_states
+            and (not parallel_review or actor in pending_reviewers(state)), 'Workflow changed during verification; retry check')
     require(fingerprint(root, state['files']) == digest == state['digest'], 'Verification changed candidate; approval denied')
     verification = {'agent': actor, 'session': session, 'method': payload['method'], 'argv': argv,
                      'criterion': payload['criterion'], 'exit_code': exit_code, 'digest': digest, 'output': output,
@@ -869,6 +911,8 @@ def auto_verify(db, root, identifier, session):
     state['checks'].append(verification)
     state['verification'] = verification
     if exit_code == 0:
+        if state.get('review_protocol') == 2:
+            resolve_findings(state, AUTO_VERIFIER)
         state['state'] = 'verified'
         evidence = 'verificación configurada del proyecto pasó sobre el candidato entregado'
     elif exit_code in {None, 124, 126, 127}:
@@ -970,8 +1014,13 @@ def operate(request):
             state = read(db, identifier)
             require(state is not None, 'Unknown workflow')
             index = payload.get('check_index')
-            require(type(index) is int and 0 <= index < len(state['checks']), 'Valid check_index required')
-            return {'id': identifier, 'check_index': index, 'check': state['checks'][index]}
+            number = payload.get('delivery_number', state.get('delivery_number'))
+            source = state if number == state.get('delivery_number') and state.get('checks') else next(
+                (r for r in reversed(state.get('review_history', [])) if r['delivery_number'] == number), None)
+            require(source is not None, 'Unknown delivery_number')
+            checks = source.get('checks') or []
+            require(type(index) is int and 0 <= index < len(checks), 'Valid check_index required')
+            return {'id': identifier, 'delivery_number': number, 'check_index': index, 'check': checks[index]}
         if action == 'reuse':
             return with_next_step(reuse_evidence(db, root, actor, session, identifier, payload))
         if action == 'check':
@@ -984,6 +1033,7 @@ def operate(request):
         now = time.time()
         evidence = payload.get('evidence', '')
         if action == 'start':
+            validate_start(payload)
             require(actor == 'alex' and state is None, 'Only Alex creates a new workflow; id cannot be reused')
             # Mismas reglas que skalling-route.sh (skalling_classify): una sola
             # autoridad decide si se implementa y por qué ruta.
@@ -999,6 +1049,12 @@ def operate(request):
             blockers = memory_blockers(path, classification['visual'])
             require(not blockers, '; '.join(blockers))
             files = file_list(payload)
+            for row in db.execute('SELECT body FROM agent_workflows'):
+                active = json.loads(row[0])
+                if (active.get('state') not in TERMINAL and active['id'] != payload.get('supersedes')
+                        and active.get('project_directory', str(root)) == str(root)
+                        and set(files) & set(active.get('files', []))):
+                    raise ValueError(f"Trabajo activo {active['id']} sobre esos archivos: consultar status y continuar; no reiniciar con otro id")
             require(not any(runtime_file(root, f) for f in files) or classification['risk'] == 'high',
                     'Skalling runtime files require risk high and independent Jhon/Luz verification')
             require(bool(str(payload.get('acceptance', '')).strip()), 'Observable acceptance required')
@@ -1007,6 +1063,7 @@ def operate(request):
             intent, outcomes = objective(payload)
             fingerprint(root, files)
             supersedes = payload.get('supersedes')
+            previous = None
             if supersedes:
                 previous = read(db, supersedes)
                 require(previous is not None and previous['state'] not in TERMINAL,
@@ -1037,7 +1094,17 @@ def operate(request):
             # A forgotten mode must not silently send a clear local request
             # through the expensive staged chain. The model can still opt into
             # staged explicitly, and plans/tasks remain staged by default.
+            state['review_protocol'] = 2
+            state['project_directory'] = str(root)
+            if previous:
+                state['delivery_number'] = previous.get('delivery_number', 0)
+                state['rejection_count'] = previous.get('rejection_count', 0)
+                state['review_findings'] = previous.get('review_findings', [])
+                state['review_history'] = previous.get('review_history', [])
+                require(state['delivery_number'] < MAX_DELIVERIES, 'Presupuesto del pedido agotado; supersedes no reinicia entregas')
             mode = payload.get('execution_mode')
+            if mode is None and 'planning_required' in payload and not flag(payload, 'planning_required') and not task and not flag(payload, 'memory_required'):
+                mode = 'direct'
             if mode is None:
                 mode = ('focused' if classification['risk'] in {'low', 'medium'}
                         and classification['scope'] == 'local'
@@ -1045,7 +1112,11 @@ def operate(request):
                         and not flag(payload, 'sensitive')
                         and not flag(payload, 'planning_required')
                         and not flag(payload, 'memory_required') and not task else 'staged')
-            require(mode in {'staged', 'focused'}, 'execution_mode must be focused or staged')
+            require(mode in {'staged', 'focused', 'direct'}, 'execution_mode must be focused, direct or staged')
+            if mode == 'direct':
+                require(payload.get('clarity', 'clear') == 'clear' and not task
+                        and not flag(payload, 'planning_required') and not flag(payload, 'memory_required'),
+                        'direct requires clear scope without a pending plan, task or memory work')
             if mode == 'focused':
                 require(classification['scope'] == 'local'
                         and payload.get('clarity', 'clear') == 'clear'
@@ -1056,7 +1127,7 @@ def operate(request):
             state['execution_mode'] = mode
             state['memory_required'] = flag(payload, 'memory_required')
             state['planning_required'] = flag(payload, 'planning_required')
-            if mode == 'focused':
+            if mode in {'focused', 'direct'}:
                 state['state'] = 'clarified' if flag(payload, 'planning_required') else 'implementation_ready'
                 state['route'] = 'FAST-TRACK' if risk == 'low' else 'DIRECT'
                 state['agents'] = 'Alex → ' + ('Sol → ' if flag(payload, 'planning_required') else '') + 'Teo'
@@ -1085,11 +1156,16 @@ def operate(request):
                     state['plan_id'] = payload['plan_id']
                     bind_tasks(db, state, payload.get('task_ids'))
                 if action == 'deliver':
+                    if state.get('review_protocol') == 2:
+                        submit_resolutions(state, payload)
+                        archive_review(state)
+                        state['review_verdicts'] = {}
                     require_scope(root, state['files'], state.get('base_head'), state.get('external_baseline'))
                     invalidate_prepared_receipt(db, state)
                     state['digest'] = fingerprint(root, state['files'])
                     state['implementation_session'] = session
-                    state['oracle'] = None
+                    if state.get('review_protocol') != 2:
+                        state['oracle'] = None
                     state['checks'] = []
                     state['coverage'] = None
                     state['delivery_number'] += 1
@@ -1135,7 +1211,8 @@ def operate(request):
                 state['files'] = widened
                 state['digest'] = None
                 state['oracle'] = None
-                state['checks'] = []
+                archive_review(state)
+                state['review_verdicts'] = {}
                 state['verification'] = None
                 state['coverage'] = None
                 template = state.get('verification_template')
@@ -1160,11 +1237,15 @@ def operate(request):
             elif action == 'oracle':
                 auto_passed = (state['state'] == 'verified' and state['risk'] == 'low'
                                and (state.get('verification') or {}).get('agent') == AUTO_VERIFIER)
-                require(actor == 'jhon' and (state['state'] == 'verification_ready' or auto_passed),
+                oracle_role = actor == 'jhon' or (actor == 'luz' and state.get('review_protocol') == 2 and state['risk'] == 'high')
+                require(oracle_role and (state['state'] == 'verification_ready' or auto_passed),
                         'Only Jhon prepares the oracle before verification or after an automatic check')
                 require(session != state['implementation_session'], 'Independent verifier session required')
                 fields = ('expected', 'negative', 'invariant', 'refutation')
                 require(all(isinstance(payload.get(f), str) and payload[f].strip() for f in fields), 'Complete independent oracle required')
+                if state.get('review_protocol') == 2 and state['oracle'] == {f: payload[f] for f in fields}:
+                    db.rollback()
+                    return with_next_step(state)
                 require(state['oracle'] is None, 'Oracle is frozen for this delivery')
                 if auto_passed:
                     invalidate_prepared_receipt(db, state)
@@ -1180,7 +1261,10 @@ def operate(request):
                 require(actor in {'jhon', 'luz'}, 'Only Jhon or Luz approve')
                 target = {'jhon': 'verified', 'luz': 'quality_reviewed'}[actor]
                 source = {'jhon': 'verification_ready', 'luz': 'verified'}[actor]
-                require(state['state'] == source, f'{actor} approves from {source}, not {state["state"]}')
+                parallel_review = state.get('review_protocol') == 2 and state['risk'] == 'high'
+                require((state['state'] in {'verification_ready', 'verified'} and actor in pending_reviewers(state))
+                        if parallel_review else state['state'] == source,
+                        f'{actor} approves from {source}, not {state["state"]}')
                 require(bool(str(evidence).strip()),
                         'Approval requires evidence that the declared criteria are covered, not just a green exit code')
                 if actor == 'luz':
@@ -1193,13 +1277,23 @@ def operate(request):
                 if actor == 'luz':
                     state['quality_findings'] = payload['findings']
                 cover_outcomes(state, payload, actor)
-                state['state'] = target
+                if state.get('review_protocol') == 2:
+                    resolve_findings(state, actor)
+                    state.setdefault('review_verdicts', {})[actor] = 'approved'
+                if parallel_review:
+                    if not pending_reviewers(state):
+                        if 'rejected' in state['review_verdicts'].values(): finish_rejection(state)
+                        else: state['state'] = 'quality_reviewed'
+                    elif actor == 'jhon': state['state'] = 'verified'
+                else:
+                    state['state'] = target
             elif action == 'reject':
                 require(actor in {'jhon', 'luz'} and state['state'] in {'verification_ready', 'verified', 'quality_reviewed'}, 'Invalid rejection')
                 require(bool(str(evidence).strip()), 'Rejection requires diagnostic evidence')
-                reason = payload.get('findings') or evidence
+                reason = payload.get('findings') if isinstance(payload.get('findings'), str) else evidence
                 invalidate_prepared_receipt(db, state)
-                record_rejection(state, actor, reason)
+                require(state.get('review_protocol') != 2 or state.get('review_verdicts', {}).get(actor) != 'rejected', 'Reviewer already submitted verdict')
+                record_rejection(state, actor, reason, payload.get('findings'))
             elif action in {'prepare_commit', 'commit'}:
                 require(actor in {'teo', 'jhon', 'luz'}, 'Only Teo, Jhon or Luz prepare autonomous local commits')
                 require(inside_git(root), 'Local commits require a Git repository')
@@ -1236,9 +1330,18 @@ def operate(request):
                 state['terminal_reason'] = evidence
             elif action == 'complete':
                 require(actor == 'alex', 'Only Alex completes a workflow')
-                expected = ('quality_reviewed' if state.get('execution_mode') == 'focused' and not state.get('memory_required')
+                expected = ('quality_reviewed' if state.get('execution_mode') in {'focused', 'direct'} and not state.get('memory_required')
                             else 'documented') if state['risk'] == 'high' else 'verified'
                 require(state['state'] == expected, f'Completion requires {expected}')
+                if state.get('review_protocol') == 2 and not state.get('local_commit_result'):
+                    changes = classify_delivery(root, state['files'], state.get('base_head'))
+                    head = base_head(root)
+                    at_head = classify_delivery(root, state['files'], head)
+                    if (head and head != state.get('base_head') and state.get('receipt_tree_hash')
+                            and not any(at_head[k] for k in ('added', 'modified', 'deleted'))):
+                        state['local_commit_result'] = {'sha': head, 'created': False, 'verified_existing': True}
+                    require(state.get('local_commit_result') or not any(changes[k] for k in ('added', 'modified', 'deleted')),
+                            f'Falta commit local: {commit_owner(state)} ejecuta action commit con el mismo id, message y coverage; no repetir pruebas ni pedir Git al usuario')
                 require_scope(root, state['files'], state.get('base_head'), state.get('external_baseline'))
                 require(fingerprint(root, state['files']) == state['digest'], 'Candidate changed after verification')
                 state['state'] = 'completed'
@@ -1287,7 +1390,7 @@ def public_response(state):
     fields = ('id', 'state', 'risk', 'route', 'agents', 'files', 'acceptance', 'reuse',
               'task', 'plan_id', 'task_ids', 'routing_id', 'terminal_reason', 'digest', 'delivery_number', 'next_step', 'receipt_tree_hash',
               'duration_ms', 'execution_mode', 'memory_required', 'planning_required',
-              'last_rejection', 'blocked_reason', 'rejection_count', 'oracle',
+              'review_findings', 'review_verdicts', 'last_rejection', 'blocked_reason', 'rejection_count', 'oracle',
               'intent', 'outcomes', 'coverage', 'human_corrections', 'user_acceptance', 'usage', 'auto_verify', 'context', 'local_commit_result')
     response = {key: state[key] for key in fields if key in state}
     response['next_step'] = next_step(state)
@@ -1308,11 +1411,17 @@ def public_response(state):
         response['local_commit'] = {
             'ready': True, 'agents': ['teo', 'jhon', 'luz'], 'legacy_prepare_action': 'prepare_commit',
             'action': 'commit', 'payload': {'id': state['id'], 'message': '<mensaje descriptivo>'},
-            'delegate_to': 'luz' if state.get('risk') == 'high' else 'jhon',
+            'delegate_to': commit_owner(state),
             'handoff': f"Conservar workflow {state['id']}: action commit con message crea el commit y conserva staging ajeno; no repetir checks válidos ni pedir al usuario hacerlo",
-            'then': 'reportar local_commit_result.sha; el commit ya fue creado', 'repeat_checks': False, 'push': 'user_approval',
+            'then': 'solo tras respuesta exitosa, reportar local_commit_result.sha; antes sigue pendiente', 'repeat_checks': False, 'push': 'user_approval',
             'coverage_required': not bool(state.get('coverage')),
         }
+    response['delivery_status'] = {'review': state['state'],
+                                   'commit': 'recorded' if state.get('local_commit_result') else 'pending',
+                                   'push': 'not_verified_by_workflow', 'push_requires_user_authorization': True}
+    response['review_findings'] = [f for f in state.get('review_findings', []) if f['status'] != 'resolved']
+    response['review_history'] = [{'delivery_number': r['delivery_number'], 'digest': r['digest'],
+                                   'check_count': len(r.get('checks') or [])} for r in state.get('review_history', [])]
     response['check_count'] = len(state.get('checks', []))
     response['checks'] = [{**{k: c[k] for k in ('agent', 'exit_code', 'argv', 'duration_ms',
                         'criterion', 'method', 'reused_from', 'superseded_by', 'failure_kind') if k in c}, 'check_index': i}

@@ -118,5 +118,7 @@ with sqlite3.connect(runtime / 'context/team.db') as db:
                if c['exit_code'] is not None), 'No recorded RED'
     assert state['coverage'] and all(c['exit_code'] == 0 for c in state['checks']), 'Unverified outcome'
     assert db.execute('SELECT count(*) FROM receipts WHERE exit_code=0').fetchone()[0], 'No receipt'
+    actors = {row[0] for row in db.execute('SELECT DISTINCT actor FROM agent_workflow_events')}
+    assert actors <= {'alex', 'teo', 'auto'}, 'A complete configured check should not add another agent merely to commit: ' + str(actors)
 print(json.dumps({'sha': sha, 'elapsed_seconds': round(time.monotonic() - started),
-                  'workflow': state['id'], 'fixture': str(root), 'push': 'not authorized'}, ensure_ascii=False))
+                  'workflow': state['id'], 'actors': sorted(actors), 'fixture': str(root), 'push': 'not authorized'}, ensure_ascii=False))

@@ -78,3 +78,4 @@ skalling-privacy-check.py	skalling-privacy-check.py
 skalling_lifecycle.py	skalling_lifecycle.py
 skalling-reconcile.py	skalling-reconcile.py
 skalling_git.py	skalling_git.py
+skalling_review_cycle.py	skalling_review_cycle.py

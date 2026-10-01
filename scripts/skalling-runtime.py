@@ -9,7 +9,7 @@ import sys
 REQUIRED = ('scripts/skalling-workflow.py', 'scripts/skalling_skills.py',
             'scripts/skalling-refresh.sh', 'plugins/skalling-workflow.js',
             'plugins/skalling-git-guard.js', 'plugins/skalling-query-memory.js',
-            'plugins/lib/query-memory.mjs', 'hooks/git-gate.py')
+            'plugins/lib/query-memory.mjs', 'scripts/skalling_review_cycle.py', 'hooks/git-gate.py')
 
 
 def version(path):

@@ -1017,7 +1017,11 @@
     "git -C \"$PWD\" status": "allow",
     "git -C \"$PWD\" status *": "allow",
     "git -C \"$PWD\" log": "allow",
-    "git -C \"$PWD\" log *": "allow"
+    "git -C \"$PWD\" log *": "allow",
+    "git -C . rev-parse": "allow",
+    "git -C . rev-parse *": "allow",
+    "git -C \"$PWD\" rev-parse": "allow",
+    "git -C \"$PWD\" rev-parse *": "allow"
   },
   "profiles": {
     "Alex": {
@@ -1820,7 +1824,11 @@
         "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal",
         "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal *",
         "bash .opencode/scripts/skalling-privacy.sh verify-internal",
-        "bash .opencode/scripts/skalling-privacy.sh verify-internal *"
+        "bash .opencode/scripts/skalling-privacy.sh verify-internal *",
+        "git -C . rev-parse",
+        "git -C . rev-parse *",
+        "git -C \"$PWD\" rev-parse",
+        "git -C \"$PWD\" rev-parse *"
       ],
       "overrides": {}
     },
@@ -2492,7 +2500,11 @@
         "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal",
         "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal *",
         "bash .opencode/scripts/skalling-privacy.sh verify-internal",
-        "bash .opencode/scripts/skalling-privacy.sh verify-internal *"
+        "bash .opencode/scripts/skalling-privacy.sh verify-internal *",
+        "git -C . rev-parse",
+        "git -C . rev-parse *",
+        "git -C \"$PWD\" rev-parse",
+        "git -C \"$PWD\" rev-parse *"
       ],
       "overrides": {
         "sed -i*": "ask",
@@ -3377,7 +3389,11 @@
         "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal",
         "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal *",
         "bash .opencode/scripts/skalling-privacy.sh verify-internal",
-        "bash .opencode/scripts/skalling-privacy.sh verify-internal *"
+        "bash .opencode/scripts/skalling-privacy.sh verify-internal *",
+        "git -C . rev-parse",
+        "git -C . rev-parse *",
+        "git -C \"$PWD\" rev-parse",
+        "git -C \"$PWD\" rev-parse *"
       ],
       "overrides": {
         "sed -i*": "ask",
@@ -4272,7 +4288,11 @@
         "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal",
         "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal *",
         "bash .opencode/scripts/skalling-privacy.sh verify-internal",
-        "bash .opencode/scripts/skalling-privacy.sh verify-internal *"
+        "bash .opencode/scripts/skalling-privacy.sh verify-internal *",
+        "git -C . rev-parse",
+        "git -C . rev-parse *",
+        "git -C \"$PWD\" rev-parse",
+        "git -C \"$PWD\" rev-parse *"
       ],
       "overrides": {
         "sed -i*": "ask",
@@ -5150,7 +5170,11 @@
         "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal",
         "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal *",
         "bash .opencode/scripts/skalling-privacy.sh verify-internal",
-        "bash .opencode/scripts/skalling-privacy.sh verify-internal *"
+        "bash .opencode/scripts/skalling-privacy.sh verify-internal *",
+        "git -C . rev-parse",
+        "git -C . rev-parse *",
+        "git -C \"$PWD\" rev-parse",
+        "git -C \"$PWD\" rev-parse *"
       ],
       "overrides": {
         "bash ~/.config/opencode/scripts/skalling-refresh.sh --apply *": "ask",
@@ -5873,7 +5897,11 @@
         "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal",
         "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal *",
         "bash .opencode/scripts/skalling-privacy.sh verify-internal",
-        "bash .opencode/scripts/skalling-privacy.sh verify-internal *"
+        "bash .opencode/scripts/skalling-privacy.sh verify-internal *",
+        "git -C . rev-parse",
+        "git -C . rev-parse *",
+        "git -C \"$PWD\" rev-parse",
+        "git -C \"$PWD\" rev-parse *"
       ],
       "overrides": {
         "sed -i*": "ask",
@@ -6711,7 +6739,11 @@
         "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal",
         "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal *",
         "bash .opencode/scripts/skalling-privacy.sh verify-internal",
-        "bash .opencode/scripts/skalling-privacy.sh verify-internal *"
+        "bash .opencode/scripts/skalling-privacy.sh verify-internal *",
+        "git -C . rev-parse",
+        "git -C . rev-parse *",
+        "git -C \"$PWD\" rev-parse",
+        "git -C \"$PWD\" rev-parse *"
       ],
       "overrides": {
         "sed -i*": "ask",
@@ -7599,7 +7631,11 @@
         "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal",
         "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal *",
         "bash .opencode/scripts/skalling-privacy.sh verify-internal",
-        "bash .opencode/scripts/skalling-privacy.sh verify-internal *"
+        "bash .opencode/scripts/skalling-privacy.sh verify-internal *",
+        "git -C . rev-parse",
+        "git -C . rev-parse *",
+        "git -C \"$PWD\" rev-parse",
+        "git -C \"$PWD\" rev-parse *"
       ],
       "overrides": {
         "git commit": "allow",
@@ -8667,7 +8703,11 @@
         "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal",
         "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal *",
         "bash .opencode/scripts/skalling-privacy.sh verify-internal",
-        "bash .opencode/scripts/skalling-privacy.sh verify-internal *"
+        "bash .opencode/scripts/skalling-privacy.sh verify-internal *",
+        "git -C . rev-parse",
+        "git -C . rev-parse *",
+        "git -C \"$PWD\" rev-parse",
+        "git -C \"$PWD\" rev-parse *"
       ],
       "overrides": {}
     }

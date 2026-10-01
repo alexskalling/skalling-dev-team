@@ -7,6 +7,17 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class Generation(unittest.TestCase):
+    def test_local_git_branch_identity_is_readable_but_push_still_asks(self):
+        import fnmatch
+        policy = json.loads((ROOT / 'data/permission-policy.json').read_text())
+        for name, profile in policy['profiles'].items():
+            for command, expected in [('git -C "$PWD" rev-parse --abbrev-ref HEAD', 'allow'),
+                                      ('git -C . rev-parse HEAD', 'allow'),
+                                      ('git -C . push origin main', 'ask')]:
+                matches = [profile['overrides'].get(p, policy['rules'][p])
+                           for p in profile['bash_patterns'] if fnmatch.fnmatchcase(command, p)]
+                self.assertEqual(matches[-1], expected, (name, command))
+
     def test_local_pnpm_typecheck_is_allowed_without_opening_arbitrary_exec(self):
         import fnmatch
         policy = json.loads((ROOT / 'data/permission-policy.json').read_text())

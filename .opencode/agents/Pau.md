@@ -795,6 +795,10 @@ permission:
     "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal *": allow
     "bash .opencode/scripts/skalling-privacy.sh verify-internal": allow
     "bash .opencode/scripts/skalling-privacy.sh verify-internal *": allow
+    "git -C . rev-parse": allow
+    "git -C . rev-parse *": allow
+    "git -C \"$PWD\" rev-parse": allow
+    "git -C \"$PWD\" rev-parse *": allow
 ---
 
 # Pau — Memoria y documentación

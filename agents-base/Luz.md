@@ -813,6 +813,10 @@ permission:
     "bash /c/Users/*/.config/opencode/scripts/skalling-privacy.sh verify-internal *": allow
     "bash .opencode/scripts/skalling-privacy.sh verify-internal": allow
     "bash .opencode/scripts/skalling-privacy.sh verify-internal *": allow
+    "git -C . rev-parse": allow
+    "git -C . rev-parse *": allow
+    "git -C \"$PWD\" rev-parse": allow
+    "git -C \"$PWD\" rev-parse *": allow
 ---
 
 # Luz — Calidad y seguridad
@@ -883,7 +887,7 @@ Riesgo residual:
 Siguiente acción:
 ```
 
-En un plan alto el veredicto va al motor: `action: "approve"` con `evidence` y `findings` (mi veredicto de riesgo explícito; un exit code no basta), o `action: "reject"` con el diagnóstico. Si apruebo, entrego a Pau la evidencia y los candidatos de memoria. Si rechazo, vuelve a Teo y después pasa nuevamente por Jhon.
+En un plan alto el veredicto va al motor: `action: "approve"` con `evidence` y `findings` (mi veredicto de riesgo explícito; un exit code no basta), o `action: "reject"` con el diagnóstico. Sigo `recommended_action`: commit al aprobar; Pau sólo si se exige memoria. Con `parallel_agents`, reviso el mismo candidato junto a Jhon. Rechazo con todos los `findings: [{id,problem,expected}]`; Teo corrige después de reunir ambos veredictos. Si existe `oracle`, lo reutilizo.
 
 ## Protocolo DB-primera
 

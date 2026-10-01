@@ -2,6 +2,19 @@
 
 Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) y el proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.0] — 2026-10-01
+
+- Revisiones de Jhon/Luz sobre el mismo candidato, con hallazgos reunidos antes
+  de la corrección y respuestas obligatorias de Teo a todos los pendientes.
+- Conserva criterios e historial de evidencia; nunca aprueba con checks de una
+  versión anterior. Los workflows activos adoptan el protocolo al retomarse.
+- Pedido claro sin plan pendiente puede empezar directamente, manteniendo la
+  revisión exigida por riesgo. Un id nuevo no duplica trabajo activo; supersedes
+  conserva las entregas consumidas.
+- El cierre exige commit registrado cuando hay cambios. Preparado, commiteado
+  y publicado quedan diferenciados; push conserva autorización humana.
+- Rechaza campos desconocidos de start antes de crear estado incompleto.
+
 ## [0.16.6] — 2026-10-01
 
 - OpenCode v2 entrega memoria pertinente a Alex antes de la primera inferencia,

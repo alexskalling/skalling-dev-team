@@ -247,12 +247,12 @@ class Workflow(unittest.TestCase):
     def call(self, actor, action, **payload):
         if action == 'start':
             payload.setdefault('intent', 'Preserve the fixture API and value')
-        if action in {'approve', 'complete', 'prepare_commit'} and 'coverage' not in payload:
+        if action in {'approve', 'complete', 'prepare_commit', 'commit'} and 'coverage' not in payload:
             with closing(sqlite3.connect(self.db_path)) as db:
                 row = db.execute("SELECT body FROM agent_workflows WHERE id='request'").fetchone()
             state = json.loads(row[0]) if row else {}
             checks = state.get('checks', [])
-            eligible = [i for i, c in enumerate(checks) if c['agent'] == actor or actor in {'alex', 'teo'}]
+            eligible = [i for i, c in enumerate(checks) if c['agent'] == actor or actor in {'alex', 'teo'} or action == 'commit']
             if eligible:
                 payload['coverage'] = [{'outcome_id': o['id'], 'check_index': eligible[-1],
                                         'observation': 'Fixture assertion verified value remains one'}
@@ -316,7 +316,7 @@ assert.equal(createCore().decide({tool:'shell',agent:fixture.actor,input:{comman
         self.assertEqual(policy_check.returncode, 0, policy_check.stderr)
         self.assertTrue(self.engine.public_response(before)['local_commit']['ready'])
         self.assertEqual(self.engine.public_response(before)['local_commit']['delegate_to'],
-                         'luz' if before['risk'] == 'high' else 'jhon')
+                         'luz' if before['risk'] == 'high' else ('teo' if before['risk'] == 'low' else 'jhon'))
         self.assertIn(before['id'], self.engine.public_response(before)['local_commit']['handoff'])
         prepared = self.call(actor, 'prepare_commit')
         self.assertEqual(prepared['state'], before['state'], 'Commit preparation must not bypass workflow completion')
@@ -845,7 +845,7 @@ assert.equal(createCore().decide({tool:'shell',agent:fixture.actor,input:{comman
         rejected = self.call('jhon', 'reject', evidence='needs another pass',
                              findings='La salida conserva el centrado; alinear el wrapper a la derecha')
         self.assertEqual(rejected['delivery']['delivery_number'], 1)
-        second = self.call('teo', 'deliver')
+        second = self.call('teo', 'deliver', resolutions=[{'finding_id': f['id'], 'change': 'Wrapper aligned'} for f in rejected['review_findings']])
         self.assertEqual(second['delivery']['delivery_number'], 2)
 
     def test_rejection_carries_specific_fix_and_delivery_budget(self):
@@ -860,8 +860,9 @@ assert.equal(createCore().decide({tool:'shell',agent:fixture.actor,input:{comman
 
     def test_third_rejected_delivery_blocks_same_workflow(self):
         self.start()
+        result = {}
         for attempt in range(1, self.engine.MAX_DELIVERIES + 1):
-            self.call('teo', 'deliver')
+            self.call('teo', 'deliver', resolutions=[{'finding_id': f['id'], 'change': 'Attempt correction'} for f in result.get('review_findings', []) if f['status'] != 'resolved'])
             result = self.call('jhon', 'reject', evidence=f'candidate {attempt} still fails',
                                findings=f'failure detail {attempt}')
         self.assertEqual(result['state'], 'blocked')
@@ -904,7 +905,7 @@ assert.equal(createCore().decide({tool:'shell',agent:fixture.actor,input:{comman
         concurrent_start = time.monotonic()
         self.engine.operate({'project': str(self.root), 'actor': 'alex', 'session': 'other-session',
                              'action': 'start', 'payload': {'id': 'other-request', 'risk': 'low',
-                             'files': ['app.py'], 'acceptance': 'x', 'scope': 'local', 'decision': 'none',
+                             'files': ['other.py'], 'acceptance': 'x', 'scope': 'local', 'decision': 'none',
                              'reuse': 'x', 'intent': 'Preserve value'}})
         concurrent_duration = time.monotonic() - concurrent_start
         thread.join()
@@ -951,12 +952,13 @@ assert.equal(createCore().decide({tool:'shell',agent:fixture.actor,input:{comman
         delivered = self.call('teo', 'deliver')
         self.assertEqual(delivered['state'], 'verified')
         self.assertEqual(delivered['verification']['agent'], 'auto')
+        self.call('jhon', 'commit', message='fix: verified fixture')
         completed = self.call('alex', 'complete')
         self.assertEqual(completed['state'], 'completed')
         with closing(sqlite3.connect(self.db_path)) as db, db:
             row = db.execute("SELECT agent, command, exit_code, tree_hash FROM receipts WHERE task_id='request'").fetchone()
             metric = db.execute("SELECT outcome FROM workflow_metrics WHERE request_id='request'").fetchone()
-        self.assertEqual(row[:3], ('auto', 'skalling_workflow:complete', 0))
+        self.assertEqual(row[:3], ('auto', 'skalling_workflow:prepare_commit', 0))
         self.assertEqual(row[3], completed['receipt_tree_hash'])
         self.assertEqual(metric[0], 'success')
 
@@ -1000,9 +1002,9 @@ assert.equal(createCore().decide({tool:'shell',agent:fixture.actor,input:{comman
             self.call('alex', 'complete')
         checked = self.call('jhon', 'check', argv=['bash', 'tests/check.test.sh'], method='behavior', criterion='value stays 1')
         self.assertEqual(checked['verification']['exit_code'], 1)
-        self.call('jhon', 'reject', evidence='The file exists, but value is 2 instead of 1')
+        rejection = self.call('jhon', 'reject', evidence='The file exists, but value is 2 instead of 1')
         (self.root / 'app.py').write_text('value = 1\n')
-        self.assertEqual(self.call('teo', 'deliver')['state'], 'verification_ready')
+        self.assertEqual(self.call('teo', 'deliver', resolutions=[{'finding_id': f['id'], 'change': 'Set value to one'} for f in rejection['review_findings']])['state'], 'verification_ready')
         self.call('jhon', 'oracle', expected='one', negative='two', invariant='int', refutation='test value')
         self.call('jhon', 'check', argv=['bash', 'tests/check.test.sh'], method='behavior', criterion='value stays 1')
         self.call('jhon', 'approve', evidence='Observed the requested value one')
@@ -1022,7 +1024,7 @@ assert.equal(createCore().decide({tool:'shell',agent:fixture.actor,input:{comman
     def test_reclassification_supersedes_only_what_it_names(self):
         self.start()
         other = self.engine.operate({'project': str(self.root), 'actor': 'alex', 'session': 'b', 'action': 'start',
-                                     'payload': {'id': 'other', 'risk': 'low', 'files': ['app.py'], 'acceptance': 'x',
+                                     'payload': {'id': 'other', 'risk': 'low', 'files': ['other.py'], 'acceptance': 'x',
                                                  'scope': 'local', 'decision': 'none', 'reuse': 'x', 'intent': 'Preserve value'}})
         self.assertEqual(other['state'], 'implementation_ready')
         self.assertEqual(self.call('alex', 'status')['state'], 'implementation_ready')
@@ -1205,6 +1207,7 @@ assert.equal(createCore().decide({tool:'shell',agent:fixture.actor,input:{comman
         message('alex-session', 'Alex', 55555, 5555, 0, 5.0, when=1.0)  # fuera de la ventana: no cuenta
         (self.root / 'app.py').write_text('value = 1  # ok\n')
         self.call('teo', 'deliver')
+        self.call('jhon', 'commit', message='fix: verified fixture')
         completed = self.call('alex', 'complete')
         self.assertEqual(completed['usage']['tokens_input'], 3000)
         self.assertEqual(completed['usage']['agents'], ['Alex', 'Teo'])
@@ -1255,6 +1258,7 @@ assert.equal(createCore().decide({tool:'shell',agent:fixture.actor,input:{comman
         self.start()
         (self.root / 'app.py').write_text('value = 1  # ok\n')
         self.call('teo', 'deliver')
+        self.call('jhon', 'commit', message='fix: verified fixture')
         self.assertEqual(self.call('alex', 'complete')['state'], 'completed')
 
 

@@ -308,7 +308,7 @@ sys.exit(result.returncode)
         required = ('scripts/skalling-workflow.py', 'scripts/skalling_skills.py',
                     'scripts/skalling-refresh.sh', 'plugins/skalling-workflow.js',
                     'plugins/skalling-git-guard.js', 'plugins/skalling-query-memory.js',
-                    'plugins/lib/query-memory.mjs')
+                    'plugins/lib/query-memory.mjs', 'scripts/skalling_review_cycle.py')
         for name in (*required, *(str(p.relative_to(ROOT)) for p in (ROOT/'command').glob('skalling-*.md'))):
             dest = target/name
             dest.parent.mkdir(parents=True, exist_ok=True)
