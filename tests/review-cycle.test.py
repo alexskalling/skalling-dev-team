@@ -16,6 +16,48 @@ spec.loader.exec_module(base)
 
 
 class ReviewCycle(base.Workflow):
+    def test_resolution_error_explains_exact_ids_without_consuming_delivery(self):
+        self.start()
+        self.call('teo', 'deliver')
+        state = self.call('jhon', 'reject', evidence='wrong value', findings=[
+            {'id': 'value', 'problem': 'value is two', 'expected': 'value is one'}])
+        with self.assertRaises(ValueError) as error:
+            self.call('teo', 'deliver', resolutions=[
+                {'finding_id': 'o1-product-result', 'change': 'Implemented feature'}])
+        message = str(error.exception)
+        self.assertIn('jhon:value', message)
+        self.assertIn('o1-product-result', message)
+        self.assertIn('value is two', message)
+        self.assertIn('no son outcomes', message)
+        after = self.call('alex', 'status')
+        for field in ('delivery_number', 'rejection_count', 'review_findings', 'checks'):
+            self.assertEqual(after[field], state[field])
+        delivered = self.call('teo', 'deliver', resolutions=[
+            {'finding_id': 'jhon:value', 'change': 'Fixed app.py value'}])
+        self.assertEqual(delivered['delivery_number'], 2)
+
+    def test_stringified_findings_keep_individual_ids_and_criteria(self):
+        self.start()
+        self.call('teo', 'deliver')
+        findings = [{'id': 'jhon:pr-array', 'problem': 'Native array discarded',
+                     'expected': 'Preserve native array'},
+                    {'id': 'status-array', 'problem': 'Pending status discarded',
+                     'expected': 'Block pending'}]
+        state = self.call('jhon', 'reject', evidence='API fixtures differ', findings=json.dumps(findings))
+        self.assertEqual([f['id'] for f in state['review_findings']], ['jhon:pr-array', 'jhon:status-array'])
+        self.assertEqual([f['expected'] for f in state['review_findings']], [f['expected'] for f in findings])
+
+    def test_duplicate_resolution_is_actionable_and_does_not_mutate_findings(self):
+        self.start()
+        self.call('teo', 'deliver')
+        state = self.call('jhon', 'reject', evidence='wrong value')
+        fid = state['review_findings'][0]['id']
+        with self.assertRaises(ValueError) as error:
+            self.call('teo', 'deliver', resolutions=[{'finding_id': fid, 'change': 'Fix'}] * 2)
+        self.assertIn('duplicados', str(error.exception))
+        self.assertIn(fid, str(error.exception))
+        self.assertEqual(self.call('alex', 'status')['review_findings'], state['review_findings'])
+
     def test_batch_reviews_then_single_correction_and_commit(self):
         self.call('alex', 'start', risk='high', scope='cross-cutting', sensitive=True,
                   planning_required=False, files=['app.py'], acceptance='value is one', reuse='app')

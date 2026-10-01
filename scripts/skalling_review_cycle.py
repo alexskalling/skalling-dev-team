@@ -1,5 +1,6 @@
 """Review findings survive corrections; reviewer verdicts share one candidate."""
 import copy
+import json
 
 
 def adopt_active_review(state):
@@ -35,6 +36,15 @@ def archive_review(state):
 
 
 def add_findings(state, actor, findings, reason):
+    # Older callers serialize findings inside the JSON payload's string field.
+    # Decode only arrays; free-text diagnostics retain their legacy identity.
+    if isinstance(findings, str):
+        try:
+            decoded = json.loads(findings)
+        except json.JSONDecodeError:
+            decoded = None
+        if isinstance(decoded, list):
+            findings = decoded
     if not isinstance(findings, list):
         findings = [{'id': str(state['delivery_number']), 'problem': str(findings or reason)[:2000],
                      'expected': 'Resolver el diagnóstico y verificar la aceptación declarada'}]
@@ -43,11 +53,14 @@ def add_findings(state, actor, findings, reason):
     prepared, seen = [], set()
     for item in findings:
         if (not isinstance(item, dict) or any(not isinstance(item.get(k), str) or not item[k].strip()
-                for k in ('id', 'problem', 'expected')) or len(item['id']) > 100 or item['id'] in seen
+                for k in ('id', 'problem', 'expected')) or len(item['id']) > 100
                 or any(len(item[k]) > 2000 for k in ('problem', 'expected'))):
             raise ValueError('Cada finding requiere id único, problem y expected no vacíos')
-        seen.add(item['id'])
-        prepared.append({'id': actor + ':' + item['id'], 'owner': actor, 'problem': item['problem'],
+        fid = item['id'] if item['id'].startswith(actor + ':') else actor + ':' + item['id']
+        if fid in seen:
+            raise ValueError('Cada finding requiere id único, problem y expected no vacíos')
+        seen.add(fid)
+        prepared.append({'id': fid, 'owner': actor, 'problem': item['problem'],
                          'expected': item['expected'], 'status': 'open', 'delivery_number': state['delivery_number']})
     existing = {item['id']: item for item in state.get('review_findings', [])}
     for item in prepared:
@@ -60,13 +73,25 @@ def submit_resolutions(state, payload):
     if not pending:
         return
     items = payload.get('resolutions')
-    if not isinstance(items, list) or len(items) != len(pending) or any(
-            not isinstance(i, dict) or not isinstance(i.get('finding_id'), str)
-            or not isinstance(i.get('change'), str) or not i['change'].strip() for i in items):
-        raise ValueError('deliver requiere resolutions [{finding_id,change}] para cada hallazgo pendiente')
+    valid_shape = isinstance(items, list) and all(
+            isinstance(i, dict) and isinstance(i.get('finding_id'), str)
+            and isinstance(i.get('change'), str) and i['change'].strip() for i in items)
+    supplied = [i['finding_id'] for i in items if isinstance(i, dict) and isinstance(i.get('finding_id'), str)] if isinstance(items, list) else []
+    expected = {f['id'] for f in pending}
+    if not valid_shape or len(supplied) != len(set(supplied)) or set(supplied) != expected:
+        recovery = {
+            'missing': sorted(expected - set(supplied)),
+            'unexpected': sorted(set(supplied) - expected),
+            'duplicados': sorted({fid for fid in supplied if supplied.count(fid) > 1}),
+            'review_findings': [{k: f[k] for k in ('id', 'problem', 'expected')} for f in pending],
+            'retry': {'action': 'deliver', 'payload': {'id': state['id'], 'resolutions': [
+                {'finding_id': f['id'], 'change': ''} for f in pending]}},
+        }
+        raise ValueError('deliver requiere resolutions [{finding_id,change}] con IDs de review_findings; '
+                         'no son outcomes. Completar change con la corrección real de cada hallazgo. '
+                         'Este error no consume entrega ni ejecuta pruebas. No reiniciar el workflow. '
+                         + json.dumps(recovery, ensure_ascii=False))
     mapping = {i['finding_id']: i['change'] for i in items}
-    if set(mapping) != {f['id'] for f in pending}:
-        raise ValueError('resolutions debe cubrir exactamente todos los hallazgos pendientes')
     for finding in pending:
         finding.update(status='addressed', change=mapping[finding['id']])
 
