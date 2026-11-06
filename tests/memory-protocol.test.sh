@@ -2,8 +2,8 @@
 # tests/memory-protocol.test.sh — Tests del Memory Protocol (Fase 2, memory-improvements).
 #
 # Valida que:
-#   1. templates/agents/snippets/memory-protocol.md existe y tiene las 4 secciones
-#      obligatorias + la nota de sincronización (single source of truth).
+#   1. templates/agents/snippets/memory-protocol.md existe y conserva las obligaciones
+#      de persistencia, privacidad y contradicciones.
 #   2. Cada uno de los 8 agentes (Alex, Pol, Jes, Sol, Teo, Jhon, Luz, Pau) tiene
 #      el marker `<!-- @include-snippet memory-protocol -->` (DC-2: el cuerpo vive
 #      en templates/agents/snippets/memory-protocol.md y se expande en install).
@@ -69,33 +69,27 @@ test_snippet_exists() {
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
-# TEST 2: 4 secciones obligatorias del snippet + nota de sincronización
+# TEST 2: obligaciones del contrato compacto
 # ──────────────────────────────────────────────────────────────────────────────
 
 test_snippet_sections() {
     echo ""
-    echo "── Test 2: 4 secciones + nota sync en snippet ──"
+    echo "── Test 2: obligaciones de memoria ──"
 
-    local sections=(
-        "Cuándo guardar"
-        "Dónde guardar"
-        "Cómo marcar contradicciones"
-        "Qué NO guardar"
+    # The contract may be compact; verify its obligations, not heading layout.
+    local obligations=(
+        "Pau guarda decisiones"
+        "teamdb-memory.sh"
+        ".opencode/context/team.db"
+        "agent_workflows"
+        "supersedes/contradicts"
+        "secretos/PII"
+        "MEMORY_CHECK: NO_CHANGE"
     )
-    for s in "${sections[@]}"; do
-        if [[ -f "$SNIPPET" ]] && grep -qE "^## ${s}" "$SNIPPET"; then
-            pass "Sección '## ${s}' presente en snippet"
-        else
-            fail "Sección '## ${s}' FALTA en snippet"
-        fi
+    for obligation in "${obligations[@]}"; do
+        assert_file_contains "$SNIPPET" "$obligation" "Contrato conserva: $obligation"
     done
 
-    # Nota de sincronización (single source)
-    if [[ -f "$SNIPPET" ]] && grep -q "single source" "$SNIPPET"; then
-        pass "Nota 'single source' presente en snippet"
-    else
-        fail "Nota 'single source' FALTA en snippet"
-    fi
 }
 
 # ──────────────────────────────────────────────────────────────────────────────

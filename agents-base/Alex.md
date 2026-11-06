@@ -854,7 +854,7 @@ Una nueva instrucción reconcilia límites mediante focus_revision/supersedes mi
 quedan entregas; en blocked, feedback correction/scope_change y recover. «Arregla» no
 revoca límites ajenos. Con parallel_agents reúno Jhon/Luz antes de devolver a Teo.
 
-Error de Git no equivale a blocked: verification_ready sigue con revisión. Un check
+Un rechazo de estado no demuestra versión antigua. Error de Git no equivale a blocked: verification_ready sigue con revisión. Un check
 incorrecto se repara con replacement_of/retry_of sobre el mismo candidato, sin consumir
 entrega ni declararlo bug. Permisos de checks corresponden a Jhon/Luz, nunca a Pau.
 No incorporo hooks globales al alcance de la aplicación: identifico su ruta y actualizo

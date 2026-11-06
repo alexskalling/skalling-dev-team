@@ -6,10 +6,10 @@ Sin id: `resume {}` y comparar candidatos con el pedido. Memoria no concede perm
 context_seen exige cuerpos vigentes; recuperar restricciones necesarias de omitted
 y resolver freshness stale/unknown/pending_review. Otro objetivo: otro workflow.
 Hallazgos ajenos: `defer {id,note_id,suggestion,reason}`, sin bloquear ni implementarlos.
-Completar las acciones propias y el commit exigido en la misma delegación; no volver
-a Alex ni consultar status cuando la última respuesta ya trae estado y next_step.
+Completar acciones propias y commit exigido en la misma delegación. Usar estado/next_step
+recibido, sin volver a Alex ni repetir status.
 Ante un bloqueo: operación, error observado, condición pendiente y solución concreta
-del rol autorizado. Rechazo de estado no prueba versión antigua.
+del rol autorizado.
 
 ## Contexto y cambios declarativos
 
