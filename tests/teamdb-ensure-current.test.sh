@@ -9,7 +9,7 @@ PASS=0; FAIL=0
 check() { if eval "$2"; then echo "✓ $1"; PASS=$((PASS+1)); else echo "✗ $1" >&2; FAIL=$((FAIL+1)); fi; }
 ver() { sqlite3 "$TMP/.opencode/context/team.db" "SELECT value FROM schema_meta WHERE key='version'"; }
 EXPECTED="$(sed -n 's/^EXPECTED_VERSION="\(.*\)"$/\1/p' "$ROOT/scripts/teamdb-init.sh")"
-LAST="$(ls "$ROOT/sql/migrations" | sort | tail -1)"; LAST="${LAST%.*}"
+LAST="$(find "$ROOT/sql/migrations" -maxdepth 1 -type f \( -name "*.sql" -o -name "*.py" \) -exec basename {} \; | sort | tail -1)"; LAST="${LAST%.*}"
 
 mkdir -p "$TMP/.opencode/context"
 SKALLING_ROOT="$ROOT" bash "$ROOT/scripts/teamdb-init.sh" "$TMP" >/dev/null 2>&1

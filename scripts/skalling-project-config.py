@@ -80,9 +80,16 @@ def sync_agents(project, force=False, check=False):
             raise ValueError(f'Fuente de agente ausente: {source}; reparar instalación antes de sincronizar')
         old = path.read_text(encoding='utf-8')
         body = agent_body(old)
-        rendered = (subprocess.run(['bash', str(ROOT / 'scripts/render-agent.sh'), str(source)],
-                                  capture_output=True, encoding='utf-8', check=True, timeout=30).stdout
-                    if source.parent.name == 'agents-base' else source.read_text(encoding='utf-8'))
+        if source.parent.name == 'agents-base':
+            # Git Bash accepts drive paths with forward slashes, not Windows backslashes.
+            rendered_result = subprocess.run(
+                ['bash', (ROOT / 'scripts/render-agent.sh').as_posix(), source.as_posix()],
+                capture_output=True, encoding='utf-8', timeout=30)
+            if rendered_result.returncode:
+                raise ValueError(f'No se pudo renderizar {source}: {rendered_result.stderr.strip()}')
+            rendered = rendered_result.stdout
+        else:
+            rendered = source.read_text(encoding='utf-8')
         wanted = agent_body(rendered)
         digest = hashlib.sha256(body.encode()).hexdigest()
         if body == wanted:
@@ -238,6 +245,13 @@ def patched_agent(text, rules, begin=BEGIN, end_marker=END):
             seen.add(key)
         kept.append(line)
     lines[start:end] = reversed(kept)
+    if not rules and start == end:
+        # Removing the final managed rule must not leave a null bash policy.
+        lines.pop(start - 1)
+        if 'permission:' in lines:
+            index = lines.index('permission:')
+            if index + 1 == len(lines) or not lines[index + 1].startswith('  '):
+                lines.pop(index)
     return '---\n' + '\n'.join(lines) + sep + rest
 
 

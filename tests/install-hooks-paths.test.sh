@@ -114,6 +114,7 @@ TMP6B="$(cd "$TMP6B_RAW" && pwd -P)"
 git -C "$TMP6B" init -q
 mkdir -p "$TMP6B/.opencode/hooks" "$TMP6B/.opencode/scripts" "$TMP6B/.opencode/context"
 cp "$ROOT/scripts/hooks/pre-commit" "$ROOT/scripts/hooks/git-gate.py" "$TMP6B/.opencode/hooks/"
+cp "$ROOT/scripts/skalling_privacy.py" "$TMP6B/.opencode/scripts/"
 chmod +x "$TMP6B/.opencode/hooks/pre-commit"
 ln -s "$TMP6B/.opencode/scripts/../hooks/pre-commit" "$TMP6B/.git/hooks/pre-commit"
 echo "notas" > "$TMP6B/README.md"

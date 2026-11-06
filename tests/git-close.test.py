@@ -131,12 +131,15 @@ class GitClose(unittest.TestCase):
         self.assertNotIn('posible secreto', self.hook('pre-commit').stderr)
 
     def test_new_branch_checks_changes_not_already_on_remote(self):
-        self.git('update-ref', 'refs/remotes/origin/main', self.base)
+        remote = tempfile.TemporaryDirectory()
+        self.addCleanup(remote.cleanup)
+        subprocess.run(['git', 'init', '--bare', '-q', remote.name], check=True)
+        self.git('push', remote.name, 'HEAD:refs/heads/main')
         self.change(2)
         self.receipt()
         self.git('commit', '-qm', 'reviewed')
         head = self.git('rev-parse', 'HEAD').stdout.strip()
-        result = self.hook('pre-push', f'refs/heads/feature {head} refs/heads/feature ' + '0' * 40 + '\n')
+        result = subprocess.run(['bash', str(ROOT/'scripts/hooks/pre-push'), 'fixture', remote.name], cwd=self.project, capture_output=True, text=True, input=f'refs/heads/feature {head} refs/heads/feature ' + '0' * 40 + '\n')
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_seal_uses_staged_changes_and_does_not_export_memory(self):

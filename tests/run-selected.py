@@ -23,7 +23,7 @@ IMPACT = {
                                  'tests/workflow-plugin.test.mjs', 'tests/data-safety-v2.test.mjs'],
     'plugins/lib/workflow.mjs': ['tests/workflow-plugin.test.mjs', 'tests/permission-bypass.test.mjs',
                                 'tests/project-test-command-permission.test.py'],
-    'plugins/lib/data-safety.mjs': ['tests/data-safety-plugin.test.mjs', 'tests/data-safety-v2.test.mjs',
+    'plugins/lib/data-safety.mjs': ['tests/data-safety-v2.test.mjs',
                                    'tests/permission-bypass.test.mjs'],
     'scripts/teamdb-context.sh': ['tests/context-regressions.test.py', 'tests/teamdb-context-capsule.test.sh',
                                 'tests/teamdb-context-issue8.test.sh', 'tests/scripts-parity.test.sh'],

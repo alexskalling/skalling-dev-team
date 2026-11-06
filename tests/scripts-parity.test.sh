@@ -15,7 +15,12 @@ TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$TESTS_DIR")"
 SNAPSHOT="$ROOT/scripts/build-local-snapshot.sh"
 MANIFEST="$ROOT/scripts/.bundle-manifest"
-DST_DIR="$ROOT/.opencode/scripts"
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+DST_DIR="$TMP/bundle/scripts"
+# Build the same distributable bundle without requiring a committed runtime.
+bash "$SNAPSHOT" --apply --dst="$DST_DIR" >/dev/null
+python3 "$ROOT/scripts/skalling_skills.py" repair --root "$ROOT" --target "$TMP/bundle" >/dev/null
 SRC_DIR="$ROOT/scripts"
 
 PASS=0
@@ -50,7 +55,7 @@ require "scripts/.bundle-manifest"       "$MANIFEST"
 # Pre-checks: si el árbol real tiene drift, este test no puede correr positivo.
 # ──────────────────────────────────────────────────────────────────────────────
 
-if ! bash "$SNAPSHOT" --check >/dev/null 2>&1; then
+if ! bash "$SNAPSHOT" --check --dst="$DST_DIR" >/dev/null 2>&1; then
     echo "WARN: el bundle real tiene drift; el test asume --check=0 sobre el árbol real." >&2
     echo "      Corré 'bash scripts/build-local-snapshot.sh --apply' antes de CI." >&2
     # No abortamos: los tests 1, 3, 4, 5 pueden no depender de estado real.
@@ -60,7 +65,7 @@ fi
 # Test 1: --check retorna 0 sobre el bundle real
 # ──────────────────────────────────────────────────────────────────────────────
 
-if bash "$SNAPSHOT" --check >/dev/null 2>&1; then
+if bash "$SNAPSHOT" --check --dst="$DST_DIR" >/dev/null 2>&1; then
     assert_pass "build-local-snapshot.sh --check retorna 0 sobre árbol real"
 else
     assert_fail "build-local-snapshot.sh --check retorna 0 sobre árbol real" \
@@ -86,8 +91,6 @@ fi
 # Test 3: drift detectado (en directorios aislados, no toca el árbol real)
 # ──────────────────────────────────────────────────────────────────────────────
 
-TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/src/scripts" "$TMP/dst/scripts"
 
 # Armamos un mini-manifest con un único par. El manifest TSV tiene 4 columnas;
@@ -181,7 +184,7 @@ fi
 # Snapshot del estado antes
 BEFORE_HASH="$(cd "$DST_DIR" && find . -type f ! -name '.*' -exec sha256sum {} \; 2>/dev/null | sort | sha256sum | awk '{print $1}')"
 
-bash "$SNAPSHOT" --dry-run >/dev/null 2>&1 || true
+bash "$SNAPSHOT" --dry-run --dst="$DST_DIR" >/dev/null 2>&1 || true
 
 AFTER_HASH="$(cd "$DST_DIR" && find . -type f ! -name '.*' -exec sha256sum {} \; 2>/dev/null | sort | sha256sum | awk '{print $1}')"
 if [[ "$BEFORE_HASH" == "$AFTER_HASH" ]]; then
@@ -203,10 +206,10 @@ if [[ -e "$ORPHAN_FILE" ]]; then
 else
     echo '#!/usr/bin/env bash' > "$ORPHAN_FILE"
     ORPHAN_RC=0
-    ORPHAN_OUT="$(bash "$SNAPSHOT" --check 2>&1)" || ORPHAN_RC=$?
+    ORPHAN_OUT="$(bash "$SNAPSHOT" --check --dst="$DST_DIR" 2>&1)" || ORPHAN_RC=$?
     rm -f "$ORPHAN_FILE"  # lens:ok: literal DST_DIR + nombre fijo, nunca vacío
     CLEAN_RC=0
-    bash "$SNAPSHOT" --check >/dev/null 2>&1 || CLEAN_RC=$?
+    bash "$SNAPSHOT" --check --dst="$DST_DIR" >/dev/null 2>&1 || CLEAN_RC=$?
     if [[ "$ORPHAN_RC" != "0" ]] && printf '%s' "$ORPHAN_OUT" | grep -q "huérfano"; then
         assert_pass "--check detecta huérfano inyectado y lo reporta"
     else
@@ -240,7 +243,7 @@ fi
 # Resumen
 # ──────────────────────────────────────────────────────────────────────────────
 
-if python3 "$ROOT/scripts/skalling_skills.py" check-parity --root "$ROOT" --target "$ROOT/.opencode"; then
+if python3 "$ROOT/scripts/skalling_skills.py" check-parity --root "$ROOT" --target "$TMP/bundle"; then
     assert_pass "skills core locales coinciden con fuente y tienen metadata válida"
 else
     assert_fail "skills core locales divergentes o inválidas"

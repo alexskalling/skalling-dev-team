@@ -309,7 +309,7 @@ sys.exit(result.returncode)
         script.parent.mkdir(parents=True)
         script.write_text('original')
         import shutil
-        required = ('plugins/lib/execution-efficiency.mjs',
+        required = ('plugins/lib/context-budget.mjs', 'plugins/lib/execution-efficiency.mjs',
                     'plugins/skalling-execution-efficiency/index.js', 'plugins/skalling-execution-efficiency/package.json',
                     'scripts/skalling-workflow.py', 'scripts/skalling_skills.py', 'scripts/skalling_db.py', 'scripts/skalling_budget.py', 'scripts/skalling_memory_relations.py',
                     'scripts/skalling-refresh.sh', 'scripts/skalling-project-root.py',

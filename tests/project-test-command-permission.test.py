@@ -9,6 +9,7 @@ import importlib.util
 import json
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -56,7 +57,7 @@ class ProjectTestCommand(unittest.TestCase):
         agents = self.project / '.opencode/agents'
         agents.mkdir(parents=True)
         for name in ('Teo', 'Jhon', 'Luz', 'Alex', 'Pau'):
-            shutil.copy(ROOT / '.opencode/agents' / f'{name}.md', agents / f'{name}.md')
+            (agents / f'{name}.md').write_text(subprocess.check_output(['bash', str(ROOT/'scripts/render-agent.sh'), str(ROOT/'agents-base'/f'{name}.md')], text=True))
 
     def yaml(self, unit=None, fast=None):
         lines = ['testing:']
@@ -87,7 +88,7 @@ class ProjectTestCommand(unittest.TestCase):
             keys = [key for key, _ in rules]
             self.assertEqual(len(keys), len(set(keys)), name)
         target = self.project / '.opencode/agents/Teo.md'
-        original = '---\nmodel: custom/provider\npermission:\n  bash:\n    "git commit *": ask\n    "git *": ask\n---\nCustom body\n'
+        original = '---\nmode: subagent\nmodel: custom/provider\npermission:\n  bash:\n    "git commit *": ask\n    "git *": ask\n---\nCustom body\n'
         target.write_text(original)
         config.apply_test_commands(self.project)
         self.assertEqual(decide(bash_rules(self.agent('Teo')), 'git commit -m fix'), 'allow')
@@ -228,7 +229,7 @@ class ProjectTestCommand(unittest.TestCase):
         self.assertEqual(decide(bash_rules(target.read_text()), 'python3 test_app.py'), 'allow')
         self.assertEqual(config.test_command_drift(self.project), [])
         config.apply_test_commands(self.project, remove=True)
-        self.assertEqual(target.read_text(), body)
+        self.assertEqual(target.read_text(), '---\nmode: subagent\n---\n' + body)
 
     def test_dangerous_or_chained_commands_are_never_allowlisted(self):
         # project.yaml viaja por git: un PR no puede convertirlo en un permiso amplio.
@@ -248,10 +249,11 @@ class ProjectTestCommand(unittest.TestCase):
         self.assertNotIn(config.BEGIN, self.agent('Teo'))
 
     def test_remove_strips_the_added_rules(self):
+        original = self.agent('Teo')
         self.yaml(unit='python3 test_app.py')
         config.apply_test_commands(self.project)
         config.apply_test_commands(self.project, remove=True)
-        self.assertEqual(self.agent('Teo'), (ROOT / '.opencode/agents/Teo.md').read_text())
+        self.assertEqual(self.agent('Teo'), original)
 
 
 if __name__ == '__main__':

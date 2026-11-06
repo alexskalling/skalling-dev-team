@@ -16,11 +16,16 @@ class Diagnostic(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
-        probe = subprocess.run([NODE, '--permission', '-e', "if(process.permission.has('net')!==false)process.exit(1)"], capture_output=True)
+
+    def require_supported_node(self):
+        if not NODE:
+            self.skipTest('Node unavailable')
+        probe = subprocess.run([NODE, '--permission', '-e', "if(!process.allowedNodeEnvironmentFlags.has('--allow-net')||process.permission.has('net')!==false)process.exit(1)"], capture_output=True)
         if probe.returncode:
             self.skipTest('Node with network permission restriction unavailable; capability must fail closed')
 
     def run_code(self, source, **kwargs):
+        self.require_supported_node()
         return subprocess.run(['python3', str(RUNNER), '--source', source], cwd=self.root,
                               capture_output=True, text=True, **kwargs)
 
@@ -51,6 +56,18 @@ class Diagnostic(unittest.TestCase):
         result = self.run_code("if(process.env.GH_TOKEN || process.env.NODE_OPTIONS)throw Error('leaked'); console.log('clean')",
                                env={**os.environ, 'GH_TOKEN':'fixture-secret', 'NODE_OPTIONS':'--require /missing/preload.cjs'})
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_older_node_cannot_mistake_an_unknown_permission_for_denied_network(self):
+        if not NODE:
+            self.skipTest('Node unavailable')
+        probe = subprocess.run([NODE, '-e', "process.exit(process.allowedNodeEnvironmentFlags.has('--allow-net')?0:1)"], capture_output=True)
+        if probe.returncode == 0:
+            self.skipTest('This runtime supports network permissions')
+        result = subprocess.run([sys.executable, str(RUNNER), '--source', 'console.log("UNRESTRICTED")'],
+                                cwd=self.root, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn('UNRESTRICTED', result.stdout)
+        self.assertIn('Diagnóstico no ejecutado', result.stderr)
 
     def test_extra_flags_are_rejected(self):
         result = subprocess.run(['python3',str(RUNNER),'--source','0','--allow-child-process'],capture_output=True,text=True)

@@ -17,6 +17,16 @@ TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$TESTS_DIR")"
 PASS=0
 FAIL=0
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+INSTALLED="$TMP/runtime"
+mkdir -p "$TMP/bin"
+printf '#!/usr/bin/env bash\necho 2.2.5\n' > "$TMP/bin/opencode"
+chmod +x "$TMP/bin/opencode"
+export PATH="$TMP/bin:$PATH"
+# Verify a distributed installation, not a developer's untracked local runtime.
+SKALLING_OPENCODE_DIR="$INSTALLED" SKALLING_DB_GLOBAL="$INSTALLED/team.db" \
+  bash "$ROOT/install-global.sh" --force > "$TMP/install.log" 2>&1 || { cat "$TMP/install.log"; exit 1; }
 
 assert_pass() { echo "✓ $1"; PASS=$((PASS+1)); }
 assert_fail() { echo "✗ $1${2:+ — $2}"; FAIL=$((FAIL+1)); }
@@ -25,7 +35,7 @@ assert_fail() { echo "✗ $1${2:+ — $2}"; FAIL=$((FAIL+1)); }
 for src in "$ROOT"/agents-base/*.md; do
   [ -f "$src" ] || continue
   name="$(basename "$src")"
-  mirror="$ROOT/.opencode/agents/$name"
+  mirror="$INSTALLED/agents/$name"
   if [ ! -f "$mirror" ]; then
     assert_fail "$name: espejo en .opencode/agents/ existe" "falta $mirror"
     continue
@@ -43,7 +53,7 @@ done
 for src in "$ROOT"/scripts/hooks/*; do
   [ -f "$src" ] || continue
   name="$(basename "$src")"
-  mirror="$ROOT/.opencode/hooks/$name"
+  mirror="$INSTALLED/hooks/$name"
   if [ ! -f "$mirror" ]; then
     assert_fail "$name: espejo en .opencode/hooks/ existe" "falta $mirror"
     continue
@@ -59,12 +69,12 @@ done
 # ── huérfanos: un archivo que quedó en el espejo después de borrarse en la
 #    fuente no lo detecta el loop de arriba (solo recorre fuente -> espejo).
 ORPHANS=""
-for mirror in "$ROOT"/.opencode/agents/*.md; do
+for mirror in "$INSTALLED"/agents/*.md; do
   [ -f "$mirror" ] || continue
   name="$(basename "$mirror")"
   [ -f "$ROOT/agents-base/$name" ] || ORPHANS="$ORPHANS .opencode/agents/$name"
 done
-for mirror in "$ROOT"/.opencode/hooks/*; do
+for mirror in "$INSTALLED"/hooks/*; do
   [ -f "$mirror" ] || continue
   name="$(basename "$mirror")"
   [ -f "$ROOT/scripts/hooks/$name" ] || ORPHANS="$ORPHANS .opencode/hooks/$name"
