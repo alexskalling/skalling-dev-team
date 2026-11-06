@@ -903,6 +903,29 @@ const APPROVER_BLOCKED = 'La aprobación de un commit la registra skalling_workf
 const PAU_ENGINEERING_BLOCKED = 'Pau documenta evidencia existente; las pruebas corresponden a Jhon/Luz y el commit local a Teo/Jhon/Luz. '
   + 'Un permiso bloqueado se resuelve para el mismo rol: no se delega a Pau ni se declara verificado un check sin ejecutar.';
 
+const MEMORY_WRITE_BLOCKED = 'La memoria durable la registra Pau, sólo con evidencia validada. '
+  + 'Devolvé el hallazgo a Alex; una hipótesis de auditoría no se persiste como problema confirmado. '
+  + 'La entrega del diagnóstico no depende de escribir memoria ni de convocar a Pau.';
+const MEMORY_MUTATIONS = new Set(['concept', 'decision', 'preference', 'problem', 'batch']);
+
+function memoryMutation(segment) {
+  const words = commandWords(segment);
+  let program = words[0];
+  let args = words.slice(1);
+  if (INTERPRETER.test(program || '')) {
+    const scriptIndex = args.findIndex(word => !word.startsWith('-'));
+    if (scriptIndex < 0) return false;
+    program = args[scriptIndex].replace(/^.*\//, '');
+    args = args.slice(scriptIndex + 1);
+  }
+  if (program === 'teamdb-memory.sh') {
+    if (args[0] === '--project') args = args.slice(2);
+    return MEMORY_MUTATIONS.has(args[0]);
+  }
+  // The Python entrypoint takes the database path before the mutation kind.
+  return program === 'skalling-memory-write.py' && MEMORY_MUTATIONS.has(args[1]);
+}
+
 const COMMIT_DELEGATION_REQUIRED = 'El commit local se delega a Jhon o Luz con el id del workflow existente: '
   + 'skalling_workflow commit con id y message, conservando staging ajeno y evidencia válida sin repetir pruebas. '
   + 'Alex orquesta; Pol/Sol/Jes no commitean. No pedir al usuario otro permiso para suplir esta delegación '
@@ -967,6 +990,9 @@ export function createCore(options = {}) {
       // porque un texto antes no habilita el binario del segmento siguiente.
       const segments = splitSegments(command).segments;
       for (const seg of segments) {
+        if ((who === 'alex' || (TEAM.has(who) && who !== 'pau')) && memoryMutation(seg)) {
+          return MEMORY_WRITE_BLOCKED;
+        }
         if (['alex', 'pol', 'sol', 'jes'].includes(who)
             && new RegExp(`^git${GIT_OPT}\\s+commit(?:\\s|$)`).test(commandWords(seg).join(' '))) {
           return COMMIT_DELEGATION_REQUIRED;

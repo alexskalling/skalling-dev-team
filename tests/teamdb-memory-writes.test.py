@@ -46,6 +46,32 @@ class MemoryWrites(unittest.TestCase):
         self.memory('problem', 'flaky', 'CI intermitente', 'Falla 1 de 10', 'Reintentar el job')
         self.assertEqual(set(self.versions()), {('decisions', 'orm'), ('preferences', 'tono'), ('known_problems', 'flaky')})
 
+    def test_other_roles_cannot_publish_memory_even_with_pau_label(self):
+        before = self.db.read_bytes()
+        operation = ['problem', 'unvalidated', 'Unvalidated finding', 'Hypothesis']
+        for role in ('alex', 'pol', 'sol', 'teo', 'jhon', 'luz', 'jes', 'ambiguous', 'unattributed'):
+            for command in (
+                ['bash', str(ROOT / 'scripts/teamdb-memory.sh'), '--project', str(self.project), *operation],
+                ['python3', str(ROOT / 'scripts/skalling-memory-write.py'), str(self.db), *operation],
+            ):
+                with self.subTest(role=role, command=command[0]):
+                    result = subprocess.run(command, capture_output=True, text=True,
+                                            env={**os.environ, 'SKALLING_RUNTIME_AGENT': role, 'TEAMDB_ACTOR': 'pau'})
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn('sólo Pau', result.stderr)
+        self.assertEqual(self.db.read_bytes(), before)
+        self.memory(*operation)
+        with sqlite3.connect(self.db) as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM known_problems WHERE slug='unvalidated'").fetchone()[0], 1)
+
+    def test_human_cli_keeps_existing_memory_workflow(self):
+        env = dict(os.environ)
+        env.pop('SKALLING_RUNTIME_AGENT', None)
+        result = subprocess.run(['python3', str(ROOT / 'scripts/skalling-memory-write.py'),
+                                 str(self.db), 'concept', 'manual', 'Manual entry', 'Human reviewed'],
+                                capture_output=True, text=True, env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_updates_and_status_changes_bump_the_version(self):
         self.memory('decision', 'orm', 'ORM', 'Usamos Prisma', 'accepted')
         before = self.versions()[('decisions', 'orm')]

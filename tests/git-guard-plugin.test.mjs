@@ -57,6 +57,48 @@ test('Alex rejects an explicit verification/commit handoff to Pau, not documenta
   assert.equal(core.decide({tool:'subagent',agent:'Alex',input:{agent:'Pau',description:'Ejecuta pnpm --version'}}), null);
 });
 
+test('only Pau writes durable memory through the shell wrapper or Python entrypoint', () => {
+  const core = createCore();
+  const commands = [
+    'bash ~/.config/opencode/scripts/teamdb-memory.sh problem slug title evidence',
+    '/home/user/.config/opencode/scripts/teamdb-memory.sh decision slug title evidence',
+    'cd /project && bash .opencode/scripts/teamdb-memory.sh --project /project preference slug evidence',
+    'bash -e "/path with spaces/teamdb-memory.sh" --project "/project with spaces" concept slug title evidence',
+    'env LANG=C bash .opencode/scripts/teamdb-memory.sh batch \'[["problem","slug","title","evidence"]]\' | head -5',
+    'python3 ~/.config/opencode/scripts/skalling-memory-write.py /project/.opencode/context/team.db problem slug title evidence',
+    './scripts/skalling-memory-write.py team.db batch \'[["decision","slug","title","evidence"]]\'',
+  ];
+  for (const agent of ['Alex','Luz','Jhon','Teo','Jes','Pol','Sol']) {
+    for (const command of commands) {
+      assert.match(core.decide({tool:'shell',agent,input:{command}}) || '', /memoria durable.*Pau/, `${agent}: ${command}`);
+    }
+  }
+  for (const agent of ['Pau','Build','Plan','general','unattributed',undefined]) {
+    for (const command of commands) {
+      assert.equal(core.decide({tool:'shell',agent,input:{command}}), null, `${agent}: ${command}`);
+    }
+  }
+});
+
+test('memory mutation guard leaves help, reads, mentions and other role helpers unchanged', () => {
+  const core = createCore();
+  for (const agent of ['Alex','Luz','Jhon','Teo','Jes','Pol','Sol','Pau']) {
+    for (const command of [
+      'bash .opencode/scripts/teamdb-memory.sh --help',
+      'bash .opencode/scripts/teamdb-memory.sh --project /project list',
+      'bash .opencode/scripts/teamdb-memory.sh show slug',
+      'python3 .opencode/scripts/skalling-memory-write.py --help',
+      'bash .opencode/scripts/teamdb-read.sh "SELECT slug FROM known_problems"',
+      'bash .opencode/scripts/teamdb-claim.sh plan task --actor=teo',
+      'rg "teamdb-memory.sh problem" README.md',
+      'git diff -- scripts/skalling-memory-write.py',
+      'echo "bash .opencode/scripts/teamdb-memory.sh problem slug title evidence"',
+    ]) {
+      assert.equal(core.decide({tool:'shell',agent,input:{command}}), null, `${agent}: ${command}`);
+    }
+  }
+});
+
 test('bloquea git push/reset/etc. encadenado detrás de un prefijo permitido', () => {
   assert.notEqual(guardCommand('git add . && git push'), null);
   assert.notEqual(guardCommand('git add -A && git commit -m "x" && git push'), null);

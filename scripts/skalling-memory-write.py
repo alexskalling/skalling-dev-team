@@ -68,6 +68,11 @@ def write(db, operations):
 
 if __name__ == '__main__':
     try:
+        actor = os.environ.get('SKALLING_RUNTIME_AGENT', '').strip().lower()
+        if actor in {'alex', 'pol', 'sol', 'teo', 'jhon', 'luz', 'jes', 'ambiguous', 'unattributed'}:
+            raise ValueError('Memoria durable: sólo Pau persiste desde el equipo. '
+                             'Devuelve hallazgos a Alex; Pau guarda sólo evidencia validada, '
+                             'sin bloquear la respuesta de auditoría.')
         db, kind, *fields = sys.argv[1:]
         operations = json.loads(fields[0]) if kind == 'batch' and len(fields) == 1 else [[kind, *fields]]
         print(json.dumps({'changes': write(db, operations)}))
