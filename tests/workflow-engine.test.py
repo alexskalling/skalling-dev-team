@@ -52,6 +52,35 @@ class Workflow(unittest.TestCase):
             db.execute("INSERT INTO plans(slug,title,design_md,status) VALUES('plan','Plan','# diseño','approved')")
             self.plan_id = db.execute("SELECT id FROM plans WHERE slug='plan'").fetchone()[0]
 
+    def test_non_code_start_does_not_initialize_or_mutate_workflow_storage(self):
+        from unittest.mock import patch
+        before = self.db_path.read_bytes()
+        with patch.object(self.engine, 'ensure_tables') as storage:
+            for kind in ('audit', 'research', 'query', 'typo', None):
+                with self.subTest(kind=kind), self.assertRaisesRegex(ValueError, 'start is only'):
+                    self.engine.operate({'project': str(self.root), 'actor': 'alex',
+                                         'session': 'audit-session', 'action': 'start',
+                                         'payload': {'request_kind': kind}})
+            storage.assert_not_called()
+        self.assertEqual(self.db_path.read_bytes(), before)
+
+    def test_explicit_code_can_correct_audit_findings_and_legacy_states_remain_readable(self):
+        state = self.call('alex', 'start', request_kind='code', risk='low', scope='local',
+                          files=['app.py'], intent='Corregir el hallazgo de la auditoría',
+                          acceptance='value remains one', reuse='existing')
+        self.assertEqual(state['request_kind'], 'code')
+        with sqlite3.connect(self.db_path) as db:
+            legacy = json.loads(db.execute("SELECT body FROM agent_workflows WHERE id='request'").fetchone()[0])
+            legacy.pop('request_kind')
+            db.execute("UPDATE agent_workflows SET body=? WHERE id='request'", (json.dumps(legacy),))
+        self.assertEqual(self.call('alex', 'status')['state'], 'implementation_ready')
+        cancelled = self.call('alex', 'cancel', evidence='Auditoría declarada por error como implementación; continuar análisis con Luz')
+        self.assertEqual(cancelled['state'], 'cancelled')
+        self.assertEqual((self.root / 'app.py').read_text(), 'value = 1\n')
+        with sqlite3.connect(self.db_path) as db:
+            self.assertGreaterEqual(db.execute("SELECT count(*) FROM agent_workflow_events WHERE request_id='request'").fetchone()[0], 2)
+            self.assertEqual(db.execute('SELECT count(*) FROM receipts').fetchone()[0], 0)
+
     def test_complete_reconciles_only_bound_tasks_and_finishes_routing(self):
         with sqlite3.connect(self.db_path) as db:
             ids = [db.execute("INSERT INTO tasks(plan_id,slug,title,acceptance_md) VALUES(?,?,?,?)",

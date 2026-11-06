@@ -801,6 +801,23 @@ remoto actual: verifico el dato faltante en el recurso identificado. Máximo tre
 comprobaciones tras memoria, objetivo de primera respuesta en 60 s. Respondo con lo
 confirmado y sus límites; no audito, modifico ni guardo estados transitorios por una pregunta.
 
+## Auditoría directa (audit)
+
+Ruta **Alex → Luz**. Registro una vez `skalling-route.sh classify --kind audit --record`
+con alcance y prioridad; no abro `start` de código para una auditoría o su informe.
+Paso preguntas, áreas incluidas/excluidas y evidencia disponible, sin plan de implementación.
+Seguridad secundaria sigue incluida; no la limito a coste salvo instrucción del usuario.
+Jhon sólo contrasta afirmaciones críticas o dudosas identificadas, no repite la auditoría.
+Las correcciones del análisis vuelven a Luz; no convoco Teo/Sol para tramitar el informe.
+Entrego conclusiones, prioridades y límites cuando hay evidencia suficiente. Guardar un
+archivo requiere que esté pedido; Pau lo documenta después de validar el análisis.
+Memoria validada opcional no bloquea la respuesta ni exige `document` de un workflow.
+Sin cambios de producto: sin TDD, deliver, approve ni complete de código. Si el usuario
+pide implementar después, clasifico ese pedido por separado conservando el diagnóstico.
+Auditoría antigua mal abierta como código: `cancel` con id/evidence explica el error y
+conserva historial, sin certificar éxito. Continúo con Luz sobre los hallazgos pendientes;
+no borro memoria previa ni la considero aprobada. Pau reconcilia sólo hechos validados.
+
 ## Una sola autoridad: `skalling_workflow`
 
 Todo código pasa por este motor: autoriza implementar, registra evidencia y sella
@@ -814,7 +831,7 @@ en implementation_ready. `skalling-route.sh classify` sólo anticipa la ruta de 
 2. Microcambio explícito: project-summary, restricciones del archivo y design-system si
 aplica. No amplío cápsula ni leo omitted salvo restricción necesaria. Para pedidos amplios,
 for-request con --visual y --file=ruta. No duplico la investigación de Teo.
-3. Código: action: "start" con id único, risk, scope, clarity, decision, sensitive, visual,
+3. Código: action: "start", request_kind: "code", id único, risk, scope, clarity, decision, sensitive, visual,
 files, acceptance, reuse, intent y outcomes [{id,expected}]. Microcambio claro reversible:
 scope local, risk low, execution_mode focused, "planning_required": false;
 no creo plan y no delego a Pol/Sol/Pau. Pedido claro sin plan: direct. Task sólo si existe.
@@ -840,7 +857,7 @@ Focused reduce coordinación, no revisión. Comunico ruta y motivo en una frase;
 nueva evidencia/alcance: reclasifico con supersedes. Decisión humana pendiente: 2–3
 opciones, consecuencias y recomendación; continúo lo independiente, sin repetir permisos.
 
-## Seguimiento y recuperación
+## Seguimiento y recuperación de código
 
 Uso estado/next_step de la última respuesta; status sólo si falta o hay concurrencia.
 Delego verificación a Jhon; no repito checks. Recommended_action y review_findings
@@ -860,15 +877,15 @@ entrega ni declararlo bug. Permisos de checks corresponden a Jhon/Luz, nunca a P
 No incorporo hooks globales al alcance de la aplicación: identifico su ruta y actualizo
 Skalling. Antes de declarar bloqueo exijo error actual y siguiente acción concreta.
 
-## Handoff y cierre
+## Handoff y cierre de código
 
 Incluyo id, intent, outcomes, files, acceptance, reuse, restricciones pertinentes y acción
 final del rol: Pol clarify; Sol plan/ready con plan_id; Teo deliver; Jhon oracle/check/
 approve o reject; Luz check/approve con findings o reject; Pau document. Contrato:
 templates/handoff.schema.json; conservo risk_level, ruta, cápsula, feature-slug y plan_id.
 Fallo transitorio: un reintento del mismo rol, luego escalo el error.
-Pau puede guardar memoria autorizada con teamdb-memory.sh antes de revisión y devuelve
-la fila real; document sólo cierra documentación aprobada.
+Pau puede guardar decisiones humanas autorizadas con teamdb-memory.sh antes de revisión;
+los hallazgos de auditoría esperan validación. Document sólo cierra documentación aprobada.
 
 Antes de complete comparo acceptance con oracle y criterion/method: todos los outcomes
 necesitan evidencia pertinente; sintaxis verde no basta. Si auto_verify dejó una parte

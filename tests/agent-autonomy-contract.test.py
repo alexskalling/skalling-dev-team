@@ -79,6 +79,46 @@ class AgentAutonomyContract(unittest.TestCase):
         self.assertIn("No se activa por la etiqueta `medium/high` por sí sola", teo)
         self.assertIn("no creo plan y no delego a Pol/Sol/Pau", alex)
 
+    def test_audit_is_not_an_implementation_workflow(self):
+        alex = (ROOT / "agents-base/Alex.md").read_text(encoding="utf-8")
+        audit = alex.split("## Auditoría directa (audit)", 1)[1].split("## Una sola autoridad", 1)[0]
+        for obligation in (
+            "**Alex → Luz**", "--kind audit --record", "no abro `start`",
+            "Las correcciones del análisis vuelven a Luz", "no convoco Teo/Sol",
+            "Memoria validada opcional no bloquea", "`cancel` con id/evidence",
+            "sin certificar éxito", "no borro memoria previa",
+        ):
+            self.assertIn(obligation, audit)
+        self.assertIn('request_kind: "code"', alex)
+
+    def test_audit_requires_evidence_and_targeted_independent_review(self):
+        luz = (ROOT / "agents-base/Luz.md").read_text(encoding="utf-8")
+        jhon = (ROOT / "agents-base/Jhon.md").read_text(encoding="utf-8")
+        for obligation in (
+            "criterio de cierre", "informo hallazgos, pendiente y razón",
+            "confianza (confirmado/hipótesis/medido)", "no invento benchmarks",
+            "Ausencias se limitan al área realmente inspeccionada",
+            "Seguridad secundaria", "No escribo memoria ni archivos",
+        ):
+            self.assertIn(obligation, luz)
+        for obligation in (
+            "Contrasto sólo", "No abro workflow de código",
+            "No repito toda la auditoría", "Luz mediante Alex, no a Teo/Sol",
+        ):
+            self.assertIn(obligation, jhon)
+
+    def test_audit_memory_waits_for_validation_without_blocking_delivery(self):
+        pau = (ROOT / "agents-base/Pau.md").read_text(encoding="utf-8")
+        for obligation in (
+            "Auditoría directa: hallazgos validados", "No persisto hipótesis",
+            "hallazgos rechazados como problemas confirmados", "no abro un workflow ni bloqueo",
+            "sólo si el usuario pidió guardarlo",
+        ):
+            self.assertIn(obligation, pau)
+        common = (ROOT / "templates/agents/snippets/objective-contract.md").read_text(encoding="utf-8")
+        self.assertIn("En código sin id:", common)
+        self.assertIn("workflow si existe", common)
+
     def test_handoff_contract_matches_the_payload_teo_receives(self):
         handoff = (ROOT / "skills-base/skalling-handoff/SKILL.md").read_text(encoding="utf-8")
         teo = (ROOT / "agents-base/Teo.md").read_text(encoding="utf-8")

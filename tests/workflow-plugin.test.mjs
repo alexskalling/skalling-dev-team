@@ -22,6 +22,42 @@ async function workflowDefinition(execute) {
   return definition;
 }
 
+test('read-only audits and missing request classification never start the implementation engine', async () => {
+  const received = [];
+  const definition = await workflowDefinition(async request => { received.push(request); return {state:'implementation_ready'}; });
+  const context = {agent:'Alex', sessionID:'audit', signal:new AbortController().signal};
+  for (const request_kind of [undefined, 'audit', 'research', 'query']) {
+    const payload = {id:'audit-report', intent:'Auditar rendimiento sin modificar código', request_kind};
+    for (const encoded of [payload, JSON.stringify(payload)]) {
+      await assert.rejects(definition.execute({action:'start', payload:encoded},context), error => {
+        assert.match(error.message, /request_kind:"code"/);
+        assert.match(error.message, /Alex → Luz/);
+        assert.match(error.message, /--kind audit --record/);
+        return true;
+      });
+    }
+  }
+  assert.equal(received.length,0, 'classification failures cannot create or mutate a workflow');
+  assert.deepEqual(definition.input.properties.payload.properties.request_kind.enum, ['code','audit','research','query']);
+  assert.ok(definition.input.properties.payload.properties.kind.enum.includes('correction'), 'feedback kind retains its own contract');
+});
+
+test('explicit implementation after an audit is not blocked by audit wording or prior classification', async () => {
+  const received = [];
+  const definition = await workflowDefinition(async request => { received.push(request); return {state:'implementation_ready'}; });
+  const context = {agent:'Alex', sessionID:'audit-then-fix', signal:new AbortController().signal};
+  await assert.rejects(definition.execute({action:'start', payload:{id:'audit',request_kind:'audit'}},context));
+  const payload = {id:'fix-audit',request_kind:'code',intent:'Corrige los hallazgos de la auditoría de rendimiento'};
+  await definition.execute({action:'start',payload},context);
+  assert.equal(received.length,1);
+  assert.deepEqual(received[0].payload,payload);
+  assert.equal(received[0].actor,'alex');
+  assert.equal(received[0].session,context.sessionID);
+  await definition.execute({action:'status',payload:{id:'legacy-workflow'}},context);
+  await definition.execute({action:'feedback',payload:{id:'legacy-workflow',kind:'correction'}},context);
+  assert.equal(received.length,3, 'existing workflows and feedback require no start classification');
+});
+
 test('recover is exposed to OpenCode with runtime identity and concrete repair payload', async () => {
   let received;
   const definition = await workflowDefinition(async request => { received = request; return {state:'implementation_ready'}; });

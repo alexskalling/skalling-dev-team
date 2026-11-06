@@ -33,6 +33,13 @@ async function handle(args, runtime, execute) {
   // Se admite objeto o JSON serializado; OpenCode puede reparar el payload.
   const payload = typeof args.payload === 'string' ? JSON.parse(args.payload) : args.payload;
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('payload debe ser un objeto JSON con id');
+  if (args.action === 'start' && payload.request_kind !== 'code') {
+    throw new Error('start requiere request_kind:"code" explícito y un pedido de implementación. '
+      + 'Una auditoría o informe sin cambios no abre un workflow de código: usar '
+      + 'skalling-route.sh classify --kind audit --record y delegar Alex → Luz; '
+      + 'research va a Jes y query la responde Alex. Si el usuario pidió corregir hallazgos, '
+      + 'iniciar ese pedido de implementación con request_kind:"code".');
+  }
   for (const key of ['actor','session','project','model','exit_code','digest']) {
     if (key in payload) throw new Error('Runtime owns ' + key);
   }
@@ -77,7 +84,7 @@ async function handle(args, runtime, execute) {
   return JSON.stringify(result);
 }
 
-const WORKFLOW_DESCRIPTION = `TeamDB es la fuente del foco, estado y evidencia. start: id, intent, files, acceptance, reuse; outcomes [{id,expected}] solo producto, constraints/non_goals listas breves de restricciones explícitas. commit_policy: allowed por defecto (cierre sin commit), required si el usuario lo exige, forbidden si lo prohíbe. Commit/hooks/push se acreditan aparte.
+const WORKFLOW_DESCRIPTION = `TeamDB es la fuente del foco, estado y evidencia. start requiere request_kind:"code" explícito: sólo implementación. Auditoría/informe read-only: skalling-route.sh classify --kind audit --record → Luz, sin start/deliver/plan; corregir hallazgos por pedido humano sí es code. start: id, intent, files, acceptance, reuse; outcomes [{id,expected}] solo producto, constraints/non_goals listas breves de restricciones explícitas. commit_policy: allowed por defecto (cierre sin commit), required si el usuario lo exige, forbidden si lo prohíbe. Commit/hooks/push se acreditan aparte.
 El foco de start/status/resume viene directamente del workflow, fuera de la búsqueda textual. Al retomar usa la respuesta vigente; si falta el id, resume con payload {} recupera desde la sesión del runtime sin escribir. Si devuelve candidatos, comparar con el pedido y consultar status con su id; no elegir otro objetivo ni crear otro plan por pérdida de contexto. start/status/ready traen context; no repetir lecturas ya recibidas. context_seen solo para cuerpos aún presentes. Memoria no autoriza acciones nuevas. requires_resolution/relations advierten contradicciones o reemplazos registrados: consultar las referencias pertinentes antes de usar esa memoria como regla, sin abrir revisiones ajenas al pedido.
 resource_budget opcional en start: max_checks/max_elapsed_seconds sólo si el usuario fijó esos límites. Bloquea nuevas pruebas al agotarse; conserva evidencia y permite cierre válido. No representa cuota de tokens ni autoriza reiniciar el presupuesto. Seguir recommended_action. focused para local; direct para alcance claro con planning_required:false; staged para planes necesarios. Conservar riesgo y revisores; no agregar agentes por rutina. ready: plan_id aprobado y task_ids. rescope: files adicionales, outcome_id válido y evidence de su necesidad; conserva objetivo y restricciones. supersedes conserva restricciones, commit_policy y presupuesto. Para una corrección explícita del usuario: focus_revision {feedback_id,evidence} y las listas constraints/non_goals de reemplazo; claves omitidas se heredan. No usarlo para eludir límites; la revisión empieza de nuevo.
 Teo probe con id es opcional: solo testing.fast pertinente, sin argv; no aprueba ni entrega. Sin fast no ejecutar suite por rutina. Suite configurada en probe/check exige profile:"unit" e impact_reason concreto; comandos congelados al iniciar. deliver corre auto_verify; no duplicarlo en terminal. Jhon oracle con review_plan:[criterios mínimos] → check usando esos criterion → approve con coverage. Jhon y Luz pueden declarar review_plan en su primer check/reuse; si se omite, el motor fija un plan mínimo. Cubierto el plan de cada revisor, otro check exige gap concreto; Luz según riesgo, Pau si hay memoria durable necesaria. Reutilizar oracle. check configured:true usa fast congelado. check inspection:{kind:"diff"|"file",files:[rutas del alcance]} lee Git base/candidato sin shell arbitrario; inspection_output viene en respuesta, si truncado recuperar evidence. Inspecciones nativas son reutilizables automáticamente por sus archivos/base/motor: no recorren el workspace ni expiran por tiempo. Un cambio ajeno no invalida el diff. Jhon/Luz conservan sus propios veredictos. No usar child_process ni packfiles para inspeccionar Git. retry_of conserva comando; replacement_of permite corregir un check inválido/infrastuctura con el mismo criterion, failure_kind:"invalid_check"|"infrastructure" y evidence concreta. Ambos comparten dos reparaciones; no pedir nueva entrega por fallos del verificador ni reclasificar defectos reales; reusable:true solo entradas deterministas. Luz reuse con check_index y evidence. evidence recupera un log sin repetir la prueba. node -e/--eval de revisores usa el runner restringido, nunca ejecución irrestricta como fallback.
@@ -166,6 +173,8 @@ const PAYLOAD_SCHEMA = {
   properties: {
     context_seen: {type: 'array', items: text, description: 'read_keys cuyos cuerpos completos siguen en TU contexto; vacío después de compacción o en otro agente.'},
     id: text, risk: { type: 'string', enum: ['low', 'medium', 'high'] },
+    request_kind: {type: 'string', enum: ['code', 'audit', 'research', 'query'],
+      description: 'Obligatorio en start: code sólo para implementar cambios; auditoría, investigación y consultas no usan este motor.'},
     scope: { type: 'string', enum: ['local', 'module', 'cross-cutting'] },
     clarity: { type: 'string', enum: ['clear', 'ambiguous'] },
     decision: { type: 'string', enum: ['none', 'pending', 'resolved'] },

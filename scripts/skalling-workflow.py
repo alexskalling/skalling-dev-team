@@ -1245,6 +1245,13 @@ def operate(request):
     if action == 'resume':
         require(not payload, 'resume usa payload {}; la sesión y el proyecto vienen del runtime')
         return resume_workflow(root, session)
+    if action == 'start':
+        # Legacy non-runtime callers omitted kind. OpenCode requires an explicit
+        # choice before reaching this backend; a declared audit never mutates DB.
+        require(payload.get('request_kind', 'code') == 'code',
+                'start is only for request_kind code. Auditoría/informe: '
+                'skalling-route.sh classify --kind audit --record → Alex → Luz; '
+                'no plan/deliver ni workflow de implementación')
     identifier = payload['id']
     require(isinstance(identifier, str) and 0 < len(identifier) <= 200, 'Invalid request id')
     # En un worktree la memoria es la del repositorio principal (mismo
@@ -1346,7 +1353,7 @@ def operate(request):
             risk = classification['risk']
             task = payload.get('task')
             require(task is None or (isinstance(task, str) and task.count('/') == 1), 'task debe ser "plan-slug/task-slug"')
-            state = {'id': identifier, 'intent': intent, 'outcomes': outcomes, 'coverage': None, 'risk': risk, 'files': files, 'acceptance': payload['acceptance'],
+            state = {'id': identifier, 'request_kind': 'code', 'intent': intent, 'outcomes': outcomes, 'coverage': None, 'risk': risk, 'files': files, 'acceptance': payload['acceptance'],
                      'reuse': payload['reuse'], 'task': task, 'visual': classification['visual'],
                      'state': 'implementation_ready' if risk == 'low' else ('clarified' if risk == 'medium' else 'requested'),
                      'route': classification['route'], 'agents': classification['agents'],

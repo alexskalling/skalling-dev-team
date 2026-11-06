@@ -125,7 +125,7 @@ def resolve_findings(state, actor):
 
 def validate_start(payload):
     # Reject misspelled contracts before the default acceptance can hide them.
-    allowed = {'id', 'intent', 'outcomes', 'risk', 'scope', 'clarity', 'decision', 'sensitive', 'visual',
+    allowed = {'id', 'request_kind', 'intent', 'outcomes', 'risk', 'scope', 'clarity', 'decision', 'sensitive', 'visual',
                'files', 'acceptance', 'reuse', 'task', 'supersedes', 'execution_mode', 'planning_required',
                'memory_required', 'context_seen', 'constraints', 'non_goals', 'commit_policy', 'focus_revision', 'resource_budget'}
     unknown = set(payload) - allowed

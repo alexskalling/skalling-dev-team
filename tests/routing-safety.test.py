@@ -47,6 +47,19 @@ class RoutingSafety(unittest.TestCase):
         self.assertEqual(recorded.returncode, 2)
         self.assertIn('solo lectura', recorded.stderr)
 
+    def test_audit_stays_direct_without_implementation_even_for_security_scope(self):
+        db_path = self.project / '.opencode/context/team.db'
+        before = db_path.read_bytes()
+        for risk, scope in [('medium', 'module'), ('high', 'cross-cutting')]:
+            result = self.classify('--kind', 'audit', '--risk', risk, '--scope', scope, '--sensitive')
+            self.assertEqual(result['agents'], 'Alex → Luz')
+            self.assertEqual(result['request_kind'], 'audit')
+            self.assertFalse(result['workflow_required'])
+            self.assertFalse(result['implementation_allowed'])
+            self.assertIn('sin skalling_workflow start', result['next_step'])
+            self.assertIn('correcciones del informe vuelven a Luz', result['next_step'])
+        self.assertEqual(db_path.read_bytes(), before)
+
     def test_proven_local_change_is_fast_track(self):
         self.assertEqual(self.classify('--risk', 'low', '--scope', 'local')['route'], 'FAST-TRACK')
 

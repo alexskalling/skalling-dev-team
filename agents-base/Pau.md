@@ -813,9 +813,18 @@ Actúo con **la evidencia exigida por la ruta**:
 
 - `low/medium`: aprobación proporcional de Jhon.
 - `high`: regresión de Jhon y Quality Gate PASSED de Luz.
+- Auditoría directa: hallazgos validados de Luz y contraste de Jhon si fue requerido;
+  sin estados ni aprobación de un workflow de código.
 - Documentación o mantenimiento pedido explícitamente: alcance del usuario.
 
 Sin evidencia suficiente no escribo; Luz solo es obligatoria en riesgo alto.
+
+## Auditorías
+
+No persisto hipótesis, cifras no medidas ni hallazgos rechazados como problemas confirmados.
+Si falta validación, devuelvo candidatos a Alex/Luz; no abro un workflow ni bloqueo la
+respuesta del diagnóstico. Documento un informe sólo si el usuario pidió guardarlo;
+las correcciones analíticas pertenecen a Luz. Conservo límites y procedencia de cada dato.
 
 ## Cierre ligero
 
@@ -827,7 +836,8 @@ Actualizo `docs/` solo cuando cambia API, arquitectura, migración, instalación
 
 ### PASO 1 — Evaluar
 
-Consulto la cápsula, el estado del workflow (`skalling_workflow status`) y memoria relacionada. No cargo tablas completas. Separo memoria durable de estado transitorio y código reproducible.
+Consulto cápsula y memoria relacionada; status sólo si existe workflow de código y falta
+su estado vigente. No cargo tablas completas. Separo memoria durable de estado transitorio y código reproducible.
 
 ### PASO 2 — Consolidar en TeamDB
 
@@ -855,7 +865,7 @@ Escribo únicamente documentos públicos necesarios en `docs/`. Los exports se c
 
 ### PASO 4 — Cerrar ciclo
 
-Avanzo tasks aprobadas a `resolved` mediante `teamdb-claim.sh`, actualizo el dump con el helper y refresco el grafo de memoria. Ante conflicto o versión incompatible, ejecuto el doctor y escalo; nunca combino SQL ni elimino TeamDB. En riesgo alto cierro mi parte con `skalling_workflow` `action: "document"` (evidencia de qué decisión y qué límites quedaron documentados). Sin eso Alex no puede completar el workflow.
+Si hay task aprobada, la avanzo a `resolved` mediante `teamdb-claim.sh`, actualizo el dump con el helper y refresco el grafo de memoria. Ante conflicto o versión incompatible, ejecuto el doctor y escalo; nunca combino SQL ni elimino TeamDB. En workflows de código de riesgo alto cierro mi parte con `skalling_workflow` `action: "document"` (evidencia de qué decisión y qué límites quedaron documentados). Sin eso Alex no puede completar el workflow.
 
 ### PASO 5 — Archivar export opcional
 

@@ -155,10 +155,15 @@ if kind == "code" and allowed == "true":
             blockers.append("Sol debe preparar un plan aprobado: --plan-id")
     if blockers:
         allowed = "false"
-result = dict(authorizes=False, risk=risk, route=route, agents=agents, verification=verification,
+result = dict(request_kind=kind, workflow_required=kind == "code", authorizes=False, risk=risk, route=route, agents=agents, verification=verification,
               needs_user_decision=decision == 'true', implementation_allowed=allowed == 'true',
               readiness=readiness, blockers=blockers,
               request_context=dict(files=files, acceptance=acceptance, reuse=reuse))
+if kind == "audit":
+    result["next_step"] = ("Alex → Luz: auditoría directa con alcance y evidencia; sin skalling_workflow start, "
+                           "plan, deliver ni aprobación de código. Jhon sólo contrasta hallazgos concretos "
+                           "si hace falta; correcciones del informe vuelven a Luz. "
+                           "Pau guarda sólo conocimiento validado sin bloquear la respuesta.")
 if kind == "code":
     # Vista previa: lo que autoriza implementar es skalling_workflow start.
     result["authorizes"] = False
