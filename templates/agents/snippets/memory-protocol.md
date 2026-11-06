@@ -2,15 +2,15 @@
 # 🧠 Memory Protocol
 
 ## Cuándo guardar
-Decisiones arquitectónicas, preferencias confirmadas, problemas, workarounds y
-lecciones no evidentes; Pau consolida con `teamdb-memory.sh`.
+Pau: decisiones, preferencias, problemas y lecciones durables con teamdb-memory.sh.
 
 ## Dónde guardar
-TeamDB es la fuente; `.opencode/context/` solo exports.
+TeamDB: `.opencode/context/team.db`. Avance/evidencia en agent_workflows;
+exports derivados, sin otra memoria paralela.
 
 ## Cómo marcar contradicciones
-Tabla/slug, regla anterior, evidencia y decisión; `contradicts`/`supersedes`.
+Tabla/slug, evidencia y supersedes/contradicts.
 
 ## Qué NO guardar
-Secretos, PII, conversaciones, código, hechos genéricos, resultados transitorios.
-Sin novedad: `MEMORY_CHECK: NO_CHANGE`.
+Secretos/PII, conversaciones, código o resultados transitorios como conocimiento
+durable. Sin novedad: `MEMORY_CHECK: NO_CHANGE`.

@@ -98,7 +98,7 @@ else
   assert_fail "formato coverage.py: percent/lines_covered/lines_total correctos" "row=$ROW4 out=$OUT4"
 fi
 
-# Caso 5: comando que falla (exit != 0) -> no escribe ninguna fila nueva.
+# Caso 5: comando que falla -> conserva evidencia sin porcentaje.
 COUNT_BEFORE="$(sqlite3 "$DB" "SELECT COUNT(*) FROM coverage_runs")"
 cat > "$FIXTURE/fake-coverage.sh" <<'SH'
 #!/usr/bin/env bash
@@ -111,10 +111,11 @@ else
   assert_fail "comando que falla: el script también falla"
 fi
 COUNT_AFTER="$(sqlite3 "$DB" "SELECT COUNT(*) FROM coverage_runs")"
-if [ "$COUNT_AFTER" = "$COUNT_BEFORE" ]; then
-  assert_pass "comando que falla: no escribe ninguna fila nueva"
+if [ "$COUNT_AFTER" = "$((COUNT_BEFORE + 1))" ] && \
+   [ "$(sqlite3 "$DB" 'SELECT format FROM coverage_runs ORDER BY id DESC LIMIT 1')" = failed ]; then
+  assert_pass "comando que falla: registra el fallo sin inventar cobertura"
 else
-  assert_fail "comando que falla: no escribe ninguna fila nueva" "antes=$COUNT_BEFORE después=$COUNT_AFTER"
+  assert_fail "comando que falla: falta evidencia del fallo" "antes=$COUNT_BEFORE después=$COUNT_AFTER"
 fi
 
 if command -v shellcheck >/dev/null 2>&1; then

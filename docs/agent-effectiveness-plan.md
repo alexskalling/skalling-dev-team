@@ -29,7 +29,7 @@ implementación y no quedan registrados como terminados.
 
 El README contiene sesiones puntuales más rápidas, incluyendo una tarea trivial
 de 30 segundos, pero también reconoce que son fixtures/proyectos chicos y que
-OpenCode 2.x no tiene `/skalling-goal`: en esa versión el flujo necesita que
+el flujo de OpenCode 2 necesita que
 una persona lo conduzca y no continúa objetivos por sí mismo. La cobertura de
 tests valida contratos y seguridad; no demuestra aceptación del usuario ni
 calidad de producto. La evaluación real con proveedor sigue pendiente.

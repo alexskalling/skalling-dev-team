@@ -12,7 +12,9 @@ PROJECT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 bash "$SK_ROOT/scripts/skalling-refresh.sh" --check "$PROJECT"
 ```
 
-Si se pidió actualizar, ejecutar el mismo helper con `--apply`. La invocación de
+Sin argumentos o con `--apply`, ejecutar después el mismo helper con `--apply`.
+Con `--check` o una petición de diagnóstico, ejecutar solamente `--check`.
+Rechazar otras opciones sin modificar nada. La invocación de
 refresh autoriza reparar contexto generado, skills core administradas y registro.
 No pedir otra confirmación por esas operaciones. Preservar personalizaciones;
 mostrar conflictos pendientes. Para una consulta de diagnóstico, usar solo --check.

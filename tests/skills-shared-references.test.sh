@@ -18,6 +18,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PASS=0
 FAIL=0
+INSTALLED="$(mktemp -d)"
+trap 'rm -rf "$INSTALLED"' EXIT
+python3 "$ROOT/scripts/skalling_skills.py" repair --root "$ROOT" --target "$INSTALLED" >/dev/null
 
 assert_pass() { echo "✓ $1"; PASS=$((PASS+1)); }
 assert_fail() { echo "✗ $1${2:+ — $2}"; FAIL=$((FAIL+1)); }
@@ -45,12 +48,12 @@ for f in sdd-phase-common.md openspec-convention.md; do
   else
     assert_fail "skills-base/_shared/$f existe"
   fi
-  if [ -f "$ROOT/.opencode/skills/_shared/$f" ]; then
+  if [ -f "$INSTALLED/skills/_shared/$f" ]; then
     assert_pass ".opencode/skills/_shared/$f existe (mirror instalado)"
   else
     assert_fail ".opencode/skills/_shared/$f existe (mirror instalado)"
   fi
-  if diff -q "$ROOT/skills-base/_shared/$f" "$ROOT/.opencode/skills/_shared/$f" >/dev/null 2>&1; then
+  if diff -q "$ROOT/skills-base/_shared/$f" "$INSTALLED/skills/_shared/$f" >/dev/null 2>&1; then
     assert_pass "$f: skills-base y .opencode/skills coinciden"
   else
     assert_fail "$f: skills-base y .opencode/skills coinciden"
@@ -69,7 +72,13 @@ fi
 # Las skills sdd-* + _shared tienen que estar en el catálogo core, si no
 # install-global.sh nunca las copia a ningún lado -- exactamente el segundo
 # bug real que encontramos: código completo, correcto, e inalcanzable.
-CORE_SKILLS="$(source "$ROOT/scripts/lib/lib-stack-detect.sh" && skalling_core_skills "$ROOT/data/skills-by-stack.yaml")"
+CORE_SKILLS="$(PYTHONPATH="$ROOT/scripts" python3 - "$ROOT" <<'PY_SKILLS'
+from pathlib import Path
+import sys
+from skalling_skills import catalog
+print('\n'.join(entry['name'] for entry in catalog(Path(sys.argv[1]))['core']))
+PY_SKILLS
+)"
 for name in _shared sdd-init sdd-explore sdd-propose sdd-spec sdd-design sdd-tasks sdd-apply sdd-verify sdd-archive sdd-onboard; do
   if grep -qx "$name" <<< "$CORE_SKILLS"; then
     assert_pass "$name está en el catálogo core (skills-by-stack.yaml)"

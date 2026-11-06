@@ -267,6 +267,10 @@ sys.exit(result.returncode)
 
     def test_corrupt_workflow_is_not_reported_as_idle(self):
         with sqlite3.connect(self.db) as conn:
+            # Simulate a legacy database without the generated JSON projections.
+            # The current schema correctly rejects malformed JSON on INSERT.
+            conn.execute('DROP TABLE agent_workflows')
+            conn.execute('CREATE TABLE agent_workflows(id TEXT PRIMARY KEY, body TEXT NOT NULL)')
             conn.execute('INSERT INTO agent_workflows VALUES (?,?)', ('broken', '{bad'))
         result = self.command('teamdb-status.sh', '', self.project)
         self.assertNotEqual(result.returncode, 0)
@@ -283,7 +287,7 @@ sys.exit(result.returncode)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('Corriendo: exit 9', result.stdout)
         with sqlite3.connect(self.db) as conn:
-            self.assertEqual(conn.execute('SELECT count(*) FROM coverage_runs').fetchone()[0], 0)
+            self.assertEqual(conn.execute('SELECT format,percent FROM coverage_runs').fetchone(), ('failed', None))
 
     def test_external_privacy_reports_and_blocks_tracked_memory(self):
         subprocess.run(['git', 'init', '-q', str(self.project)], check=True)
@@ -305,10 +309,14 @@ sys.exit(result.returncode)
         script.parent.mkdir(parents=True)
         script.write_text('original')
         import shutil
-        required = ('scripts/skalling-workflow.py', 'scripts/skalling_skills.py',
-                    'scripts/skalling-refresh.sh', 'plugins/skalling-workflow.js',
+        required = ('plugins/lib/execution-efficiency.mjs',
+                    'plugins/skalling-execution-efficiency/index.js', 'plugins/skalling-execution-efficiency/package.json',
+                    'scripts/skalling-workflow.py', 'scripts/skalling_skills.py', 'scripts/skalling_db.py', 'scripts/skalling_budget.py', 'scripts/skalling_memory_relations.py',
+                    'scripts/skalling-refresh.sh', 'scripts/skalling-project-root.py',
+                    'scripts/skalling-codegraph.sh', 'scripts/skalling-coverage-run.py',
+                    'scripts/skalling_process.py', 'scripts/skalling_models.py', 'scripts/skalling_privacy.py', 'plugins/skalling-workflow.js',
                     'plugins/skalling-git-guard.js', 'plugins/skalling-query-memory.js',
-                    'plugins/lib/query-memory.mjs', 'scripts/skalling_review_cycle.py')
+                    'plugins/lib/query-memory.mjs', 'scripts/skalling_review_cycle.py', 'scripts/skalling-node-diagnostic.py')
         for name in (*required, *(str(p.relative_to(ROOT)) for p in (ROOT/'command').glob('skalling-*.md'))):
             dest = target/name
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -320,6 +328,14 @@ sys.exit(result.returncode)
         subprocess.run(command + ['record'] + args, check=True, capture_output=True)
         result = subprocess.run(command + ['check'] + args, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout)
+        duplicate = target/'plugins/skalling-execution-efficiency.js'
+        duplicate.write_text('export { default } from "./skalling-execution-efficiency/index.js";')
+        subprocess.run(command + ['record'] + args, check=True, capture_output=True)
+        result = subprocess.run(command + ['check'] + args, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertEqual(json.loads(result.stdout)['retired_plugins'], ['plugins/skalling-execution-efficiency.js'])
+        duplicate.unlink()
+        subprocess.run(command + ['record'] + args, check=True, capture_output=True)
         script.write_text('modified')
         result = subprocess.run(command + ['check'] + args, capture_output=True, text=True)
         self.assertEqual(result.returncode, 1)

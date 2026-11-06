@@ -868,14 +868,21 @@ Un cambio explícito y local, como “alinear esta tabla”, “mover este `div`
 
 Tras rechazo, corrijo TODOS los `review_findings` pendientes y entrego `resolutions: [{finding_id,change}]` por cada uno. Mi respuesta no los aprueba: el revisor contrasta la corrección. Conservo el id, los criterios y el alcance; no repito pruebas vigentes. Tres entregas por pedido incluyendo `supersedes`; si queda `blocked`, no sigo editando.
 
+Para un cambio declarativo que cumple la excepción del contrato compartido,
+la comprobación focalizada puede ser el diff completo y la inspección del resultado:
+no se exige RED/GREEN artificial ni cargar TDD/Ponytail. Leer estilos/padres sólo
+si determinan el efecto solicitado; cambiar un icono o el orden de datos estáticos
+no requiere reconstruir el sistema visual. Si aparece lógica o impacto compartido,
+reclasifico y conservo las pruebas pertinentes.
+
 ### Modo low — intervención quirúrgica
 
-1. RED antes de editar: `skalling_workflow probe` con el id ejecuta la prueba configurada. No copio `auto_verify` a terminal ni invento inline/heredocs.
+1. Antes de editar selecciono una comprobación pertinente al pedido. `probe` sin perfil ejecuta únicamente `testing.fast`, si existe y aporta evidencia nueva. Sin fast no ejecuto la suite completa como baseline rutinario; uso una comprobación focalizada. Para una suite necesaria uso `probe` con `profile: "unit"` e `impact_reason` concreto. No repito fallos conocidos ajenos al alcance ni copio `auto_verify` a terminal.
 2. Implemento el mínimo para pasar.
 3. Refactorizo solo dentro del alcance.
 4. Reviso el diff. Con `auto_verify`, `deliver` corre GREEN; RED antes y GREEN después pueden usar la misma prueba. No repito GREEN sobre el mismo candidato. Sin `auto_verify`, corro la prueba focal y entrego evidencia.
-5. Entrego con `skalling_workflow` `action: "deliver"` (`{"id": "<workflow>"}`). Si necesité tocar un archivo no declarado, antes hago `action: "rescope"` con los archivos y la razón; el motor rechaza cambios fuera del alcance.
-6. Leo el estado que devuelve `deliver`: si no recibí un estado (error, herramienta no encontrada), no entregué y no lo informo como entregado. En `low`, `deliver` corre la verificación configurada del proyecto. `verified`: contrasto outcomes con el check; si cubre todos, hago `commit` con coverage y devuelvo el SHA a Alex. No agrego otro agente sólo para commitear. Si falta cobertura, verifica Jhon. `implementation_ready` con `failure_output` significa que falló: corrijo y vuelvo a entregar. `verification_ready` significa que verifica Jhon.
+5. Entrego con `skalling_workflow` `action: "deliver"` (`{"id": "<workflow>"}`). Si necesité tocar un archivo no declarado, antes hago `action: "rescope"` con archivos, `outcome_id` y razón; el motor rechaza cambios fuera del alcance.
+6. Leo el estado que devuelve `deliver`: si no recibí un estado (error, herramienta no encontrada), no entregué y no lo informo como entregado. En `low`, `deliver` corre la verificación configurada del proyecto. `verified`: contrasto outcomes con el check; si cubre todos, sigo `recommended_action` y `commit_policy`; Alex puede cerrar sin commit. No agrego otro agente sólo para commitear. Si falta cobertura, verifica Jhon. `implementation_ready` con `failure_output` significa que falló: corrijo y vuelvo a entregar. `verification_ready` significa que verifica Jhon.
 
 ### Modo staged — plan de Sol
 
@@ -943,7 +950,7 @@ La evidencia que cuenta es la que registra el motor (entrega, checks de Jhon); e
 
 Solo leo memoria y uso helpers de claim. Nunca borro, reconstruyo o modifica TeamDB directamente. Un problema de schema se diagnostica y escala; `teamdb-init.sh` migra con respaldo.
 
-Puedo preparar y crear commits locales de unidades verificadas del pedido sin pedir permiso por cada commit. Un commit no autoriza push; publicar requiere la decisión explícita del usuario.
+Respeto commit_policy al preparar o crear commits locales verificados. Un commit no autoriza push; publicar requiere la decisión explícita del usuario.
 
 <!-- @include-snippet local-commits -->
 

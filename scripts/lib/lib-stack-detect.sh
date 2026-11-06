@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# lib-stack-detect.sh — Parser de stack-detectors.yaml + skills-by-stack.yaml.
+# lib-stack-detect.sh — Detección de stack desde stack-detectors.yaml.
 #
 # Lee los data files y aplica los detectores contra el PROJECT_DIR.
 # No usa eval ni associative arrays (compatible bash 3.2).
@@ -383,82 +383,4 @@ skalling_detect_from_yaml() {
         desc="$(head -20 "$project_dir/README.md" 2>/dev/null | { grep -v "^#" || true; } | head -3 | tr '\n' ' ' | sed 's/  */ /g' | cut -c 1-200)"
         skalling_set_detected description "$desc"
     fi
-}
-
-# ──────────────────────────────────────────────────────────────────────────────
-# SKILLS-BY-STACK LOOKUP
-# ──────────────────────────────────────────────────────────────────────────────
-
-skalling_recommended_skills_for_stack() {
-    local yaml_file="$1"
-    local stack_key="$2"
-
-    [[ ! -f "$yaml_file" ]] && return 1
-
-    awk -v key="$stack_key" '
-        BEGIN { in_section=0; current="" }
-        /^[a-z_-]+:$/ {
-            current=tolower($1)
-            sub(/:$/, "", current)
-            in_section = (current == key)
-            next
-        }
-        in_section && /^custom:/ { exit }
-        in_section && /^[a-z]/ && !/^[a-z_-]+:$/ { in_section=0 }
-        in_section && /^  - name:/ {
-            line=$0
-            sub(/^  - name:[[:space:]]*/, "", line)
-            # split en lugar de match con array (POSIX-only)
-            n=split(line, parts, " ")
-            print parts[1]
-        }
-    ' "$yaml_file"
-}
-
-skalling_core_skills() {
-    local yaml_file="$1"
-
-    [[ ! -f "$yaml_file" ]] && return 1
-
-    awk '
-        /^core:/ { in_core=1; next }
-        in_core && /^custom:/ { exit }
-        in_core && /^[a-z]/ && !/^core:/ { in_core=0 }
-        in_core && /^  - name:/ {
-            line=$0
-            sub(/^  - name:[[:space:]]*/, "", line)
-            n=split(line, parts, " ")
-            print parts[1]
-            next
-        }
-    ' "$yaml_file"
-}
-
-# Devuelve la lista de skills marcadas como stack-specific (las que NO son core).
-skalling_stack_specific_skills() {
-    local yaml_file="$1"
-
-    [[ ! -f "$yaml_file" ]] && return 1
-
-    awk '
-        BEGIN { in_core=0; in_top_level=0 }
-        /^detectors:/ { exit }
-        /^core:/ { in_core=1; next }
-        in_core && /^[a-z]/ && !/^core:/ { in_core=0 }
-        in_core && /^  - name:/ { next }
-        /^[a-z_-]+:$/ {
-            current=tolower($1)
-            sub(/:$/, "", current)
-            in_top_level=1
-            next
-        }
-        in_top_level && /^custom:/ { exit }
-        in_top_level && /^[a-z]/ && !/^[a-z_-]+:$/ { in_top_level=0 }
-        in_top_level && /^  - name:/ {
-            line=$0
-            sub(/^  - name:[[:space:]]*/, "", line)
-            n=split(line, parts, " ")
-            print parts[1]
-        }
-    ' "$yaml_file"
 }

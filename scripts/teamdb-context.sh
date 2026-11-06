@@ -63,8 +63,10 @@ case "$OP" in
     python3 - "$DB" "$QUERY" "$TOP_K" "$MAX_BYTES" "$VISUAL" "$SCRIPT_DIR" "$PROJECT" "$OP" "${SEEN[@]+${SEEN[@]/#/seen:}}" "${FILE_ANCHORS[@]+${FILE_ANCHORS[@]}}" <<'PYEOF'
 import json, sqlite3, sys
 sys.path.insert(0, sys.argv[6])
+from contextlib import closing
+from skalling_db import connect
 from skalling_context import request_context
-with sqlite3.connect("file:" + sys.argv[1] + "?mode=ro", uri=True) as conn:
+with closing(connect(sys.argv[1], readonly=True)) as conn:
     result = request_context(conn, sys.argv[7], sys.argv[2], int(sys.argv[3]), int(sys.argv[4]), sys.argv[5] == 'true', sys.argv[9:], query_only=sys.argv[8] == 'for-query')
 print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
 PYEOF
@@ -159,8 +161,10 @@ PYEOF
     python3 - "$DB" "$PLAN_SLUG" "$TASK_SLUG" "$TOP_K" "$MAX_BYTES" "$DISCOVER" "$SCRIPT_DIR" "$PROJECT" "${SEEN[@]+${SEEN[@]}}" <<'PYEOF'
 import sqlite3, sys, json
 sys.path.insert(0, sys.argv[7])
+from contextlib import closing
+from skalling_db import connect
 from skalling_context import task_context
-with sqlite3.connect("file:" + sys.argv[1] + "?mode=ro", uri=True) as conn:
+with closing(connect(sys.argv[1], readonly=True)) as conn:
     result = task_context(conn, sys.argv[8], sys.argv[2], sys.argv[3], int(sys.argv[4]), int(sys.argv[5]), sys.argv[6] == '1', sys.argv[9:])
 print(json.dumps(result, ensure_ascii=False, separators=(',', ':')))
 PYEOF

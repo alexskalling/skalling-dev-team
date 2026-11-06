@@ -22,6 +22,15 @@ class InstalledWorkflow(unittest.TestCase):
             stub.write_text('#!/bin/sh\nwhile [ "$#" -gt 0 ]; do\n'
                             'if [ "$1" = --cwd ]; then mkdir -p "$2/.codegraph"; exit 0; fi\nshift\ndone\n')
             stub.chmod(0o755)
+            opencode = binaries / 'opencode'
+            opencode.write_text('#!/bin/sh\necho 2.0.21\n')
+            opencode.chmod(0o755)
+            for artifact in ('plugins/skalling-execution-efficiency.js', 'plugins/skalling-goal.js', 'scripts/skalling-goal.sh', 'scripts/skalling-goal.py', 'command/skalling-goal.md', 'templates/okf/index.template.md', 'scripts/test-teamdb-safe.sh', 'scripts/test-teamdb-git-sync.sh'):
+                path = config / artifact
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('retired artifact')
+            (config / 'plugins/custom.js').write_text('custom plugin')
+            (config / 'model-overrides.json').write_text('{"Teo":"fixture/kept"}\n')
             env = dict(os.environ, SKALLING_OPENCODE_DIR=str(config),
                        SKALLING_DB_GLOBAL=str(config / 'team.db'), PATH=f'{binaries}:{os.environ["PATH"]}')
 
@@ -37,14 +46,42 @@ class InstalledWorkflow(unittest.TestCase):
                                           'dependencies': {'next': '15.0.0', 'react': '19.0.0'}}))
             (project / 'app/globals.css').write_text(':root { --brand: red; }')
             run(ROOT / 'install-global.sh', '--force')
+            self.assertIn('model: fixture/kept', (config/'agents/Teo.md').read_text())
+            before_models = (config/'model-overrides.json').read_bytes()
+            invalid_model = run(config/'scripts/skalling-models.sh', 'set', 'Teo', 'invalid', check=False)
+            self.assertNotEqual(invalid_model.returncode, 0)
+            self.assertEqual((config/'model-overrides.json').read_bytes(), before_models)
+            runtime = subprocess.run(['python3', str(ROOT / 'scripts/skalling-runtime.py'), 'check',
+                                      '--root', str(ROOT), '--target', str(config)],
+                                     env=env, capture_output=True, text=True)
+            self.assertEqual(runtime.returncode, 0, runtime.stdout + runtime.stderr)
+            self.assertTrue(json.loads(runtime.stdout)['ready'])
+            recovery = subprocess.run(['python3', '-B', str(ROOT / 'tests/workflow-recovery.test.py')],
+                                      env={**env, 'SKALLING_RECOVERY_ROOT': str(config)}, cwd=project,
+                                      capture_output=True, text=True, timeout=120)
+            self.assertEqual(recovery.returncode, 0, recovery.stdout + recovery.stderr)
+            efficiency = subprocess.run(['python3', '-B', str(ROOT / 'tests/verification-efficiency.test.py')],
+                                        env={**env, 'SKALLING_EFFICIENCY_ROOT': str(config)}, cwd=project,
+                                        capture_output=True, text=True, timeout=120)
+            self.assertEqual(efficiency.returncode, 0, efficiency.stdout + efficiency.stderr)
+            for role in ('Alex', 'Jhon', 'Luz', 'Pau'):
+                self.assertIn('Resolver bloqueos sin perder el pedido', (config / f'agents/{role}.md').read_text())
+            run(ROOT / 'setup-team-doctor.sh', '--global-only', '--strict')
+            duplicate = config / 'plugins/skalling-execution-efficiency.js'
+            duplicate.write_text('export { default } from "./skalling-execution-efficiency/index.js";')
+            diagnosis = run(ROOT / 'setup-team-doctor.sh', '--global-only', '--strict', check=False)
+            self.assertNotEqual(diagnosis.returncode, 0)
+            self.assertIn('Plugin de eficiencia duplicado', diagnosis.stdout + diagnosis.stderr)
+            duplicate.unlink()
+            self.assertEqual((config / 'plugins/custom.js').read_text(), 'custom plugin')
             installed_config = json.loads((config / 'opencode.jsonc').read_text())
             self.assertEqual(installed_config['permission']['todowrite'], 'allow')
             self.assertEqual(installed_config, json.loads((ROOT / 'templates/opencode.json').read_text()))
             self.assertTrue((config / '.skalling-backups/install.log').exists())
             self.assertTrue((config / 'hooks/git-gate.py').is_file())
-            for artifact in ('plugins/skalling-goal.js', 'scripts/skalling-goal.sh', 'scripts/skalling-goal.py', 'command/skalling-goal.md'):
-                self.assertTrue((config / artifact).is_file(), artifact)
-            for artifact in ('plugins/skalling-data-safety.js', 'plugins/lib/data-safety.mjs', 'plugins/skalling-workflow.js', 'plugins/lib/workflow.mjs', 'plugins/skalling-model-fallback.js', 'plugins/lib/model-fallback.mjs', 'scripts/teamdb_guard.py', 'scripts/teamdb-destructive.py', 'scripts/skalling-workflow.py'):
+            for artifact in ('plugins/skalling-execution-efficiency.js', 'plugins/skalling-goal.js', 'scripts/skalling-goal.sh', 'scripts/skalling-goal.py', 'command/skalling-goal.md', 'templates/okf/index.template.md', 'scripts/test-teamdb-safe.sh', 'scripts/test-teamdb-git-sync.sh'):
+                self.assertFalse((config / artifact).exists(), artifact)
+            for artifact in ('plugins/lib/context-budget.mjs', 'plugins/skalling-data-safety.js', 'plugins/lib/data-safety.mjs', 'plugins/skalling-workflow.js', 'plugins/lib/workflow.mjs', 'plugins/skalling-model-fallback.js', 'plugins/lib/model-fallback.mjs', 'scripts/teamdb_guard.py', 'scripts/skalling_db.py', 'scripts/teamdb-destructive.py', 'scripts/skalling-workflow.py'):
                 self.assertTrue((config / artifact).is_file(), artifact)
             hook_result = run(config / 'hooks/pre-commit', check=False)
             # A non-Git fixture must fail explicitly, not silently bypass the gate.

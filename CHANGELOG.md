@@ -2,10 +2,47 @@
 
 Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) y el proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.0] — 2026-11-06
+
+- Compactación nativa de conversaciones grandes de agentes Skalling: cola segura,
+  deduplicación y recuperación del foco desde TeamDB. No recorta mensajes a mano.
+- Medición aproximada separada del historial y del sistema/herramientas, preparaciones
+  de contexto y llamadas de herramientas; no se presenta como facturación ni atribución por tarea.
+- Copy, iconos y orden estático local usan inspección focal sin TDD/Ponytail rutinario;
+  lógica y bugs funcionales conservan pruebas de comportamiento y revisión por riesgo.
+- Skills más breves con guías extensas disponibles bajo demanda; el instalador
+  actualiza skills administradas aunque la versión agregue archivos de referencia.
+- Migración 068 actualiza sólo la marca de versión. Instalación conserva modelos.
+
+Detalles y límites: [notas de 0.19.0](docs/releases/0.19.0.md).
+
+## [0.18.0] — 2026-11-06
+
+Versión preparada e instalada localmente. La publicación de tag/Release queda pendiente.
+
+- Plan de revisión propio para Jhon y Luz, cierre con cobertura y justificación
+  de comprobaciones adicionales. Instrucciones de aceptación con salida completa.
+- Inspecciones nativas de archivos y diff reutilizables por sus entradas reales,
+  sin recorrer todo el repositorio ni repetir Git entre revisores.
+- Verificación rápida proporcional: sin fallback automático a la suite completa.
+  Reparación de checks inválidos sin gastar otra entrega del producto.
+- Continuaciones por nueva autorización humana, conservando hallazgos, límites e
+  historial; feedback y recuperación opcionalmente en una sola transacción.
+- Identidad del backend/plugin y detección de plugin desactualizado en memoria.
+  Medición separada de ejecución y caché; tokens por sesión marcados como estimación.
+- Sincronización global/local con preservación de modelos; correcciones de comandos,
+  selección de modelos y hooks que motivaron los bloqueos observados en actas.
+- Migración 067 actualiza sólo la versión de TeamDB; no reinicia workflows ni borra datos.
+
+Detalles, validación y límites: [notas de 0.18.0](docs/releases/0.18.0.md).
+
 ## [0.17.0] — 2026-10-01
 
 - Selector con Alex, Build y Plan; especialistas como subagentes. Los agentes
   nativos pueden trabajar y commitear sin workflow Skalling; push conserva permiso.
+
+- Diagnósticos inline de Node para Jhon/Luz mediante runner con permisos
+  limitados, sin habilitar eval general ni publicación automática.
 
 - Revisiones de Jhon/Luz sobre el mismo candidato, con hallazgos reunidos antes
   de la corrección y respuestas obligatorias de Teo a todos los pendientes.

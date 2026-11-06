@@ -1,32 +1,47 @@
 ---
-description: Inicializa la memoria TeamDB y detecta el stack del proyecto actual.
+description: Inicializa Skalling; elige privacidad antes de instalar en un proyecto ajeno.
 ---
 
 # Skalling Init
 
-Inicializa Skalling usando el bootstrap canónico instalado. Deja el proyecto
-completo, igual que `setup.sh`: memoria, agentes, plugins, scripts, hooks de Git y
-Alex como agente por defecto. No reimplementes la detección ni escribas
-directamente en la base de datos.
+Pedido: $ARGUMENTS
+
+Resuelve la raíz y consulta el modo guardado ANTES de escribir:
 
 ```bash
 SK_ROOT="${SKALLING_ROOT:-${SKALLING_OPENCODE_DIR:-$HOME/.config/opencode}}"
-bash "$SK_ROOT/bootstrap-context.sh" --target "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" --install-project
+PROJECT="$(python3 "$SK_ROOT/scripts/skalling-project-root.py" "$PWD")" || exit
+bash "$SK_ROOT/scripts/skalling-privacy.sh" status "$PROJECT"
 ```
 
-Al terminar, avisá al usuario que **reinicie OpenCode** para cargar los agentes y
-plugins del proyecto, y que los archivos nuevos (`.opencode/`, `.gitignore`,
-`.gitattributes`, `db/teamdb/`) pueden commitearlos Teo, Jhon o Luz siguiendo el receipt y el gate del candidato. Pau no realiza commits de implementación.
+Usa `external` cuando el usuario indique externo, ajeno o público donde Skalling
+no debe versionarse. Usa `internal` cuando quiera compartir agentes y memoria.
+Conserva un modo ya elegido; si falta y el pedido no lo aclara, pregunta antes de
+instalar. No repitas una pregunta ya respondida.
 
-Si el proyecto ya está inicializado, muestra primero el estado y pide confirmación
-antes de usar `--force`. Al terminar, resume stack detectado, ubicación de TeamDB y
-avisos reales del comando. No afirmes que algo se instaló si el proceso falló.
+Ejecuta con el modo elegido (sustituye el marcador por internal o external):
 
-Después de inicializar, chequeo `bash "$SK_ROOT/scripts/skalling-privacy.sh" status "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"`.
-Si dice `privacy_mode: sin-configurar` (primera vez de verdad, no un re-init), le pregunto
-al usuario: **"¿Este proyecto es interno (de tu empresa, memoria compartida por git) o
-externo (de otro cliente/no tuyo, se excluye la memoria; si ya estaba rastreada hay que resolverlo antes de publicar)?"** — y corro
-`/skalling-privacy interno` o `/skalling-privacy externo` según responda, antes de seguir
-con cualquier otra cosa. Si ya tiene un `privacy_mode` configurado, no vuelvo a preguntar.
+```bash
+bash "$SK_ROOT/bootstrap-context.sh" --target "$PROJECT" --install-project --privacy <modo elegido>
+```
 
-El éxito significa memoria inicializada, no comprensión completa del proyecto. No crear carpetas ni Markdown manualmente. Las reglas visuales se consultan en concepts/design-system. Antes de implementar, investigar los archivos pertinentes y completar el contexto del pedido.
+En externo, los agentes y TeamDB son locales y las exclusiones viven en
+`.git/info/exclude`. No crear ni modificar `.gitignore`, `.gitattributes`,
+`AGENTS.md`, CI o documentación compartida para Skalling. No añadir referencias
+al equipo en archivos ni mensajes de commit del proyecto. Los commits deben
+contener únicamente los cambios funcionales solicitados. El instalador conserva
+configuración ajena y rechaza colisiones; no lo fuerces ni retires archivos del
+índice para saltar esa protección.
+
+Si ya está inicializado, muestra el estado antes de una reparación con `--force`;
+úsalo solo con autorización. Para previsualizar, agrega `--dry-run`.
+Si devuelve 3, diferencia lo instalado del contexto pendiente y no repitas
+`--force` automáticamente. No declares listo un proceso que falló.
+
+Al terminar comprueba `/skalling-privacy status` y pide reiniciar OpenCode.
+Solo en interno pueden versionarse los artefactos de Skalling, siguiendo los
+gates y receipts del equipo. Nunca crees un commit automáticamente desde init.
+
+Inicializar prepara memoria, agentes, plugins, scripts y hooks; no significa
+comprender todo el proyecto. Antes de implementar consulta TeamDB y los archivos
+pertinentes. Las reglas visuales están en concepts/design-system.

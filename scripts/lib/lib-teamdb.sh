@@ -74,11 +74,6 @@ teamdb_check_sqlite3() {
   fi
 }
 
-teamdb_query_global() {
-  teamdb_check_sqlite3 || return 1
-  sqlite3 -separator $'\t' "$(teamdb_global_path)" "$1"
-}
-
 teamdb_query_project() {
   teamdb_check_sqlite3 || return 1
   local db; db="$(teamdb_project_path "${2:-$(pwd)}")"
@@ -120,20 +115,6 @@ print(json.dumps([
   {'sql':sys.argv[3], 'params':json.loads(sys.argv[4])}
 ]))" "$actor" "<via_helper-global>" "$sql" "$user_params_json")"
   teamdb_exec_multi "$db" "$batches_json"
-}
-
-teamdb_with_lock() {
-  local lock_path="$1"
-  shift
-  mkdir -p "$(dirname "$lock_path")"
-  if command -v flock >/dev/null 2>&1; then
-    (
-      flock -w 5 200 || { echo "[ERROR] No lock $lock_path" >&2; return 1; }
-      "$@"
-    ) 200>"$lock_path.lock" >/dev/null 2>&1
-  else
-    "$@"
-  fi
 }
 
 teamdb_init_project() {
@@ -369,15 +350,6 @@ teamdb_exec_write() {
   python3 "$_TEAMDB_EXEC_PY" --db "$db" --mode write --sql "$sql" --params "$params_json"
 }
 
-teamdb_exec_transaction() {
-  _resolve_teamdb_exec_py || { echo "[ERROR] teamdb_exec.py no encontrado" >&2; return 1; }
-  command -v python3 >/dev/null 2>&1 || { echo "[ERROR] python3 requerido" >&2; return 1; }
-  local db="$1"; local sql="$2"; shift 2
-  local params_json
-  params_json="$(python3 -c "import json,sys; print(json.dumps(list(sys.argv[1:])))" "$@")"
-  python3 "$_TEAMDB_EXEC_PY" --db "$db" --mode transaction --sql "$sql" --params "$params_json"
-}
-
 # teamdb_exec_multi <db> <batches_json>
 # Ejecuta multiples (sql, params) atómicamente en BEGIN IMMEDIATE.
 # batches_json = '[{"sql":"...","params":[...]}, ...]'
@@ -391,29 +363,6 @@ teamdb_exec_multi() {
 # _sql_quote: envuelve en '...' con escape de comillas (estandar SQL).
 _sql_quote() {
   printf "'%s'" "$(printf '%s' "$1" | sed "s/'/''/g")"
-}
-
-# teamdb_has_table: retorna 1 si la tabla existe, 0 si no. Sin interpolacion user-input.
-teamdb_has_table() {
-  teamdb_check_sqlite3 || return 1
-  local db="$1"
-  local table="$2"
-  [ -f "$db" ] || return 1
-  case "$table" in
-    *[!a-zA-Z0-9_]*) return 1 ;;
-  esac
-  local row
-  row="$(sqlite3 -separator $'\t' "$db" "SELECT 1 FROM sqlite_master WHERE type='table' AND name='$table' LIMIT 1" 2>/dev/null || true)"
-  [ -n "$row" ] && return 0
-  return 1
-}
-
-# _actor_or_unknown: retorna TEAMDB_ACTOR si está exportado, sino 'unknown'.
-# INV-AUDIT-1: el actor en audit_log debe reflejar el agente que invoca,
-# no un literal. Esta función es la fundación — la integración completa
-# con teamdb_write_* se hace en T-2.2 (escritura helper-side).
-_actor_or_unknown() {
-  echo "${TEAMDB_ACTOR:-unknown}"
 }
 
 # teamdb_lock / teamdb_unlock: lock cross-platform basado en mkdir (v0.8.3).

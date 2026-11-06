@@ -5,6 +5,7 @@ Actor/session come from ToolContext. This is process discipline, not protection
 against the OS user who owns both the interpreter and database.
 """
 import hashlib
+from contextlib import closing
 import json
 import os
 from pathlib import Path
@@ -19,6 +20,9 @@ import time
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from skalling_classify import ROUTES, memory_blockers, normalize, project_db, readiness  # noqa: E402
 from skalling_config import testing_config  # noqa: E402
+from skalling_process import run_bounded, _cancel
+from skalling_db import connect
+from skalling_budget import require_budget, budget_status
 from skalling_git import path_identity, isolated_index, commit_unit
 
 ROLES = {'alex', 'pol', 'sol', 'teo', 'jhon', 'luz', 'pau', 'jes'}
@@ -35,8 +39,56 @@ MAX_TIMEOUT = 3600
 # A third rejected candidate is a signal to stop and re-scope instead of
 # burning more model calls in the same loop.
 MAX_DELIVERIES = 3
-_ACTIVE = None  # comando en curso, para cancelarlo con todo su grupo
-from skalling_review_cycle import adopt_active_review, pending_reviewers, archive_review, add_findings, submit_resolutions, resolve_findings, validate_start
+
+
+def delivery_limit(state):
+    # Grants add one attempt; they never reset previous deliveries.
+    return MAX_DELIVERIES + int(bool(state.get('process_recovery'))) + len(state.get('authorized_continuations', []))
+
+
+def recovery_step(state):
+    if state.get('process_recovery'):
+        return ('Alex: recuperación ya consumida. Si el usuario volvió a ordenar continuar después del bloqueo, '
+                'registrar esa nueva instrucción con feedback_id propio y recover con continuation:true, '
+                'feedback_id, evidence y recovery_plan. Cada autorización nueva habilita una entrega; '
+                'no reutilizar autorizaciones gastadas ni crear otro id. Sin instrucción nueva, informar el bloqueo concreto')
+    return ('Alex: feedback con feedback_id, kind correction/scope_change y evidencia de la instrucción humana '
+            '(reutilizarla si ya existe); después recover con el mismo id, feedback_id, evidence del bloqueo '
+            'y recovery_plan concreto. Habilita una entrega adicional, conserva revisores y límites del usuario')
+
+
+def reviewer_plan(state, actor, payload=None):
+    """Freeze a small per-reviewer plan in the first existing tool call."""
+    oracle = state.get('oracle') or {}
+    plan = oracle.get('review_plans', {}).get(actor)
+    if plan is None and actor == 'jhon':
+        plan = oracle.get('checks')
+    if payload is None:
+        return plan or []
+    proposed = payload.get('review_plan')
+    if proposed is not None:
+        require(isinstance(proposed, list) and proposed and
+                all(isinstance(c, str) and c.strip() for c in proposed) and len(set(proposed)) == len(proposed),
+                'review_plan requires distinct nonempty criteria')
+        require(plan is None or plan == proposed, 'Reviewer plan is frozen; justify a new check with gap')
+        plan = proposed
+    if plan is None and state.get('review_policy', 2) == 2:
+        plan = [payload['criterion']]
+    if plan:
+        oracle.setdefault('review_plans', {})[actor] = plan
+    return plan or []
+
+
+def require_review_gap(state, actor, payload, repair=None):
+    plan = reviewer_plan(state, actor, payload)
+    successful = {c['criterion'] for c in state['checks'] if c['agent'] == actor
+                  and c['digest'] == state['digest'] and c['exit_code'] == 0 and 'superseded_by' not in c}
+    if plan and repair is None and (payload['criterion'] not in plan or payload['criterion'] in successful):
+        require(bool(str(payload.get('gap', '')).strip()),
+                'Review plan already covered or check outside plan: provide a concrete evidence gap, otherwise approve with coverage')
+
+
+from skalling_review_cycle import adopt_active_review, pending_reviewers, archive_review, add_findings, submit_resolutions, resolve_findings, validate_start, focus_limits, defer_note
 from skalling_lifecycle import TERMINAL, bind_tasks, finish as finish_lifecycle, expire_claims, progress
 TRANSITIONS = {
     'clarify': ('pol', 'requested', 'clarified'),
@@ -64,6 +116,8 @@ NEXT_STEP = {
 def next_step(state):
     current = state.get('state')
     action = next_action(state)
+    if action['action'] == 'approve':
+        return action['agent'] + ': ' + action['reason']
     if action['action'] == 'commit':
         return f"{action['agent']}: commit con id y message; conservar evidencia vigente; si falta cobertura, Jhon oracle/check. Después Alex complete. Push requiere autorización"
     if state.get('review_protocol') == 2 and current in {'verification_ready', 'verified'} and state['risk'] == 'high':
@@ -71,10 +125,10 @@ def next_step(state):
     if current in {'cancelled', 'failed', 'abandoned'}:
         return 'cerrado sin éxito: ' + state.get('terminal_reason', 'consultar evidencia del cierre')
     if current == 'blocked':
-        return 'Alex: detener el ciclo; aclarar alcance o criterio y abrir otro workflow con supersedes'
+        return recovery_step(state)
     if current == 'implementation_ready' and state.get('last_rejection'):
         rejection = state['last_rejection']
-        remaining = max(0, MAX_DELIVERIES - state.get('delivery_number', 0))
+        remaining = max(0, delivery_limit(state) - state.get('delivery_number', 0))
         return (f"Teo: corregir rechazo de {rejection['agent']} (entrega {rejection['delivery_number']}); "
                 f"quedan {remaining} entrega(s), luego vuelve a entregar")
     if current == 'quality_reviewed' and state.get('execution_mode') in {'focused', 'direct'} and not state.get('memory_required'):
@@ -106,7 +160,7 @@ def next_action(state):
         'documented': ('alex', 'complete'), 'completed': ('done', 'none'),
         'superseded': ('done', 'follow_superseding_workflow'),
         'cancelled': ('done', 'none'), 'failed': ('done', 'none'), 'abandoned': ('done', 'none'),
-        'blocked': ('alex', 'stop_and_reclassify'),
+        'blocked': ('alex', 'recover'),
     }
     if current == 'quality_reviewed' and state.get('risk') == 'high' and state.get('memory_required'):
         routes[current] = ('pau', 'document')
@@ -117,7 +171,7 @@ def next_action(state):
     if current == 'verification_ready' and state.get('auto_verify'):
         routes[current] = ('auto', 'verify')
     commit_states = {'quality_reviewed', 'documented', 'completed'} if state.get('risk') == 'high' else {'verified', 'completed'}
-    if current in commit_states and not state.get('local_commit_result'):
+    if current in commit_states and state.get('commit_policy', 'required') == 'required' and not state.get('local_commit_result'):
         routes[current] = (commit_owner(state), 'commit')
     parallel = []
     if state.get('review_protocol') == 2 and state['risk'] == 'high' and current in {'verification_ready', 'verified'}:
@@ -126,15 +180,24 @@ def next_action(state):
             routes[current] = (parallel[0], 'check/approve-or-reject' if state.get('oracle') else 'oracle/check/approve-or-reject')
     agent, action = routes.get(current, ('alex', 'status'))
     rejection = state.get('last_rejection') if current == 'implementation_ready' else None
-    reason = rejection.get('reason') if rejection else None
+    reason = recovery_step(state) if current == 'blocked' else (rejection.get('reason') if rejection else None)
     if current == 'verified' and state.get('risk') == 'low' and (state.get('verification') or {}).get('agent') == AUTO_VERIFIER:
         reason = 'Contrastar acceptance; si falta cobertura, Jhon abre oracle sobre este workflow antes del cierre.'
+    if agent in {'jhon', 'luz'} and current in {'verification_ready', 'verified'} and state.get('oracle'):
+        checks = [c for c in state.get('checks', []) if c.get('agent') == agent
+                  and c.get('digest') == state.get('digest') and 'superseded_by' not in c]
+        if checks and all(c['exit_code'] == 0 for c in checks):
+            planned = reviewer_plan(state, agent)
+            if set(planned) <= {c['criterion'] for c in checks}:
+                action = 'approve'
+                reason = ('Evaluar coverage de todos los outcomes y emitir veredicto. No repetir pruebas; '
+                          'otro check exige una carencia concreta de evidencia (gap). Verde no equivale a aceptación.')
     return {
         'agent': agent, 'action': action, 'parallel_agents': parallel if state.get('oracle') else [],
         'reason': reason,
         'delivery_number': state.get('delivery_number', 0),
-        'max_deliveries': MAX_DELIVERIES,
-        'deliveries_remaining': max(0, MAX_DELIVERIES - state.get('delivery_number', 0)),
+        'max_deliveries': delivery_limit(state),
+        'deliveries_remaining': max(0, delivery_limit(state) - state.get('delivery_number', 0)),
     }
 
 
@@ -142,6 +205,9 @@ def record_rejection(state, actor, reason, findings=None):
     delivery_number = state.get('delivery_number', 0)
     if state.get('review_protocol') == 2:
         add_findings(state, actor, findings, reason)
+        if state.get('finding_contract') == 1:
+            reason = '; '.join(f['problem'] for f in state['review_findings']
+                               if f['owner'] == actor and f['delivery_number'] == delivery_number)[:2000]
         state.setdefault('review_verdicts', {})[actor] = 'rejected'
     state['last_rejection'] = {
         'agent': actor, 'reason': str(reason).strip()[:2000],
@@ -155,7 +221,7 @@ def record_rejection(state, actor, reason, findings=None):
 
 def finish_rejection(state):
     state['rejection_count'] = state.get('rejection_count', 0) + 1
-    state['state'] = 'blocked' if state.get('delivery_number', 0) >= MAX_DELIVERIES else 'implementation_ready'
+    state['state'] = 'blocked' if state.get('delivery_number', 0) >= delivery_limit(state) else 'implementation_ready'
     if state.get('review_protocol') == 2:
         archive_review(state)
     else:
@@ -382,45 +448,6 @@ def verification_timeout(root):
     return max(1, min(int(value), MAX_TIMEOUT))
 
 
-def run_bounded(argv, root, env, timeout):
-    """Corre el comando en su propio grupo de procesos: al vencer el plazo (o
-    si el plugin cancela y llega SIGTERM) se termina el grupo entero, sin
-    dejar pruebas huérfanas corriendo."""
-    global _ACTIVE
-    # pnpm can install/upgrade dependencies before `run` or `exec`. A check
-    # must use the prepared environment, never repair it implicitly.
-    env = {**env, 'PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN': 'false',
-           'npm_config_verify_deps_before_run': 'false'}
-    proc = subprocess.Popen(argv, cwd=root, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                            start_new_session=True)
-    _ACTIVE = proc
-    try:
-        output, _ = proc.communicate(timeout=timeout)
-        return proc.returncode, output[-16000:].decode('utf-8', 'replace')
-    except subprocess.TimeoutExpired:
-        _kill_group(proc)
-        proc.communicate()
-        raise
-    finally:
-        _ACTIVE = None
-
-
-def _kill_group(proc):
-    if hasattr(os, 'killpg'):
-        try:
-            os.killpg(proc.pid, signal.SIGKILL)
-        except (ProcessLookupError, PermissionError):
-            pass
-    elif proc.poll() is None:
-        proc.kill()
-
-
-def _cancel(signum, _frame):
-    if _ACTIVE is not None:
-        _kill_group(_ACTIVE)
-    sys.exit(128 + signum)
-
-
 def verification_template(root):
     """Plantillas de verificación del proyecto, congeladas al iniciar el
     workflow (las lee Alex antes de que Teo toque nada: editar project.yaml
@@ -432,7 +459,95 @@ def render_verification(template, files):
     template = template or {}
     if template.get('fast'):
         return ['bash', '-c', template['fast'].replace('{files}', shlex.join(sorted(files)))]
-    return ['bash', '-c', template['unit']] if template.get('unit') else None
+    return None
+
+
+def selected_verification(state, payload):
+    """A missing fast check never silently selects the entire unit suite."""
+    profile = payload.get('profile', 'fast')
+    require(profile in {'fast', 'unit'}, 'Verification profile must be fast or unit')
+    template = state.get('verification_template') or {}
+    if profile == 'unit':
+        require(bool(str(payload.get('impact_reason', '')).strip()),
+                'Suite completa: profile unit requiere impact_reason vinculado al cambio')
+        command = template.get('unit')
+        require(bool(command), 'No testing.unit configured; choose a focused check')
+        return ['bash', '-c', command]
+    command = render_verification(template, state['files']) or state.get('auto_verify')
+    require(bool(command), 'No testing.fast: elegir una prueba focalizada; la suite completa exige profile unit e impact_reason')
+    return command
+
+
+def inspection_paths(root, state, inspection):
+    require(isinstance(inspection, dict) and set(inspection) <= {'kind', 'files'},
+            'inspection accepts only kind and files')
+    require(inspection.get('kind') in {'diff', 'file'}, 'inspection.kind must be diff or file')
+    files = inspection.get('files', state['files'])
+    require(isinstance(files, list) and files and all(isinstance(p, str) and p in state['files'] for p in files),
+            'Inspection files must belong to the workflow scope')
+    for name in files:
+        path = root / name
+        require(not path.is_symlink() and path.resolve().is_relative_to(root.resolve()),
+                'Inspection cannot follow paths outside the project or symlinks')
+    return list(dict.fromkeys(files))
+
+
+def inspect_candidate(root, state, inspection):
+    """Fixed read-only operations, without shell, filters or arbitrary Git flags."""
+    import difflib
+    files = inspection_paths(root, state, inspection)
+    base = state.get('base_head')
+    require(base is None or re.fullmatch(r'[0-9a-f]{40,64}', base), 'Invalid frozen base commit')
+    result, size = [], 0
+    for name in files:
+        before = ''
+        if base:
+            git = ['git', '--no-replace-objects', '--no-optional-locks', '-c', 'core.fsmonitor=false', 'cat-file']
+            info = subprocess.run([*git, '-s', f'{base}:{name}'], cwd=root, capture_output=True, text=True, timeout=15)
+            if info.returncode:
+                # A new file has no baseline; other errors must not masquerade as an empty file.
+                listing = subprocess.run(['git', '--no-replace-objects', '--literal-pathspecs', 'ls-tree', '--name-only', base, '--', name],
+                                         cwd=root, capture_output=True, text=True, timeout=15, check=True)
+                require(not listing.stdout.strip(), 'Cannot read Git baseline: ' + info.stderr[-1000:])
+            else:
+                require(int(info.stdout) <= 1024 * 1024, 'Baseline file too large for inspection')
+                before = subprocess.run([*git, 'blob', f'{base}:{name}'], cwd=root, capture_output=True,
+                                        text=True, timeout=15, check=True).stdout
+        path = root / name
+        require(not path.exists() or (path.is_file() and path.stat().st_size <= 1024 * 1024),
+                'Inspection requires text files up to 1 MiB; use a focused project check')
+        after = path.read_text() if path.exists() else ''
+        require('\0' not in before + after, 'Binary file: use a focused project check')
+        size += len(before) + len(after)
+        require(size <= 1024 * 1024, 'Inspection too large; select fewer files')
+        if inspection['kind'] == 'file':
+            result.append({'file': name, 'before': before, 'after': after})
+        else:
+            result.append({'file': name, 'diff': ''.join(difflib.unified_diff(
+                before.splitlines(keepends=True), after.splitlines(keepends=True),
+                fromfile='before/' + name, tofile='after/' + name))})
+    return 0, json.dumps({'base_head': base, 'files': result}, ensure_ascii=False)
+
+
+def validate_check_repair(state, actor, digest, argv, payload):
+    retry, replacement = payload.get('retry_of'), payload.get('replacement_of')
+    require(retry is None or replacement is None, 'Use retry_of or replacement_of, not both')
+    index = retry if retry is not None else replacement
+    if index is None:
+        return None
+    require(type(index) is int and 0 <= index < len(state['checks']), 'Valid retry_of/replacement_of required')
+    prior = state['checks'][index]
+    kinds = {'infrastructure', 'flaky'} if retry is not None else {'infrastructure', 'invalid_check'}
+    require(payload.get('failure_kind') in kinds and bool(str(payload.get('evidence', '')).strip()),
+            'Check repair needs failure classification and concrete evidence; product defects require Teo')
+    require(prior['agent'] == actor and prior['digest'] == digest and prior['exit_code'] != 0
+            and 'superseded_by' not in prior, 'Repair must replace your unresolved failing check on this candidate')
+    require(prior['criterion'] == payload['criterion'], 'Repair must preserve the original criterion')
+    if retry is not None:
+        require(prior['argv'] == argv, 'Retry must use the same command; use replacement_of for an invalid check')
+    require(sum(c.get('retry_of') is not None or c.get('replacement_of') is not None
+                for c in state['checks']) < 2, 'Retry budget exhausted; report the concrete remaining blocker')
+    return index
 
 
 def auto_verification(root, files):
@@ -539,6 +654,40 @@ def workflow_usage(db, state, now):
     return runtime_usage(roots, state['started_at'], now)
 
 
+def stored_usage(db, identifier):
+    if not db.execute("SELECT 1 FROM sqlite_master WHERE name='workflow_metrics'").fetchone():
+        return None
+    try:
+        row = db.execute('SELECT tokens_input,tokens_output,tokens_cache_read,cost,agents_used '
+                         'FROM workflow_metrics WHERE request_id=?', (identifier,)).fetchone()
+    except sqlite3.OperationalError:
+        return None  # read-only recovery also supports older metric schemas
+    if not row or row[0] is None:
+        return None
+    return dict(tokens_input=row[0], tokens_output=row[1], tokens_cache_read=row[2], cost=row[3],
+                agents=[a for a in (row[4] or '').split(',') if a])
+
+
+def refresh_usage(db, state):
+    """Collect outside the writer lock; persist telemetry only if state is unchanged."""
+    require(not db.in_transaction, 'Usage collection must run outside a transaction')
+    try:
+        usage = workflow_usage(db, state, state.get('completed_at') or time.time())
+        if usage is None:
+            return None
+        # One conditional statement: no stale snapshot can overwrite progress.
+        db.execute('UPDATE workflow_metrics SET tokens_input=?,tokens_output=?,tokens_cache_read=?,cost=?,agents_used=? '
+                   'WHERE request_id=? AND EXISTS (SELECT 1 FROM agent_workflows WHERE id=? '
+                   "AND json_extract(body,'$.updated_at')=?)",
+                   (usage['tokens_input'], usage['tokens_output'], usage['tokens_cache_read'], usage['cost'],
+                    ','.join(usage['agents']), state['id'], state['id'], state['updated_at']))
+        db.commit()
+        return usage
+    except (sqlite3.Error, OSError, ValueError, TypeError):
+        db.rollback()
+        return None  # unavailable telemetry must not turn completed work into failure
+
+
 def context_response(db, root, state, payload):
     """Deliver bounded memory at handoff; exact read keys belong to this caller.
 
@@ -549,13 +698,16 @@ def context_response(db, root, state, payload):
     seen = payload.get('context_seen', [])
     require(isinstance(seen, list) and len(seen) <= 200 and all(isinstance(k, str) for k in seen),
             'context_seen must be the read_keys whose bodies are still in your own context')
-    if state.get('task'):
-        plan, task = state['task'].split('/', 1)
-        capsule = task_context(db, root, plan, task, seen=seen)
-    else:
-        capsule = request_context(db, root, state.get('intent') or state['acceptance'],
-                                  visual=state.get('visual', False),
-                                  options=[*state['files'], *('seen:' + k for k in seen)])
+    try:
+        if state.get('task'):
+            plan, task = state['task'].split('/', 1)
+            capsule = task_context(db, root, plan, task, seen=seen)
+        else:
+            capsule = request_context(db, root, state.get('intent') or state['acceptance'],
+                                      visual=state.get('visual', False),
+                                      options=[*state['files'], *('seen:' + k for k in seen)])
+    except (sqlite3.Error, OSError):
+        capsule = {'freshness': {'status': 'unavailable'}, 'needs_expansion': True}
     if db.execute("SELECT 1 FROM sqlite_master WHERE name='workflow_metrics'").fetchone():
         size = len(json.dumps(capsule, ensure_ascii=False, separators=(',', ':')).encode())
         db.execute('UPDATE workflow_metrics SET context_bytes=COALESCE(context_bytes,0)+? WHERE request_id=?',
@@ -601,12 +753,14 @@ def require_approved_plan(db, plan_id):
 
 def apply_pending_migrations(root):
     init_script = Path(__file__).resolve().parent / 'teamdb-init.sh'
-    subprocess.run(['bash', str(init_script), str(root)], capture_output=True)
+    result = subprocess.run(['bash', str(init_script), str(root)], capture_output=True, timeout=120)
+    require(result.returncode == 0, 'TeamDB migration failed: ' +
+            (result.stderr or result.stdout).decode('utf-8', 'replace')[-2000:])
 
 
 def ensure_tables(root, path):
     """agent_workflows/agent_workflow_events are versioned schema
-    (sql/migrations/031_*), not something this script fabricates at runtime.
+    (sql/migrations/033_* and 066_*), not tables fabricated at runtime.
     Never connect() before checking existence: sqlite3.connect() creates an
     empty file as a side effect, and teamdb-init.sh treats an existing-but-
     schemaless file as a corrupt DB rather than a fresh one. Check first,
@@ -618,12 +772,13 @@ def ensure_tables(root, path):
     # Nunca crear una base vacía por accidente (connect() la crea): sin base,
     # teamdb-init.sh la trata como corrupta en vez de nueva.
     require(path.exists(), f'TeamDB no existe en {path}: correr /skalling-init (o bash scripts/teamdb-init.sh)')
-    db = sqlite3.connect(path, timeout=10)
-    if not db.execute("SELECT 1 FROM sqlite_master WHERE name='agent_workflows'").fetchone():
+    db = connect(path, timeout=10)
+    if not db.execute("SELECT 1 FROM pragma_table_xinfo('agent_workflows') WHERE name='workflow_state'").fetchone():
         db.close()
         apply_pending_migrations(root)
-        db = sqlite3.connect(path, timeout=10)
-        if not db.execute("SELECT 1 FROM sqlite_master WHERE name='agent_workflows'").fetchone():
+        db = connect(path, timeout=10)
+        if not db.execute("SELECT 1 FROM pragma_table_xinfo('agent_workflows') WHERE name='workflow_state'").fetchone():
+            db.close()
             raise ValueError('agent_workflows falta y teamdb-init.sh no pudo migrarla; correr bash scripts/teamdb-init.sh manualmente')
     return db
 
@@ -637,16 +792,12 @@ def save(db, identifier, actor, session, action, state, evidence, now):
     progress(db, state)
     expire_claims(db, now)
     state['updated_at'] = now
-    if action in {'ready', 'deliver', 'check', 'approve', 'reject', 'reuse', 'status'}:
-        state['usage'] = workflow_usage(db, state, now)
+    state.pop('execution_budget', None)
+    state.pop('usage', None)  # telemetry lives in workflow_metrics, never in the state snapshot
     if action != 'feedback' and db.execute("SELECT 1 FROM sqlite_master WHERE name='workflow_metrics'").fetchone():
         db.execute('UPDATE workflow_metrics SET duration_ms=?, handoffs=?, retries=? WHERE request_id=?',
                    (round((now - state['started_at']) * 1000), state['handoffs'],
                     state.get('rejection_count', 0), identifier))
-        usage = state.get('usage')
-        if usage:
-            db.execute('UPDATE workflow_metrics SET tokens_input=?, tokens_output=?, tokens_cache_read=?, cost=? WHERE request_id=?',
-                       (usage['tokens_input'], usage['tokens_output'], usage['tokens_cache_read'], usage['cost'], identifier))
     db.execute('INSERT INTO agent_workflows(id,body) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body',
                (identifier, json.dumps(state)))
     db.execute('INSERT INTO agent_workflow_events(request_id,actor,session,action,state,evidence,ts) VALUES(?,?,?,?,?,?,?)',
@@ -656,7 +807,13 @@ def save(db, identifier, actor, session, action, state, evidence, now):
 
 def read(db, identifier):
     row = db.execute('SELECT body FROM agent_workflows WHERE id=?', (identifier,)).fetchone()
-    return adopt_active_review(json.loads(row[0])) if row else None
+    if not row:
+        return None
+    state = adopt_active_review(json.loads(row[0]))
+    state['usage'] = stored_usage(db, identifier)
+    if state.get('resource_budget'):
+        state['execution_budget'] = budget_status(db, state)
+    return state
 
 
 def evidence_context(root):
@@ -704,6 +861,33 @@ def evidence_context(root):
         return None
 
 
+def inspection_context(root, state, inspection):
+    """Native inspection has a closed set of inputs; tests do not get this shortcut."""
+    files = inspection_paths(root, state, inspection)
+    inputs = {'kind': inspection['kind'], 'files': files, 'root': str(root),
+              'base': state.get('base_head'), 'candidate': fingerprint(root, files),
+              'engine': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(), 'python': sys.version}
+    return 'inspection-v1:' + hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest()
+
+
+def context_for_check(root, state, inspection=None):
+    return inspection_context(root, state, inspection) if inspection is not None else evidence_context(root)
+
+
+def scan_evidence_unlocked(db, root, state, inspection=None):
+    """Release the writer while hashing dependencies; reject an obsolete snapshot."""
+    revision = state['updated_at']
+    db.rollback()
+    context = context_for_check(root, state, inspection)
+    db.execute('BEGIN IMMEDIATE')
+    current = read(db, state['id'])
+    require(current is not None and current['updated_at'] == revision,
+            'Workflow changed during evidence scan; retry on the current candidate')
+    require(fingerprint(root, current['files']) == current['digest'],
+            'Candidate changed during evidence scan; evidence cannot be reused')
+    return context
+
+
 def reuse_evidence(db, root, actor, session, identifier, payload):
     db.execute('BEGIN IMMEDIATE')
     state = read(db, identifier)
@@ -720,11 +904,22 @@ def reuse_evidence(db, root, actor, session, identifier, payload):
             'Reuse requires successful Jhon evidence')
     require(fingerprint(root, state['files']) == source['digest'] == state['digest'], 'Candidate changed')
     require(source.get('reusable') is True, 'Source check must explicitly declare deterministic local inputs (reusable)')
-    require(source.get('context') and source['context'] == evidence_context(root),
+    started = time.monotonic()
+    native = source.get('inspection') if str(source.get('context', '')).startswith('inspection-v1:') else None
+    criterion = payload.get('criterion', source['criterion'])
+    reviewer_plan(state, actor, {**payload, 'criterion': criterion})
+    context = scan_evidence_unlocked(db, root, state, native)
+    require(source.get('context') and source['context'] == context,
             'Evidence environment or workspace changed; run a fresh check')
-    require(time.time() - source.get('finished_at', 0) <= 600, 'Evidence expired; run a fresh check')
-    record = {k: v for k, v in source.items() if k != 'output'}
+    require(native is not None or time.time() - source.get('finished_at', 0) <= 600, 'Evidence expired; run a fresh check')
+    for existing in state['checks']:
+        if existing.get('agent') == actor and existing.get('reused_from') == index and existing.get('criterion') == criterion and 'superseded_by' not in existing:
+            db.rollback()
+            return state
+    require_review_gap(state, actor, {**payload, 'criterion': criterion})
+    record = {k: v for k, v in source.items() if k not in {'output', 'retry_of', 'replacement_of', 'repair_evidence'}}
     record.update(agent=actor, session=session, reused_from=index, duration_ms=0,
+                  criterion=criterion, context_scan_ms=round((time.monotonic() - started) * 1000),
                   method='review-of-independent-evidence', justification=payload['evidence'])
     state['checks'].append(record)
     state['verification'] = record
@@ -740,9 +935,9 @@ def implementation_probe(db, root, actor, session, identifier, payload):
     require(state is not None, 'Unknown workflow')
     require(actor == 'teo' and state['state'] == 'implementation_ready', 'Probe role/order invalid')
     require('argv' not in payload, 'Probe only runs the configured command; argv is not accepted')
-    argv = state.get('auto_verify') or state.get('configured_verification')
-    require(bool(argv), 'Probe requires testing.fast or testing.unit configured in the project')
+    argv = selected_verification(state, payload)
     digest = fingerprint(root, state['files'])
+    require_budget(db, state)
     save(db, identifier, actor, session, 'probe-started', state, {'argv': argv, 'digest': digest}, time.time())
     revision = state['updated_at']
     db.commit()  # Tests must not hold the TeamDB write lock.
@@ -761,6 +956,7 @@ def implementation_probe(db, root, actor, session, identifier, payload):
     require(fingerprint(root, state['files']) == digest, 'Candidate changed during probe; evidence discarded')
     record = {'agent': actor, 'session': session, 'argv': argv, 'digest': digest,
               'exit_code': exit_code, 'output': output, 'failure_kind': failure_kind,
+              'profile': payload.get('profile', 'fast'), 'impact_reason': payload.get('impact_reason'),
               'duration_ms': round((time.monotonic() - started) * 1000), 'finished_at': time.time()}
     # Intentionally separate from independent checks, coverage and receipts.
     state.setdefault('implementation_checks', []).append(record)
@@ -793,9 +989,14 @@ def check(db, root, actor, session, identifier, payload, request):
     require(session != state['implementation_session'], 'Independent verifier session required')
     digest = state['digest']
     require(fingerprint(root, state['files']) == digest, 'Candidate changed; return to Teo')
-    if flag(payload, 'configured'):
-        argv = state.get('configured_verification')
-        require(bool(argv), 'El proyecto no declara testing.fast ni testing.unit: usar un argv que tu política permita')
+    inspection = payload.get('inspection')
+    require(sum((flag(payload, 'configured'), 'argv' in payload, inspection is not None)) == 1,
+            'Choose exactly one: configured, argv, or inspection')
+    if inspection is not None:
+        files = inspection_paths(root, state, inspection)
+        argv = ['skalling-inspection', inspection['kind'], *files]
+    elif flag(payload, 'configured'):
+        argv = selected_verification(state, payload)
     else:
         argv = payload.get('argv')
         require(isinstance(argv, list) and argv and all(isinstance(v, str) and '\0' not in v for v in argv),
@@ -803,24 +1004,39 @@ def check(db, root, actor, session, identifier, payload, request):
     require(bool(payload.get('method')), 'Verification method required')
     require(bool(str(payload.get('criterion', '')).strip()),
             'Each check must name which declared criterion it exercises, not just run a command')
-    context_before = evidence_context(root) if flag(payload, 'reusable') else None
-    if context_before and payload.get('retry_of') is None:
+    repair = validate_check_repair(state, actor, digest, argv, payload)
+    reviewer_plan(state, actor, payload)
+    reusable = inspection is not None or flag(payload, 'reusable')
+    scan_started = time.monotonic()
+    context_before = scan_evidence_unlocked(db, root, state, inspection) if reusable else None
+    context_ms = round((time.monotonic() - scan_started) * 1000)
+    if context_before and repair is None:
         for index in range(len(state['checks']) - 1, -1, -1):
             previous = state['checks'][index]
             if previous['argv'] == argv and previous['exit_code'] != 0 and 'superseded_by' not in previous:
                 break
             if (previous.get('reusable') and previous.get('context') == context_before
-                    and previous['agent'] == actor and previous['session'] == session
+                    and (previous['agent'] == actor or (inspection is not None and actor == 'luz' and previous['agent'] == 'jhon'))
                     and previous['argv'] == argv and previous['digest'] == digest
-                    and previous['criterion'] == payload['criterion'] and previous['method'] == payload['method']
+                    and (inspection is not None or (previous['criterion'] == payload['criterion'] and previous['method'] == payload['method']))
                     and previous['exit_code'] == 0 and 'superseded_by' not in previous
-                    and time.time() - previous.get('finished_at', 0) <= 600):
-                reused = {**previous, 'reused_from': index, 'duration_ms': 0}
+                    and (inspection is not None or time.time() - previous.get('finished_at', 0) <= 600)):
+                if previous['agent'] != actor or previous['criterion'] != payload['criterion']:
+                    require_review_gap(state, actor, payload)
+                reused = {k: v for k, v in previous.items() if k not in {'retry_of', 'replacement_of', 'repair_evidence'}}
+                reused.update(agent=actor, session=session, criterion=payload['criterion'], method=payload['method'],
+                              reused_from=index, duration_ms=0, context_scan_ms=context_ms, timing_version=2)
                 state['checks'].append(reused)
                 state['verification'] = reused
                 save(db, identifier, actor, session, 'reuse', state, 'Unchanged deterministic check', time.time())
                 db.commit()
-                return state
+                return {**state, '_inspection_output': reused['output']} if inspection is not None else state
+    if context_before and any(c.get('reusable') and c.get('context') and c['context'] != context_before
+                              and c['agent'] == actor and c['argv'] == argv and c['criterion'] == payload['criterion']
+                              and c['digest'] == digest and c['exit_code'] == 0 for c in state['checks']):
+        payload = {**payload, 'gap': payload.get('gap') or 'Deterministic inputs changed; previous evidence no longer applies'}
+    require_review_gap(state, actor, payload, repair)
+    require_budget(db, state)
     save(db, identifier, actor, session, 'check-started', state, {'argv': argv, 'criterion': payload['criterion']}, time.time())
     db.commit()  # release the write lock before the potentially slow command
 
@@ -831,7 +1047,8 @@ def check(db, root, actor, session, identifier, payload, request):
     timeout = state.get('verification_timeout') or DEFAULT_TIMEOUT
     started = time.monotonic()
     try:
-        exit_code, output = run_bounded(argv, root, env, timeout)
+        exit_code, output = (inspect_candidate(root, state, inspection) if inspection is not None
+                             else run_bounded(argv, root, env, timeout))
     except subprocess.TimeoutExpired:
         db.execute('BEGIN IMMEDIATE')
         current = read(db, identifier)
@@ -843,6 +1060,10 @@ def check(db, root, actor, session, identifier, payload, request):
         raise ValueError(f'El check superó {timeout}s y se canceló sin registrarse; subir '
                          'testing.timeout_seconds o usar un comando más acotado')
 
+    command_ms = round((time.monotonic() - started) * 1000)
+    scan_started = time.monotonic()
+    context_after = context_for_check(root, state, inspection) if context_before else None
+    context_ms += round((time.monotonic() - scan_started) * 1000)
     db.execute('BEGIN IMMEDIATE')
     state = read(db, identifier)
     require(state is not None and state['state'] in allowed_states
@@ -851,34 +1072,33 @@ def check(db, root, actor, session, identifier, payload, request):
     verification = {'agent': actor, 'session': session, 'method': payload['method'], 'argv': argv,
                      'criterion': payload['criterion'], 'exit_code': exit_code, 'digest': digest, 'output': output,
                      'model': request.get('model'), 'independence': 'context-and-method; model diversity unverified'}
-    verification.update(duration_ms=round((time.monotonic() - started) * 1000), finished_at=time.time())
-    verification['reusable'] = flag(payload, 'reusable')
-    context_after = evidence_context(root) if context_before else None
+    verification.update(duration_ms=command_ms, context_scan_ms=context_ms, timing_version=2, finished_at=time.time())
+    if payload.get('gap'):
+        verification['gap'] = payload['gap']
+    if payload.get('impact_reason'):
+        verification['impact_reason'] = payload['impact_reason']
+    verification['reusable'] = reusable
     verification['context'] = context_before if context_before == context_after else None
-    retry = payload.get('retry_of')
-    if retry is not None:
-        require(type(retry) is int and 0 <= retry < len(state['checks']), 'Valid retry_of required')
-        prior = state['checks'][retry]
-        require(payload.get('failure_kind') in {'infrastructure', 'flaky'} and
-                bool(str(payload.get('evidence', '')).strip()), 'Retry needs failure classification and evidence')
-        require(prior['agent'] == actor and prior['digest'] == digest and prior['argv'] == argv
-                and prior['exit_code'] != 0 and 'superseded_by' not in prior,
-                'Retry must replace your unresolved failing check on this candidate with the same command')
-        require(sum(c.get('retry_of') is not None for c in state['checks']) < 2, 'Retry budget exhausted')
-        verification['retry_of'] = retry
+    if inspection is not None:
+        verification['inspection'] = inspection
+    if repair is not None:
+        validate_check_repair(state, actor, digest, argv, payload)
+        key = 'retry_of' if payload.get('retry_of') is not None else 'replacement_of'
+        verification[key] = repair
         verification['failure_kind'] = payload['failure_kind']
+        verification['repair_evidence'] = payload['evidence']
         if exit_code == 0:
-            cursor = retry
+            cursor = repair
             while cursor is not None:
                 replaced = state['checks'][cursor]
                 replaced['superseded_by'] = len(state['checks'])
-                cursor = replaced.get('retry_of')
+                cursor = replaced.get('retry_of', replaced.get('replacement_of'))
     state['checks'].append(verification)
     state['verification'] = verification
     now = time.time()
     state = save(db, identifier, actor, session, 'check', state, payload.get('evidence', ''), now)
     db.commit()
-    return state
+    return {**state, '_inspection_output': output} if inspection is not None else state
 
 
 def auto_verify(db, root, identifier, session):
@@ -891,6 +1111,8 @@ def auto_verify(db, root, identifier, session):
     require(state is not None and state['state'] == 'verification_ready' and state.get('auto_verify'),
             'Auto verification not applicable')
     digest, argv = state['digest'], state['auto_verify']
+    require_budget(db, state)
+    save(db, identifier, AUTO_VERIFIER, session, 'auto-verify-started', state, {'argv': argv}, time.time())
     db.commit()
     env = {**os.environ, 'SKALLING_RUNTIME_AGENT': AUTO_VERIFIER, 'SKALLING_WORKFLOW_CHECK': '1'}
     timeout = state.get('verification_timeout') or DEFAULT_TIMEOUT
@@ -920,7 +1142,10 @@ def auto_verify(db, root, identifier, session):
         state['auto_verify'] = None  # que Jhon decida cómo verificar
         evidence = output + '; queda para Jhon'
     else:
-        record_rejection(state, AUTO_VERIFIER, output or 'configured verification failed')
+        record_rejection(state, AUTO_VERIFIER, output or 'configured verification failed', findings=[{
+            'id': 'configured-check-' + str(state['delivery_number']), 'problem': (output or 'configured verification failed')[-2000:],
+            'expected': 'Configured regression passes', 'risk': 'Configured regression failed on this candidate',
+            'files': state['files']}])
         evidence = ('verificación configurada falló; vuelve a Teo' if state['state'] == 'implementation_ready'
                     else 'verificación configurada falló y se agotó el presupuesto; detener para reclasificar')
     state = save(db, identifier, AUTO_VERIFIER, session, 'auto-verify', state, evidence, time.time())
@@ -982,11 +1207,44 @@ def record_feedback(db, state, payload, actor, session, now):
     return save(db, state['id'], actor, session, 'feedback', state, item, now)
 
 
+def resume_workflow(root, session):
+    """Read-only recovery. Never attach a session to an arbitrary active request."""
+    path = project_db(root)
+    if not path.is_file():
+        return {'recovery': 'missing', 'candidates': []}
+    with closing(connect(path, readonly=True, timeout=5)) as db:
+        if not db.execute("SELECT 1 FROM pragma_table_xinfo('agent_workflows') WHERE name='workflow_state'").fetchone():
+            return {'recovery': 'missing', 'candidates': []}
+        projected = db.execute("SELECT 1 FROM pragma_table_xinfo('agent_workflows') WHERE name='workflow_state'").fetchone()
+        state_column = 'workflow_state' if projected else "json_extract(body,'$.state')"
+        project_column = 'project_directory' if projected else "json_extract(body,'$.project_directory')"
+        session_column = 'start_session' if projected else "json_extract(body,'$.start_session')"
+        terminal = tuple(sorted(TERMINAL))
+        where = (state_column + " NOT IN (" + ','.join('?' for _ in terminal) + ") "
+                 "AND (" + project_column + " = ? OR (" + project_column + " IS NULL AND ? = ?))")
+        args = (*terminal, str(root), str(path.parents[2]), str(root))
+        associated = (" AND (" + session_column + "=? OR EXISTS "
+                      "(SELECT 1 FROM agent_workflow_events e WHERE e.request_id=agent_workflows.id AND e.session=?))")
+        matches = db.execute('SELECT id FROM agent_workflows WHERE ' + where + associated + ' ORDER BY id LIMIT 2',
+                             (*args, session, session)).fetchall()
+        if len(matches) == 1:
+            return public_response(with_next_step(read(db, matches[0][0])))
+        rows = db.execute("SELECT id,json_extract(body,'$.state'),substr(json_extract(body,'$.intent'),1,200) "
+                          'FROM agent_workflows WHERE ' + where + ' ORDER BY id LIMIT 9', args).fetchall()
+        return {'recovery': 'select_workflow' if rows else 'no_active_workflow',
+                'candidates': [dict(zip(('id', 'state', 'intent_preview'), row)) for row in rows[:8]],
+                'more_candidates': len(rows) > 8,
+                'next_step': 'Comparar con el pedido actual; status con el id correspondiente. No inferir autorización ni crear otro plan.'}
+
+
 def operate(request):
     root = Path(request['project']).resolve()
     actor, session = request['actor'].lower(), request['session']
     require(actor in ROLES and bool(session), 'Runtime agent/session required')
     action, payload = request['action'], request.get('payload', {})
+    if action == 'resume':
+        require(not payload, 'resume usa payload {}; la sesión y el proyecto vienen del runtime')
+        return resume_workflow(root, session)
     identifier = payload['id']
     require(isinstance(identifier, str) and 0 < len(identifier) <= 200, 'Invalid request id')
     # En un worktree la memoria es la del repositorio principal (mismo
@@ -1006,9 +1264,22 @@ def operate(request):
             state = read(db, identifier)
             require(state is not None, 'Unknown workflow')
             if state['state'] not in TERMINAL:
+                # Record the observing session for usage attribution, never save
+                # its snapshot over a concurrent transition or change the probe
+                # revision. Re-read under the short event transaction so a
+                # cancellation/completion cannot be logged as still active.
+                db.execute('BEGIN IMMEDIATE')
+                state = read(db, identifier)
                 now = time.time()
-                save(db, identifier, actor, session, 'status', state, '', now)
+                if state['state'] not in TERMINAL:
+                    db.execute('INSERT INTO agent_workflow_events(request_id,actor,session,action,state,evidence,ts) '
+                               'VALUES(?,?,?,?,?,?,?)',
+                               (identifier, actor, session, 'status', state['state'], json.dumps(''), now))
                 db.commit()
+                if state['state'] not in TERMINAL:
+                    # Live usage belongs to this response; collection must not
+                    # hold TeamDB's write lock or overwrite persisted progress.
+                    state['usage'] = workflow_usage(db, state, now)
             return context_response(db, root, state, payload)
         if action == 'evidence':
             state = read(db, identifier)
@@ -1091,27 +1362,37 @@ def operate(request):
                      # pedir permiso (en OpenCode v2 un plugin no puede pedirlo).
                      'configured_verification': render_verification(verification_template(root), files),
                      'supersedes': supersedes, 'start_session': session}
+            state.update(focus_limits(payload, previous))
+            if state.get('resource_budget'):
+                state['budget_started_at'] = (previous or {}).get('budget_started_at', (previous or {}).get('started_at', now))
+            state['deferred'] = (previous or {}).get('deferred', [])
             # A forgotten mode must not silently send a clear local request
             # through the expensive staged chain. The model can still opt into
             # staged explicitly, and plans/tasks remain staged by default.
             state['review_protocol'] = 2
+            state['review_policy'] = 2
+            state['finding_contract'] = 1
             state['project_directory'] = str(root)
             if previous:
+                if previous.get('process_recovery'):
+                    state['process_recovery'] = previous['process_recovery']
+                state['authorized_continuations'] = previous.get('authorized_continuations', [])
                 state['delivery_number'] = previous.get('delivery_number', 0)
                 state['rejection_count'] = previous.get('rejection_count', 0)
                 state['review_findings'] = previous.get('review_findings', [])
                 state['review_history'] = previous.get('review_history', [])
-                require(state['delivery_number'] < MAX_DELIVERIES, 'Presupuesto del pedido agotado; supersedes no reinicia entregas')
+                require(state['delivery_number'] < delivery_limit(state),
+                        'Presupuesto del pedido agotado; supersedes no reinicia entregas. ' + recovery_step(previous))
             mode = payload.get('execution_mode')
             if mode is None and 'planning_required' in payload and not flag(payload, 'planning_required') and not task and not flag(payload, 'memory_required'):
                 mode = 'direct'
             if mode is None:
+                local_ready = (classification['scope'] == 'local'
+                               and payload.get('clarity', 'clear') == 'clear'
+                               and not flag(payload, 'planning_required')
+                               and not flag(payload, 'memory_required') and not task)
                 mode = ('focused' if classification['risk'] in {'low', 'medium'}
-                        and classification['scope'] == 'local'
-                        and payload.get('clarity', 'clear') == 'clear'
-                        and not flag(payload, 'sensitive')
-                        and not flag(payload, 'planning_required')
-                        and not flag(payload, 'memory_required') and not task else 'staged')
+                        and not flag(payload, 'sensitive') else 'direct') if local_ready else 'staged'
             require(mode in {'staged', 'focused', 'direct'}, 'execution_mode must be focused, direct or staged')
             if mode == 'direct':
                 require(payload.get('clarity', 'clear') == 'clear' and not task
@@ -1156,6 +1437,8 @@ def operate(request):
                     state['plan_id'] = payload['plan_id']
                     bind_tasks(db, state, payload.get('task_ids'))
                 if action == 'deliver':
+                    if state.get('auto_verify'):
+                        require_budget(db, state)
                     if state.get('review_protocol') == 2:
                         submit_resolutions(state, payload)
                         archive_review(state)
@@ -1173,6 +1456,63 @@ def operate(request):
                                           'digest': state['digest'], 'delivery_number': state['delivery_number'],
                                           'base_head': state['base_head']}
                 state['state'] = target
+            elif action == 'recover':
+                allowed = {'id', 'feedback_id', 'evidence', 'recovery_plan', 'constraints', 'non_goals', 'commit_policy', 'continuation', 'user_instruction'}
+                require(not (set(payload) - allowed), 'recover no cambia objetivo, archivos, riesgo ni presupuesto del usuario')
+                require(actor == 'alex', 'Only Alex recovers a workflow')
+                # A lost tool response must not spend another recovery or invalidate new work.
+                grants = ([state['process_recovery']] if state.get('process_recovery') else []) + state.get('authorized_continuations', [])
+                for grant in grants:
+                    if grant['request'] == payload:
+                        db.rollback()
+                        return with_next_step(state)
+                continuation = payload.get('continuation') is True
+                require(not grants or continuation, 'La recuperación del pedido ya fue utilizada. ' + recovery_step(state))
+                require(not continuation or bool(grants), 'First recovery uses recover without continuation')
+                require(state['state'] == 'blocked',
+                        'recover requiere un workflow blocked por entregas agotadas; un fallo de Git no cambia el estado. '
+                        'Resolver el error concreto del hook y continuar el workflow vigente según next_step; '
+                        'no reiniciar ni consumir otra entrega para reparar la instalación')
+                if 'user_instruction' in payload:
+                    instruction = payload['user_instruction']
+                    require(isinstance(instruction, str) and 0 < len(instruction.strip()) <= 2000,
+                            'user_instruction must quote the actual user instruction, up to 2000 characters')
+                    record_feedback(db, state, {'feedback_id': payload.get('feedback_id'), 'kind': 'correction',
+                                                'evidence': instruction}, actor, session, now)
+                feedback = next((f for f in state.get('feedback', []) if f['id'] == payload.get('feedback_id')
+                                 and f['kind'] in {'correction', 'scope_change'}), None)
+                require(feedback is not None, 'Registrar primero feedback humano correction/scope_change; no inventar autorización')
+                if continuation:
+                    require(all(g['request']['feedback_id'] != feedback['id'] for g in grants),
+                            'Esta autorización ya fue utilizada; se necesita una nueva instrucción humana')
+                    # Feedback has no timestamp in legacy state. Use its immutable event,
+                    # not updated_at (which recording feedback itself changes).
+                    blocked_at = db.execute("SELECT max(ts) FROM agent_workflow_events WHERE request_id=? "
+                                            "AND state='blocked' AND action!='feedback'", (identifier,)).fetchone()[0]
+                    feedback_at = db.execute("SELECT max(ts) FROM agent_workflow_events WHERE request_id=? "
+                                             "AND action='feedback' AND json_extract(evidence,'$.id')=?",
+                                             (identifier, feedback['id'])).fetchone()[0]
+                    require(blocked_at is not None and feedback_at is not None and feedback_at > blocked_at,
+                            'La continuación exige feedback humano nuevo registrado después del último bloqueo')
+                for field in ('evidence', 'recovery_plan'):
+                    require(isinstance(payload.get(field), str) and 0 < len(payload[field].strip()) <= 2000,
+                            f'recover requiere {field}: diagnóstico y acción concreta, hasta 2000 caracteres')
+                limits = focus_limits({**{k: payload[k] for k in ('constraints', 'non_goals', 'commit_policy') if k in payload},
+                                       'supersedes': identifier,
+                                       'focus_revision': {'feedback_id': feedback['id'], 'evidence': feedback['evidence'][:1000]}}, state)
+                archive_review(state)
+                invalidate_prepared_receipt(db, state)
+                state.update(limits)
+                grant = {'request': dict(payload), 'at_delivery': state['delivery_number'], 'ts': now}
+                if continuation:
+                    state.setdefault('authorized_continuations', []).append(grant)
+                else:
+                    state['process_recovery'] = grant
+                state['state'] = 'implementation_ready'
+                state['checks'], state['review_verdicts'], state['coverage'] = [], {}, None
+                # Corrected constraints may invalidate the old review oracle.
+                state['oracle'] = None
+                state.pop('blocked_reason', None)
             elif action == 'preserve_external':
                 require(actor == 'alex' and bool(str(evidence).strip()),
                         'Alex must explain which user/other-task changes are external; do not infer ownership')
@@ -1181,6 +1521,9 @@ def operate(request):
                 require(set(names) <= changed_paths(root), 'External files must be current Git changes')
                 state.setdefault('external_baseline', {}).update({name: path_identity(root, name) for name in names})
             elif action == 'rescope':
+                if state.get('finding_contract') == 1:
+                    require(isinstance(payload.get('outcome_id'), str) and payload['outcome_id'] in {o['id'] for o in state['outcomes']},
+                            'rescope requiere outcome_id del pedido que necesita esos archivos')
                 require(actor == 'teo' and state['state'] in {'implementation_ready', 'verification_ready'},
                         'Only Teo widens scope, and only before an approval is trusted')
                 added = payload.get('files', [])
@@ -1243,13 +1586,25 @@ def operate(request):
                 require(session != state['implementation_session'], 'Independent verifier session required')
                 fields = ('expected', 'negative', 'invariant', 'refutation')
                 require(all(isinstance(payload.get(f), str) and payload[f].strip() for f in fields), 'Complete independent oracle required')
-                if state.get('review_protocol') == 2 and state['oracle'] == {f: payload[f] for f in fields}:
+                oracle = {f: payload[f] for f in fields}
+                if 'review_plan' in payload:
+                    plan = payload['review_plan']
+                    require(isinstance(plan, list) and plan and all(isinstance(c, str) and c.strip() for c in plan)
+                            and len(plan) == len(set(plan)), 'review_plan requires distinct nonempty criteria')
+                    if actor == 'jhon':
+                        oracle['checks'] = plan
+                    else:
+                        oracle['review_plans'] = {actor: plan}
+                existing_core = {k: v for k, v in (state.get('oracle') or {}).items() if k != 'review_plans'}
+                proposed_core = {k: v for k, v in oracle.items() if k != 'review_plans'}
+                same_plan = 'review_plan' not in payload or reviewer_plan(state, actor) == payload['review_plan']
+                if state.get('review_protocol') == 2 and existing_core == proposed_core and same_plan:
                     db.rollback()
                     return with_next_step(state)
                 require(state['oracle'] is None, 'Oracle is frozen for this delivery')
                 if auto_passed:
                     invalidate_prepared_receipt(db, state)
-                state['oracle'] = {f: payload[f] for f in fields}
+                state['oracle'] = oracle
                 state['coverage'] = None
                 # A generic green check can miss the requested behavior. Permit
                 # an independent review without discarding valid observations
@@ -1274,6 +1629,8 @@ def operate(request):
                 require(relevant, f'{actor} must record at least one check on the current candidate before approving')
                 require(all(c['exit_code'] == 0 for c in relevant),
                         'A failing check is on record for this candidate; a later passing one does not erase it')
+                require(set(reviewer_plan(state, actor)) <= {c['criterion'] for c in relevant},
+                        'Review plan still has unchecked criteria')
                 if actor == 'luz':
                     state['quality_findings'] = payload['findings']
                 cover_outcomes(state, payload, actor)
@@ -1287,7 +1644,17 @@ def operate(request):
                     elif actor == 'jhon': state['state'] = 'verified'
                 else:
                     state['state'] = target
+            elif action == 'defer':
+                require(actor in {'alex', 'jhon', 'luz'} and state['state'] in
+                        {'verification_ready', 'verified', 'quality_reviewed', 'documented'},
+                        'defer registra sugerencias opcionales durante la revisión; no implementa ni aprueba')
+                if not defer_note(state, actor, payload):
+                    db.rollback()
+                    return with_next_step(state)
+                evidence = payload['reason']
             elif action == 'reject':
+                require(payload.get('failure_kind', 'product') == 'product',
+                        'Infrastructure/invalid checks do not reject the product: repair with check replacement_of or retry_of; keep this delivery')
                 require(actor in {'jhon', 'luz'} and state['state'] in {'verification_ready', 'verified', 'quality_reviewed'}, 'Invalid rejection')
                 require(bool(str(evidence).strip()), 'Rejection requires diagnostic evidence')
                 reason = payload.get('findings') if isinstance(payload.get('findings'), str) else evidence
@@ -1295,6 +1662,7 @@ def operate(request):
                 require(state.get('review_protocol') != 2 or state.get('review_verdicts', {}).get(actor) != 'rejected', 'Reviewer already submitted verdict')
                 record_rejection(state, actor, reason, payload.get('findings'))
             elif action in {'prepare_commit', 'commit'}:
+                require(state.get('commit_policy') != 'forbidden', 'El pedido prohíbe commits; entregar con complete')
                 require(actor in {'teo', 'jhon', 'luz'}, 'Only Teo, Jhon or Luz prepare autonomous local commits')
                 require(inside_git(root), 'Local commits require a Git repository')
                 approved = {'quality_reviewed', 'documented'} if state['risk'] == 'high' else {'verified'}
@@ -1333,7 +1701,7 @@ def operate(request):
                 expected = ('quality_reviewed' if state.get('execution_mode') in {'focused', 'direct'} and not state.get('memory_required')
                             else 'documented') if state['risk'] == 'high' else 'verified'
                 require(state['state'] == expected, f'Completion requires {expected}')
-                if state.get('review_protocol') == 2 and not state.get('local_commit_result'):
+                if state.get('review_protocol') == 2 and state.get('commit_policy', 'required') == 'required' and not state.get('local_commit_result'):
                     changes = classify_delivery(root, state['files'], state.get('base_head'))
                     head = base_head(root)
                     at_head = classify_delivery(root, state['files'], head)
@@ -1349,19 +1717,26 @@ def operate(request):
                 state['duration_ms'] = round((now - state['started_at']) * 1000)
                 cover_outcomes(state, payload, 'delivery')
                 verifier = (state.get('verification') or {}).get('agent', 'jhon')
-                if inside_git(root) and staged_paths(root) - set(state['files']):
+                if state.get('commit_policy') == 'forbidden':
+                    receipt = None
+                elif inside_git(root):
+                    # Completion records evidence, without changing the user's
+                    # index. Explicit prepare_commit remains the staging action.
                     with isolated_index(root, state['files']) as (env, _, _):
                         receipt = seal_receipt(db, root, identifier, state['files'], verifier, state['digest'], index_env=env)
                 else:
                     receipt = seal_receipt(db, root, identifier, state['files'], verifier, state['digest'])
                 state['receipt_tree_hash'] = receipt or state.get('receipt_tree_hash')
-                state['usage'] = workflow_usage(db, state, now)
-                record_finish_metrics(db, identifier, state['duration_ms'], state['handoffs'], state['usage'],
+                record_finish_metrics(db, identifier, state['duration_ms'], state['handoffs'], None,
                                       state.get('rejection_count', 0))
             else:
                 raise ValueError('Unknown workflow action')
         state = save(db, identifier, actor, session, action, state, evidence, now)
         db.commit()
+        if action in {'complete', 'cancel', 'fail'}:
+            state['usage'] = refresh_usage(db, state)
+        if action == 'start' and state.get('supersedes'):
+            refresh_usage(db, read(db, state['supersedes']))
         if action == 'deliver' and state['state'] == 'verification_ready' and state.get('auto_verify'):
             state = auto_verify(db, root, identifier, session)
         return context_response(db, root, state, payload) if action in {'start', 'ready'} else with_next_step(state)
@@ -1390,15 +1765,26 @@ def public_response(state):
     fields = ('id', 'state', 'risk', 'route', 'agents', 'files', 'acceptance', 'reuse',
               'task', 'plan_id', 'task_ids', 'routing_id', 'terminal_reason', 'digest', 'delivery_number', 'next_step', 'receipt_tree_hash',
               'duration_ms', 'execution_mode', 'memory_required', 'planning_required',
-              'review_findings', 'review_verdicts', 'last_rejection', 'blocked_reason', 'rejection_count', 'oracle',
-              'intent', 'outcomes', 'coverage', 'human_corrections', 'user_acceptance', 'usage', 'auto_verify', 'context', 'local_commit_result')
+              'finding_contract', 'review_findings', 'review_verdicts', 'last_rejection', 'blocked_reason', 'process_recovery', 'rejection_count', 'oracle',
+              'intent', 'outcomes', 'constraints', 'non_goals', 'commit_policy', 'focus_revision', 'resource_budget', 'execution_budget', 'deferred', 'coverage', 'human_corrections', 'user_acceptance', 'usage', 'auto_verify', 'context', 'local_commit_result')
     response = {key: state[key] for key in fields if key in state}
+    if response.get('usage'):
+        response['usage'] = {**response['usage'], 'attribution': 'session_window_estimate', 'additive_across_workflows': False}
+    response['memory_source'] = 'TeamDB:agent_workflows/' + state['id']
+    if state.get('process_recovery'):
+        recovery = state['process_recovery']
+        response['process_recovery'] = {'used': True, 'at_delivery': recovery['at_delivery'],
+                                        'feedback_id': recovery['request']['feedback_id']}
+    response['authorized_continuations'] = [
+        {'at_delivery': c['at_delivery'], 'feedback_id': c['request']['feedback_id']}
+        for c in state.get('authorized_continuations', [])]
+    response['deferred'] = [{k: note[k] for k in ('note_id', 'owner', 'suggestion')} for note in state.get('deferred', [])]
     response['next_step'] = next_step(state)
     response['recommended_action'] = next_action(state)
-    if state['state'] == 'implementation_ready' and (state.get('auto_verify') or state.get('configured_verification')):
+    if state['state'] == 'implementation_ready' and ((state.get('verification_template') or {}).get('fast') or state.get('auto_verify')):
         response['implementation_probe'] = {
             'action': 'probe', 'payload': {'id': state['id']}, 'agent': 'teo',
-            'purpose': 'RED antes de editar: ejecuta la prueba configurada sin pedir comandos al usuario; no aprueba ni entrega',
+            'purpose': 'Prueba rápida opcional y pertinente antes de editar; no aprueba ni entrega. No repetir un baseline ya conocido.',
             'count': len(state.get('implementation_checks', [])),
         }
         if state.get('implementation_checks'):
@@ -1407,36 +1793,56 @@ def public_response(state):
                 key: last_probe[key] for key in ('exit_code', 'failure_kind', 'duration_ms', 'digest')}
             response['implementation_probe']['last']['output'] = last_probe['output'][-2000:]
     commit_states = {'quality_reviewed', 'documented', 'completed'} if state.get('risk') == 'high' else {'verified', 'completed'}
-    if state['state'] in commit_states:
+    if state['state'] in commit_states and state.get('commit_policy') != 'forbidden':
         response['local_commit'] = {
-            'ready': True, 'agents': ['teo', 'jhon', 'luz'], 'legacy_prepare_action': 'prepare_commit',
+            'ready': True, 'required': state.get('commit_policy', 'required') == 'required',
+            'agents': ['teo', 'jhon', 'luz'], 'legacy_prepare_action': 'prepare_commit',
             'action': 'commit', 'payload': {'id': state['id'], 'message': '<mensaje descriptivo>'},
             'delegate_to': commit_owner(state),
-            'handoff': f"Conservar workflow {state['id']}: action commit con message crea el commit y conserva staging ajeno; no repetir checks válidos ni pedir al usuario hacerlo",
-            'then': 'solo tras respuesta exitosa, reportar local_commit_result.sha; antes sigue pendiente', 'repeat_checks': False, 'push': 'user_approval',
+            'handoff': f"Si corresponde commitear, conservar workflow {state['id']}: action commit con message; conserva staging ajeno, no repetir checks válidos ni pedir al usuario hacerlo",
+            'then': 'reportar local_commit_result.sha solo tras respuesta exitosa; allowed permite complete sin commit', 'repeat_checks': False, 'push': 'user_approval',
             'coverage_required': not bool(state.get('coverage')),
         }
     response['delivery_status'] = {'review': state['state'],
-                                   'commit': 'recorded' if state.get('local_commit_result') else 'pending',
+                                   'commit': ('recorded' if state.get('local_commit_result') else
+                                              {'allowed': 'optional', 'forbidden': 'forbidden', 'required': 'pending'}[state.get('commit_policy', 'required')]),
                                    'push': 'not_verified_by_workflow', 'push_requires_user_authorization': True}
     response['review_findings'] = [f for f in state.get('review_findings', []) if f['status'] != 'resolved']
     response['review_history'] = [{'delivery_number': r['delivery_number'], 'digest': r['digest'],
                                    'check_count': len(r.get('checks') or [])} for r in state.get('review_history', [])]
     response['check_count'] = len(state.get('checks', []))
+    timed = [c for c in state.get('checks', []) if c.get('timing_version') == 2]
+    if timed:
+        response['review_timing'] = {'scope': 'current_delivery',
+            'command_ms': sum(c.get('duration_ms', 0) for c in timed),
+            'context_scan_ms': sum(c.get('context_scan_ms', 0) for c in timed),
+            'reused_checks': sum('reused_from' in c for c in timed),
+            'legacy_checks_without_split': len(state.get('checks', [])) - len(timed)}
     response['checks'] = [{**{k: c[k] for k in ('agent', 'exit_code', 'argv', 'duration_ms',
-                        'criterion', 'method', 'reused_from', 'superseded_by', 'failure_kind') if k in c}, 'check_index': i}
+                        'criterion', 'method', 'reused_from', 'superseded_by', 'failure_kind', 'replacement_of', 'retry_of', 'gap', 'inspection', 'context_scan_ms', 'timing_version') if k in c}, 'check_index': i}
                          for i, c in enumerate(state.get('checks', []))]
     last = state.get('verification') or {}
+    if '_inspection_output' in state:
+        response['inspection_output'] = state['_inspection_output'][:12000]
+        response['inspection_truncated'] = len(state['_inspection_output']) > 12000
     if last.get('exit_code', 0) != 0:
         response['failure_output'] = last.get('output', '')[-2000:]
     return response
+
+
+def runtime_identity():
+    path = Path(__file__).resolve()
+    return {'backend_path': str(path), 'backend_sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
+            'capabilities': ['review-plans-per-reviewer', 'native-inspection-cache-v1', 'atomic-human-recovery', 'check-timing-v2']}
 
 
 if __name__ == '__main__':
     signal.signal(signal.SIGTERM, _cancel)
     signal.signal(signal.SIGINT, _cancel)
     try:
-        print(json.dumps(public_response(operate(json.load(sys.stdin)))))
+        result = public_response(operate(json.load(sys.stdin)))
+        result['runtime'] = runtime_identity()
+        print(json.dumps(result))
     except (ValueError, KeyError, OSError, sqlite3.Error, subprocess.SubprocessError) as error:
         print(str(error), file=sys.stderr)
         sys.exit(1)

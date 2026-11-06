@@ -113,6 +113,72 @@ class Workflow(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.call('teo', 'deliver')
 
+    def test_status_preserves_a_cancellation_committed_after_its_first_read(self):
+        from unittest.mock import patch
+        self.start()
+        original_read = self.engine.read
+        cancelled = None
+
+        def cancel_after_read(db, identifier):
+            nonlocal cancelled
+            snapshot = original_read(db, identifier)
+            if cancelled is None:
+                cancelled = False  # The cancelling operation also reads state.
+                cancelled = self.call('alex', 'cancel', evidence='User cancelled during status')
+            return snapshot
+
+        with patch.object(self.engine, 'read', side_effect=cancel_after_read):
+            response = self.call('alex', 'status')
+        with closing(sqlite3.connect(self.db_path)) as db:
+            persisted = json.loads(db.execute("SELECT body FROM agent_workflows WHERE id='request'").fetchone()[0])
+            outcome = db.execute('SELECT outcome FROM workflow_metrics').fetchone()[0]
+        self.assertEqual(persisted['state'], 'cancelled')
+        self.assertEqual(persisted['updated_at'], cancelled['updated_at'])
+        self.assertEqual(outcome, 'cancelled')
+        self.assertEqual(response['state'], 'cancelled')
+        with self.assertRaises(ValueError):
+            self.call('teo', 'deliver')
+
+    def test_status_observes_without_rewriting_workflow_or_progress_metrics(self):
+        self.start()
+        with closing(sqlite3.connect(self.db_path)) as db:
+            before = db.execute("SELECT body FROM agent_workflows WHERE id='request'").fetchone()[0]
+            metrics = db.execute('SELECT duration_ms,handoffs,retries,outcome FROM workflow_metrics').fetchone()
+            context_bytes = db.execute('SELECT context_bytes FROM workflow_metrics').fetchone()[0]
+        response = self.call('teo', 'status')
+        with closing(sqlite3.connect(self.db_path)) as db:
+            self.assertEqual(db.execute("SELECT body FROM agent_workflows WHERE id='request'").fetchone()[0], before)
+            self.assertEqual(db.execute('SELECT duration_ms,handoffs,retries,outcome FROM workflow_metrics').fetchone(), metrics)
+            self.assertGreater(db.execute('SELECT context_bytes FROM workflow_metrics').fetchone()[0], context_bytes)
+        self.assertEqual(response['context']['concepts'][0]['body'], 'App de prueba')
+
+    def test_status_during_probe_does_not_invalidate_unchanged_candidate(self):
+        from unittest.mock import patch
+        self.configure(fast='bash tests/check.test.sh')
+        self.start()
+
+        def observe(*args):
+            self.assertEqual(self.call('alex', 'status')['state'], 'implementation_ready')
+            return 0, 'value remains one'
+
+        with patch.object(self.engine, 'run_bounded', side_effect=observe):
+            result = self.call('teo', 'probe')
+        self.assertEqual(result['implementation_checks'][-1]['exit_code'], 0)
+        self.assertEqual(result['state'], 'implementation_ready')
+
+    def test_status_usage_collection_does_not_hold_the_teamdb_write_lock(self):
+        from unittest.mock import patch
+        self.start()
+
+        def collect(*args):
+            with closing(sqlite3.connect(self.db_path, timeout=0.1)) as db, db:
+                db.execute("UPDATE schema_meta SET value=value WHERE key='project_readiness'")
+            return None
+
+        with patch.object(self.engine, 'runtime_usage', side_effect=collect) as usage:
+            self.call('alex', 'status')
+        usage.assert_called_once()
+
     def test_goal_survives_handoffs_and_requires_all_outcomes(self):
         self.call('alex', 'start', risk='low', scope='local', files=['app.py'],
                   acceptance='value remains one', reuse='existing', intent='Keep totals correct',
@@ -131,6 +197,216 @@ class Workflow(unittest.TestCase):
         request['payload']['coverage'].append({'outcome_id': 'type', 'check_index': 0, 'observation': 'integer'})
         approved = self.engine.operate(request)
         self.assertEqual(len(approved['coverage']), 2)
+
+    def test_focus_recovers_from_teamdb_in_a_new_process_without_writes(self):
+        self.call('alex', 'start', risk='low', scope='local', files=['app.py'],
+                  acceptance='value is one', reuse='existing',
+                  intent='Keep the public API', constraints=['Use TeamDB'], non_goals=['No UI redesign'])
+        before = self.db_path.read_bytes()
+        request = dict(project=str(self.root), actor='alex', session='alex-session', action='resume', payload={})
+        result = subprocess.run([sys.executable, str(ROOT / 'scripts/skalling-workflow.py')],
+                                input=json.dumps(request), capture_output=True, text=True, check=True)
+        recovered = json.loads(result.stdout)
+        self.assertEqual(recovered['id'], 'request')
+        self.assertEqual(recovered['intent'], 'Keep the public API')
+        self.assertEqual(recovered['constraints'], ['Use TeamDB'])
+        self.assertEqual(recovered['non_goals'], ['No UI redesign'])
+        self.assertEqual(recovered['memory_source'], 'TeamDB:agent_workflows/request')
+        self.assertEqual(self.db_path.read_bytes(), before)
+
+    def test_resume_does_not_guess_between_requests_or_adopt_another_session(self):
+        self.start()
+        request = dict(project=str(self.root), actor='alex', session='new-session', action='resume', payload={})
+        result = self.engine.operate(request)
+        self.assertEqual(result['recovery'], 'select_workflow')
+        self.assertEqual([c['id'] for c in result['candidates']], ['request'])
+        self.call('alex', 'start', id='second', risk='low', scope='local', files=['other.py'],
+                  acceptance='another value', reuse='existing')
+        result = self.engine.operate({**request, 'session': 'alex-session'})
+        self.assertEqual(result['recovery'], 'select_workflow')
+        self.assertEqual({c['id'] for c in result['candidates']}, {'request', 'second'})
+        self.call('alex', 'cancel', evidence='Finished with this request')
+        result = self.engine.operate({**request, 'session': 'alex-session'})
+        self.assertEqual(result['id'], 'second')
+
+    def test_resume_missing_memory_never_initializes_a_database(self):
+        with tempfile.TemporaryDirectory() as empty:
+            result = self.engine.operate(dict(project=empty, actor='alex', session='s', action='resume', payload={}))
+            self.assertEqual(result['recovery'], 'missing')
+            self.assertFalse((Path(empty) / '.opencode').exists())
+
+    def test_resume_filters_other_worktrees_and_bounds_candidate_output(self):
+        initial = self.start()
+        with closing(sqlite3.connect(self.db_path)) as db, db:
+            for index in range(10):
+                state = {**initial, 'id': f'candidate-{index}', 'start_session': f's-{index}'}
+                db.execute('INSERT INTO agent_workflows VALUES(?,?)', (state['id'], json.dumps(state)))
+            other = {**initial, 'id': 'foreign', 'project_directory': '/another-worktree'}
+            db.execute('INSERT INTO agent_workflows VALUES(?,?)', ('foreign', json.dumps(other)))
+        request = dict(project=str(self.root), actor='alex', session='new', action='resume', payload={})
+        result = self.engine.operate(request)
+        self.assertEqual(len(result['candidates']), 8)
+        self.assertTrue(result['more_candidates'])
+        self.assertNotIn('foreign', [c['id'] for c in result['candidates']])
+        self.assertNotIn('checks', json.dumps(result))
+        recovered = self.engine.operate({**request, 'session': 'alex-session'})
+        self.assertEqual(recovered['id'], 'request')
+
+    def test_focus_limits_and_superseding_preserve_constraints(self):
+        common = dict(risk='low', scope='local', files=['app.py'], acceptance='one', reuse='existing')
+        for bad in ('not a list', [''], ['x' * 501], ['a'] * 13):
+            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, 'constraints'):
+                self.call('alex', 'start', constraints=bad, **common)
+        self.call('alex', 'start', constraints=['Keep API'], non_goals=['No redesign'], **common)
+        result = self.call('alex', 'start', id='replacement', supersedes='request',
+                           constraints=['Keep DB'], non_goals=[], **common)
+        self.assertEqual(result['constraints'], ['Keep API', 'Keep DB'])
+        self.assertEqual(result['non_goals'], ['No redesign'])
+
+    def assert_completion_without_commit(self, policy=None):
+        (self.root / 'outside.txt').write_text('user staging')
+        subprocess.run(['git', 'add', 'outside.txt'], cwd=self.root, check=True)
+        before_index = (self.root / '.git/index').read_bytes()
+        before_head = self.engine.base_head(self.root)
+        options = {} if policy is None else {'commit_policy': policy}
+        state = self.call('alex', 'start', risk='low', scope='local',
+                          files=['app.py', 'tests/check.test.sh'], acceptance='one', reuse='app', **options)
+        self.assertEqual(state['commit_policy'], policy or 'allowed')
+        test = self.root / 'tests/check.test.sh'
+        test.write_text(test.read_text() + '# verified change\n')
+        verified = self.verify()
+        self.assertEqual(self.engine.next_action(verified)['action'], 'complete')
+        if policy == 'forbidden':
+            for action in ('prepare_commit', 'commit'):
+                with self.assertRaisesRegex(ValueError, 'prohíbe commits'):
+                    self.call('jhon', action, message='must not commit')
+        completed = self.call('alex', 'complete')
+        public = self.engine.public_response(completed)
+        self.assertEqual(completed['state'], 'completed')
+        self.assertNotIn('local_commit_result', completed)
+        self.assertEqual(public['delivery_status']['commit'], 'forbidden' if policy == 'forbidden' else 'optional')
+        self.assertEqual(self.engine.base_head(self.root), before_head)
+        self.assertEqual((self.root / '.git/index').read_bytes(), before_index)
+        self.assertIn('# verified change', test.read_text())
+        self.assertEqual(len(completed['checks']), len(verified['checks']))
+        if policy == 'forbidden':
+            self.assertNotIn('local_commit', public)
+            for action in ('prepare_commit', 'commit'):
+                with self.assertRaisesRegex(ValueError, 'prohíbe commits'):
+                    self.call('teo', action, message='still forbidden')
+            with sqlite3.connect(self.db_path) as db:
+                self.assertEqual(db.execute("SELECT count(*) FROM receipts WHERE task_id='request' AND tree_hash IS NOT NULL").fetchone()[0], 0)
+
+    def test_explicit_no_commit_delivers_without_changing_head_or_index(self):
+        self.assert_completion_without_commit('forbidden')
+
+    def test_default_policy_delivers_without_a_mandatory_commit(self):
+        self.assert_completion_without_commit()
+
+    def test_user_focus_revision_replaces_only_named_limits_and_resets_evidence(self):
+        common = dict(risk='low', scope='local', files=['app.py', 'tests/check.test.sh'],
+                      acceptance='one', reuse='existing')
+        self.call('alex', 'start', constraints=['Keep API'], non_goals=['No UI'],
+                  commit_policy='forbidden', **common)
+        verified = self.verify()
+        with self.assertRaisesRegex(ValueError, 'focus_revision'):
+            self.call('alex', 'start', id='replacement', supersedes='request', commit_policy='required', **common)
+        self.assertEqual(self.call('alex', 'status')['state'], 'verified')
+        revision = {'feedback_id': 'user-message-2', 'evidence': 'User now permits API changes and asks for a commit'}
+        revised = self.call('alex', 'start', id='replacement', supersedes='request', constraints=[],
+                            commit_policy='required', focus_revision=revision, **common)
+        self.assertEqual(revised['constraints'], [])
+        self.assertEqual(revised['non_goals'], ['No UI'])
+        self.assertEqual(revised['commit_policy'], 'required')
+        self.assertEqual(revised['focus_revision'], revision)
+        self.assertEqual(revised['state'], 'implementation_ready')
+        self.assertEqual(revised['checks'], [])
+        self.assertIsNone(revised['coverage'])
+        self.assertEqual(revised['delivery_number'], verified['delivery_number'])
+        old = self.call('alex', 'status')
+        self.assertEqual(old['state'], 'superseded')
+        self.assertEqual(old['constraints'], ['Keep API'])
+        self.assertEqual(old['commit_policy'], 'forbidden')
+
+    def test_invalid_policy_or_focus_revision_does_not_create_work(self):
+        common = dict(risk='low', scope='local', files=['app.py'], acceptance='one', reuse='app')
+        for policy in (False, [], 'never', None):
+            with self.subTest(policy=policy), self.assertRaisesRegex(ValueError, 'commit_policy'):
+                self.call('alex', 'start', commit_policy=policy, **common)
+        for revision in ({}, {'feedback_id': 'msg', 'evidence': ''}, 'ignore old rules'):
+            with self.subTest(revision=revision), self.assertRaisesRegex(ValueError, 'focus_revision'):
+                self.call('alex', 'start', supersedes='missing', focus_revision=revision, **common)
+
+    def test_superseding_inherits_no_commit_and_legacy_required_policy(self):
+        common = dict(risk='low', scope='local', files=['app.py'], acceptance='one', reuse='app')
+        self.call('alex', 'start', commit_policy='forbidden', **common)
+        revised = self.call('alex', 'start', id='replacement', supersedes='request', **common)
+        self.assertEqual(revised['commit_policy'], 'forbidden')
+        legacy = {**revised, 'state': 'verified'}
+        del legacy['commit_policy']
+        self.assertEqual(self.engine.next_action(legacy)['action'], 'commit')
+
+    def test_large_verification_output_has_bounded_memory_and_keeps_tail(self):
+        import tracemalloc
+        tracemalloc.start()
+        try:
+            code, output = self.engine.run_bounded(
+                [sys.executable, '-c', "import os; [os.write(1, b'x'*65536) for _ in range(512)]; os.write(2,b'TAIL')"],
+                self.root, os.environ, 10)
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        self.assertEqual(code, 0)
+        self.assertEqual(len(output), 16000)
+        self.assertTrue(output.endswith('TAIL'))
+        self.assertLess(peak, 2 * 1024 * 1024)
+
+    def test_optional_review_note_keeps_verified_candidate_and_is_idempotent(self):
+        self.start()
+        self.verify()
+        before = self.call('alex', 'status')
+        note = dict(note_id='naming', suggestion='Rename helper later', reason='Style preference outside acceptance')
+        after = self.call('jhon', 'defer', **note)
+        again = self.call('jhon', 'defer', **note)
+        for field in ('state', 'checks', 'digest', 'coverage', 'delivery_number', 'rejection_count'):
+            self.assertEqual(after[field], before[field], field)
+        self.assertEqual(len(again['deferred']), 1)
+        self.assertEqual(self.engine.public_response(again)['deferred'][0]['suggestion'], note['suggestion'])
+        with self.assertRaisesRegex(ValueError, 'note_id'):
+            self.call('jhon', 'defer', **{**note, 'suggestion': 'Changed note'})
+        self.call('alex', 'complete')
+
+    def test_explicit_optional_finding_cannot_reject_or_discard_evidence(self):
+        self.start()
+        self.verify()
+        before = self.call('alex', 'status')
+        with self.assertRaisesRegex(ValueError, 'defer'):
+            self.call('jhon', 'reject', evidence='Prefer a different name', findings=[
+                {'id': 'style', 'problem': 'Naming preference', 'expected': 'Different name', 'blocking': False}])
+        after = self.call('alex', 'status')
+        for field in ('state', 'checks', 'coverage', 'digest', 'rejection_count'):
+            self.assertEqual(after[field], before[field])
+
+    def test_review_outcome_reference_must_belong_to_this_request(self):
+        self.start()
+        self.call('teo', 'deliver')
+        finding = {'id': 'wrong', 'problem': 'value is wrong', 'expected': 'one', 'outcome_id': 'another-request'}
+        with self.assertRaisesRegex(ValueError, 'outcome_id'):
+            self.call('jhon', 'reject', evidence='wrong value', findings=[finding])
+        result = self.call('jhon', 'reject', evidence='wrong value', findings=[{**finding, 'outcome_id': 'acceptance'}])
+        self.assertEqual(result['review_findings'][0]['outcome_id'], 'acceptance')
+
+    def test_deferred_suggestions_do_not_approve_a_high_risk_review(self):
+        self.call('alex', 'start', risk='high', scope='cross-cutting', sensitive=True,
+                  planning_required=False, files=['app.py'], acceptance='one', reuse='existing')
+        self.call('teo', 'deliver')
+        note = dict(note_id='later', suggestion='Optional cleanup', reason='Outside current outcome')
+        self.call('jhon', 'defer', **note)
+        result = self.call('luz', 'defer', **note)
+        self.assertEqual(result['state'], 'verification_ready')
+        self.assertEqual(result['review_verdicts'], {})
+        with self.assertRaises(ValueError):
+            self.call('alex', 'complete')
 
     def test_identical_deterministic_check_executes_once_and_invalidates_on_change(self):
         self.start()
@@ -247,6 +523,29 @@ class Workflow(unittest.TestCase):
     def call(self, actor, action, **payload):
         if action == 'start':
             payload.setdefault('intent', 'Preserve the fixture API and value')
+        if action == 'rescope':
+            with closing(sqlite3.connect(self.db_path)) as db:
+                row = db.execute("SELECT body FROM agent_workflows WHERE id=?", (payload.get('id', 'request'),)).fetchone()
+            if row:
+                payload.setdefault('outcome_id', json.loads(row[0])['outcomes'][0]['id'])
+        if action == 'reject':
+            with closing(sqlite3.connect(self.db_path)) as db:
+                row = db.execute("SELECT body FROM agent_workflows WHERE id=?", (payload.get('id', 'request'),)).fetchone()
+            if row:
+                fixture = json.loads(row[0])
+                findings = payload.get('findings')
+                serialized = isinstance(findings, str)
+                if serialized:
+                    try:
+                        findings = json.loads(findings)
+                    except ValueError:
+                        pass
+                if not isinstance(findings, list):
+                    findings = [{'id': str(fixture['delivery_number']), 'problem': str(findings or payload.get('evidence')),
+                                 'expected': 'Fixture value remains one'}]
+                findings = [{**f, 'outcome_id': f.get('outcome_id', fixture['outcomes'][0]['id'])}
+                            if isinstance(f, dict) else f for f in findings]
+                payload['findings'] = json.dumps(findings) if serialized else findings
         if action in {'approve', 'complete', 'prepare_commit', 'commit'} and 'coverage' not in payload:
             with closing(sqlite3.connect(self.db_path)) as db:
                 row = db.execute("SELECT body FROM agent_workflows WHERE id='request'").fetchone()
@@ -675,20 +974,22 @@ assert.equal(createCore().decide({tool:'shell',agent:fixture.actor,input:{comman
         self.call('teo', 'deliver')
         self.call('jhon', 'oracle', expected='one', negative='two', invariant='integer', refutation='test')
         self.call('jhon', 'check', argv=['false'], method='falsification', criterion='invariant holds')
-        self.call('jhon', 'check', argv=['bash', 'tests/check.test.sh'], method='falsification', criterion='value stays 1')
+        self.call('jhon', 'check', argv=['bash', 'tests/check.test.sh'], method='falsification', criterion='value stays 1',
+                  gap='Value behavior is a separate observation; the failed invariant remains unresolved')
         with self.assertRaises(ValueError):
             self.call('jhon', 'approve', evidence='the second check passed')
 
     def test_jhon_can_record_several_checks_before_approving(self):
         self.start()
         self.call('teo', 'deliver')
-        self.call('jhon', 'oracle', expected='one', negative='two', invariant='integer', refutation='test')
+        self.call('jhon', 'oracle', expected='one', negative='two', invariant='integer', refutation='test',
+                  review_plan=['value stays 1', 'no crash on empty input'])
         self.call('jhon', 'check', argv=['bash', 'tests/check.test.sh'], method='falsification', criterion='value stays 1')
         self.call('jhon', 'check', argv=['true'], method='falsification', criterion='no crash on empty input')
         self.assertEqual(self.call('jhon', 'approve', evidence='both criteria covered')['state'], 'verified')
 
     def test_high_route_cannot_skip_luz_or_documentation(self):
-        self.start('high')
+        self.start('high', execution_mode='staged')
         self.call('pol', 'clarify', evidence='approved scope')
         self.call('sol', 'plan', evidence='design and rollback')
         with self.assertRaises(ValueError):
@@ -867,7 +1168,7 @@ assert.equal(createCore().decide({tool:'shell',agent:fixture.actor,input:{comman
                                findings=f'failure detail {attempt}')
         self.assertEqual(result['state'], 'blocked')
         public = self.engine.public_response(result)
-        self.assertEqual(public['recommended_action']['action'], 'stop_and_reclassify')
+        self.assertEqual(public['recommended_action']['action'], 'recover')
         self.assertEqual(public['recommended_action']['deliveries_remaining'], 0)
         with self.assertRaisesRegex(ValueError, 'blocked'):
             self.call('teo', 'deliver')
@@ -966,7 +1267,7 @@ assert.equal(createCore().decide({tool:'shell',agent:fixture.actor,input:{comman
         self.configure(unit='bash tests/check.test.sh')
         started = self.start()
         self.assertIsNone(started['auto_verify'])
-        self.assertEqual(started['configured_verification'], ['bash', '-c', 'bash tests/check.test.sh'])
+        self.assertIsNone(started['configured_verification'])
         (self.root / 'app.py').write_text('value = 1  # ajuste local\n')
         delivered = self.call('teo', 'deliver')
         self.assertEqual(delivered['state'], 'verification_ready')
@@ -1088,7 +1389,7 @@ assert.equal(createCore().decide({tool:'shell',agent:fixture.actor,input:{comman
         self.call('teo', 'deliver')
         self.call('jhon', 'oracle', expected='one', negative='two', invariant='int', refutation='t')
         self.configure(unit='true')  # editar project.yaml después no cambia qué se corre
-        checked = self.call('jhon', 'check', configured=True, method='regresión', criterion='value stays 1')
+        checked = self.call('jhon', 'check', configured=True, profile='unit', impact_reason='Regression for the changed value', method='regresión', criterion='value stays 1')
         self.assertEqual(checked['verification']['argv'], ['bash', '-c', 'bash tests/check.test.sh'])
         self.assertEqual(checked['verification']['exit_code'], 0)
         self.assertEqual(self.call('jhon', 'approve', evidence='comando del proyecto cubre el criterio')['state'], 'verified')

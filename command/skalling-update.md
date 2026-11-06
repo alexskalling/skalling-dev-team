@@ -6,6 +6,10 @@ description: Comprueba y aplica actualizaciones de Skalling con confirmación y 
 
 Pedido: $ARGUMENTS
 
+Conserva el modo externo del proyecto. No cambies a interno para actualizar ni
+agregues artefactos de Skalling a commits. Si hay una colisión con archivos del
+repositorio o hooks propios, informa el bloqueo sin sobrescribirlos.
+
 Para comprobar sin cambiar nada:
 
 ```bash
@@ -16,7 +20,9 @@ bash "$SK_ROOT/scripts/update.sh" --check-only
 Por defecto solo se ofrecen **releases publicados** (tags `vX.Y.Z`), nunca el
 último push a `main`. Si hay una versión nueva, muestra los commits y el
 changelog. Solo después de la confirmación del usuario, ejecuta
-`bash "$SK_ROOT/scripts/update.sh"`. El actualizador conserva el backup
+`bash "$SK_ROOT/scripts/update.sh" --yes`. La autorización del chat es suficiente;
+`--yes` evita otra pregunta interactiva en una herramienta sin terminal.
+El actualizador conserva el backup
 automático del instalador y, si la instalación falla, vuelve a la versión
 anterior.
 

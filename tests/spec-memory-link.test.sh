@@ -11,6 +11,11 @@ VERSION_FILE="$ROOT/VERSION"
 CHANGELOG="$ROOT/CHANGELOG.md"
 FIXTURE="$(mktemp -d)"
 trap 'rm -rf "$FIXTURE"' EXIT
+# The fixture verifies our installer/doctor, not a personal OpenCode process.
+mkdir -p "$FIXTURE/bin"
+printf '#!/bin/sh\necho 2.0.21\n' > "$FIXTURE/bin/opencode"
+chmod +x "$FIXTURE/bin/opencode"
+export PATH="$FIXTURE/bin:$PATH"
 
 PASS=0
 FAIL=0
@@ -155,7 +160,6 @@ test_estructura_script() {
        && grep -q '^aplicar_footer_a_concept_doc()' "$SCRIPT" \
        && grep -q '^calcular_path_relativo()' "$SCRIPT" \
        && grep -q '^validar_footer_existente()' "$SCRIPT" \
-       && grep -q '^validar_escribible()' "$SCRIPT" \
        && grep -q '^procesar_concept_doc()' "$SCRIPT" \
        && grep -q '^principal()' "$SCRIPT"; then
         pass "todas las funciones de spec declaradas"

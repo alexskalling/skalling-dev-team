@@ -1,18 +1,21 @@
-// Advisory only: never changes commands, permissions, agent identity or results.
-// No filesystem, network, subprocess or model calls on the execution path.
+// Advisory workflow policy plus bounded native context compaction.
+// Never changes commands, permissions, agent identity or persisted history.
 import { createHash } from 'node:crypto';
+import { createContextBudget, compactionPolicy } from './context-budget.mjs';
 
 export const marker = 'SKALLING_EXECUTION_EFFICIENCY';
 const skallingAgents = new Set(['alex', 'pol', 'sol', 'teo', 'jhon', 'luz', 'jes', 'pau']);
 const isSkalling = agent => typeof agent === 'string' && skallingAgents.has(agent.toLowerCase());
-export const policy = `Trabaja con la menor latencia compatible con el resultado pedido y las verificaciones necesarias.
-- Resuelve primero el alcance y el criterio observable usando contexto ya disponible. Consulta memoria vigente y después solo los archivos o el estado remoto necesarios. No conviertas una pregunta en implementación ni añadas infraestructura de despliegue sin comprobar la existente.
-- Agrupa lecturas y consultas independientes en una llamada cuando sea posible. Paraleliza solo operaciones independientes; no escrituras sobre el mismo estado ni operaciones dependientes.
-- Al ejecutar pruebas, guarda toda la salida en un log temporal privado y conserva el código de salida original. Lee ese log para investigar fallos; nunca repitas una suite solo porque tail/grep ocultó su salida. No uses el éxito de tail/tee/grep como éxito del test o de Git. Si usas un pipe, conserva explícitamente el estado del productor; pipefail puede detectar errores pero head también puede provocar SIGPIPE.
-- Durante una corrección ejecuta las pruebas afectadas. Reutiliza evidencia solo si comando, código, configuración, dependencias y entorno pertinentes no cambiaron. Ejecuta la validación final requerida una vez por candidato; un commit por sí solo no exige repetirla si conserva esos mismos contenidos. Un resultado verde no prueba criterios que la prueba no cubre.
-- Consulta CI antes de esperar. No uses sleep largo ni gh run watch bloqueante para ocultar minutos de espera. Si sigue pendiente, informa el estado y usa seguimiento en segundo plano solo si el entorno realmente permite reanudar o notificar. Si el usuario pidió esperar hasta terminar, mantén un seguimiento acotado con avances; no declares completado ni abandones ese objetivo por estar pendiente. No hagas polling continuo.
-- Distingue cambio verificado, commit local, push y despliegue: cada uno requiere evidencia propia. Ejecuta los commits autorizados sin mandar comandos al usuario. Push, merge y publicación requieren autorización aplicable del usuario; nunca la infieras de esta política. No amplíes una corrección local a PR/deploy salvo que el objetivo lo requiera.
-- Ante un rechazo, reúne todos los hallazgos pendientes y corrígelos juntos. No reinicies la investigación ni delegues de nuevo solo para repetir lecturas o pruebas disponibles.`;
+export const policy = `Conserva el foco del pedido con la menor latencia compatible con una entrega correcta.
+- TeamDB es la fuente: usa intent, outcomes, constraints, non_goals y evidencia del workflow. Tras perder contexto, status con id o resume {} si falta; no reconstruyas desde archivos de memoria paralelos. No retomes un candidato que no corresponda al pedido actual.
+- Elige la ruta mínima suficiente; cada agente/revisión responde a un resultado o riesgo concreto. No añadas planificación, auditoría, refactor ni despliegue por rutina. Guarda sugerencias opcionales con defer; no bloquean ni amplían el trabajo.
+- Agrupa lecturas independientes. Entrega a cada rol solo id, foco, restricciones y evidencia pertinente; amplía memoria omitida solo cuando sea necesaria. No repitas lecturas ya disponibles ni asumas que otro agente conserva tu contexto.
+- Copy, iconos y orden declarativo local sin cambios de lógica, permisos o contratos: leer lo afectado, editar y verificar resultado/diff. No cargar TDD/Ponytail ni fabricar tests temporales por rutina; strict_tdd conserva su aplicación a cambios de comportamiento. Jhon verifica los criterios sin ampliar el alcance.
+- Pruebas afectadas durante la corrección; validación final requerida una vez por candidato. Reutiliza evidencia solo si código, comando, configuración, dependencias y entorno pertinentes siguen iguales. Un verde genérico no prueba el pedido. Reúne hallazgos antes de corregir.
+- Conserva salida completa en log temporal y código de salida original. tail/tee/grep no prueban éxito; head puede causar SIGPIPE. Consulta el log existente antes de repetir una suite.
+- Consulta CI antes de esperar; evita sleep largo, gh run watch bloqueante y polling continuo. Si el usuario pidió seguir hasta terminar, conserva ese objetivo con seguimiento acotado e informa avances; pendiente no es completado.
+- Cuando los criterios estén cubiertos, sigue el cierre indicado. Commit local autorizado sin devolver comandos al usuario; push, merge y publicación requieren autorización aplicable. Una sugerencia opcional o un commit sin cambios de contenido no obliga a otra revisión.
+- Sin avance, identifica causa y siguiente recuperación concreta antes de repetir una delegación. No inventes presupuestos de tokens ni sacrifiques una comprobación necesaria para aparentar ahorro.`;
 
 export async function setupEfficiency(ctx) {
   if (!ctx.session?.hook) return;
@@ -21,9 +24,14 @@ export async function setupEfficiency(ctx) {
   if (!key || registry.has(key)) return;
   registry.add(key);
   const sessions = new Map();
+  const budget = createContextBudget(ctx);
   try {
     await ctx.tool?.hook('execute.after', async event => {
       if (!isSkalling(event.agent)) return;
+      budget.tool(event.sessionID);
+      if (event.tool === 'skalling_workflow' && event.result && typeof event.result === 'object') {
+        event.result.metadata = { ...event.result.metadata, skalling_context: budget.report(event.sessionID) };
+      }
       if (!event.sessionID || !['shell', 'bash', 'terminal'].includes(event.tool)) return;
       const command = event.input?.command;
       if (typeof command !== 'string') return;
@@ -46,17 +54,25 @@ export async function setupEfficiency(ctx) {
         if (event.system[i].metadata?.skalling === marker) event.system.splice(i, 1);
       }
       if (!isSkalling(event.agent)) return;
+      await budget.observe(event);
       const state = sessions.get(event.sessionID);
       const hints = [];
+      const context = budget.report(event.sessionID);
+      if (context?.compaction === 'queued') hints.push('Se solicitó compactación nativa para el próximo punto seguro. Conserva el workflow; no abras otro ni repitas checks tras el resumen.');
+      if (['unsupported', 'request_failed'].includes(context?.compaction)) hints.push('El historial supera el umbral de contexto y no se pudo programar la compactación nativa. No bloquees el trabajo ni afirmes que se compactó; conserva el foco en TeamDB.');
       if (state?.filtered) hints.push('La última salida shell fue filtrada: consulta el log existente y comprueba el estado original antes de repetir el comando.');
       if (state?.waited) hints.push('El último comando incluía espera bloqueante: consulta el estado actual antes de programar otra espera.');
       if (state?.repeats) hints.push(`Se observaron ${state.repeats} repeticiones de comandos en esta sesión. No implica que sobren: verifica qué cambió antes de repetir pruebas.`);
       event.system.push({ type: 'text', metadata: { skalling: marker }, text: marker + '\n' + policy + (hints.length ? '\n' + hints.join('\n') : '') });
       return event;
     });
+    await ctx.session.hook('compaction', event => {
+      if (!budget.report(event.sessionID)) return;
+      event.system.push({ type: 'text', text: compactionPolicy });
+    });
   } catch (error) {
     registry.delete(key);
     throw error;
   }
-  return () => { registry.delete(key); sessions.clear(); };
+  return () => { registry.delete(key); sessions.clear(); budget.clear(); };
 }

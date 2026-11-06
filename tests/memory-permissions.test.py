@@ -1,6 +1,9 @@
 import fnmatch
 import json
 import unittest
+import subprocess
+import tempfile
+import shutil
 from pathlib import Path
 
 import yaml
@@ -9,9 +12,25 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class MemoryPermissions(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        temporary = tempfile.TemporaryDirectory(prefix='skalling-permissions-')
+        cls.addClassCleanup(temporary.cleanup)
+        cls.runtime = Path(temporary.name)
+        agents = cls.runtime / '.opencode/agents'
+        agents.mkdir(parents=True)
+        for source in (ROOT / 'agents-base').glob('*.md'):
+            result = subprocess.run(['bash', str(ROOT / 'scripts/render-agent.sh'), str(source)],
+                                    capture_output=True, text=True, check=True)
+            (agents / source.name).write_text(result.stdout)
+        shutil.copyfile(ROOT / 'templates/opencode.json', cls.runtime / '.opencode/opencode.json')
+
+    def path(self, relative):
+        return (self.runtime if relative.startswith('.opencode/') else ROOT) / relative
+
     def test_local_tests_preserve_working_changes(self):
         for name in ('Teo', 'Jhon', 'Luz'):
-            rendered = (ROOT / '.opencode/agents' / (name + '.md')).read_text()
+            rendered = (self.path('.opencode/agents') / (name + '.md')).read_text()
             self.assertIn('## Pruebas sin apartar cambios', rendered)
             self.assertIn('sin git stash', rendered)
             rules = yaml.safe_load(rendered.split('---', 2)[1])['permission']['bash']
@@ -28,9 +47,9 @@ class MemoryPermissions(unittest.TestCase):
     def test_every_agent_has_baseline_read_and_scoped_database_access(self):
         for name in ('Alex', 'Jes', 'Pol', 'Sol', 'Teo', 'Jhon', 'Luz', 'Pau'):
             for folder in ('agents-base', '.opencode/agents'):
-                policy = yaml.safe_load((ROOT / folder / (name + '.md')).read_text().split('---', 2)[1])['permission']
+                policy = yaml.safe_load((self.path(folder) / (name + '.md')).read_text().split('---', 2)[1])['permission']
                 self.assertEqual(policy['teamdb_destructive'], 'ask')
-                rules = yaml.safe_load((ROOT / folder / (name + '.md')).read_text().split('---', 2)[1])['permission']['bash']
+                rules = yaml.safe_load((self.path(folder) / (name + '.md')).read_text().split('---', 2)[1])['permission']['bash']
                 def action(command):
                     return next((value for pattern, value in reversed(list(rules.items()))
                                  if fnmatch.fnmatchcase(command, pattern)), 'ask')
@@ -49,14 +68,14 @@ class MemoryPermissions(unittest.TestCase):
                     self.assertEqual(action('npm run test'), 'allow')
                     self.assertEqual(action('node_modules/.bin/vitest run'), 'allow')
                     self.assertEqual(action('./node_modules/.bin/vitest run'), 'allow')
-                helper = {'Alex': 'skalling-goal', 'Sol': 'teamdb-plan', 'Teo': 'teamdb-claim',
+                helper = {'Alex': 'skalling-route', 'Sol': 'teamdb-plan', 'Teo': 'teamdb-claim',
                           'Jhon': 'skalling-review', 'Luz': 'skalling-review', 'Pau': 'teamdb-memory'}.get(name)
                 if helper:
                     self.assertEqual(action(f'bash /home/test/.config/opencode/scripts/{helper}.sh action'), 'allow')
 
     def test_pau_allows_memory_without_allowing_arbitrary_shell(self):
         for path in ('agents-base/Pau.md', '.opencode/agents/Pau.md'):
-            frontmatter = yaml.safe_load((ROOT / path).read_text().split('---', 2)[1])
+            frontmatter = yaml.safe_load((self.path(path)).read_text().split('---', 2)[1])
             rules = frontmatter['permission']['bash']
 
             def action(command):
@@ -89,11 +108,11 @@ class MemoryPermissions(unittest.TestCase):
                      'pip install evilpkg', 'truncate -s0 src/app.ts', 'printenv', 'git tag -d v1',
                      "psql -c 'drop table users'", 'cat ~/.aws/credentials', 'grep token ~/.netrc',
                      'cat ~/.ssh/id_ed25519', 'cat /home/me/.kube/config')
-        sources = [(f'{folder}/{name}.md', yaml.safe_load((ROOT / folder / (name + '.md')).read_text()
+        sources = [(f'{folder}/{name}.md', yaml.safe_load((self.path(folder) / (name + '.md')).read_text()
                                                            .split('---', 2)[1])['permission']['bash'])
                    for folder in ('agents-base', '.opencode/agents')
                    for name in ('Alex', 'Jes', 'Pol', 'Sol', 'Teo', 'Jhon', 'Luz', 'Pau')]
-        sources += [(path, json.loads((ROOT / path).read_text())['permission']['bash'])
+        sources += [(path, json.loads((self.path(path)).read_text())['permission']['bash'])
                     for path in ('templates/opencode.json', '.opencode/opencode.json')]
         for source, rules in sources:
             self.assertEqual(rules.get('*'), 'ask', source)

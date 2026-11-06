@@ -24,6 +24,11 @@ from pathlib import Path
 
 DUMP = 'db/teamdb/team.dump.sql'
 PATHSPEC = ['--', '.', ':(exclude)' + DUMP]
+# Reserved navigation documents, not durable entities. Only the collection's
+# root index is exempt from row lookup; content/privacy checks still run.
+MEMORY_INDEXES = {'.opencode/changes/index.md', *(
+    f'.opencode/context/{folder}/index.md'
+    for folder in ('decisiones', 'problemas-conocidos', 'followups'))}
 # Alcance protegido: TODO cambio necesita revisión aprobada, salvo excepciones
 # acotadas que no cambian el comportamiento (documentación, imágenes, fuentes).
 # Antes era al revés -- una lista corta de lenguajes -- y quedaban afuera
@@ -162,7 +167,7 @@ def check(diff_args, db, label, equivalents=None, require_receipt=None):
     names = git('diff', *diff_args, '--name-only', '-z', *PATHSPEC).decode().split('\0')
     if db:
         for name in names:
-            if '/archive/' in name or not name.endswith('.md'):
+            if '/archive/' in name or not name.endswith('.md') or name in MEMORY_INDEXES:
                 continue
             table = None
             slug = Path(name).stem
@@ -173,7 +178,15 @@ def check(diff_args, db, label, equivalents=None, require_receipt=None):
                 if name.startswith('.opencode/context/' + folder + '/'):
                     table = target
             if table and not db.execute(f'SELECT 1 FROM {table} WHERE slug=? LIMIT 1', (slug,)).fetchone():
-                raise ValueError(f'{label}: {name} no tiene registro en TeamDB; no crear memoria paralela.')
+                helper = '.opencode/scripts/teamdb-memory.sh' if (project_root() / '.opencode/scripts/teamdb-memory.sh').is_file() else '~/.config/opencode/scripts/teamdb-memory.sh'
+                recovery = (f'Pau: registrar la decisión autorizada con bash {helper} --project <raíz-del-proyecto> '
+                            f'decision {slug!r} <título-fiel> <contenido-fiel>; verificar la fila y reintentar la operación original. '
+                            'El helper no exige cerrar action document ni aprobar el workflow antes de escribir memoria. '
+                            'Respetar restricciones explícitas vigentes; un JSON propuesto no es una fila persistida.'
+                            if table == 'decisions' else
+                            f'Reconciliar {table} con su helper tipado, verificar el slug {slug!r} y reintentar la operación original.')
+                raise ValueError(f'{label}: {name} no tiene registro en TeamDB; no crear memoria paralela. '
+                                 f'Tabla: {table}; slug: {slug}. Recuperación: {recovery}')
     if not require_receipt or not any(needs_review(name) for name in names):
         return
     if not db:
@@ -247,7 +260,31 @@ def clean_automerge(commit, parents):
     return merged == git('rev-parse', commit + '^{tree}').decode().strip()
 
 
-def check_commit(commit, db, seen):
+def published_remote_tips(destination):
+    """Trust current refs from the destination, never mutable tracking refs.
+
+    A push to an older branch can include history already accepted on main.
+    That history is a baseline, not new unpublished work needing retroactive
+    local receipts. Only locally available commit objects can bound traversal.
+    """
+    result = subprocess.run(['git', 'ls-remote', '--refs', '--', destination],
+                            capture_output=True, text=True, timeout=30,
+                            env={**os.environ, 'GIT_TERMINAL_PROMPT': '0'})
+    if result.returncode:
+        raise ValueError('No se pudo consultar el remoto de destino; comprobar acceso/conectividad y reintentar. '
+                         'No se asumió que los commits estén publicados ni se modificó TeamDB.')
+    advertised = sorted({line.split()[0] for line in result.stdout.splitlines()
+                         if len(line.split()) == 2 and re.fullmatch(r'[a-fA-F0-9]{40,64}', line.split()[0])})
+    if not advertised:
+        return []
+    objects = subprocess.run(['git', 'cat-file', '--batch-check=%(objectname) %(objecttype)'],
+                             input='\n'.join(advertised) + '\n', capture_output=True, text=True,
+                             check=True, timeout=30)
+    return [parts[0] for line in objects.stdout.splitlines()
+            if len(parts := line.split()) == 2 and parts[1] == 'commit']
+
+
+def check_commit(commit, db, seen, published=()):
     if commit in seen:
         return
     seen.add(commit)
@@ -257,9 +294,10 @@ def check_commit(commit, db, seen):
         # Secretos y memoria se revisan igual sobre lo que entra con el merge;
         # la aprobación se exige a cada commit del otro lado, uno por uno.
         check([parents[0], commit], db, label, require_receipt=False)
-        side = git('rev-list', '--reverse', parents[1], '^' + parents[0], '--not', '--remotes').decode().split()
+        side = git('rev-list', '--reverse', parents[1], '^' + parents[0],
+                   *('^' + tip for tip in published)).decode().split()
         for other in side:
-            check_commit(other, db, seen)
+            check_commit(other, db, seen, published)
         print(f'OK: {label} es un merge automático de cambios verificados')
         return
     parent = parents[0] if parents else empty_tree()
@@ -267,13 +305,16 @@ def check_commit(commit, db, seen):
 
 
 def privacy_check(db, tree=None):
-    if db is None or not db.execute("SELECT 1 FROM sqlite_master WHERE name='schema_meta'").fetchone():
+    # Source: scripts/hooks; installed: .opencode/hooks or global/hooks.
+    for directory in (Path(__file__).resolve().parent.parent, Path(__file__).resolve().parent.parent/'scripts'):
+        if (directory/'skalling_privacy.py').is_file():
+            sys.path.insert(0, str(directory))
+            break
+    from skalling_privacy import mode, candidate_problems
+    project = Path(git('rev-parse', '--show-toplevel').decode().strip())
+    if mode(project) != 'external':
         return
-    mode = db.execute("SELECT value FROM schema_meta WHERE key='privacy_mode'").fetchone()
-    if not mode or mode[0] != 'external':
-        return
-    paths = (git('ls-tree', '-r', '--name-only', tree, '--', '.opencode', 'db/teamdb') if tree else
-             git('ls-files', '--', '.opencode', 'db/teamdb')).decode().splitlines()
+    paths = candidate_problems(project, tree)
     if paths:
         raise ValueError('Privacidad externa incompleta: el candidato contiene memoria/configuración rastreada. '
                          'Retirar esas rutas del índice con autorización; .gitignore no basta: ' + ', '.join(paths[:5]))
@@ -288,6 +329,8 @@ def main():
             privacy_check(db)
             check(['--cached'], db, 'commit preparado')
         elif sys.argv[1] == 'pre-push':
+            destination = sys.argv[3] if len(sys.argv) > 3 else (sys.argv[2] if len(sys.argv) > 2 else None)
+            published = None  # Query once, only if at least one ref publishes commits.
             for line in sys.stdin:
                 fields = line.split()
                 if len(fields) != 4:
@@ -297,16 +340,18 @@ def main():
                     raise ValueError('Referencia Git inválida')
                 if not local.strip('0'):
                     continue
+                if published is None:
+                    published = published_remote_tips(destination) if destination else []
                 revision = local + '^{commit}'
                 args = ['rev-list', '--reverse', '--first-parent', revision]
+                baseline = set(published)
                 if remote.strip('0'):
-                    args += ['^' + remote]
-                else:
-                    args += ['--not', '--remotes']
+                    baseline.add(remote)
+                args += ['^' + tip for tip in sorted(baseline)]
                 seen = set()
                 for commit in git(*args).decode().splitlines():
                     privacy_check(db, commit)
-                    check_commit(commit, db, seen)
+                    check_commit(commit, db, seen, baseline)
         else:
             raise ValueError('Modo de hook inválido')
     finally:

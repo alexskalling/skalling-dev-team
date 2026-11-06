@@ -41,13 +41,6 @@ else
   assert_fail "teamdb_exec_write definida" "no existe"
 fi
 
-# 3. teamdb_exec_transaction existe
-if type teamdb_exec_transaction >/dev/null 2>&1; then
-  assert_pass "teamdb_exec_transaction definida"
-else
-  assert_fail "teamdb_exec_transaction definida" "no existe"
-fi
-
 # 4. teamdb_exec.py existe y es ejecutable
 if [ -f "$ROOT/scripts/teamdb_exec.py" ] && [ -x "$ROOT/scripts/teamdb_exec.py" ]; then
   assert_pass "scripts/teamdb_exec.py existe y ejecutable"
@@ -140,9 +133,9 @@ else
 fi
 
 # 13. transaction: BEGIN IMMEDIATE + commit atómico
-teamdb_exec_transaction "$DB" \
+python3 "$ROOT/scripts/teamdb_exec.py" --db "$DB" --mode transaction --sql \
   "INSERT INTO audit_log(ts,agent,action,table_name) VALUES(datetime('now'),?,'via_test','concepts')" \
-  "transaction-actor" >/dev/null 2>&1
+  --params '["transaction-actor"]' >/dev/null 2>&1
 COUNT_AUDIT=$(teamdb_exec_query "$DB" "SELECT COUNT(*) AS n FROM audit_log WHERE agent = ?" "transaction-actor")
 if echo "$COUNT_AUDIT" | grep -q '"n": 1'; then
   assert_pass "transaction inserta audit_log atómicamente"

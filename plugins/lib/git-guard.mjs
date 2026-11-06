@@ -477,11 +477,6 @@ export function guardMessage(finding) {
     + 'prefijos (command, env, VAR=...), rutas absolutas o comillas en el nombre del comando.';
 }
 
-// Compatibilidad con la versión anterior del plugin.
-export function blocksChainedSensitiveGit(command) {
-  return guardCommand(command) !== null;
-}
-
 export function normalizeAgent(agent) {
   return String(agent || '').trim().toLowerCase();
 }
@@ -887,11 +882,10 @@ export function teamdbWorkflowState(id, directory) {
   }
 }
 
-// ─── Núcleo compartido por OpenCode v1 y v2 ──────────────────────────────────
-// Cada versión entrega los mismos datos con otra forma; los adaptadores de
-// abajo los traducen a { tool, agent, sessionID, input } y aplican la
-// decisión a su manera (v1: throw; v2: reemplazar el comando, porque un error
-// lanzado desde un hook de la v2 no se convierte en un rechazo limpio).
+// ─── Núcleo del control de OpenCode 2 ──────────────────────────────────
+// Los hooks traducen los eventos a { tool, agent, sessionID, input }.
+// El bloqueo reemplaza el comando: lanzar un error desde un hook de OpenCode 2
+// no produce un rechazo limpio.
 const SHELL_TOOLS = new Set(['bash', 'shell']);
 const SUBAGENT_TOOLS = new Set(['task', 'subagent']);
 const EDIT_TOOLS = new Set(['edit', 'write', 'patch', 'multiedit', 'apply_patch']);
@@ -940,7 +934,7 @@ function pauEngineeringHandoff(input) {
 }
 
 function parseState(output) {
-  // v1: string. v2: { output?, content } con content string o partes de texto.
+  // Acepta texto o { output?, content } con content string o partes de texto.
   const content = output?.content;
   const text = typeof output === 'string' ? output
     : (output?.output ?? output?.stdout ?? (typeof content === 'string' ? content : content?.[0]?.text)
@@ -1069,35 +1063,6 @@ export function createCore(options = {}) {
   }
 
   return { decide, observe, workflows };
-}
-
-// OpenCode v1: hooks devueltos por la función `server`. El agente de cada
-// sesión llega en chat.params; tool.execute.before no lo trae.
-export function createGuard(agentBySession = new Map(), core = createCore()) {
-  const remember = async (input) => {
-    if (input?.sessionID && input?.agent) agentBySession.set(input.sessionID, normalizeAgent(input.agent));
-  };
-  return {
-    'chat.params': remember,
-    'chat.message': remember,
-    'shell.env': async (input, output) => {
-      const agent = agentBySession.get(input?.sessionID);
-      // Sin agente conocido se falla cerrado: los helpers de TeamDB no
-      // aceptan una identidad declarada dentro de OpenCode.
-      output.env.SKALLING_RUNTIME_AGENT = agent || UNATTRIBUTED_AGENT;
-      if (input?.sessionID) output.env.SKALLING_RUNTIME_SESSION = String(input.sessionID);
-    },
-    'tool.execute.before': async (input, output) => {
-      const agent = agentBySession.get(input.sessionID);
-      const blocked = core.decide({ tool: input.tool, agent, sessionID: input.sessionID, input: output.args,
-        directory: input.directory || input.cwd });
-      if (blocked) throw new Error(blocked);
-    },
-    'tool.execute.after': async (input, output) => {
-      core.observe({ tool: input.tool, agent: agentBySession.get(input.sessionID), sessionID: input.sessionID,
-        input: input.args, output: output?.output });
-    },
-  };
 }
 
 const UNATTRIBUTED_AGENT = 'unattributed';

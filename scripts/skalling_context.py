@@ -4,6 +4,7 @@ import json
 import re
 import os
 from pathlib import Path
+from skalling_memory_relations import annotate_relations
 
 IGNORED = {'node_modules', 'dist', 'build', 'coverage', 'vendor', '__pycache__', 'venv'}
 SOURCES = ('README.md', 'package.json', 'pyproject.toml', 'go.mod', 'Cargo.toml',
@@ -69,11 +70,13 @@ def memory_item(table, item, body_key, seen=()):
     return item
 
 
-def request_context(conn, project, query, top_k=8, max_bytes=8000, visual=False, options=(), *, query_only=False):
+def request_context(conn, project, query, top_k=8, max_bytes=8000, visual=False, options=(), *, query_only=False, search_mode="fts", freshness_status=None):
     """Bounded retrieval, shared by CLI and workflow delivery."""
     if not 1 <= top_k <= 50 or not 512 <= max_bytes <= 100000:
         raise ValueError("top-k must be 1..50 and max-bytes 512..100000")
-    terms = list(dict.fromkeys(re.findall(r"[a-z0-9áéíóúñü]{3,}", query.lower())))
+    if search_mode not in {'fts', 'lexical'}:
+        raise ValueError('search_mode must be fts or lexical')
+    terms = list(dict.fromkeys(re.findall(r"[^\W_]{3,}", query.lower())))
     stop = {"para", "con", "que", "los", "las", "del", "una", "por", "the", "and"}
     stop.update({"quiero", "necesito", "hacer", "esto", "este", "esta", "como", "pero", "porque", "más", "sin", "del", "los", "las"})
     terms = [term for term in terms if term not in stop][:24]
@@ -89,17 +92,30 @@ def request_context(conn, project, query, top_k=8, max_bytes=8000, visual=False,
     result = {key: [] for key in tables}
     status = ({'status': 'not_checked', 'proves_live_state': False,
                'meaning': 'Memoria registrada; confirmar sólo el dato actual requerido en su fuente.'}
-              if query_only else freshness(conn, project))
+              if query_only else freshness_status if freshness_status is not None else freshness(conn, project))
     result.update(omitted=[], needs_expansion=False, more_matches=False, freshness=status)
     seen = {x[5:] for x in options if x.startswith("seen:")}
     def encode():
         return json.dumps(result, ensure_ascii=False, separators=(",", ":"))
     candidates = []
+    available = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    indexes = {'concepts': 'concepts_fts', 'decisions': 'decisions_fts', 'known_problems': 'problems_fts'}
+    # Quote tokens: user text is never interpreted as FTS operators or SQL.
+    match = ' OR '.join('"' + term + '"*' for term in terms)
     for table, (title, body, guard) in tables.items():
         clauses, params = [], []
+        index = indexes.get(table)
+        use_fts = search_mode == 'fts' and index in available and bool(match)
+        if use_fts:
+            clauses.append(f'id IN (SELECT rowid FROM {index} WHERE {index} MATCH ?)')
+            params.append(match)
         for term in terms:
-            clauses.append("(lower(slug) LIKE ? OR lower(" + title + ") LIKE ? OR lower(coalesce(" + body + ",'')) LIKE ?)")
-            params.extend(["%" + term + "%"] * 3)
+            # Slugs and file anchors are identifiers; preserve substring matching.
+            parts = ["lower(slug) LIKE ?", "lower(" + title + ") LIKE ?"]
+            if not use_fts:
+                parts.append("lower(coalesce(" + body + ",'')) LIKE ?")
+            clauses.append('(' + ' OR '.join(parts) + ')')
+            params.extend(["%" + term + "%"] * len(parts))
         for anchor in anchors:
             clauses.append("instr(lower(coalesce(" + body + ",'')), ?) > 0")
             params.append(anchor)
@@ -136,6 +152,9 @@ def request_context(conn, project, query, top_k=8, max_bytes=8000, visual=False,
             if query_only:
                 item.update(source=f'TeamDB:{table}/{slug}', recorded_at=recorded_at)
             candidates.append((rank, table, item))
+    annotate_relations(conn, [(table, item) for _, table, item in candidates])
+    if any(item.get('requires_resolution') for _, _, item in candidates):
+        result['needs_expansion'] = True
     for _, table, item in sorted(candidates, key=lambda row: (-row[0], row[1], row[2]["slug"])):
         item = memory_item(table, item, "body", seen)
         result[table].append(item)
@@ -190,6 +209,7 @@ def task_context(conn, project, plan_slug, task_slug, top_k=8, max_bytes=8000, d
         if size() > max_bytes - 160:
             output[table].pop()
             omit(table, item['slug'])
+    linked = []
     for table in tables:
         title = 'm.slug' if table == 'preferences' else 'm.title'
         body = ("coalesce(m.symptom_md,'') || char(10) || coalesce(m.workaround_md,'')"
@@ -199,17 +219,23 @@ def task_context(conn, project, plan_slug, task_slug, top_k=8, max_bytes=8000, d
                             f'JOIN {table} m ON c.memory_id=m.id WHERE c.task_id=? AND c.memory_table=?'
                             + guard + ' ORDER BY c.relevance DESC,m.slug LIMIT ?', (row[0], table, top_k + 1)).fetchall()
         for slug, title, body, relevance in rows:
-            place(table, dict(slug=slug, title=title or '', body_md=body, relevance=relevance, provenance='linked'))
+            linked.append((table, dict(slug=slug, title=title or '', body_md=body, relevance=relevance, provenance='linked')))
+    annotate_relations(conn, linked)
+    for table, item in linked:
+        if item.get('requires_resolution'):
+            output['needs_expansion'] = True
+        place(table, item)
     if discover:
         query = ' '.join(str(v or '') for v in row[2:])
         # Retrieve complete candidates before applying the shared output budget.
-        found = request_context(conn, project, query, top_k, 100000)
+        found = request_context(conn, project, query, top_k, 100000, freshness_status=output['freshness'])
         output['more_matches'] |= found['more_matches']
         output['needs_expansion'] |= found['needs_expansion']
         for table in tables:
             for item in found[table]:
                 place(table, dict(slug=item['slug'], title=item['title'], body_md=item['body'],
-                                  provenance='discovered', relevance=0))
+                                  provenance='discovered', relevance=0,
+                                  **{k: item[k] for k in ('relations','requires_resolution','relations_truncated') if k in item}))
         for item in found['omitted']:
             if item['slug'] not in selected[item['table']]:
                 omit(item['table'], item['slug'])

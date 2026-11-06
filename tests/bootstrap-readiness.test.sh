@@ -32,7 +32,7 @@ test ! -d "$PROJECT/.opencode/context/proyecto"
 grep -q -- '--brand: #123456' "$DESIGN"
 grep -q 'Inter' "$DESIGN"
 ! grep -q 'compiled-only\|.open-next' "$DESIGN"
-test -d "$PROJECT/.codegraph"
+test ! -d "$PROJECT/.codegraph" # Never initialize CodeGraph in temporary fixtures.
 test "$(sqlite3 "$DB" "SELECT value FROM schema_meta WHERE key='project_readiness'")" = initialized
 test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM concepts")" -ge 3
 test "$(sqlite3 "$DB" "SELECT COUNT(*) FROM concepts WHERE slug='design-system'")" = 1

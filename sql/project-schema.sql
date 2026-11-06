@@ -114,7 +114,7 @@ CREATE TABLE schema_meta (
   value TEXT NOT NULL
 );
 
-INSERT INTO schema_meta VALUES ('version', '0.17.0');
+INSERT INTO schema_meta VALUES ('version', '0.19.0');
 
 CREATE TABLE IF NOT EXISTS data_revisions (
   id INTEGER PRIMARY KEY,
@@ -558,7 +558,7 @@ CREATE TABLE IF NOT EXISTS workflow_metrics (
 CREATE INDEX IF NOT EXISTS idx_workflow_metrics_started ON workflow_metrics(started_at DESC);
 
 -- ════════════════════════════════════════
--- v0.11.4: session_goals/session_goal_history (scripts/skalling-goal.py) y
+-- v0.11.4: session_goals/session_goal_history (historial conservado) y
 -- agent_workflows/agent_workflow_events (scripts/skalling-workflow.py).
 -- El schema es versión y se migra; antes se creaban al vuelo en el primer
 -- uso de cada herramienta, sin quedar declarados acá ni en sql/migrations/.
@@ -575,12 +575,22 @@ CREATE TABLE IF NOT EXISTS session_goal_history(
   id INTEGER PRIMARY KEY, session TEXT NOT NULL, goal_json TEXT NOT NULL,
   archived_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE TABLE IF NOT EXISTS agent_workflows(id TEXT PRIMARY KEY, body TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS agent_workflows(
+  id TEXT PRIMARY KEY, body TEXT NOT NULL,
+  workflow_state TEXT GENERATED ALWAYS AS (json_extract(body,'$.state')) VIRTUAL,
+  project_directory TEXT GENERATED ALWAYS AS (json_extract(body,'$.project_directory')) VIRTUAL,
+  start_session TEXT GENERATED ALWAYS AS (json_extract(body,'$.start_session')) VIRTUAL,
+  state_revision REAL GENERATED ALWAYS AS (json_extract(body,'$.updated_at')) VIRTUAL
+);
+CREATE INDEX IF NOT EXISTS idx_workflow_project_session ON agent_workflows(project_directory,start_session,workflow_state);
+CREATE INDEX IF NOT EXISTS idx_workflow_project_state ON agent_workflows(project_directory,workflow_state);
 CREATE TABLE IF NOT EXISTS agent_workflow_events(
   id INTEGER PRIMARY KEY, request_id TEXT NOT NULL, actor TEXT NOT NULL,
   session TEXT NOT NULL, action TEXT NOT NULL, state TEXT NOT NULL,
   evidence TEXT NOT NULL, ts REAL NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_workflow_event_session ON agent_workflow_events(request_id,session,ts);
 
 -- v0.13.0: versión de las entidades durables para el merge entre integrantes.
 CREATE TABLE IF NOT EXISTS memory_versions (

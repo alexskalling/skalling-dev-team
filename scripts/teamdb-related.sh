@@ -19,6 +19,11 @@ fi
 SLUG="${1:-}"
 TYPE="${2:-concept}"
 PROJECT="${3:-$(pwd)}"
+# Igual que search: si se omite el tipo, el segundo argumento es el proyecto.
+if [ "$#" -eq 2 ] && [ -d "$2" ]; then
+  TYPE=concept
+  PROJECT="$2"
+fi
 
 
 if [ -z "$SLUG" ]; then

@@ -60,7 +60,7 @@ class ReviewCycle(base.Workflow):
 
     def test_batch_reviews_then_single_correction_and_commit(self):
         self.call('alex', 'start', risk='high', scope='cross-cutting', sensitive=True,
-                  planning_required=False, files=['app.py'], acceptance='value is one', reuse='app')
+                  planning_required=False, files=['app.py'], acceptance='value is one', reuse='app', commit_policy='required')
         self.assertEqual(self.call('alex', 'status')['state'], 'implementation_ready')
         (self.root / 'app.py').write_text('value = 2\n')
         self.call('teo', 'deliver')
@@ -159,7 +159,7 @@ class ReviewCycle(base.Workflow):
         self.start()
         self.call('teo', 'deliver')
         state = self.call('jhon', 'reject', evidence='wrong output')
-        for key in ('review_protocol', 'review_findings', 'review_history', 'review_verdicts'):
+        for key in ('review_protocol', 'finding_contract', 'review_findings', 'review_history', 'review_verdicts'):
             state.pop(key, None)
         with sqlite3.connect(self.db_path) as db:
             db.execute('UPDATE agent_workflows SET body=? WHERE id=?', (json.dumps(state), state['id']))
@@ -171,7 +171,8 @@ class ReviewCycle(base.Workflow):
         with self.assertRaisesRegex(ValueError, 'resolutions'): self.call('teo', 'deliver')
 
     def test_reopening_after_commit_never_reports_the_old_sha_as_the_new_commit(self):
-        self.start()
+        self.call('alex', 'start', risk='low', scope='local', files=['app.py', 'tests/check.test.sh'],
+                  acceptance='one', reuse='app', commit_policy='required')
         test = self.root / 'tests/check.test.sh'
         test.write_text(test.read_text() + '# first correction\n')
         self.verify()
@@ -182,7 +183,7 @@ class ReviewCycle(base.Workflow):
         test.write_text(test.read_text() + '# second correction\n')
         self.call('teo', 'deliver', resolutions=[{'finding_id': f['id'], 'change': 'Second correction'}
                                                for f in rejected['review_findings']])
-        self.call('jhon', 'check', argv=['bash', 'tests/check.test.sh'], method='regression', criterion='one')
+        self.call('jhon', 'check', argv=['bash', 'tests/check.test.sh'], method='regression', criterion='value stays 1')
         self.call('jhon', 'approve', evidence='Correction verified')
         with self.assertRaisesRegex(ValueError, 'Falta commit local'): self.call('alex', 'complete')
         second = self.call('jhon', 'commit', message='fix: second candidate')['local_commit_result']['sha']

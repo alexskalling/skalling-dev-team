@@ -14,7 +14,7 @@ Uso:
   python3 scripts/teamdb_exec.py --db <path> --mode query \\
     --sql "SELECT * FROM x WHERE a = ?" --params '["v1","v2"]'
 
-PRAGMA aplicados: journal_mode=WAL, busy_timeout, foreign_keys=ON
+Conexión: foreign_keys=ON, timeout; WAL lo establece la inicialización.
 """
 import sqlite3
 import sys
@@ -69,19 +69,6 @@ def main():
 
     conn = connect(args.db, timeout=args.timeout / 1000, readonly=args.mode == 'query')
     conn.row_factory = sqlite3.Row
-
-    try:
-        conn.execute('PRAGMA journal_mode=WAL')
-    except Exception:
-        pass
-    try:
-        conn.execute('PRAGMA busy_timeout={}'.format(args.timeout))
-    except Exception:
-        pass
-    try:
-        conn.execute('PRAGMA foreign_keys=ON')
-    except Exception:
-        pass
 
     try:
         if args.mode == 'query':

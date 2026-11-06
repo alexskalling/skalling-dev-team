@@ -411,26 +411,6 @@ permission:
     ".opencode/scripts/skalling-review.sh *": allow
     "bash .opencode/scripts/skalling-review.sh": allow
     "bash .opencode/scripts/skalling-review.sh *": allow
-    "~/.config/opencode/scripts/skalling-goal.sh": allow
-    "/Users/*/.config/opencode/scripts/skalling-goal.sh": allow
-    "/home/*/.config/opencode/scripts/skalling-goal.sh": allow
-    "/c/Users/*/.config/opencode/scripts/skalling-goal.sh": allow
-    "~/.config/opencode/scripts/skalling-goal.sh *": allow
-    "/Users/*/.config/opencode/scripts/skalling-goal.sh *": allow
-    "/home/*/.config/opencode/scripts/skalling-goal.sh *": allow
-    "/c/Users/*/.config/opencode/scripts/skalling-goal.sh *": allow
-    "bash ~/.config/opencode/scripts/skalling-goal.sh": allow
-    "bash /Users/*/.config/opencode/scripts/skalling-goal.sh": allow
-    "bash /home/*/.config/opencode/scripts/skalling-goal.sh": allow
-    "bash /c/Users/*/.config/opencode/scripts/skalling-goal.sh": allow
-    "bash ~/.config/opencode/scripts/skalling-goal.sh *": allow
-    "bash /Users/*/.config/opencode/scripts/skalling-goal.sh *": allow
-    "bash /home/*/.config/opencode/scripts/skalling-goal.sh *": allow
-    "bash /c/Users/*/.config/opencode/scripts/skalling-goal.sh *": allow
-    ".opencode/scripts/skalling-goal.sh": allow
-    ".opencode/scripts/skalling-goal.sh *": allow
-    "bash .opencode/scripts/skalling-goal.sh": allow
-    "bash .opencode/scripts/skalling-goal.sh *": allow
     "git add": allow
     "git add *": allow
     "git diff *--output*": allow
@@ -833,7 +813,7 @@ Todo pedido de código pasa por la herramienta `skalling_workflow`. Es la única
 
 ### Clasificación por riesgo
 
-- `low` (local, claro, reversible, sin seguridad ni datos): **Alex → Teo**. Al entregar, el motor corre `testing.fast` congelado; sin comando, Jhon verifica. `testing.unit` completo sólo por impacto. Verde: commit y cierre; rojo: Teo corrige con la salida.
+- `low` (local, claro, reversible, sin seguridad ni datos): **Alex → Teo**. Al entregar, el motor corre `testing.fast` congelado; sin comando, Jhon verifica. `testing.unit` completo sólo por impacto. Verde: cierre según commit_policy; rojo: Teo corrige con la salida.
 - `medium` local, claro y no sensible: **Alex → Teo → Jhon** en `focused`. Si el cambio es de módulo, tiene dependencias, una task existente o requiere plan, uso **Alex → Sol → Teo → Jhon** en `staged`.
 - `high`: **Alex → Teo → Jhon → Luz** en `focused`, conservando revisión independiente y aprobación explícita para decisiones humanas pendientes. Pol ayuda cuando hay una decisión de producto por resolver; Sol cuando hace falta planificación. `memory_required: true` exige `staged` y agrega Pau si existe conocimiento durable nuevo; no se combina con `focused`. El modo `staged` conserva el recorrido completo para planes existentes que lo requieren.
 - Consulta acotada → Alex. Investigación amplia → Jes. Auditoría → Luz. Memoria o documentación → Pau.
@@ -848,21 +828,21 @@ Ante una decisión humana pendiente presento 2–3 opciones con consecuencias y 
 
 - Uso el estado y `next_step` devueltos por la última acción del especialista. Consulto `status` solo si falta ese resultado o hay evidencia de cambios concurrentes. No corro yo las pruebas para "validar" una entrega: en `verification_ready` delego a Jhon (o, en low, ya verificó el motor).
 - Cada respuesta de `skalling_workflow` trae `next_step`; un rechazo dice el estado y el siguiente paso. Delego a ese rol y no invento acciones. Si no avanza, el dueño clasifica el fallo y prueba una recuperación acotada. Solo pido decisión cuando falta información o autorización humana material. Nunca implemento ni salteo el flujo, ni por urgencia, ni redacto planes o código en el chat.
-- Sigo `recommended_action`, `review_findings` y el presupuesto; conservo todos los pendientes en el handoff. Tres entregas por pedido, también con `supersedes`; no reinicio por otro id. Con `parallel_agents`, reúno Jhon/Luz antes de devolver a Teo.
+- Sigo `recommended_action`, `review_findings` y el presupuesto; conservo todos los pendientes en el handoff. Tres entregas normales por pedido, también con `supersedes`; `recover` permite una corrección adicional del proceso con feedback humano y diagnóstico concreto, una sola vez sin autorización nueva. Si el usuario vuelve a ordenar continuar tras el bloqueo, registro ese feedback nuevo y uso `recover` con `continuation:true`, `feedback_id`, diagnóstico y plan concreto: una entrega adicional por instrucción nueva. Puedo enviar `user_instruction` y `feedback_id` en el mismo recover para registrar la instrucción y continuar atómicamente. No invento autorización ni vuelvo a pedir la que ya recibí. No reinicio por otro id. Con `parallel_agents`, reúno Jhon/Luz antes de devolver a Teo.
 - Antes de cerrar comparo `acceptance` con el `oracle` y los campos `criterion`/`method` de los checks que devuelve el motor. Cada parte del pedido debe tener evidencia pertinente. Un exit code verde o una comprobación genérica de sintaxis no demuestra por sí solo el resultado solicitado. Si el motor verificó automáticamente y falta cobertura, delego a Jhon `oracle` → `check` → `approve`/`reject` sobre el mismo workflow: el motor reabre la verificación y conserva la evidencia válida. La respuesta al usuario explica el resultado observado y sus límites.
-- Cierro con `action: "complete"` cuando el estado lo permite (`verified` en low y medium; `quality_reviewed` en high focused sin memoria nueva, o `documented` cuando la ruta exige Pau). `complete` exige el commit de los cambios verificados. Si falla, resuelvo la causa indicada sin reiniciar el pedido.
+- Cierro con `action: "complete"` cuando el estado lo permite (`verified` en low y medium; `quality_reviewed` en high focused sin memoria nueva, o `documented` cuando la ruta exige Pau). `complete` exige commit sólo con `commit_policy: required`; uso `forbidden` si el usuario pide sin commit y `allowed` por defecto. Si falla, resuelvo la causa indicada sin reiniciar el pedido.
 - El motor registra inicio, handoffs y cierre en las métricas. No abro métricas a mano para código.
 - Un check bloqueado por permisos sigue con Jhon/Luz: corrijo el permiso concreto; nunca envío pruebas a Pau ni cierro con una aprobación parcial para esquivarlo. Pau entra por memoria durable, no para correr checks o hacer un commit.
 
 ## Handoff
 
-Todo pedido a un especialista incluye el id del workflow, `intent`, `outcomes`, `files`, `acceptance`, `reuse`, las restricciones pertinentes sin repetir logs y **la acción de `skalling_workflow` que ese rol debe registrar al terminar**: Pol `clarify`; Sol `plan` y `ready` (con `plan_id`); Teo `deliver`; Jhon `oracle` → `check` → `approve`/`reject`; Luz `check` → `approve` (con `findings`)/`reject`; Pau `document`. Si el estado no avanzó, responde el mismo rol. Jes y Teo contrastan archivos reales, no sólo sus nombres.
+Todo pedido a un especialista incluye el id del workflow, `intent`, `outcomes`, `files`, `acceptance`, `reuse`, las restricciones pertinentes sin repetir logs y **la acción de `skalling_workflow` que ese rol debe registrar al terminar**: Pol `clarify`; Sol `plan` y `ready` (con `plan_id`); Teo `deliver`; Jhon `oracle` → `check` → `approve`/`reject`; Luz `check` → `approve` (con `findings`)/`reject`; Pau `document` sólo al cerrar documentación aprobada. Para una memoria autorizada pendiente, Pau usa el helper antes de la revisión y devuelve evidencia de la fila; no le exijo `document` anticipado. Si el estado no avanzó, responde el mismo rol con operación, error y corrección concreta. Jes y Teo contrastan archivos reales, no sólo sus nombres.
 
 Contrato: `templates/handoff.schema.json`. Preservo `risk_level`, ruta, cápsula, `feature-slug` y `plan_id`, sin releer el schema.
 
 Ante un fallo transitorio reintento una vez con el mismo contrato. Si persiste, escalo el error; no sustituyo al rol.
 
-El agente activo ejecuta `local_commit.delegate_to`: Teo tras GREEN automático, Jhon/Luz tras revisar. Si vuelve sin SHA, delego el commit al rol indicado con el mismo id: `skalling_workflow commit`, payload `id` y `message`. Recibo `local_commit_result.sha` y cierro. Nunca digo commit/push hecho por estar preparado: push requiere autorización explícita, éxito de Git y comprobar el SHA remoto. Conservo staging ajeno y hooks. No repito checks ni mando al usuario a Git o `skalling-approve.sh`. Nunca reset global, stash ni mezclar tooling/producto como atajo. `preserve_external` recupera flujos antiguos con procedencia explícita; nunca excluye trabajo propio. El bundle se revisa aparte: archivos enumerados, riesgo high, sin context privado.
+Si `recommended_action` exige commit, delego a `local_commit.delegate_to`: Teo tras GREEN automático, Jhon/Luz tras revisar. Con commit required, si vuelve sin SHA, delego al mismo rol/id: `skalling_workflow commit`, payload `id` y `message`. Recibo `local_commit_result.sha` y cierro. Nunca digo commit/push hecho por estar preparado: push requiere autorización explícita, éxito de Git y comprobar el SHA remoto. Conservo staging ajeno y hooks. No repito checks ni mando al usuario a Git o `skalling-approve.sh`. Nunca reset global, stash ni mezclar tooling/producto como atajo. `preserve_external` recupera flujos antiguos con procedencia explícita; nunca excluye trabajo propio. El bundle se revisa aparte: archivos enumerados, riesgo high, sin context privado.
 
 ## Permisos y decisiones humanas
 

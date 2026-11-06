@@ -10,7 +10,6 @@
 #   skalling_home              — ruta al home del usuario
 #   skalling_path_sep          — "/" en Unix, "\" en Windows
 #   skalling_log_os            — log con info del OS detectado
-#   skalling_require_bash_3    — chequea que bash >= 3
 
 # ──────────────────────────────────────────────────────────────────────────────
 # DETECCIÓN DE OS
@@ -105,27 +104,9 @@ skalling_log_os() {
     printf '  %s OS detectado: %s\n' "$icon" "$SKALLING_OS"
 }
 
-skalling_log_paths() {
-    printf '  HOME:    %s\n' "$SKALLING_HOME"
-    printf '  Config:  %s\n' "$SKALLING_OPENCODE_DIR"
-}
-
 # ──────────────────────────────────────────────────────────────────────────────
 # VALIDACIÓN DE BASH
 # ──────────────────────────────────────────────────────────────────────────────
-
-skalling_require_bash_3() {
-    local major="${BASH_VERSINFO[0]:-0}"
-    if [[ "$major" -lt 3 ]]; then
-        echo "ERROR: bash >= 3 requerido. Tenés: ${BASH_VERSION:-unknown}" >&2
-        return 1
-    fi
-    if [[ "$major" -lt 4 ]]; then
-        # bash 3.2 (default macOS) funciona pero no tenemos arrays asociativos
-        return 0
-    fi
-    return 0
-}
 
 # Dependencias mínimas para que el modelo DB-first funcione de verdad.
 # No se consideran opcionales: sin sqlite3 o Python los agentes pueden quedar
@@ -178,16 +159,6 @@ skalling_sed_inplace() {
     fi
 }
 
-# Reemplazo portable para `realpath`
-skalling_realpath() {
-    local path="$1"
-    if [[ "$SKALLING_OS" == "macos" ]]; then
-        [[ -d "$path" ]] && cd "$path" && pwd || echo "$path"
-    else
-        realpath "$path" 2>/dev/null || readlink -f "$path" 2>/dev/null || echo "$path"
-    fi
-}
-
 # SHA-256 portable: GNU/Linux y algunos macOS traen sha256sum; macOS estándar
 # trae shasum; OpenSSL queda como último fallback.
 skalling_sha256_stream() {
@@ -216,119 +187,6 @@ skalling_sha256_tree() {
             printf '%s  %s\n' "$(skalling_sha256_file "$file")" "$file"
           done \
         | skalling_sha256_stream
-}
-
-# Detecta si hay bash disponible para wrappers PowerShell
-skalling_has_bash() {
-    command -v bash >/dev/null 2>&1 || return 1
-    command -v git >/dev/null 2>&1 || return 1
-    return 0
-}
-
-# ──────────────────────────────────────────────────────────────────────────────
-# ESCRITURA ATÓMICA
-# ──────────────────────────────────────────────────────────────────────────────
-
-# Escribe contenido a un archivo de forma atómica (write-then-rename).
-# Evita archivos corruptos si el proceso crashea mid-write.
-#
-# Uso: skalling_atomic_write "path/al/archivo" "contenido"
-skalling_atomic_write() {
-    local file_path="$1"
-    local content="$2"
-    local dir; dir="$(dirname "$file_path")"
-    local tmp_file; tmp_file="${file_path}.tmp.$$"
-
-    # Asegurar que el directorio existe
-    [[ -d "$dir" ]] || mkdir -p "$dir"
-
-    # Escribir a archivo temporal
-    printf '%s' "$content" > "$tmp_file" || return 1
-
-    # Atomic rename (POSIX garantiza atomicidad en mismo filesystem)
-    mv -f "$tmp_file" "$file_path" || {
-        rm -f "$tmp_file" 2>/dev/null  # lens:ok: sufijo .tmp.$$ propio, nunca vacío
-        return 1
-    }
-
-    return 0
-}
-
-# Append atómico a un archivo (usa flock si está disponible, fallback a tmp+cat).
-# Uso: skalling_atomic_append "path/al/archivo" "línea a appendear"
-skalling_atomic_append() {
-    local file_path="$1"
-    local line="$2"
-    local dir; dir="$(dirname "$file_path")"
-
-    [[ -d "$dir" ]] || mkdir -p "$dir"
-    [[ -f "$file_path" ]] || touch "$file_path"
-
-    if command -v flock >/dev/null 2>&1; then
-        # Con flock (Linux): append bajo lock
-        (
-            flock -x 200
-            printf '%s\n' "$line" >> "$file_path"
-        ) 200>"${file_path}.lock"
-        rm -f "${file_path}.lock"  # lens:ok: sufijo .lock fijo sobre file_path, nunca vacío
-    else
-        # Sin flock (macOS sin coreutils): leer todo + append + write atómico
-        local current; current="$(cat "$file_path" 2>/dev/null || true)"
-        local new_content="${current}${line}
-"
-        skalling_atomic_write "$file_path" "$new_content"
-    fi
-}
-
-# ──────────────────────────────────────────────────────────────────────────────
-# MEMORY SIZE LIMITS
-# ──────────────────────────────────────────────────────────────────────────────
-
-# Verifica si el bundle OKF excede el size limit (default 5MB).
-# Output: "OK" | "WARN: size=X KB" | "ERROR: size=X KB"
-skalling_check_bundle_size() {
-    local bundle_dir="$1"
-    local max_kb="${2:-5120}"  # 5MB default
-
-    [[ ! -d "$bundle_dir" ]] && { echo "ERROR: bundle no existe"; return 1; }
-
-    local size_kb
-    size_kb="$(du -sk "$bundle_dir" 2>/dev/null | awk '{print $1}')"
-
-    if [[ -z "$size_kb" ]]; then
-        echo "WARN: no se pudo medir tamaño"
-        return 0
-    fi
-
-    if [[ "$size_kb" -gt "$max_kb" ]]; then
-        echo "ERROR: size=${size_kb} KB excede max=${max_kb} KB"
-        return 2
-    elif [[ "$size_kb" -gt $((max_kb / 2)) ]]; then
-        echo "WARN: size=${size_kb} KB (>50% del max=${max_kb} KB)"
-        return 0
-    else
-        echo "OK: size=${size_kb} KB"
-        return 0
-    fi
-}
-
-# Cuenta concept docs (excluyendo README, index, log) por tipo.
-# Output: "Concept:N Decision:N Preference:N ..."
-skalling_count_concept_docs() {
-    local bundle_dir="$1"
-
-    [[ ! -d "$bundle_dir" ]] && return 1
-
-    # Buscar en subdirs: decisiones/, preferencias/, etc.
-    # Más simple: contar archivos con frontmatter type: X
-    local counts
-    counts="$(find "$bundle_dir" -type f -name "*.md" \
-        -not -name "README.md" -not -name "index.md" -not -name "log.md" \
-        -exec awk '/^type:/ { print; exit }' {} \; 2>/dev/null \
-        | awk '{gsub(/^type:[[:space:]]*/, ""); gsub(/[[:space:]]*$/, ""); print}' \
-        | sort | uniq -c | awk '{printf "%s:%s ", $2, $1}')"
-
-    echo "${counts% }"
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -409,12 +267,11 @@ skalling_uninstall_git_hook() {
 # ──────────────────────────────────────────────────────────────────────────────
 # COMPATIBILIDAD CON OPENCODE (matriz de soporte, ver README)
 # ──────────────────────────────────────────────────────────────────────────────
-# Los plugins exportan { server, setup }: esa forma la acepta OpenCode desde
-# 1.18.29. Antes no carga los plugins (guard, workflow, data-safety, goal).
-export SKALLING_OPENCODE_MIN="1.18.29"
+# Solo OpenCode 2. El bundle incluye plugins de directorio verificados en 2.0.21.
+export SKALLING_OPENCODE_MIN="2.0.21"
 
-# skalling_opencode_support "<salida de opencode --version>" → imprime
-#   unsupported | v1 | v2 | unknown
+# skalling_opencode_support "<salida de opencode --version>"
+# imprime unsupported | v2 | unknown. No promete soporte de majors futuros.
 skalling_opencode_support() {
   local raw="$1" ver major minor patch
   ver="$(printf '%s' "$raw" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
@@ -422,32 +279,41 @@ skalling_opencode_support() {
   IFS=. read -r major minor patch <<EOF_VER
 $ver
 EOF_VER
-  if [ "$major" -ge 2 ]; then echo v2; return 0; fi
-  if [ "$major" -eq 1 ] && { [ "$minor" -gt 18 ] || { [ "$minor" -eq 18 ] && [ "$patch" -ge 29 ]; }; }; then
-    echo v1; return 0
+  if [ "$major" -eq 2 ] && { [ "$minor" -gt 0 ] || [ "$patch" -ge 21 ]; }; then
+    echo v2; return 0
   fi
   echo unsupported
 }
 
-# skalling_plugin_pkg_status "<dir .opencode o config global>" → imprime
-#   "<estado>\t<versión>" con estado absent | ok | old | unknown.
-# Los plugins importan `tool` de @opencode-ai/plugin, que OpenCode resuelve
-# desde <dir>/node_modules. Ese package.json lo escribe OpenCode (está en
-# .gitignore), así que puede quedar viejo tras cambiar de versión de OpenCode.
-# Se lee la versión instalada; si no hay node_modules, la declarada.
-skalling_plugin_pkg_status() {
-  local dir="$1" ver=""
-  local installed="$dir/node_modules/@opencode-ai/plugin/package.json"
-  if [ -f "$installed" ]; then
-    ver="$(sed -n 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$installed" | head -1)"
-  elif [ -f "$dir/package.json" ]; then
-    ver="$(sed -n 's/.*"@opencode-ai\/plugin"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$dir/package.json" | head -1)"
-  else
-    printf 'absent\t\n'; return 0
-  fi
-  case "$(skalling_opencode_support "$ver")" in
-    v1|v2) printf 'ok\t%s\n' "$ver" ;;
-    unsupported) printf 'old\t%s\n' "$ver" ;;
-    *) printf 'unknown\t%s\n' "$ver" ;;
-  esac
+# Retira únicamente artefactos propios de versiones anteriores. El caller ya
+# respaldó la instalación (salvo su opción explícita de omitir backup).
+# Usa run para respetar --dry-run; conserva bases y plugins del usuario.
+skalling_remove_retired_artifacts() {
+  local dir="$1" artifact
+  for artifact in plugins/skalling-goal.js scripts/skalling-goal.sh scripts/skalling-goal.py command/skalling-goal.md \
+      plugins/skalling-execution-efficiency.js \
+      scripts/test-teamdb-safe.sh scripts/test-teamdb-git-sync.sh \
+      templates/okf/README.template.md \
+      templates/okf/concept.template.md \
+      templates/okf/context.template.md \
+      templates/okf/decision.template.md \
+      templates/okf/decisiones-index.template.md \
+      templates/okf/index.template.md \
+      templates/okf/log.template.md \
+      templates/okf/preference.template.md \
+      templates/okf/preferencias-index.template.md \
+      templates/okf/problemas-conocidos-index.template.md \
+      templates/okf/proyecto-index.template.md \
+      templates/okf/proyecto-que-es.template.md \
+      templates/okf/stack-concept.template.md \
+      templates/okf/stack-index.template.md \
+      templates/okf/trabajo-en-curso-index.template.md \
+      templates/okf/work-in-progress.template.md \
+      templates/okf/workaround.template.md \
+      templates/changes/design.template.md \
+      templates/changes/proposal.template.md \
+      templates/changes/spec.template.md \
+      templates/changes/tasks.template.md; do
+    if [ -f "$dir/$artifact" ]; then run rm -f "$dir/$artifact"; fi
+  done
 }

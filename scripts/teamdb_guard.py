@@ -1,6 +1,7 @@
 """SQLite safety for preauthorized helpers. This is not an OS sandbox."""
 import re
 import sqlite3
+from skalling_db import connect as open_database
 
 MESSAGE = 'DATA_APPROVAL_REQUIRED: operación con pérdida de datos; usar teamdb_destructive con aprobación explícita.'
 # Runtime state is mutable; durable project knowledge keeps previous versions.
@@ -60,15 +61,14 @@ class GuardedConnection(sqlite3.Connection):
 
 def connect(database, *args, readonly=False, **kwargs):
     if kwargs.get('uri') and 'mode=ro' in str(database):
-        conn = sqlite3.connect(database, *args, **kwargs)
+        conn = open_database(database, *args, create=True, **kwargs)
         conn.execute('PRAGMA query_only=ON')
         return conn
     if readonly:
-        from pathlib import Path
-        conn = sqlite3.connect(Path(database).resolve().as_uri() + '?mode=ro', uri=True, *args, **kwargs)
+        conn = open_database(database, *args, readonly=True, **kwargs)
         conn.execute('PRAGMA query_only=ON')
         return conn
-    conn = sqlite3.connect(database, *args, factory=GuardedConnection, **kwargs)
+    conn = open_database(database, *args, create=True, factory=GuardedConnection, **kwargs)
     try:
         tables = {r[1]: r[2] for r in conn.execute('PRAGMA table_list')}
         shadows = {name for name, kind in tables.items() if kind == 'shadow'}

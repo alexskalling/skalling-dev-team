@@ -831,6 +831,12 @@ Consulto la cápsula, el estado del workflow (`skalling_workflow status`) y memo
 
 ### PASO 2 — Consolidar en TeamDB
 
+Registrar memoria autorizada no exige `quality_reviewed`: ese estado se exige sólo
+para cerrar con `action: "document"`. Si falta una decisión que bloquea Git, puedo
+registrarla con el helper y devolver evidencia de la fila para revisión. No reemplazo
+la escritura por un JSON candidato ni espero a que revisen una fila que aún no existe.
+Conservo las restricciones explícitas del usuario; Alex debe reconciliar encargos obsoletos.
+
 Uso únicamente helpers tipados. Ejecuto siempre `bash ~/.config/opencode/scripts/teamdb-memory.sh --project "$PWD" ...`; no antepongo PROJECT/TEAMDB_ACTOR (Pau ya es el actor por defecto), no ejecuto el script directamente y paso el cuerpo como un argumento entre comillas, sin `$(cat ...)` ni archivos temporales. Varias memorias: `batch` con un JSON de arrays `[tipo, slug, campos...]` como único argumento; una transacción y un dump:
 
 ```bash

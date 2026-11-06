@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Matriz de soporte de OpenCode (lib-os.sh) y timeout de los corredores.
 # No prueba el binario real de OpenCode: solo la clasificación de versiones y
-# la detección del SDK de plugins que escribe OpenCode en .opencode/.
+# el retiro acotado de artefactos antiguos.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -21,33 +21,29 @@ source "$ROOT/scripts/lib/lib-os.sh"
 # shellcheck source=lib/with-timeout.sh
 source "$ROOT/tests/lib/with-timeout.sh"
 
-# ── Clasificación de la salida de `opencode --version` ──
-assert_eq "1.18.28 no soportada" unsupported "$(skalling_opencode_support "1.18.28")"
-assert_eq "1.18.29 es v1 (mínimo exacto)" v1 "$(skalling_opencode_support "1.18.29")"
-assert_eq "1.19.0 es v1" v1 "$(skalling_opencode_support "1.19.0")"
-assert_eq "0.9.9 no soportada" unsupported "$(skalling_opencode_support "0.9.9")"
-assert_eq "'opencode v2.0.18' es v2" v2 "$(skalling_opencode_support "opencode v2.0.18")"
+# Solo la serie 2, desde el mínimo verificado.
+for version in 0.9.9 1.18.29 1.99.99 2.0.18 2.0.20 3.0.0; do
+  assert_eq "$version no soportada" unsupported "$(skalling_opencode_support "$version")"
+done
+for version in 2.0.21 2.0.22 2.1.0; do
+  assert_eq "$version soportada" v2 "$(skalling_opencode_support "opencode v$version")"
+done
 assert_eq "salida vacía es unknown" unknown "$(skalling_opencode_support "")"
-assert_eq "salida sin semver es unknown" unknown "$(skalling_opencode_support "Error: EACCES log")"
+assert_eq "salida ilegible es unknown" unknown "$(skalling_opencode_support "Error: EACCES log")"
 
-# ── SDK de plugins (@opencode-ai/plugin) instalado por OpenCode ──
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-
-assert_eq "sin package.json ni node_modules: absent" "absent	" "$(skalling_plugin_pkg_status "$tmp/nada")"
-
-mkdir -p "$tmp/decl"
-printf '{\n  "dependencies": {\n    "@opencode-ai/plugin": "1.18.18"\n  }\n}\n' > "$tmp/decl/package.json"
-assert_eq "declarada 1.18.18 (bajo el mínimo): old" "old	1.18.18" "$(skalling_plugin_pkg_status "$tmp/decl")"
-
-# La versión instalada manda sobre la declarada.
-mkdir -p "$tmp/decl/node_modules/@opencode-ai/plugin"
-printf '{\n  "name": "@opencode-ai/plugin",\n  "version": "1.18.30"\n}\n' > "$tmp/decl/node_modules/@opencode-ai/plugin/package.json"
-assert_eq "instalada 1.18.30 manda sobre la declarada" "ok	1.18.30" "$(skalling_plugin_pkg_status "$tmp/decl")"
-
-mkdir -p "$tmp/rango"
-printf '{ "dependencies": { "@opencode-ai/plugin": "latest" } }\n' > "$tmp/rango/package.json"
-assert_eq "rango no numérico: unknown" "unknown	latest" "$(skalling_plugin_pkg_status "$tmp/rango")"
+mkdir -p "$tmp/plugins" "$tmp/scripts" "$tmp/command"
+for file in plugins/skalling-goal.js scripts/skalling-goal.sh scripts/skalling-goal.py command/skalling-goal.md; do
+  printf old > "$tmp/$file"
+done
+printf custom > "$tmp/plugins/custom.js"
+printf memory > "$tmp/team.db"
+run() { "$@"; }
+skalling_remove_retired_artifacts "$tmp"
+assert_eq "no quedan artefactos retirados" 0 "$(find "$tmp" -name 'skalling-goal*' | wc -l | tr -d ' ')"
+assert_eq "conserva plugins ajenos" custom "$(cat "$tmp/plugins/custom.js")"
+assert_eq "conserva memoria" memory "$(cat "$tmp/team.db")"
 
 # ── Timeout portable ──
 skalling_with_timeout 5 bash -c 'exit 7'

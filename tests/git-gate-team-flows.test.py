@@ -62,9 +62,12 @@ class GitGateTeamFlows(unittest.TestCase):
         self.git('add', *paths)
         self.git('commit', '-qm', message, '--no-verify')
 
-    def push_check(self, ref='main', remote=ZERO):
+    def push_check(self, ref='main', remote=ZERO, destination=None):
         local = self.git('rev-parse', ref).stdout.strip()
-        return subprocess.run(['bash', str(ROOT / 'scripts/hooks/pre-push')], cwd=self.project,
+        args = ['bash', str(ROOT / 'scripts/hooks/pre-push')]
+        if destination:
+            args += ['fixture', destination]
+        return subprocess.run(args, cwd=self.project,
                               capture_output=True, text=True,
                               input=f'refs/heads/{ref} {local} refs/heads/{ref} {remote}\n')
 
@@ -129,6 +132,47 @@ class GitGateTeamFlows(unittest.TestCase):
         result = self.push_check()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('falta revisión aprobada', result.stderr)
+
+    def published_history(self):
+        remote = tempfile.TemporaryDirectory()
+        self.addCleanup(remote.cleanup)
+        subprocess.run(['git', 'init', '--bare', '-q', remote.name], check=True)
+        base = self.git('rev-parse', 'HEAD').stdout.strip()
+        self.git('push', '-q', remote.name, 'HEAD:refs/heads/release')
+        self.replace('line_5 = 5', 'line_5 = "historical accepted work"')
+        self.commit_unverified('historical main before Skalling', 'app.py')
+        self.git('push', '-q', remote.name, 'HEAD:refs/heads/main')
+        return remote.name, base
+
+    def test_existing_remote_history_does_not_require_retroactive_receipts(self):
+        destination, base = self.published_history()
+        self.replace('line_20 = 20', 'line_20 = "new reviewed work"')
+        self.commit_verified('new work', 'app.py')
+        result = self.push_check(remote=base, destination=destination)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_remote_history_does_not_exempt_new_work_or_trust_forged_tracking_refs(self):
+        destination, base = self.published_history()
+        self.replace('line_20 = 20', 'line_20 = "new unreviewed work"')
+        self.commit_unverified('must review', 'app.py')
+        self.git('update-ref', 'refs/remotes/fixture/main', self.git('rev-parse', 'HEAD').stdout.strip())
+        result = self.push_check(remote=base, destination=destination)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('falta revisión aprobada', result.stderr)
+
+    def test_clean_merge_keeps_same_verified_remote_baseline_for_side_history(self):
+        destination, base = self.published_history()
+        self.git('checkout', '-qb', 'feature', base)
+        self.replace('line_20 = 20', 'line_20 = "new reviewed work"')
+        self.commit_verified('new work', 'app.py')
+        self.git('merge', '-q', '--no-edit', 'main')
+        result = self.push_check(ref='feature', remote=base, destination=destination)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_unavailable_destination_is_not_treated_as_published_history(self):
+        result = self.push_check(destination=str(self.project / 'missing.git'))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('No se pudo consultar el remoto', result.stderr)
 
 
 if __name__ == '__main__':

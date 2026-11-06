@@ -47,16 +47,16 @@ fi
 
 # ── externo: agrega el bloque, guarda el modo ──
 OUT_EXT="$(bash "$SCRIPT" external "$PROJECT")"
-if grep -q "privacy_mode: external" <<< "$OUT_EXT" && [ -f "$PROJECT/.gitignore" ] \
-   && grep -q "^\.opencode/$" "$PROJECT/.gitignore" && grep -q "^db/teamdb/$" "$PROJECT/.gitignore"; then
-  assert_pass "external: agrega .opencode/ y db/teamdb/ al .gitignore, guarda el modo"
+if grep -q "privacy_mode: external" <<< "$OUT_EXT" && [ -f "$PROJECT/.git/info/exclude" ] \
+   && grep -q "^/\.opencode/$" "$PROJECT/.git/info/exclude" && grep -q "^/db/teamdb/$" "$PROJECT/.git/info/exclude"; then
+  assert_pass "external: agrega .opencode/ y db/teamdb/ a info/exclude, guarda el modo"
 else
-  assert_fail "external: agrega .opencode/ y db/teamdb/ al .gitignore, guarda el modo" "out=$OUT_EXT"
+  assert_fail "external: agrega .opencode/ y db/teamdb/ a info/exclude, guarda el modo" "out=$OUT_EXT"
 fi
 
 # ── idempotencia: correrlo de nuevo no duplica el bloque ──
 bash "$SCRIPT" external "$PROJECT" >/dev/null
-BLOCK_COUNT="$(grep -c "modo externo" "$PROJECT/.gitignore")"
+BLOCK_COUNT="$(grep -c "modo externo" "$PROJECT/.git/info/exclude")"
 if [ "$BLOCK_COUNT" = "1" ]; then
   assert_pass "external corrido dos veces: el bloque no se duplica"
 else
@@ -67,13 +67,13 @@ fi
 PROJECT_ES="$TMP/proj-es"
 new_project "$PROJECT_ES"
 bash "$SCRIPT" externo "$PROJECT_ES" >/dev/null
-if grep -q "modo externo" "$PROJECT_ES/.gitignore" 2>/dev/null; then
+if grep -q "modo externo" "$PROJECT_ES/.git/info/exclude" 2>/dev/null; then
   assert_pass "alias 'externo' (español) funciona igual que 'external'"
 else
   assert_fail "alias 'externo' (español) funciona igual que 'external'"
 fi
 bash "$SCRIPT" interno "$PROJECT_ES" >/dev/null
-if ! grep -q "modo externo" "$PROJECT_ES/.gitignore" 2>/dev/null; then
+if ! grep -q "modo externo" "$PROJECT_ES/.git/info/exclude" 2>/dev/null; then
   assert_pass "alias 'interno' (español) funciona igual que 'internal'"
 else
   assert_fail "alias 'interno' (español) funciona igual que 'internal'"

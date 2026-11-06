@@ -29,7 +29,6 @@ def load(name, relpath):
         return module
     finally:
         sys.dont_write_bytecode = previous
-    return module
 
 
 class WorkflowSealsGitGateReceipt(unittest.TestCase):

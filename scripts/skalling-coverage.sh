@@ -31,20 +31,21 @@ fi
 echo "Corriendo: $COMMAND"
 STDOUT_FILE="$(mktemp)"
 trap '[ -n "$STDOUT_FILE" ] && rm -f "$STDOUT_FILE"' EXIT
-START_TS="$(date +%s)"
-if ! (cd "$PROJECT" && bash -c "$COMMAND") >"$STDOUT_FILE" 2>&1; then
-  cat "$STDOUT_FILE"
-  echo "ERROR: el comando de cobertura falló (exit != 0). No se registra nada." >&2
-  exit 1
-fi
-
+RUN="$(python3 "$SCRIPT_DIR/skalling-coverage-run.py" "$PROJECT" "$STDOUT_FILE")"
 cat "$STDOUT_FILE"
-RESULT="$(python3 - "$PROJECT" "$STDOUT_FILE" "$START_TS" <<'PY'
+RESULT="$(python3 - "$PROJECT" "$STDOUT_FILE" "$RUN" <<'PYRESULT'
 import json, re, sys
 from pathlib import Path
 
-project, stdout_path, start_ts = Path(sys.argv[1]), Path(sys.argv[2]), float(sys.argv[3])
-stdout_text = stdout_path.read_text(encoding="utf-8", errors="ignore")
+project, stdout_path = Path(sys.argv[1]), Path(sys.argv[2])
+run = json.loads(sys.argv[3])
+start_ts = run['started_at']
+stdout_text = stdout_path.read_text(encoding="utf-8", errors="replace")
+if run['exit_code'] != 0:
+    print(json.dumps({'format': 'timeout' if run['timed_out'] else 'failed',
+                     'percent': None, 'lines_covered': None, 'lines_total': None,
+                     'note': run['note']}))
+    raise SystemExit(0)
 
 def fresh(path):
     # Un coverage-summary.json de una corrida VIEJA que quedo en disco no
@@ -78,7 +79,11 @@ def go_cover():
         return {"format": "go-cover", "percent": float(m.group(1)), "lines_covered": None, "lines_total": None}
     return None
 
-result = istanbul() or python_coverage() or go_cover()
+try:
+    result = istanbul() or python_coverage() or go_cover()
+except (OSError, ValueError, TypeError, AttributeError) as error:
+    result = {'format': 'invalid', 'percent': None, 'lines_covered': None,
+              'lines_total': None, 'note': 'Artefacto de cobertura inválido: ' + str(error)}
 if result is None:
     result = {"format": "unknown", "percent": None, "lines_covered": None, "lines_total": None,
                "note": "El comando corrió pero no se reconoció el formato de salida "
@@ -87,7 +92,7 @@ if result is None:
 else:
     result.setdefault("note", None)
 print(json.dumps(result))
-PY
+PYRESULT
 )"
 
 get_field() {
@@ -120,6 +125,11 @@ python3 "$SCRIPT_DIR/teamdb_exec.py" --db "$DB" --mode write \
   --sql "INSERT INTO coverage_runs (command, format, percent, lines_covered, lines_total, note) VALUES (?,?,?,?,?,?)" \
   --params "$PARAMS" >/dev/null
 
+RC="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["exit_code"])' "$RUN")"
+if [ "$RC" -ne 0 ]; then
+  echo "ERROR: $NOTE (registrado en TeamDB)." >&2
+  exit "$RC"
+fi
 if [ -n "$PERCENT" ]; then
   echo "Cobertura: ${PERCENT}% (${LINES_COVERED:-?}/${LINES_TOTAL:-?} líneas, formato $FORMAT)"
 else

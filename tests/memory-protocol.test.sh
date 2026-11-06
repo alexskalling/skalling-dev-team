@@ -11,7 +11,7 @@
 #   4. El snippet canónico contiene los puntos clave (cuándo guardar, dónde,
 #      cómo marcar contradicciones) — sanity check de que no quedó vacío.
 #
-# Patrón: tests/setup.test.sh y tests/concept-template.test.sh
+# Patrón: tests/setup.test.sh
 # (set -euo pipefail, helpers pass/fail/log, asserts tipados).
 #
 # Uso:

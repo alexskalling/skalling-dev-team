@@ -46,6 +46,7 @@ INSTALL_LOG="${BACKUP_DIR}/install.log"
 DRY_RUN=false
 FORCE=false
 UNINSTALL=false
+INSTALL_LOG_ENABLED=false
 
 # ──────────────────────────────────────────────────────────────────────────────
 # PARSEO DE ARGUMENTOS
@@ -90,7 +91,7 @@ log() {
         WARN)  printf '  \033[33m⚠\033[0m  %s | %s\n' "$ts" "$msg" ;;
         ERROR) printf '  \033[31m✗\033[0m  %s | %s\n' "$ts" "$msg" >&2 ;;
     esac
-    if [[ "$DRY_RUN" == false ]]; then
+    if [[ "$DRY_RUN" == false && "$INSTALL_LOG_ENABLED" == true ]]; then
         mkdir -p "$BACKUP_DIR"
         printf '[%s] %s | %s\n' "$INSTALL_DATE" "$level" "$msg" >> "$INSTALL_LOG" 2>/dev/null || true
     fi
@@ -111,7 +112,7 @@ remove_broken_symlink() {
     if [[ -L "$path" && ! -e "$path" ]]; then
         local target; target="$(readlink "$path" 2>/dev/null || echo '?')"
         log WARN "Symlink roto en $path -> $target. Eliminando."
-        rm -f "$path"
+        run rm -f "$path"
     fi
 }
 
@@ -126,18 +127,17 @@ check_bash_version() {
 
 check_opencode() {
     if ! command -v opencode >/dev/null 2>&1; then
-        log WARN "opencode no está en PATH. Skalling funcionará igual cuando lo instales."
+        log WARN "opencode no está en PATH. Se prepararán archivos; requiere OpenCode 2 >= $SKALLING_OPENCODE_MIN y < 3.0.0 para funcionar."
         return 1
     fi
-    local version; version="$(opencode --version 2>/dev/null || echo 'unknown')"
+    local version; version="$(opencode --version 2>/dev/null)" || version=unknown
     case "$(skalling_opencode_support "$version")" in
-        v1) log OK "opencode $version (soporte completo: v1)" ;;
-        v2) log INFO "opencode $version (v2 soportada, conducida: /skalling-goal no existe en v2 — ver README)" ;;
+        v2) log OK "opencode $version (OpenCode 2)" ;;
         unsupported)
-            log ERROR "opencode $version no está soportado: Skalling necesita >= $SKALLING_OPENCODE_MIN (antes no carga sus plugins de control)."
+            log ERROR "opencode $version no está soportado: Skalling necesita OpenCode 2 >= $SKALLING_OPENCODE_MIN y < 3.0.0."
             log ERROR "  Actualizá OpenCode y volvé a instalar."
             exit 1 ;;
-        *) log WARN "No se pudo leer la versión de opencode ($version); mínimo soportado $SKALLING_OPENCODE_MIN" ;;
+        *) log ERROR "No se pudo verificar OpenCode ($version); se requiere 2 >= $SKALLING_OPENCODE_MIN y < 3.0.0."; exit 1 ;;
     esac
     return 0
 }
@@ -153,7 +153,7 @@ create_backup() {
         return 0
     fi
 
-    mkdir -p "$BACKUP_DIR"
+    run mkdir -p "$BACKUP_DIR"
     local stamp; stamp="$(date +%Y%m%d-%H%M%S)"
     local backup="${BACKUP_DIR}/opencode-${stamp}.tar.gz"
     local sha_file="${backup}.sha256"
@@ -249,7 +249,11 @@ apply_model_overrides() {
     [[ "$DRY_RUN" == true ]] && { echo "    [dry-run] reaplicaría model-overrides.json"; return 0; }
 
     if [[ -x "$SCRIPT_DIR/scripts/skalling-models.sh" ]]; then
-        SKALLING_OPENCODE_DIR="$OPENCODE_DIR" "$SCRIPT_DIR/scripts/skalling-models.sh" apply >/dev/null 2>&1 || true
+        if ! SKALLING_OPENCODE_DIR="$OPENCODE_DIR" SKALLING_PROJECT_DIR="$SCRIPT_DIR" \
+            "$SCRIPT_DIR/scripts/skalling-models.sh" apply; then
+            log ERROR "No se pudieron reaplicar los modelos; revisar el error y el backup de instalación."
+            return 1
+        fi
         log OK "model-overrides.json reaplicado a los agentes instalados"
     fi
 }
@@ -302,7 +306,7 @@ install_constitution() {
     fi
     if [[ -L "$CONSTITUTION_FILE" && ! -e "$CONSTITUTION_FILE" ]]; then
         log WARN "Symlink roto en $CONSTITUTION_FILE. Eliminando."
-        rm -f "$CONSTITUTION_FILE"
+        run rm -f "$CONSTITUTION_FILE"
     fi
     run cp "$SCRIPT_DIR/constitution/constitucion.md" "$CONSTITUTION_FILE"
     log OK "Constitución instalada"
@@ -469,8 +473,14 @@ install_teamdb_hooks() {
 
 install_skalling_scripts() {
     run mkdir -p "$OPENCODE_DIR/plugins"
-    run cp "$SCRIPT_DIR/plugins/skalling-goal.js" "$OPENCODE_DIR/plugins/skalling-goal.js"
     run mkdir -p "$OPENCODE_DIR/plugins/lib"
+    run mkdir -p "$OPENCODE_DIR/plugins/skalling-execution-efficiency"
+    run cp "$SCRIPT_DIR/plugins/lib/context-budget.mjs" "$OPENCODE_DIR/plugins/lib/context-budget.mjs"
+    run cp "$SCRIPT_DIR/plugins/lib/execution-efficiency.mjs" "$OPENCODE_DIR/plugins/lib/execution-efficiency.mjs"
+    run cp "$SCRIPT_DIR/plugins/skalling-execution-efficiency/index.js" "$OPENCODE_DIR/plugins/skalling-execution-efficiency/index.js"
+    run cp "$SCRIPT_DIR/plugins/skalling-execution-efficiency/package.json" "$OPENCODE_DIR/plugins/skalling-execution-efficiency/package.json"
+    run cp "$SCRIPT_DIR/plugins/skalling-query-memory.js" "$OPENCODE_DIR/plugins/skalling-query-memory.js"
+    run cp "$SCRIPT_DIR/plugins/lib/query-memory.mjs" "$OPENCODE_DIR/plugins/lib/query-memory.mjs"
     run cp "$SCRIPT_DIR/plugins/skalling-data-safety.js" "$OPENCODE_DIR/plugins/skalling-data-safety.js"
     run cp "$SCRIPT_DIR/plugins/lib/data-safety.mjs" "$OPENCODE_DIR/plugins/lib/data-safety.mjs"
     run cp "$SCRIPT_DIR/plugins/skalling-workflow.js" "$OPENCODE_DIR/plugins/skalling-workflow.js"
@@ -554,7 +564,7 @@ install_teamdb() {
     # lo resuelven en $OPENCODE_DIR/scripts/. Sin él, el bundle instalado no escribe.
     if [ -f "$SCRIPT_DIR/scripts/teamdb_exec.py" ]; then
         run cp "$SCRIPT_DIR/scripts/teamdb_exec.py" "$OPENCODE_DIR/scripts/teamdb_exec.py"
-        run cp "$SCRIPT_DIR/scripts/teamdb_guard.py" "$OPENCODE_DIR/scripts/teamdb_guard.py"
+        run cp "$SCRIPT_DIR/scripts/teamdb_guard.py" "$SCRIPT_DIR/scripts/skalling_db.py" "$OPENCODE_DIR/scripts/"
         # Reglas de clasificación compartidas por skalling-route.sh y el motor.
         run cp "$SCRIPT_DIR/scripts/skalling_classify.py" "$OPENCODE_DIR/scripts/skalling_classify.py"
         # Parser seguro del dump (restore/merge): solo filas de datos.
@@ -682,7 +692,7 @@ print_summary() {
      ├── agents/          (8 agentes)
      ├── skills/          (skills core)
      ├── command/         (comandos /skalling-*)
-     ├── templates/       (templates OKF y SDD)
+     ├── templates/       (configuración y contratos)
      ├── constitucion.md  (reglas universales)
      ├── VERSION          (versión del bundle)
      ├── web/            (dashboard HTML — abre con /skalling-dashboard)
@@ -706,10 +716,12 @@ EOF
 
 do_install() {
     skalling_require_dependencies
+    check_opencode || true
+    INSTALL_LOG_ENABLED=true
     create_backup
+    skalling_remove_retired_artifacts "$OPENCODE_DIR"
     log INFO "Iniciando instalación de Skalling v${SKALLING_VERSION}"
     check_bash_version
-    check_opencode || true
     install_agents
     install_skills_core
     install_commands
@@ -745,6 +757,7 @@ do_install() {
 }
 
 do_uninstall() {
+    INSTALL_LOG_ENABLED=true
     if [[ ! -d "$OPENCODE_DIR" ]]; then
         printf 'No hay instalación en %s\n' "$OPENCODE_DIR"
         exit 0
@@ -768,7 +781,7 @@ do_uninstall() {
     done
     log OK "$removed agentes removidos"
 
-    if [ -f "$OPENCODE_DIR/plugins/skalling-goal.js" ]; then run rm -f "$OPENCODE_DIR/plugins/skalling-goal.js"; fi
+    skalling_remove_retired_artifacts "$OPENCODE_DIR"
     if [ -f "$OPENCODE_DIR/plugins/skalling-data-safety.js" ]; then run rm -f "$OPENCODE_DIR/plugins/skalling-data-safety.js"; fi
     if [ -f "$OPENCODE_DIR/plugins/lib/data-safety.mjs" ]; then run rm -f "$OPENCODE_DIR/plugins/lib/data-safety.mjs"; fi
     if [ -f "$OPENCODE_DIR/plugins/skalling-git-guard.js" ]; then run rm -f "$OPENCODE_DIR/plugins/skalling-git-guard.js"; fi
@@ -777,6 +790,7 @@ do_uninstall() {
     if [ -f "$OPENCODE_DIR/plugins/skalling-model-fallback.js" ]; then run rm -f "$OPENCODE_DIR/plugins/skalling-model-fallback.js"; fi
     if [ -f "$OPENCODE_DIR/plugins/lib/model-fallback.mjs" ]; then run rm -f "$OPENCODE_DIR/plugins/lib/model-fallback.mjs"; fi
     if [ -f "$OPENCODE_DIR/plugins/lib/workflow.mjs" ]; then run rm -f "$OPENCODE_DIR/plugins/lib/workflow.mjs"; fi
+    if [ -f "$OPENCODE_DIR/plugins/lib/context-budget.mjs" ]; then run rm -f "$OPENCODE_DIR/plugins/lib/context-budget.mjs"; fi
     if [ -f "$OPENCODE_DIR/scripts/skalling-workflow.py" ]; then run rm -f "$OPENCODE_DIR/scripts/skalling-workflow.py"; fi
     # Los hooks globales los usan proyectos con hooks copiados que buscan
     # ~/.config/opencode/hooks/git-gate.py: al retirarlos, esos hooks fallan

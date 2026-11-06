@@ -91,11 +91,6 @@ def testing_config(path):
     return config
 
 
-def yaml_quote(value):
-    """Escalar YAML entre comillas dobles que scalar() vuelve a leer igual."""
-    return json.dumps(value, ensure_ascii=False)
-
-
 if __name__ == '__main__':
     # skalling-verify.sh: imprime el comando a correr (fast no; unit).
     import sys

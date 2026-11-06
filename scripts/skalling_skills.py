@@ -123,16 +123,19 @@ def repair(root, target):
             metadata(src/'SKILL.md')
         if dst.is_symlink() or (dst.exists() and any(p.is_symlink() for p in dst.rglob('*'))):
             raise ValueError('Skill administrada contiene symlink; revisar manualmente: ' + str(dst))
-        if dst.is_dir():
+        # Classify BEFORE adding new reference files. Otherwise our own repair
+        # changes the digest and makes an untouched managed skill look custom.
+        current = digest(dst) if dst.exists() else None
+        expected = digest(src)
+        customized = current not in (None, expected, hashes.get(name), allowed.get(name))
+        if customized and dst.is_dir():
             # Repair absent files without replacing any customized bytes.
             for original in src.rglob('*'):
                 local = dst/original.relative_to(src)
                 if original.is_file() and not local.exists():
                     local.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(original, local)
-        current = digest(dst) if dst.exists() else None
-        expected = digest(src)
-        if current not in (None, expected, hashes.get(name), allowed.get(name)):
+        if customized:
             preserved.append(name); continue
         if current != expected:
             if dst.is_symlink():

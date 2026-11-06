@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import {
-  blocksChainedSensitiveGit, guardCommand, identityViolation, createGuard, setupGuardV2,
+  guardCommand, identityViolation, setupGuardV2,
   writeViolation, hookBypassViolation, createCore, createIdentityQueue, teamdbWorkflowState,
 } from '../plugins/lib/git-guard.mjs';
 
@@ -58,36 +58,36 @@ test('Alex rejects an explicit verification/commit handoff to Pau, not documenta
 });
 
 test('bloquea git push/reset/etc. encadenado detrás de un prefijo permitido', () => {
-  assert.equal(blocksChainedSensitiveGit('git add . && git push'), true);
-  assert.equal(blocksChainedSensitiveGit('git add -A && git commit -m "x" && git push'), true);
-  assert.equal(blocksChainedSensitiveGit('echo listo; git push origin main'), true);
-  assert.equal(blocksChainedSensitiveGit('npm test | git reset --hard'), true);
-  assert.equal(blocksChainedSensitiveGit('git add . && git -C /tmp/wt push'), true);
-  assert.equal(blocksChainedSensitiveGit('cat file.txt && git branch -D old-branch'), true);
-  assert.equal(blocksChainedSensitiveGit('ls && git worktree remove /tmp/wt'), true);
+  assert.notEqual(guardCommand('git add . && git push'), null);
+  assert.notEqual(guardCommand('git add -A && git commit -m "x" && git push'), null);
+  assert.notEqual(guardCommand('echo listo; git push origin main'), null);
+  assert.notEqual(guardCommand('npm test | git reset --hard'), null);
+  assert.notEqual(guardCommand('git add . && git -C /tmp/wt push'), null);
+  assert.notEqual(guardCommand('cat file.txt && git branch -D old-branch'), null);
+  assert.notEqual(guardCommand('ls && git worktree remove /tmp/wt'), null);
 });
 
 test('no bloquea git push/reset/etc. como comando único, sin encadenar', () => {
-  assert.equal(blocksChainedSensitiveGit('git push'), false);
-  assert.equal(blocksChainedSensitiveGit('git push origin main'), false);
-  assert.equal(blocksChainedSensitiveGit('git -C /tmp/wt push'), false);
-  assert.equal(blocksChainedSensitiveGit('git branch -D old-branch'), false);
+  assert.equal(guardCommand('git push'), null);
+  assert.equal(guardCommand('git push origin main'), null);
+  assert.equal(guardCommand('git -C /tmp/wt push'), null);
+  assert.equal(guardCommand('git branch -D old-branch'), null);
 });
 
 test('no bloquea comandos encadenados sin ningún git sensible de por medio', () => {
-  assert.equal(blocksChainedSensitiveGit('git add . && git status'), false);
-  assert.equal(blocksChainedSensitiveGit('ls && cat file.txt'), false);
-  assert.equal(blocksChainedSensitiveGit('git diff && git log'), false);
+  assert.equal(guardCommand('git add . && git status'), null);
+  assert.equal(guardCommand('ls && cat file.txt'), null);
+  assert.equal(guardCommand('git diff && git log'), null);
 });
 
 test('no confunde un "git push" mencionado dentro de un string literal con una invocación real', () => {
-  assert.equal(blocksChainedSensitiveGit('echo "recordar: git push" && ls'), false);
-  assert.equal(blocksChainedSensitiveGit('git commit -m "no hacer git push todavia"'), false);
+  assert.equal(guardCommand('echo "recordar: git push" && ls'), null);
+  assert.equal(guardCommand('git commit -m "no hacer git push todavia"'), null);
 });
 
 test('command vacío o undefined no rompe, simplemente no bloquea', () => {
-  assert.equal(blocksChainedSensitiveGit(''), false);
-  assert.equal(blocksChainedSensitiveGit(undefined), false);
+  assert.equal(guardCommand(''), null);
+  assert.equal(guardCommand(undefined), null);
 });
 
 // Vías de escape señaladas por la auditoría de v0.11.12: cada una esquivaba
@@ -126,33 +126,6 @@ test('un comando no puede fijar la identidad del agente', () => {
   assert.equal(identityViolation('bash .opencode/scripts/teamdb-claim.sh advance p t'), null);
 });
 
-test('v1: recuerda el agente por sesión, pone la identidad en el entorno y bloquea falsificaciones', async () => {
-  const hooks = createGuard();
-  await hooks['chat.params']({ sessionID: 's1', agent: 'Teo' }, {});
-  await hooks['chat.params']({ sessionID: 's2', agent: 'Jhon' }, {});
-
-  const env = { env: {} };
-  await hooks['shell.env']({ cwd: '/x', sessionID: 's1' }, env);
-  assert.equal(env.env.SKALLING_RUNTIME_AGENT, 'teo');
-
-  // El comando no se reescribe: así sigue coincidiendo con su permiso.
-  const out = { args: { command: 'bash .opencode/scripts/teamdb-claim.sh advance p t' } };
-  await hooks['tool.execute.before']({ tool: 'bash', sessionID: 's1', callID: 'c' }, out);
-  assert.equal(out.args.command, 'bash .opencode/scripts/teamdb-claim.sh advance p t');
-
-  await assert.rejects(hooks['tool.execute.before'](
-    { tool: 'bash', sessionID: 's1', callID: 'c' },
-    { args: { command: 'SKALLING_RUNTIME_AGENT=jhon bash teamdb-claim.sh advance p t' } },
-  ));
-  await assert.rejects(hooks['tool.execute.before'](
-    { tool: 'bash', sessionID: 's2', callID: 'c' },
-    { args: { command: 'git add . && git push' } },
-  ));
-
-  const other = { args: { command: 'git add . && git push' } };
-  await hooks['tool.execute.before']({ tool: 'read', sessionID: 's1', callID: 'c' }, other);
-  assert.equal(other.args.command, 'git add . && git push');
-});
 
 // El caso real (sesión ucadigital): Alex, con el editor bloqueado, buscó otra
 // vía y cambió 3 archivos por la terminal, sin clasificar ni pasar por Teo.
@@ -172,23 +145,6 @@ test('Alex no escribe archivos por ninguna vía de la terminal', () => {
 
 const ready = (id, state = 'implementation_ready') => JSON.stringify({ id, state, risk: 'low' });
 
-test('v1: Alex no delega implementación a Teo sin un workflow vigente en implementation_ready', async () => {
-  const hooks = createGuard();
-  await hooks['chat.params']({ sessionID: 'a', agent: 'Alex' }, {});
-  const task = { args: { subagent_type: 'teo', prompt: 'saca la resta (wf-1)', description: 'fix' } };
-  await assert.rejects(hooks['tool.execute.before']({ tool: 'task', sessionID: 'a', callID: '1' }, task), /skalling_workflow start/);
-  // Delegar investigación (Jes) no necesita workflow.
-  await hooks['tool.execute.before']({ tool: 'task', sessionID: 'a', callID: '2' },
-    { args: { subagent_type: 'jes', prompt: 'dónde se calcula', description: 'buscar' } });
-  // Una clasificación con request_id ya NO autoriza (auditoría v0.12.0 #1).
-  const classify = 'bash ~/.config/opencode/scripts/skalling-route.sh classify --kind code --project .';
-  await hooks['tool.execute.after']({ tool: 'bash', sessionID: 'a', callID: '3', args: { command: classify } },
-    { title: '', output: '{"request_id":"r-1","implementation_allowed":false,"needs_user_decision":true}', metadata: {} });
-  await assert.rejects(hooks['tool.execute.before']({ tool: 'task', sessionID: 'a', callID: '4' }, task), /skalling_workflow start/);
-  await hooks['tool.execute.after']({ tool: 'skalling_workflow', sessionID: 'a', callID: '5', args: {} },
-    { title: '', output: ready('wf-1'), metadata: {} });
-  await hooks['tool.execute.before']({ tool: 'task', sessionID: 'a', callID: '6' }, task);
-});
 
 test('la autorización es del pedido vigente, no de la sesión', () => {
   const core = createCore();
@@ -293,16 +249,6 @@ test('v2: un comando denegado no deja su identidad pendiente', async () => {
   assert.equal(create.env.SKALLING_RUNTIME_AGENT, 'jhon');
 });
 
-test('v1: shell.env lleva agente y sesión; sin agente conocido, unattributed', async () => {
-  const hooks = createGuard();
-  await hooks['chat.params']({ sessionID: 'a', agent: 'Teo' }, {});
-  const known = { env: {} };
-  await hooks['shell.env']({ sessionID: 'a' }, known);
-  assert.deepEqual(known.env, { SKALLING_RUNTIME_AGENT: 'teo', SKALLING_RUNTIME_SESSION: 'a' });
-  const unknown = { env: {} };
-  await hooks['shell.env']({ sessionID: 'z' }, unknown);
-  assert.equal(unknown.env.SKALLING_RUNTIME_AGENT, 'unattributed');
-});
 
 test('v2: con el workflow en implementation_ready, Alex sí puede delegar a Teo', async () => {
   const { hooks, ctx } = fakeV2();
@@ -326,11 +272,11 @@ test('v2: el estado del workflow se lee también de result.content (forma real d
   assert.equal(sub.tool, 'subagent');
 });
 
-test('el plugin exporta una sola definición válida para v1 (server) y v2 (setup)', async () => {
+test('el plugin exporta solo la definición de OpenCode 2', async () => {
   const mod = await import('../plugins/skalling-git-guard.js');
   assert.deepEqual(Object.keys(mod), ['default']);
   assert.equal(mod.default.id, 'skalling-git-guard');
-  assert.equal(typeof mod.default.server, 'function');
+  assert.equal(mod.default.server, undefined);
   assert.equal(typeof mod.default.setup, 'function');
 });
 

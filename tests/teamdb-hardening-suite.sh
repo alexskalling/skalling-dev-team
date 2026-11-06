@@ -122,7 +122,6 @@ TESTS=(
   tests/memory-protocol.test.sh
   tests/spec-memory-link.test.sh
   tests/skalling-drift.test.sh
-  tests/concept-template.test.sh
   tests/conflict-detection.test.sh
   tests/teamdb-link.test.sh
   tests/review-lenses.test.sh

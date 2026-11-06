@@ -42,6 +42,11 @@ done
 # programático por diseño. Agregar acá SOLO con el motivo, no para silenciar
 # un hallazgo real sin revisarlo primero.
 ALLOWLIST=(
+  # CLI manual documentada en README: conserva la importación de dumps legacy
+  # data_*.sql y la migración JSONL/Markdown de proyectos previos a TeamDB.
+  # No son parte del arranque automático ni necesitan un caller programático.
+  "teamdb-import.sh"
+  "teamdb-migrate.sh"
   # migrate-plans-md-to-db.sh: migración legacy de planes en .md a TeamDB,
   # para proyectos viejos que actualizan Skalling; se corre una vez a mano.
   "migrate-plans-md-to-db.sh"

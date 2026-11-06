@@ -17,3 +17,7 @@ por qué; muestra esa nota tal cual, sin adivinar el número.
 
 El resultado (y el historial de corridas anteriores) también se ve en el
 dashboard, pestaña Sistema.
+
+Respeta `testing.timeout_seconds` (900 segundos por defecto, máximo 3600).
+Conserva también fallos y timeouts en TeamDB, sin porcentaje, y devuelve error.
+La salida se limita a los últimos 16 KB. No repitas la ejecución automáticamente.

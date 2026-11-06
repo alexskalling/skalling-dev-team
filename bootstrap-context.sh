@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# bootstrap-context.sh — Inicializa el bundle OKF en un proyecto.
+# bootstrap-context.sh — Inicializa TeamDB y la configuración del proyecto.
 #
-# Detecta stack, genera concept docs iniciales, crea project.yaml.
+# Detecta stack, registra contexto en TeamDB y crea project.yaml.
 # Es invocado por /skalling-init (por Alex) o manualmente.
 #
 # Uso:
@@ -9,6 +9,7 @@
 #   bash bootstrap-context.sh --target /path/proj # bootstrap en proyecto específico
 #   bash bootstrap-context.sh --dry-run          # ver qué haría sin tocar
 #   bash bootstrap-context.sh --force            # regenerar sin preguntar
+#   bash bootstrap-context.sh --privacy external # privacidad antes de instalar
 #   bash bootstrap-context.sh --only-detection   # solo detecta, no escribe
 #   bash bootstrap-context.sh --install-project  # además instala agentes, plugins, scripts
 #                                                # y hooks en el proyecto (setup.sh); lo usa /skalling-init
@@ -40,6 +41,8 @@ DRY_RUN=false
 FORCE=false
 ONLY_DETECTION=false
 INSTALL_PROJECT=false
+PRIVACY_MODE=auto
+PRIVACY_ARGS=(--privacy auto)
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -48,6 +51,7 @@ while [[ $# -gt 0 ]]; do
         --force) FORCE=true; shift ;;
         --only-detection) ONLY_DETECTION=true; shift ;;
         --install-project) INSTALL_PROJECT=true; shift ;;
+        --privacy) PRIVACY_MODE="${2:?Falta internal o external}"; shift 2 ;;
         --help|-h)
             sed -n '2,14p' "${BASH_SOURCE[0]}"
             exit 0 ;;
@@ -81,12 +85,6 @@ run() {
 # Variables detectadas (via lib-stack-detect.sh)
 # ──────────────────────────────────────────────────────────────────────────────
 
-# Wrapper para mantener compatibilidad con el código existente
-# (usa skalling_detected_<key> de la lib)
-set_detected() {
-    skalling_set_detected "$@"
-}
-
 get_detected() {
     skalling_get_detected "$@"
 }
@@ -119,7 +117,7 @@ detect_stack() {
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
-# GENERACIÓN DEL BUNDLE OKF
+# PREPARACIÓN DE TEAMDB
 # ──────────────────────────────────────────────────────────────────────────────
 
 generate_bundle() {
@@ -185,18 +183,24 @@ check_design_md() {
 
 CODEGRAPH_STATUS="unavailable"
 init_codegraph() {
+    if [[ "$PRIVACY_MODE" == external && ! -d "$PROJECT_DIR/.codegraph" ]]; then
+        warn "Proyecto externo: no se inicializa CodeGraph automáticamente; usar lectura directa sin modificar archivos compartidos"
+        CODEGRAPH_STATUS=unavailable
+        return 0
+    fi
+    # Los fixtures temporales pueden probar TeamDB, pero nunca crear índices.
+    if ! python3 "$SCRIPT_DIR/scripts/skalling-project-root.py" "$PROJECT_DIR" --codegraph >/dev/null 2>&1; then
+        warn "CodeGraph omitido: esta ubicación no admite indexación (por ejemplo, un directorio temporal)"
+        CODEGRAPH_STATUS="unavailable"
+        return 0
+    fi
     if [[ -d "$PROJECT_DIR/.codegraph" ]]; then
         ok "CodeGraph presente"
         CODEGRAPH_STATUS="ready"
         return 0
     fi
-    if command -v gentle-ai >/dev/null 2>&1 && gentle-ai codegraph init --cwd "$PROJECT_DIR" >/dev/null 2>&1; then
+    if bash "$SCRIPT_DIR/scripts/skalling-codegraph.sh" "$PROJECT_DIR"; then
         ok "CodeGraph inicializado"
-        CODEGRAPH_STATUS="ready"
-        return 0
-    fi
-    if command -v codegraph >/dev/null 2>&1 && codegraph init "$PROJECT_DIR" >/dev/null 2>&1; then
-        ok "CodeGraph inicializado con CLI"
         CODEGRAPH_STATUS="ready"
         return 0
     fi
@@ -308,7 +312,7 @@ install_project_bundle() {
         return 1
     fi
     echo "  Instalando agentes, plugins, scripts y hooks en el proyecto (setup.sh de $source)"
-    if bash "$source/setup.sh" --target "$project" </dev/null >/dev/null 2>&1; then
+    if bash "$source/setup.sh" --target "$project" "${PRIVACY_ARGS[@]}" </dev/null; then
         ok "Proyecto instalado (agentes, plugins, scripts, hooks)"
     else
         err "setup.sh falló; ver $project/.skalling-backups/setup.log"
@@ -352,6 +356,28 @@ activate_teamdb_hooks() {
 # ──────────────────────────────────────────────────────────────────────────────
 
 main() {
+    # Toda validación previsible ocurre antes de crear YAML, DB o hooks.
+    skalling_require_dependencies
+    PROJECT_DIR="$(python3 "$SCRIPT_DIR/scripts/skalling-project-root.py" "$PROJECT_DIR")" || return 1
+    OPENCODE_DIR="$PROJECT_DIR/.opencode"
+    CONTEXT_DIR="$OPENCODE_DIR/context"
+    case "$PRIVACY_MODE" in
+        auto) PRIVACY_MODE="$(python3 "$SCRIPT_DIR/scripts/skalling_privacy.py" mode "$PROJECT_DIR")" ;;
+        external|internal) ;;
+        *) err "--privacy requiere internal o external"; return 2 ;;
+    esac
+    if [[ "$PRIVACY_MODE" == external || "$PRIVACY_MODE" == internal ]]; then
+        PRIVACY_ARGS=(--privacy "$PRIVACY_MODE")
+    fi
+    if [[ "$PRIVACY_MODE" == external ]]; then
+        python3 "$SCRIPT_DIR/scripts/skalling_privacy.py" preflight "$PROJECT_DIR" || return 1
+    fi
+    if [[ "$INSTALL_PROJECT" == true && "$ONLY_DETECTION" == false ]]; then
+        local source
+        source="$(skalling_source_dir)" || { err "Falta el checkout fuente de Skalling; reinstala desde el checkout antes de inicializar."; return 1; }
+        # Incluye compatibilidad OpenCode y dependencias, sin modificar el proyecto.
+        bash "$source/setup.sh" --target "$PROJECT_DIR" --dry-run "${PRIVACY_ARGS[@]}" >/dev/null || return 1
+    fi
     echo ""
     log "Iniciando bootstrap de Skalling"
     log "Target: $PROJECT_DIR"
@@ -372,9 +398,15 @@ main() {
     fi
 
     skalling_require_dependencies
+    if [[ "$PRIVACY_MODE" == external || "$PRIVACY_MODE" == internal ]]; then
+        run python3 "$SCRIPT_DIR/scripts/skalling_privacy.py" "$PRIVACY_MODE" "$PROJECT_DIR"
+    fi
     generate_bundle
     generate_project_yaml
     init_teamdb "$PROJECT_DIR"
+    if [[ "$DRY_RUN" == false ]]; then
+        python3 "$SCRIPT_DIR/scripts/skalling_privacy.py" record "$PROJECT_DIR"
+    fi
     if [[ "$INSTALL_PROJECT" == true && "$DRY_RUN" == false ]]; then
         install_project_bundle "$PROJECT_DIR" || return 1
     fi

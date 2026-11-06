@@ -11,6 +11,7 @@
 #   bash setup.sh --dry-run                # ver qué haría sin tocar
 #   bash setup.sh --skip-backup            # no crear backup antes
 #   bash setup.sh --force                  # sobrescribir todo sin preguntar
+#   bash setup.sh --privacy external      # instalación local en un repositorio ajeno
 #   bash setup.sh --with-ci                # además: workflow de CI y CODEOWNERS (.github/)
 
 set -euo pipefail
@@ -36,6 +37,7 @@ FORCE=false
 SKIP_BACKUP=false
 UNINSTALL=false
 WITH_CI=false
+PRIVACY_MODE=auto
 TARGET_DIR=""
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -50,6 +52,7 @@ while [[ $# -gt 0 ]]; do
         --skip-backup) SKIP_BACKUP=true; shift ;;
         --uninstall) UNINSTALL=true; shift ;;
         --with-ci) WITH_CI=true; shift ;;
+        --privacy) PRIVACY_MODE="${2:?Falta internal o external}"; shift 2 ;;
         --help|-h)
             sed -n '2,15p' "${BASH_SOURCE[0]}"
             exit 0 ;;
@@ -210,7 +213,7 @@ step_create_directories() {
         if [[ -L "$path" && ! -e "$path" ]]; then
             local target; target="$(readlink "$path" 2>/dev/null || echo '?')"
             log WARN "Symlink roto en $path -> $target. Eliminando."
-            rm -f "$path"
+            run rm -f "$path"
         fi
     done
 
@@ -305,7 +308,7 @@ step_install_scripts() {
     fi
     if [[ -f "$SCRIPTS_SRC_DIR"/teamdb_exec.py ]]; then
         run cp "$SCRIPTS_SRC_DIR"/teamdb_exec.py "$SCRIPTS_DEST_DIR/"
-        run cp "$SCRIPTS_SRC_DIR"/teamdb_guard.py "$SCRIPTS_DEST_DIR/"
+        run cp "$SCRIPTS_SRC_DIR"/teamdb_guard.py "$SCRIPTS_SRC_DIR"/skalling_db.py "$SCRIPTS_DEST_DIR/"
         run cp "$SCRIPTS_SRC_DIR"/skalling_classify.py "$SCRIPTS_DEST_DIR/"
         run cp "$SCRIPTS_SRC_DIR"/teamdb_dump.py "$SCRIPTS_DEST_DIR/"
         run cp "$SCRIPTS_SRC_DIR"/skalling_config.py "$SCRIPTS_DEST_DIR/"
@@ -326,8 +329,8 @@ step_install_scripts() {
 # global y en modo proyecto: sin skalling-git-guard no hay identidad del
 # runtime ni bloqueo de ediciones por rol, y los helpers caen al actor que
 # declare el comando (pensado para la CLI humana).
-SKALLING_PLUGINS=(skalling-execution-efficiency.js skalling-query-memory.js skalling-model-fallback.js skalling-goal.js skalling-data-safety.js skalling-workflow.js skalling-git-guard.js)
-SKALLING_PLUGIN_LIBS=(execution-efficiency.mjs query-memory.mjs model-fallback.mjs data-safety.mjs workflow.mjs git-guard.mjs)
+SKALLING_PLUGINS=(skalling-query-memory.js skalling-model-fallback.js skalling-data-safety.js skalling-workflow.js skalling-git-guard.js)
+SKALLING_PLUGIN_LIBS=(context-budget.mjs execution-efficiency.mjs query-memory.mjs model-fallback.mjs data-safety.mjs workflow.mjs git-guard.mjs)
 SKALLING_GIT_HOOKS=(pre-commit pre-push post-merge post-rewrite)
 
 step_install_hooks() {
@@ -343,7 +346,6 @@ step_install_hooks() {
         run cp "$SCRIPT_DIR/plugins/lib/$plugin" "$TARGET_DIR/.opencode/plugins/lib/$plugin"
     done
     run cp "$SCRIPT_DIR/scripts/skalling-workflow.py" "$TARGET_DIR/.opencode/scripts/skalling-workflow.py"
-    run cp "$SCRIPT_DIR/command/skalling-goal.md" "$TARGET_DIR/.opencode/command/skalling-goal.md"
     if [[ "$DRY_RUN" == false ]]; then
         for plugin in "${SKALLING_PLUGINS[@]}"; do
             [[ -f "$TARGET_DIR/.opencode/plugins/$plugin" ]] || { log ERROR "Falta plugin obligatorio: $plugin"; return 1; }
@@ -414,8 +416,8 @@ step_init_teamdb() {
 
     local init_script="$SCRIPTS_SRC_DIR/teamdb-init.sh"
     if [[ -x "$init_script" ]]; then
-        if bash "$init_script" "$TARGET_DIR"; then
-            log OK "teamdb inicializado y migrado: $CONTEXT_DIR/team.db"
+        if run bash "$init_script" "$TARGET_DIR"; then
+            if [[ "$DRY_RUN" == false ]]; then log OK "teamdb inicializado y migrado: $CONTEXT_DIR/team.db"; fi
         else
             log ERROR "No se pudo inicializar o migrar TeamDB"
             return 1
@@ -427,6 +429,7 @@ step_init_teamdb() {
 }
 
 step_install_gitattributes() {
+    [[ "$PRIVACY_MODE" == external ]] && { log INFO "Proyecto externo: sin cambios en atributos o exclusiones compartidos"; return 0; }
     log INFO "Instalando .opencode/.gitattributes (estrategias de merge R16)"
     if [[ ! -f "$GITATTRIBUTES_TEMPLATE" ]]; then
         warn "Template gitattributes.template no encontrado, skip"
@@ -441,7 +444,7 @@ step_install_gitattributes() {
 
     if [[ "$diff" == true ]]; then
         if ask_yes_no "    .opencode/.gitattributes difiere, ¿sobrescribir?" "n"; then
-            cp "$GITATTRIBUTES_TEMPLATE" "$dest"
+            run cp "$GITATTRIBUTES_TEMPLATE" "$dest"
             log OK ".gitattributes actualizado"
         else
             log INFO ".gitattributes preservado (customización del usuario)"
@@ -527,6 +530,7 @@ install_root_gitignore_block() {
 }
 
 step_install_agents_md() {
+    [[ "$PRIVACY_MODE" == external ]] && { log INFO "Proyecto externo: AGENTS.md del repositorio se conserva"; return 0; }
     # En modo per-project, AGENTS.md es opcional — opencode carga agents/ directamente.
     # Lo creamos solo si el usuario lo quiere para team clarity (commit visible).
     log INFO "Evaluando AGENTS.md raíz"
@@ -583,6 +587,12 @@ AGENTS_MD_EOF
 }
 
 step_summary() {
+    if [[ "$PRIVACY_MODE" == external ]]; then
+        log OK "Skalling instalado solo localmente en $TARGET_DIR; modo externo conservado."
+        log INFO "Agentes, memoria y respaldos excluidos mediante Git local. No versionar artefactos de Skalling."
+        log INFO "Reinicia OpenCode para cargar el equipo."
+        return 0
+    fi
     cat <<EOF
 
    ╭──────────────────────────────────────────────────────────────╮
@@ -677,7 +687,7 @@ do_uninstall() {
     done
     rmdir "$OPENCODE_DIR/plugins/skalling-execution-efficiency" 2>/dev/null || true
     rmdir "$OPENCODE_DIR/plugins/lib" "$OPENCODE_DIR/plugins" 2>/dev/null || true
-    [[ -f "$OPENCODE_DIR/command/skalling-goal.md" ]] && run rm -f "$OPENCODE_DIR/command/skalling-goal.md"
+    skalling_remove_retired_artifacts "$OPENCODE_DIR"
     # Devolver a OpenCode su agente por defecto y los agentes nativos: sin
     # Alex instalado, default_agent=Alex dejaría el proyecto sin agente.
     if [[ -f "$OPENCODE_DIR/opencode.json" ]]; then
@@ -756,10 +766,19 @@ main() {
     echo ""
 
     skalling_require_dependencies
+    case "$PRIVACY_MODE" in
+        auto) PRIVACY_MODE="$(python3 "$SCRIPT_DIR/scripts/skalling_privacy.py" mode "$TARGET_DIR")" ;;
+        external|internal) ;;
+        *) log ERROR "--privacy requiere internal o external"; return 2 ;;
+    esac
+    if [[ "$PRIVACY_MODE" == external ]]; then
+        [[ "$WITH_CI" == false ]] || { log ERROR "--with-ci no es compatible con un proyecto externo"; return 2; }
+        python3 "$SCRIPT_DIR/scripts/skalling_privacy.py" preflight "$TARGET_DIR" || return 1
+    fi
     if command -v opencode >/dev/null 2>&1; then
-        local oc_version; oc_version="$(opencode --version 2>/dev/null || echo unknown)"
-        if [[ "$(skalling_opencode_support "$oc_version")" == unsupported ]]; then
-            log ERROR "opencode $oc_version no está soportado: mínimo $SKALLING_OPENCODE_MIN (antes no carga los plugins de control)."
+        local oc_version; oc_version="$(opencode --version 2>/dev/null)" || oc_version=unknown
+        if [[ "$(skalling_opencode_support "$oc_version")" != v2 ]]; then
+            log ERROR "opencode $oc_version no está soportado: se requiere OpenCode 2 >= $SKALLING_OPENCODE_MIN y < 3.0.0."
             exit 1
         fi
     fi
@@ -768,7 +787,11 @@ main() {
         log WARN "Modo dry-run activo — no se modifica nada"
     fi
 
+    if [[ "$PRIVACY_MODE" == external || "$PRIVACY_MODE" == internal ]]; then
+        run python3 "$SCRIPT_DIR/scripts/skalling_privacy.py" "$PRIVACY_MODE" "$TARGET_DIR"
+    fi
     create_backup
+    skalling_remove_retired_artifacts "$OPENCODE_DIR"
     step_create_directories
     step_install_agents
     step_install_skills
@@ -784,6 +807,7 @@ main() {
     step_install_project_config
     step_init_teamdb
     if [[ "$DRY_RUN" == false ]]; then
+        python3 "$SCRIPT_DIR/scripts/skalling_privacy.py" record "$TARGET_DIR"
         python3 "$SCRIPT_DIR/scripts/skalling_skills.py" sync --project "$TARGET_DIR"
         python3 "$SCRIPT_DIR/scripts/skalling-runtime.py" record --root "$SCRIPT_DIR" --target "$OPENCODE_DIR"
     fi

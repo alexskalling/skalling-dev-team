@@ -28,7 +28,7 @@ GATES=(
 )
 for gate in "${GATES[@]}"; do
   if [ -n "$gate" ] && [ -f "$gate" ]; then
-    python3 "$gate" pre-push < "$STDIN_FILE"
+    python3 "$gate" pre-push "$@" < "$STDIN_FILE"
     exit $?
   fi
 done

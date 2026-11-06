@@ -33,7 +33,11 @@ repo de Skalling) — sobrevive a un `/skalling-update` o reinstalación, porque
 install-global.sh la vuelve a aplicar después de regenerar los agentes.
 
 `set`, `reset` y `apply` actualizan también los agentes locales existentes del
-proyecto actual, conservando sus permisos e instrucciones. El checkout fuente de
+proyecto actual, incluso desde una subcarpeta, conservando sus permisos e instrucciones.
+Valida `proveedor/modelo[#variante]`, no disponibilidad ni cuota. Prepara todos
+los archivos antes de escribir y revierte errores de escritura; si la reversión
+falla, informa los respaldos. No garantiza recuperación ante corte de energía.
+El checkout fuente de
 Skalling conserva sus agentes generados sin preferencias personales. No edites
 `model:` a mano ni uses stash para cambiar modelos: usa este comando. Un `model:`
 en el cuerpo del Markdown no configura OpenCode; debe estar en su cabecera.
@@ -42,8 +46,8 @@ conserva su propia selección de modelo; `show` no certifica el modelo de esa se
 
 ## Recuperación automática (0.15.1)
 
-Requiere **OpenCode 2.0.18** con los hooks nativos `session.retry` y
-`session.switchModel`. OpenCode v1 no soporta este mecanismo. Primero consulta
+Requiere **OpenCode 2 >= 2.0.21 y < 3.0.0** con los hooks nativos `session.retry` y
+`session.switchModel`. Primero consulta
 `opencode models` y sustituye los IDs de ejemplo por modelos que tengas disponibles:
 
 ```text
@@ -83,12 +87,3 @@ mediocre: eso corresponde a la revisión y a la evidencia del objetivo. La detec
 Gemini, además de Responses por WebSocket; protocolos desconocidos conservan la
 validación del runtime. Títulos,
 compactaciones y generaciones auxiliares conservan sus reintentos nativos.
-
-Ensayo reproducible sin proveedores externos, con OpenCode instalado:
-
-```bash
-python3 tests/runtime/model-fallback-smoke.py
-SKALLING_SMOKE_FAILURE=timeout python3 tests/runtime/model-fallback-smoke.py
-SKALLING_SMOKE_FAILURE=empty python3 tests/runtime/model-fallback-smoke.py
-SKALLING_SMOKE_FAILURE=tools python3 tests/runtime/model-fallback-smoke.py
-```

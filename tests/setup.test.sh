@@ -210,7 +210,7 @@ test_commands() {
     echo ""
     echo "── Test 5: comandos /skalling-* ──"
 
-    local expected=(skalling-help skalling-init skalling-goal skalling-status skalling-resume skalling-memory skalling-metrics skalling-codegraph skalling-dashboard skalling-refresh skalling-doctor skalling-recover skalling-merge skalling-update)
+    local expected=(skalling-help skalling-init skalling-status skalling-resume skalling-memory skalling-metrics skalling-codegraph skalling-dashboard skalling-refresh skalling-doctor skalling-recover skalling-merge skalling-update)
     for cmd in "${expected[@]}"; do
         assert_file_exists "$REPO_ROOT/command/${cmd}.md" "command/${cmd}.md existe"
     done
@@ -222,21 +222,10 @@ test_commands() {
 
 test_templates() {
     echo ""
-    echo "── Test 6: Templates SDD y OKF ──"
+    echo "── Test 6: Templates de configuración y contratos ──"
 
-    # SDD
-    assert_file_exists "$REPO_ROOT/templates/changes/proposal.template.md" "proposal.template.md"
-    assert_file_exists "$REPO_ROOT/templates/changes/spec.template.md" "spec.template.md"
-    assert_file_exists "$REPO_ROOT/templates/changes/design.template.md" "design.template.md"
-    assert_file_exists "$REPO_ROOT/templates/changes/tasks.template.md" "tasks.template.md"
-
-    # OKF
-    assert_file_exists "$REPO_ROOT/templates/okf/concept.template.md" "concept.template.md"
-    assert_file_exists "$REPO_ROOT/templates/okf/decision.template.md" "decision.template.md"
-    assert_file_exists "$REPO_ROOT/templates/okf/preference.template.md" "preference.template.md"
-    assert_file_exists "$REPO_ROOT/templates/okf/workaround.template.md" "workaround.template.md"
-    assert_file_exists "$REPO_ROOT/templates/okf/work-in-progress.template.md" "work-in-progress.template.md"
-    assert_file_exists "$REPO_ROOT/templates/okf/context.template.md" "context.template.md"
+    assert_file_exists "$REPO_ROOT/templates/project.yaml.template" "project.yaml.template"
+    assert_file_exists "$REPO_ROOT/templates/gitattributes.template" "gitattributes.template"
 
     # JSON Schema
     assert_file_exists "$REPO_ROOT/templates/handoff.schema.json" "handoff.schema.json"
@@ -382,7 +371,6 @@ test_windows_support() {
 
     # Lib OS tiene helpers portables
     assert_file_contains "$REPO_ROOT/scripts/lib/lib-os.sh" "skalling_sed_inplace" "helper sed portable"
-    assert_file_contains "$REPO_ROOT/scripts/lib/lib-os.sh" "skalling_realpath" "helper realpath portable"
 
     # PowerShell wrappers usan bash delegation
     assert_file_contains "$REPO_ROOT/install-global.ps1" "Find-GitBash" "PS1 detecta Git Bash explícitamente"
@@ -613,27 +601,6 @@ test_tier2_fixes() {
         pass "Pau puede editar docs/ sin pedir permiso"
     else
         fail "Pau NO puede editar docs/ automáticamente"
-    fi
-
-    # FIX T2.6: lib-os.sh tiene atomic write
-    if grep -q "skalling_atomic_write" "$REPO_ROOT/scripts/lib/lib-os.sh"; then
-        pass "lib-os.sh tiene skalling_atomic_write"
-    else
-        fail "lib-os.sh NO tiene skalling_atomic_write"
-    fi
-
-    # FIX T2.7: lib-os.sh tiene atomic append
-    if grep -q "skalling_atomic_append" "$REPO_ROOT/scripts/lib/lib-os.sh"; then
-        pass "lib-os.sh tiene skalling_atomic_append"
-    else
-        fail "lib-os.sh NO tiene skalling_atomic_append"
-    fi
-
-    # FIX T2.8: lib-os.sh tiene bundle size check
-    if grep -q "skalling_check_bundle_size" "$REPO_ROOT/scripts/lib/lib-os.sh"; then
-        pass "lib-os.sh tiene skalling_check_bundle_size"
-    else
-        fail "lib-os.sh NO tiene skalling_check_bundle_size"
     fi
 
     # FIX TIER 14: install-global.sh tiene remove_broken_symlink

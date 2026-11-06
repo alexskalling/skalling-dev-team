@@ -25,11 +25,11 @@ else
   assert_fail "lib-teamdb.sh referencia TEAMDB_ACTOR" "no aparece"
 fi
 
-# 2. Existe helper _actor_or_unknown
-if grep -q "_actor_or_unknown" "$ROOT/scripts/lib/lib-teamdb.sh"; then
-  assert_pass "lib-teamdb.sh define _actor_or_unknown"
+# 2. Existe helper teamdb_runtime_actor
+if grep -q "teamdb_runtime_actor" "$ROOT/scripts/lib/lib-teamdb.sh"; then
+  assert_pass "lib-teamdb.sh define teamdb_runtime_actor"
 else
-  assert_fail "lib-teamdb.sh define _actor_or_unknown" "no aparece"
+  assert_fail "lib-teamdb.sh define teamdb_runtime_actor" "no aparece"
 fi
 
 # 3. teamdb_init_project setea TEAMDB_ACTOR default
@@ -66,22 +66,22 @@ else
 fi
 rm -rf "$TMP_INIT2"
 
-# 6. _actor_or_unknown retorna TEAMDB_ACTOR si existe
+# 6. teamdb_runtime_actor retorna TEAMDB_ACTOR si existe
 TEAMDB_ACTOR=teo
-result="$(_actor_or_unknown)"
+result="$(teamdb_runtime_actor "${TEAMDB_ACTOR:-}")"
 if [ "$result" = "teo" ]; then
-  assert_pass "_actor_or_unknown retorna TEAMDB_ACTOR"
+  assert_pass "teamdb_runtime_actor retorna TEAMDB_ACTOR"
 else
-  assert_fail "_actor_or_unknown retorna TEAMDB_ACTOR" "result=$result"
+  assert_fail "teamdb_runtime_actor retorna TEAMDB_ACTOR" "result=$result"
 fi
 
-# 7. _actor_or_unknown retorna 'unknown' si no existe
+# 7. teamdb_runtime_actor retorna 'unknown' si no existe
 unset TEAMDB_ACTOR
-result="$(_actor_or_unknown)"
+result="$(teamdb_runtime_actor "${TEAMDB_ACTOR:-}")"
 if [ "$result" = "unknown" ]; then
-  assert_pass "_actor_or_unknown retorna 'unknown' si no existe"
+  assert_pass "teamdb_runtime_actor retorna 'unknown' si no existe"
 else
-  assert_fail "_actor_or_unknown retorna 'unknown' si no existe" "result=$result"
+  assert_fail "teamdb_runtime_actor retorna 'unknown' si no existe" "result=$result"
 fi
 
 # 8. teamdb-init.sh setea TEAMDB_ACTOR en su ejecución

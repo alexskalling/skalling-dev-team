@@ -222,20 +222,6 @@ validar_footer_existente() {
     grep -q -E '^## Spec original[[:space:]]*$' "$concept_doc"
 }
 
-validar_escribible() {
-    local concept_doc="$1"
-    if [[ ! -f "$concept_doc" ]]; then
-        return 1
-    fi
-    if [[ ! -s "$concept_doc" ]]; then
-        return 1
-    fi
-    if [[ ! -w "$concept_doc" ]]; then
-        return 1
-    fi
-    return 0
-}
-
 aplicar_footer_a_concept_doc() {
     local concept_doc="$1"
     local path_relativo="$2"

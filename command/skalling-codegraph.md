@@ -4,18 +4,19 @@ description: Inspecciona estructura, dependencias e impacto usando CodeGraph rea
 
 # Skalling CodeGraph
 
-Usa primero la herramienta `codegraph_explore`. Si no está disponible, resuelve la
-raíz con Git, verifica `.codegraph/` e inicializa una sola vez con el comando oficial:
+Pedido: $ARGUMENTS
+
+Primero valida la raíz y prepara CodeGraph con el helper canónico. Rechaza HOME,
+carpetas temporales y ubicaciones sin evidencia de proyecto antes de inicializar:
 
 ```bash
-PROJECT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-if [ ! -d "$PROJECT/.codegraph" ]; then
-  if command -v gentle-ai >/dev/null 2>&1; then gentle-ai codegraph init --cwd "$PROJECT"
-  else codegraph init "$PROJECT"; fi
-fi
-codegraph status
+SK_ROOT="${SKALLING_ROOT:-${SKALLING_OPENCODE_DIR:-$HOME/.config/opencode}}"
+PROJECT="$(python3 "$SK_ROOT/scripts/skalling-project-root.py" "$PWD" --codegraph)" || exit
+bash "$SK_ROOT/scripts/skalling-codegraph.sh" "$PROJECT"
 ```
 
-Después usa consultas de solo lectura (`explore`, `query`, `callers`, `callees`,
+Si falla, informa el motivo sin reintentar la inicialización ni declarar el índice listo.
+Después prefiere `codegraph_explore` con `projectPath` explícito, o consultas CLI
+de solo lectura desde esa raíz (`explore`, `query`, `callers`, `callees`,
 `impact` o `affected`). No sustituyas CodeGraph con el dashboard ni con un escaneo
 casero guardado en TeamDB. Si CodeGraph no está instalado, informa esa limitación.

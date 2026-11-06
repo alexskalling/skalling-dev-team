@@ -30,12 +30,13 @@ modules:
 # ────────────────────────────────────────────────────────────────────────────
 # TESTING
 # ────────────────────────────────────────────────────────────────────────────
+# TDD para lógica y comportamiento; copy/iconos/orden estático usan inspección focal.
 strict_tdd: true
 testing:
   # Límite de cada verificación que corre el motor (segundos, máx. 3600).
   timeout_seconds: 900
   # Verificación rápida del carril trivial; {files} = archivos del pedido.
-  # Sin ella, lo trivial corre testing.unit completo.
+  # Sin ella, Jhon verifica con evidencia focal; no se ejecuta unit por defecto.
   fast:
     available: false
     command: ""

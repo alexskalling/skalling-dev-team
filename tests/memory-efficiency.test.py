@@ -24,6 +24,19 @@ memory = load('memory_write', 'skalling-memory-write.py')
 config = load('project_config', 'skalling-project-config.py')
 
 class MemoryEfficiency(unittest.TestCase):
+    def test_fts_recovers_accented_terms_and_excludes_superseded_decisions(self):
+        self.db.execute("INSERT INTO decisions(slug,title,body_md,status) VALUES('access','Login','Autenticación con el proveedor actual','accepted')")
+        self.db.execute("INSERT INTO decisions(slug,title,body_md,status) VALUES('old','Login','Autenticación antigua','superseded')")
+        result = request_context(self.db,self.project,'autenticacion',query_only=True)
+        self.assertEqual([i['slug'] for i in result['decisions']], ['access'])
+        old = request_context(self.db,self.project,'autenticacion',query_only=True,search_mode='lexical')
+        self.assertEqual(old['decisions'], [])
+
+    def test_fts_operators_in_user_text_are_only_search_terms(self):
+        self.db.execute("INSERT INTO concepts(slug,title,body_md,updated_at) VALUES('example','Storage','SQLite data',datetime('now'))")
+        result = request_context(self.db,self.project,'sqlite OR \"* NOT - ( )',query_only=True)
+        self.assertIn('example', [i['slug'] for i in result['concepts']])
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -37,6 +50,34 @@ class MemoryEfficiency(unittest.TestCase):
         self.db.execute("INSERT INTO tasks(plan_id,slug,title,purpose,acceptance_md) VALUES(1,'task','Campañas envío','No enviar duplicados','Un destinatario recibe un mensaje')")
         self.db.execute("INSERT INTO decisions(slug,title,body_md,status) VALUES('unique','Restricción de envío','Campañas deben deduplicar destinatarios','accepted')")
         self.db.commit()
+
+    def test_conflict_with_an_unmatched_memory_is_exposed_without_choosing_a_winner(self):
+        first = self.db.execute("SELECT id FROM decisions WHERE slug='unique'").fetchone()[0]
+        second = self.db.execute("INSERT INTO decisions(slug,title,body_md,status) VALUES('opposite','Política','Permitir destinatarios repetidos','accepted')").lastrowid
+        self.db.execute("INSERT INTO memory_links(from_table,from_id,to_table,to_id,link_type) VALUES('decisions',?,'decisions',?,'contradicts')",(first,second))
+        result = request_context(self.db,self.project,'deduplicar',query_only=True)
+        item = result['decisions'][0]
+        self.assertEqual(item['slug'],'unique')
+        self.assertTrue(item['requires_resolution'])
+        self.assertEqual(item['relations'][0]['target']['slug'],'opposite')
+        self.assertTrue(result['needs_expansion'])
+        self.db.execute("UPDATE decisions SET status='superseded' WHERE id=?",(second,))
+        result = request_context(self.db,self.project,'deduplicar',query_only=True)
+        self.assertNotIn('requires_resolution',result['decisions'][0])
+
+    def test_explicit_supersedes_relation_marks_old_memory_even_if_status_was_not_updated(self):
+        old = self.db.execute("SELECT id FROM decisions WHERE slug='unique'").fetchone()[0]
+        new = self.db.execute("INSERT INTO decisions(slug,title,body_md,status) VALUES('new','Política','Usar nueva política','accepted')").lastrowid
+        self.db.execute("INSERT INTO memory_links(from_table,from_id,to_table,to_id,link_type) VALUES('decisions',?,'decisions',?,'supersedes')",(new,old))
+        result = task_context(self.db,self.project,'plan','task')
+        item = next(x for x in result['decisions'] if x['slug']=='unique')
+        self.assertTrue(item['requires_resolution'])
+        self.assertEqual(item['relations'][0]['type'],'superseded_by')
+
+    def test_task_retrieval_checks_source_freshness_only_once(self):
+        with patch('skalling_context.freshness',return_value={'status':'current','pending_review':[]}) as read:
+            task_context(self.db,self.project,'plan','task')
+        read.assert_called_once()
 
     def test_no_link_still_delivers_relevant_full_memory_and_goal(self):
         data = task_context(self.db, self.project, 'plan', 'task')

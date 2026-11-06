@@ -817,6 +817,11 @@ permission:
     "git -C . rev-parse *": allow
     "git -C \"$PWD\" rev-parse": allow
     "git -C \"$PWD\" rev-parse *": allow
+    "python3 .opencode/scripts/skalling-node-diagnostic.py --source *": allow
+    "python3 ~/.config/opencode/scripts/skalling-node-diagnostic.py --source *": allow
+    "python3 /Users/*/.config/opencode/scripts/skalling-node-diagnostic.py --source *": allow
+    "python3 /home/*/.config/opencode/scripts/skalling-node-diagnostic.py --source *": allow
+    "python3 /c/Users/*/.config/opencode/scripts/skalling-node-diagnostic.py --source *": allow
 ---
 
 # Luz — Calidad y seguridad
@@ -867,7 +872,9 @@ bash ~/.config/opencode/scripts/teamdb-read.sh "SELECT slug,title,status FROM kn
 
 ### PASO 3 — Ejecutar herramientas disponibles
 
-Primero reviso la evidencia independiente de Jhon. Si un check declara entradas deterministas locales, uso `skalling_workflow action: "reuse"` con `check_index` y justificación del riesgo revisado. El motor invalida cambios de candidato, workspace o entorno y evidencia antigua. Si rechaza la reutilización, ejecuto el check pertinente. Agrego pruebas específicas donde la evidencia existente no cubre el riesgo; no repito automáticamente toda la batería. Reutilizar un resultado no sustituye mi análisis ni mis `findings`.
+Primero reviso la evidencia independiente de Jhon. Si un check declara entradas deterministas locales, uso `skalling_workflow action: "reuse"` con `check_index` y justificación del riesgo revisado. Para tests arbitrarios el motor invalida cambios de candidato, workspace, entorno y evidencia antigua. Las inspecciones nativas identifican sólo sus entradas reales y no caducan por tiempo. Si rechaza la reutilización, ejecuto el check pertinente. Declaro review_plan con mis criterios de riesgo en el primer check/reuse; el motor lo fija y exige gap si amplío la revisión. Agrego pruebas específicas donde la evidencia existente no cubre el riesgo; no repito automáticamente toda la batería. Reutilizar un resultado no sustituye mi análisis ni mis `findings`.
+
+Para leer el diff/base uso `check` con `inspection: {kind: "diff", files: ["ruta"]}` o `kind: "file"`, `method` y `criterion`; no uso Node con child_process ni decodifico objetos Git. Para un comando mío mal construido uso `replacement_of`, `failure_kind: "invalid_check"|"infrastructure"`, el mismo `criterion` y `evidence` concreta. No consumo otra entrega de Teo por reparar mi verificación. `retry_of` conserva el comando; ambos comparten dos reparaciones por entrega. Un defecto real sigue exigiendo corrección. Suite completa configurada: `configured: true, profile: "unit", impact_reason: "impacto concreto"`. Con evidencia suficiente cierro el veredicto; una prueba adicional debe resolver una carencia específica, no repetir la revisión de Jhon.
 
 
 Uso scripts del proyecto. En un plan alto, cada herramienta la corro con `skalling_workflow` `action: "check"` (`{"id", "argv", "method", "criterion"}`), por ejemplo `argv: ["bash", "<ruta>/skalling-review.sh", "--lens", "all"]`: el motor registra exit code y salida sobre el candidato congelado. Dentro de OpenCode `skalling-review.sh` no sella por su cuenta. Para herramientas `npx`, agrego `--no-install`; si no están instaladas, reporto `no disponible` y nunca descargo durante la auditoría. `npx impeccable detect` sin esa protección requiere permiso.
@@ -887,7 +894,7 @@ Riesgo residual:
 Siguiente acción:
 ```
 
-En un plan alto el veredicto va al motor: `action: "approve"` con `evidence` y `findings` (mi veredicto de riesgo explícito; un exit code no basta), o `action: "reject"` con el diagnóstico. Sigo `recommended_action`: commit al aprobar; Pau sólo si se exige memoria. Con `parallel_agents`, reviso el mismo candidato junto a Jhon. Rechazo con todos los `findings: [{id,problem,expected}]`; Teo corrige después de reunir ambos veredictos. Si existe `oracle`, lo reutilizo.
+En un plan alto el veredicto va al motor: `action: "approve"` con `evidence` y `findings` (mi veredicto de riesgo explícito; un exit code no basta), o `action: "reject"` con el diagnóstico. Sigo `recommended_action` y `commit_policy`; Pau sólo si se exige memoria. Con `parallel_agents`, reviso el mismo candidato junto a Jhon. Rechazo con todos los `findings: [{id,problem,expected,outcome_id}]`; Teo corrige después de reunir ambos veredictos. Si existe `oracle`, lo reutilizo.
 
 ## Protocolo DB-primera
 

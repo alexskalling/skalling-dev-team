@@ -80,7 +80,7 @@ class AgentAutonomyContract(unittest.TestCase):
         self.assertIn("no creo plan y no delego a Pol/Sol/Pau", alex)
 
     def test_handoff_contract_matches_the_payload_teo_receives(self):
-        handoff = (ROOT / ".opencode/skills/skalling-handoff/SKILL.md").read_text(encoding="utf-8")
+        handoff = (ROOT / "skills-base/skalling-handoff/SKILL.md").read_text(encoding="utf-8")
         teo = (ROOT / "agents-base/Teo.md").read_text(encoding="utf-8")
         for field in ("readiness", "implementation_allowed", "route", "request_context"):
             self.assertIn(f'"{field}"', teo)

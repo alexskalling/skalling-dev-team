@@ -16,5 +16,31 @@
     "prompt": "Corrige slug en app.py para conservar letras Unicode, convertir espacios en guiones y poner minúsculas. Mantén el comportamiento ASCII y la API. Implementa y verifica, sin commit ni publicación.",
     "source": "def slug(text):\n    return '-'.join(text.encode('ascii', 'ignore').decode().lower().split())\n",
     "oracle": "from app import slug; assert slug('Niño Feliz')=='niño-feliz'; assert slug(' Hello  World ')=='hello-world'; assert slug('東京')=='東京'; assert slug('')==''"
+  },
+  {
+    "id": "nested-cache-isolation",
+    "prompt": "Corrige load en app.py: modificar el resultado no debe cambiar la caché ni los siguientes resultados, incluidos datos anidados. Conserva la API y el formato de los datos. No agregues dependencias ni refactorices otros archivos. Implementa y verifica, sin commit ni publicación.",
+    "source": "CACHE = {'user': {'roles': ['reader']}}\ndef load():\n    return dict(CACHE)\n",
+    "oracle": "from app import load, CACHE; a=load(); a['user']['roles'].append('admin'); b=load(); assert b=={'user':{'roles':['reader']}}; assert CACHE==b; assert a is not b"
+  },
+  {
+    "id": "sqlite-atomic-transfer",
+    "prompt": "Corrige transfer en app.py: una transferencia fallida debe dejar intactos ambos saldos y una válida debe actualizar ambos. Usa la transacción de la conexión SQLite existente; no cambies almacenamiento, esquema ni API. Implementa y verifica, sin commit ni publicación.",
+    "memory": "La persistencia de este proyecto es SQLite. Se conserva la conexión recibida; no se permiten bases paralelas ni migraciones para este arreglo.",
+    "source": "def transfer(db, source, target, amount):\n    db.execute('UPDATE accounts SET balance=balance-? WHERE id=?', (amount, source))\n    db.commit()\n    db.execute('UPDATE accounts SET balance=balance+? WHERE id=?', (amount, target))\n    db.commit()\n",
+    "oracle": "import sqlite3\nfrom app import transfer\ndb=sqlite3.connect(':memory:')\ndb.execute('CREATE TABLE accounts(id INTEGER PRIMARY KEY,balance INTEGER CHECK(balance<=100))')\ndb.executemany('INSERT INTO accounts VALUES(?,?)',[(1,80),(2,90)])\ndb.commit()\ntry:\n transfer(db,1,2,20)\nexcept sqlite3.IntegrityError:\n pass\nelse:\n raise AssertionError('expected failure')\nassert db.execute('SELECT balance FROM accounts ORDER BY id').fetchall()==[(80,),(90,)]\ntransfer(db,1,2,5)\nassert db.execute('SELECT balance FROM accounts ORDER BY id').fetchall()==[(75,),(95,)]"
+  },
+  {
+    "id": "configured-zero-limit",
+    "prompt": "Corrige la configuración y su consumo en config.py y app.py: limit=0 debe devolver cero elementos, None todos, y un entero positivo limita. Conserva las APIs; no cambies los datos de entrada ni añadas dependencias. Implementa y verifica, sin commit ni publicación.",
+    "source": "from config import read_limit\ndef select(values, settings):\n    limit=read_limit(settings)\n    return values[:limit] if limit else values[:]\n",
+    "fixture_files": {
+      "config.py": "def read_limit(settings):\n    return settings.get('limit') or None\n"
+    },
+    "allowed_files": [
+      "app.py",
+      "config.py"
+    ],
+    "oracle": "from app import select; from config import read_limit; x=[1,2,3]; settings={'limit':0}; assert read_limit(settings)==0; assert select(x,settings)==[]; assert select(x,{'limit':None})==x; assert select(x,{})==x; assert select(x,{'limit':2})==[1,2]; assert settings=={'limit':0}; assert x==[1,2,3]"
   }
 ]

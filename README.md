@@ -2,12 +2,12 @@
 
 Skalling es un equipo de **8 agentes de IA** que trabajan juntos adentro de [OpenCode](https://opencode.ai). Cada agente tiene un rol específico y siguen un ciclo ordenado para construir software bien hecho.
 
-**Versión actual: 0.17.0**
+**Versión actual: 0.19.0** — disponible en el checkout local; publicación pendiente.
 
-La versión 0.17.0 reúne hallazgos de revisión antes de corregir, conserva
-el historial y exige un commit real para cerrar cambios. Los pedidos claros
-pueden empezar sin planificación innecesaria; el riesgo conserva sus revisores.
-Push sigue requiriendo autorización del usuario. Ver [notas de versión](docs/releases/0.17.0.md).
+La versión 0.19.0 añade compactación nativa acotada de conversaciones grandes,
+conservando el workflow en TeamDB, y un carril declarativo sin preparación TDD ni
+Ponytail rutinaria. Mantiene las revisiones por riesgo y las pruebas de comportamiento.
+Ver [notas de versión](docs/releases/0.19.0.md).
 
 Desde 0.15.1 hay respaldos de modelo configurables ante errores del proveedor,
 timeouts y salida inválida en OpenCode 2.0.18. Ver [configuración y límites](command/skalling-models.md).
@@ -32,11 +32,17 @@ Toda implementación pasa por la herramienta `skalling_workflow`, que es la **ú
 | Trivial (`low`): local, claro, reversible | cambiar una mayúscula o un texto | **Alex → Teo**, más la verificación configurada del proyecto que corre el motor (Jhon si no hay comando) |
 | Local y claro (`medium`): cambio reversible sin plan ni decisión | ajustar un componente conocido | **Alex → Teo → Jhon** |
 | De módulo o con dependencias (`medium`) | feature con varios pasos | **Alex → Sol → Teo → Jhon** |
-| Complejo o sensible (`high`) | feature transversal, auth, datos, CI/CD | **Alex → Pol → Sol → Teo → Jhon → Luz → Pau** (Jes si hace falta investigar) |
+| Complejo o sensible (`high`) | feature transversal, auth, datos, CI/CD | **Alex → Teo → Jhon → Luz** si el alcance está claro; Pol/Sol cuando falta aclaración/plan y Pau cuando hay conocimiento durable nuevo. `staged` conserva el recorrido completo. |
 
 Investigación → Jes. Auditoría → Luz. Con una decisión tuya pendiente o un pedido ambiguo, el motor no deja implementar: Alex te pregunta primero.
 
 Carga memorias relevantes al inicio de sesión (`skalling-memory`).
+
+TeamDB conserva el foco del pedido, sus restricciones y la evidencia. Si se pierde
+el id al retomar, `skalling_workflow resume` con `{}` recupera el trabajo asociado
+a la sesión o muestra candidatos para contrastar con el pedido actual. Las mejoras
+opcionales se registran con `defer`, sin bloquear la entrega ni ampliar el alcance.
+Ver [foco, recuperación y límites](docs/execution-efficiency.md#foco-recuperable-en-teamdb).
 
 **Pol** — Spec Author. Te hace preguntas para entender bien qué necesitás. Una por una, no avanza sin tu confirmación. Su objetivo: evitar que el equipo construya cualquier cosa incorrecta o innecesaria.
 
@@ -50,38 +56,51 @@ Carga memorias relevantes al inicio de sesión (`skalling-memory`).
 
 **Luz** — QA & Security Auditor. Revisa el código terminado: calidad, seguridad, rendimiento, duplicación, complejidad. Si encuentra problemas lo devuelve a Teo.
 
-**Pau** — Documentalist / Memory Keeper. Cuando todo está aprobado, Pau guarda los cambios en la documentación y en la memoria del proyecto para que el equipo nunca empiece de cero.
+**Pau** — Documentalist / Memory Keeper. Registra conocimiento durable autorizado cuando se necesita, incluso antes de revisar una entrega. Tras la aprobación cierra la etapa documental; registrar una decisión y cerrar esa etapa son operaciones distintas.
+
+Si un workflow agota sus tres entregas, Alex puede usar `recover` una sola vez con
+feedback humano registrado, el error observado y un plan concreto. Permite una
+entrega adicional sin reiniciar el historial ni los límites de pruebas o tiempo
+del usuario. Las restricciones corregidas deben corresponder a esa instrucción;
+las omitidas se conservan. No habilita commits sin revisión ni autoriza un push.
+Si Git detecta una decisión sin fila en TeamDB, el error identifica tabla, slug
+y helper para que Pau registre el contenido autorizado y se verifique antes de reintentar.
 
 ---
 
 ## Instalación
 
-### Objetivos autónomos, sin publicación
-
-`/skalling-goal <objetivo y criterios de aceptación>` autoriza al equipo a implementar,
-verificar y crear **un commit local** del objetivo. Nunca autoriza push ni despliegue.
-El plugin continúa los turnos incompletos; conserva el estado en TeamDB, no en archivos
-de memoria adicionales. No sustituye la revisión ni decide por el usuario asuntos críticos.
-
-Controles: `/skalling-goal status`, `pause`, `resume`, `cancel`. El límite es de 20
-continuaciones automáticas y 3 sin avance de archivos/checkpoints. Cancelar no borra trabajo.
-Se protegen cambios anteriores y se bloquea el cierre si falta evidencia del candidato staged.
-Después de instalar o actualizar, reiniciar OpenCode para cargar el plugin. No funciona con
-OpenCode cerrado ni garantiza completar tareas con bloqueos externos o decisiones pendientes.
-
 ### Compatibilidad con OpenCode
 
-| Versión | Estado | Qué funciona |
-|---|---|---|
-| < 1.18.29 | **No soportada** | Los plugins exportan `{ server, setup }`, forma que OpenCode acepta desde 1.18.29. El instalador y el doctor lo rechazan. |
-| 1.18.29 – 1.x | **Completa** (v1) | Todo: agentes, guard de identidad, `skalling_workflow`, `teamdb_destructive`, `/skalling-goal`. |
-| 2.x (verificado con 2.0.18) | **Soportada, conducida** | Agentes, guard, `skalling_workflow` (herramienta directa) y `teamdb_destructive`. Rutas trivial, mediana y alta, decisión pendiente y restricción en memoria probadas con sesiones reales (ver abajo). **`/skalling-goal` no existe en v2**: la API de plugins v2 no expone los hooks que usa. Un plugin v2 no puede pedir aprobación: el `check` de Jhon/Luz corre el comando declarado por el proyecto (`configured: true`) o comandos que su política ya permite. Un comando sin agente atribuible recibe identidad `unattributed` y los helpers de TeamDB se niegan. |
+Este bundle requiere **OpenCode 2 >= 2.0.21 y < 3.0.0**. Usa únicamente plugins
+con `setup`; no instala adaptadores ni herramientas de OpenCode 1. El mínimo
+incluye el formato de plugin de directorio usado por ejecución eficiente.
+Ambos instaladores rechazan versiones incompatibles o ilegibles antes de cambiar
+la instalación. Sin el binario en PATH permiten preparar los archivos; eso no
+verifica el runtime ni habilita una versión anterior.
 
-v2 no es el mismo producto que v1: sin `/skalling-goal` no hay continuación autónoma, así
-que el trabajo en v2 necesita que alguien lo conduzca.
+El flujo se inicia con Alex y persiste foco, estado y evidencia en TeamDB.
+No incluye continuación autónoma entre turnos. `skalling_workflow` ejecuta checks
+configurados o permitidos por la política del agente; un plugin no puede solicitar
+aprobación nativa desde esa herramienta. `teamdb_destructive` previsualiza y devuelve
+un comando exacto que solicita aprobación por la terminal. Sin identidad atribuible,
+los helpers de TeamDB rechazan la operación.
 
-**Cómo se verificó (27-09-2026).** Pruebas unitarias de los adaptadores v1/v2 y, además,
-sesiones reales con el binario de OpenCode 2.0.18 y modelos MiniMax (M3 para Alex, M2.7
+Al actualizar, el instalador retira el plugin, comando y helpers antiguos de
+`skalling-goal`, las plantillas Markdown sin uso de OKF/SDD y dos scripts de prueba
+antiguos. Los formatos SDD vigentes están definidos en sus skills. Conserva las bases y los plugins del usuario. La memoria se inicializa
+y mantiene en TeamDB; las exportaciones Markdown siguen disponibles. Se aplican las opciones
+habituales de backup (`--force` global y `--skip-backup` local lo omiten).
+Reiniciá OpenCode después de instalar para cargar los plugins nuevos.
+
+**Verificación del instalador (02-11-2026).** Instalaciones aisladas global/local,
+rechazo de versiones incompatibles, retiro de artefactos y dry-run sin mutación.
+Plugins verificados con pruebas unitarias y política de eficiencia probada en
+OpenCode 2.2.5 con proveedor local sintético; no implica una evaluación de calidad
+con modelos reales.
+
+**Cómo se verificó (27-09-2026).** Pruebas de la integración de OpenCode 2 y, además,
+sesiones históricas con el binario de OpenCode 2.0.18 (anterior al mínimo actual) y modelos MiniMax (M3 para Alex, M2.7
 para el resto), en un proyecto de prueba aislado:
 
 | Escenario | Resultado observado |
@@ -150,8 +169,12 @@ Instalar **siempre un release publicado** (`vX.Y.Z`), nunca `main`. La lista est
 
 **1. Instalar (una vez por máquina)**
 
+El tag `v0.19.0` todavía está pendiente de publicación. Hasta entonces, desde
+el checkout local actualizado usa `bash install-global.sh`; los ejemplos de
+clonación de abajo requieren que ese tag ya se haya publicado.
+
 ```bash
-VERSION=v0.17.0   # requiere publicar este tag; también puede instalarse desde el checkout local
+VERSION=v0.19.0   # requiere publicar este tag; también puede instalarse desde el checkout local
 git clone --branch "$VERSION" --depth 1 https://github.com/alexskalling/skalling-dev-team.git ~/skalling-dev-team
 bash ~/skalling-dev-team/install-global.sh
 ```
@@ -180,7 +203,7 @@ config locales, que reemplazan a los globales) y el paso 3.
 **Windows** (Git Bash o WSL2, no nativo; en CI solo tiene smoke test):
 
 ```powershell
-git clone --branch v0.17.0 --depth 1 https://github.com/alexskalling/skalling-dev-team.git $HOME\skalling-dev-team
+git clone --branch v0.19.0 --depth 1 https://github.com/alexskalling/skalling-dev-team.git $HOME\skalling-dev-team
 .\skalling-dev-team\install-global.ps1
 ```
 
@@ -270,7 +293,6 @@ Alex clasifica tu pedido y deriva al agente que corresponde.
 |---|---|
 | `/skalling-help` | Indica rápidamente qué comando usar |
 | `/skalling-init` | Prepara el proyecto por primera vez (detecta lenguaje, crea memoria) |
-| `/skalling-goal` | Completa un objetivo hasta un commit local, sin push |
 | `/skalling-status` | Muestra el estado del proyecto y el trabajo en curso |
 | `/skalling-resume` | Recupera una cápsula mínima para continuar el trabajo |
 | `/skalling-memory` | Busca, relaciona, grafica y revisa la memoria desde un solo lugar |
@@ -284,7 +306,16 @@ Alex clasifica tu pedido y deriva al agente que corresponde.
 | `/skalling-merge` | Ayuda a resolver conflictos cuando trabajan varios |
 | `/skalling-update` | Busca versiones nuevas de Skalling y las instala si confirmás |
 | `/skalling-models` | Asigna un modelo de OpenCode a cada agente, individualmente |
-| `/skalling-privacy` | Marca un proyecto como interno (memoria compartida por git) o externo (nunca se sube) |
+| `/skalling-privacy` | Elige memoria compartida o instalación externa con exclusiones locales y controles de commit/push |
+
+En un repositorio ajeno, usa `/skalling-init externo` desde el comienzo (CLI:
+`bash setup.sh --target /ruta/proyecto --privacy external`). Las exclusiones se
+guardan en `.git/info/exclude`; la instalación no añade reglas a `.gitignore`,
+`.gitattributes`, `AGENTS.md` ni CI compartidos. Las actualizaciones conservan
+ese modo. Si encuentra configuración ajena que tendría que sobrescribir,
+se detiene. `/skalling-privacy externo` permite convertir una instalación
+anterior: respalda y retira sus bloques marcados, pero no elimina archivos
+rastreados ni reescribe el historial; los pendientes se informan explícitamente.
 
 Los antiguos `/skalling-forget`, `/skalling-graph` y
 `/skalling-graph-refresh` fueron consolidados en `/skalling-memory`.
@@ -312,8 +343,9 @@ Para cosas chicas (un typo, un color, un texto) la ruta es Alex → Teo y el mot
 
 Teo, Jhon y Luz pueden crear commits locales cuando una unidad de trabajo está
 verificada y conviene dejarla organizada, sin pedirte permiso por cada commit.
-`prepare_commit` prepara y sella esa unidad sin repetir pruebas ni esperar el
-cierre de Alex; después el agente hace `git commit`. Incluyen código, pruebas y
+`commit` crea la unidad verificada conservando el staging ajeno. `complete` puede
+cerrar sin commit: `commit_policy` es `allowed` por defecto, `required` si lo pide
+el usuario y `forbidden` si lo prohíbe. Incluyen código, pruebas y
 documentación relacionados y respetan cualquier instrucción de no commitear.
 El usuario decide cuándo autorizar el push. Commitear no autoriza publicación.
 
@@ -321,9 +353,9 @@ Alex clasifica cada pedido por riesgo, no solo por cantidad de archivos:
 
 - Bajo: Alex → Teo; el motor corre `testing.fast` si existe. Sin él, Jhon elige una verificación focal y recurre a la suite completa solo cuando el impacto lo justifica.
 - Medio local, claro y reversible: Alex → Teo → Jhon. Si requiere varios pasos o dependencias: Alex → Sol → Teo → Jhon.
-- Alto: ciclo completo con Pol, Luz y Pau. Ambiguo o con decisión pendiente: primero se pregunta.
+- Alto local y claro: Alex → Teo → Jhon/Luz; planificación si hace falta y Pau si hay conocimiento durable. Las decisiones pendientes se resuelven antes de implementar.
 
-Antes del primer handoff se crea una cápsula de hasta 8 KB: resumen general, memoria relacionada y ubicaciones obtenidas con Code Intelligence. Esa cápsula se reutiliza; los agentes amplían contexto solo bajo demanda. Pau revisa todos los cierres, pero escribe memoria únicamente cuando hay conocimiento duradero. Markdown sigue siendo documentación o export explícito, nunca transporte entre agentes.
+Antes del primer handoff se crea una cápsula de hasta 8 KB: resumen general, memoria relacionada y ubicaciones obtenidas con Code Intelligence. Esa cápsula se reutiliza; los agentes amplían contexto solo bajo demanda. Pau participa cuando hay conocimiento duradero que registrar. Markdown sigue siendo documentación o export explícito, nunca transporte entre agentes.
 
 `skalling-metrics.sh` registra ruta, agentes, handoffs, solicitudes de permiso, bytes de contexto, duración y resultado. No inventa consumo de tokens: si el runtime no expone tokens reales, reporta bytes de contexto como métrica verificable.
 
@@ -471,13 +503,13 @@ Skalling usa **skalling-memory** (estilo Engram) para reducir contexto:
 
 Los receipts (`skalling-receipt`) formalizan cada verificación con evidence antes de claims.
 
-**Memoria del proyecto**: Skalling ahora estructura la memoria con un template de 4 secciones (What/Why/Where/Learned) para concept docs, un snippet de Memory Protocol en cada agente que fuerza el guardado de decisiones y marcado de contradicciones, detección de conflictos en Pol antes de cerrar proposals, y herramientas de salud (`mem-review`, sección de memoria en el doctor) que detectan huérfanos, WIP zombie, duplicados y docs stale o superseded.
+**Memoria del proyecto**: Los agentes organizan los conceptos en TeamDB con 4 secciones (What/Why/Where/Learned), un snippet de Memory Protocol en cada agente que fuerza el guardado de decisiones y marcado de contradicciones, detección de conflictos en Pol antes de cerrar proposals, y herramientas de salud (`mem-review`, sección de memoria en el doctor) que detectan huérfanos, WIP zombie, duplicados y docs stale o superseded.
 
 ---
 
-## TeamDB (libSQL)
+## TeamDB (SQLite)
 
-Skalling v0.7.6 usa **libSQL** como fuente de verdad para memoria y tracking de trabajo.
+Skalling usa **SQLite** como fuente de verdad para memoria y seguimiento del trabajo.
 
 ### Dos bases de datos
 
@@ -498,7 +530,7 @@ bash scripts/teamdb-migrate.sh /path/to/project
 # Export DB → .sql (para git)
 bash scripts/teamdb-export.sh /path/to/project
 
-# Import .sql → DB (post-merge)
+# Importación manual de exports legacy data_*.sql → DB
 bash scripts/teamdb-import.sh /path/to/project
 
 # Ciclo de planificación en DB (proposals → plans → tasks)

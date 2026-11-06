@@ -41,11 +41,6 @@
 #   - tests/**                   → fixtures con payloads SQLi intencionales
 #                                 para validar que el código NO es vulnerable.
 #   - scripts/hooks/git-gate.py  → gate Python pre-push, no shell con sqlite3.
-#   - scripts/test-teamdb-safe.sh,
-#     scripts/test-teamdb-git-sync.sh → fixtures de test bajo scripts/ (no
-#                                 tests/ por legacy de nombres); slugs/valores
-#                                 hardcodeados en asserts, mismo caso que
-#                                 tests/**.
 #   - scripts/migrate-legacy-md-to-db.sh → `SELECT COUNT(*) FROM $t` interpola
 #                                 un nombre de TABLA, no un valor; $t itera un
 #                                 enum fijo definido en la misma línea de arriba

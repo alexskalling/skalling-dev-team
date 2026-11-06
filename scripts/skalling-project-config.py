@@ -25,6 +25,7 @@ Uso: skalling-project-config.py <proyecto> [--check | --remove | --sync-agents]
            retira los bloques de permisos propios de las cabeceras locales.
 """
 import json
+import subprocess
 import hashlib
 import datetime
 import os
@@ -55,7 +56,7 @@ def agent_body(text):
 
 
 def agent_sources():
-    directory = ROOT / ('.opencode/agents' if (ROOT / 'agents-base').is_dir() else 'agents')
+    directory = ROOT / ('agents-base' if (ROOT / 'agents-base').is_dir() else 'agents')
     return [directory / (name + '.md') for name in ('Alex', 'Pol', 'Sol', 'Teo', 'Jhon', 'Luz', 'Pau', 'Jes')]
 
 
@@ -73,11 +74,16 @@ def sync_agents(project, force=False, check=False):
     drift = []
     for source in agent_sources():
         path = target / source.name
-        if not source.is_file() or not path.is_file():
+        if not path.is_file():
             continue  # Projects without a local override inherit the global agent.
+        if not source.is_file():
+            raise ValueError(f'Fuente de agente ausente: {source}; reparar instalación antes de sincronizar')
         old = path.read_text(encoding='utf-8')
         body = agent_body(old)
-        wanted = agent_body(source.read_text(encoding='utf-8'))
+        rendered = (subprocess.run(['bash', str(ROOT / 'scripts/render-agent.sh'), str(source)],
+                                  capture_output=True, encoding='utf-8', check=True, timeout=30).stdout
+                    if source.parent.name == 'agents-base' else source.read_text(encoding='utf-8'))
+        wanted = agent_body(rendered)
         digest = hashlib.sha256(body.encode()).hexdigest()
         if body == wanted:
             if not check:
@@ -92,7 +98,6 @@ def sync_agents(project, force=False, check=False):
         backup.write_text(old, encoding='utf-8')
         header = old[:-len(body)] if body else old
         if not header:
-            rendered = source.read_text(encoding='utf-8')
             header = rendered[:-len(wanted)] if wanted else rendered
         # Refuse to overwrite an editor's concurrent change.
         if path.read_text(encoding='utf-8') != old:

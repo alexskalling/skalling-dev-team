@@ -58,7 +58,7 @@ test('long waits are advisory; next command clears transient hints and permissio
     await f.hooks['execute.after']({ ...call, input: { command: 'git status --short' } });
     await f.hooks.context(e);
     assert.doesNotMatch(e.system[1].text, /último comando incluía espera/);
-    assert.deepEqual(Object.keys(f.hooks).sort(), ['context', 'execute.after']);
+    assert.deepEqual(Object.keys(f.hooks).sort(), ['compaction', 'context', 'execute.after']);
   } finally { f.cleanup(); }
 });
 

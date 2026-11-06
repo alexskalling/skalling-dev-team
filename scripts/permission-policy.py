@@ -69,6 +69,9 @@ def main():
                     failures.append(str(path.relative_to(ROOT)))
     for filename in ('templates/opencode.json', '.opencode/opencode.json'):
         path = ROOT / filename
+        # A generated local installation is optional in a source checkout.
+        if filename.startswith('.opencode/') and not path.exists():
+            continue
         config = json.loads(path.read_text(encoding='utf-8'))
         if config['permission'] != permissions('project'):
             if args.write:
