@@ -26,6 +26,7 @@ Uso: skalling-project-config.py <proyecto> [--check | --remove | --sync-agents]
 """
 import json
 import subprocess
+import shutil
 import hashlib
 import datetime
 import os
@@ -60,6 +61,20 @@ def agent_sources():
     return [directory / (name + '.md') for name in ('Alex', 'Pol', 'Sol', 'Teo', 'Jhon', 'Luz', 'Pau', 'Jes')]
 
 
+def renderer_shell():
+    if sys.platform != 'win32':
+        return 'bash'
+    # Windows may resolve bare bash to the WSL launcher, even inside Git Bash.
+    git = shutil.which('git')
+    if git:
+        parent = Path(git).resolve().parent
+        for candidate in (parent / 'bash.exe', parent.parent / 'bin/bash.exe',
+                          parent.parent / 'usr/bin/bash.exe'):
+            if candidate.is_file():
+                return str(candidate)
+    raise ValueError('Git Bash no encontrado junto a Git; instalar Git for Windows y volver a intentar')
+
+
 def sync_agents(project, force=False, check=False):
     """Update managed bodies; preserve headers/models and back up every change.
 
@@ -83,10 +98,10 @@ def sync_agents(project, force=False, check=False):
         if source.parent.name == 'agents-base':
             # Git Bash accepts drive paths with forward slashes, not Windows backslashes.
             rendered_result = subprocess.run(
-                ['bash', (ROOT / 'scripts/render-agent.sh').as_posix(), source.as_posix()],
+                [renderer_shell(), (ROOT / 'scripts/render-agent.sh').as_posix(), source.as_posix()],
                 capture_output=True, encoding='utf-8', timeout=30)
             if rendered_result.returncode:
-                raise ValueError(f'No se pudo renderizar {source}: {rendered_result.stderr.strip()}')
+                raise ValueError(f'No se pudo renderizar {source}: {(rendered_result.stderr or rendered_result.stdout).strip()}')
             rendered = rendered_result.stdout
         else:
             rendered = source.read_text(encoding='utf-8')
