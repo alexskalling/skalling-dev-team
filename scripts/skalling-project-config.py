@@ -68,11 +68,14 @@ def renderer_shell():
     git = shutil.which('git')
     if git:
         parent = Path(git).resolve().parent
-        for candidate in (parent / 'bash.exe', parent.parent / 'bin/bash.exe',
-                          parent.parent / 'usr/bin/bash.exe'):
+        # Git Bash's PATH normally selects Git/mingw64/bin/git.exe.
+        candidates = [parent / 'bash.exe']
+        for root in (parent.parent, parent.parent.parent):
+            candidates.extend((root / 'bin/bash.exe', root / 'usr/bin/bash.exe'))
+        for candidate in candidates:
             if candidate.is_file():
                 return str(candidate)
-    raise ValueError('Git Bash no encontrado junto a Git; instalar Git for Windows y volver a intentar')
+    raise ValueError(f'Git Bash no encontrado junto a Git ({git or "no disponible"}); instalar Git for Windows y volver a intentar')
 
 
 def sync_agents(project, force=False, check=False):

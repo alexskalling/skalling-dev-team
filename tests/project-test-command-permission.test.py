@@ -61,16 +61,18 @@ class ProjectTestCommand(unittest.TestCase):
             (agents / f'{name}.md').write_text(subprocess.check_output(['bash', str(ROOT/'scripts/render-agent.sh'), str(ROOT/'agents-base'/f'{name}.md')], text=True))
 
     def test_windows_render_uses_git_bash_instead_of_wsl_launcher(self):
-        git_dir = self.project / 'Git/cmd'
-        git_dir.mkdir(parents=True)
-        git = git_dir / 'git.exe'
-        git.touch()
-        bash = git_dir.parent / 'bin/bash.exe'
-        bash.parent.mkdir()
+        bash = self.project / 'Git/bin/bash.exe'
+        bash.parent.mkdir(parents=True)
         bash.touch()
+        for directory in ('cmd', 'bin', 'mingw64/bin'):
+            with self.subTest(directory=directory):
+                git = self.project / 'Git' / directory / 'git.exe'
+                git.parent.mkdir(parents=True, exist_ok=True)
+                git.touch()
+                with patch.object(config.sys, 'platform', 'win32'), patch.object(config.shutil, 'which', return_value=str(git)):
+                    self.assertEqual(config.renderer_shell(), str(bash.resolve()))
+        bash.unlink()
         with patch.object(config.sys, 'platform', 'win32'), patch.object(config.shutil, 'which', return_value=str(git)):
-            self.assertEqual(config.renderer_shell(), str(bash.resolve()))
-            bash.unlink()
             with self.assertRaisesRegex(ValueError, 'Git Bash no encontrado'):
                 config.renderer_shell()
 
