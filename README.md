@@ -2,12 +2,12 @@
 
 Skalling es un equipo de **8 agentes de IA** que trabajan juntos adentro de [OpenCode](https://opencode.ai). Cada agente tiene un rol específico y siguen un ciclo ordenado para construir software bien hecho.
 
-**Versión actual: [0.19.0](https://github.com/alexskalling/skalling-dev-team/releases/tag/v0.19.0)**.
+**Versión actual: [0.19.1](https://github.com/alexskalling/skalling-dev-team/releases/tag/v0.19.1)**.
 
-La versión 0.19.0 añade compactación nativa acotada de conversaciones grandes,
+La versión 0.19.1 separa auditorías de implementación y conserva la compactación nativa acotada de conversaciones grandes,
 conservando el workflow en TeamDB, y un carril declarativo sin preparación TDD ni
 Ponytail rutinaria. Mantiene las revisiones por riesgo y las pruebas de comportamiento.
-Ver [notas de versión](docs/releases/0.19.0.md).
+Ver [notas de versión](docs/releases/0.19.1.md).
 
 Desde 0.15.1 hay respaldos de modelo configurables ante errores del proveedor,
 timeouts y salida inválida en OpenCode 2.0.18. Ver [configuración y límites](command/skalling-models.md).
@@ -169,11 +169,11 @@ Instalar **siempre un release publicado** (`vX.Y.Z`), nunca `main`. La lista est
 
 **1. Instalar (una vez por máquina)**
 
-Usa el release `v0.19.0`. Si ya tienes Skalling, actualiza desde cada proyecto
+Usa el release `v0.19.1`. Si ya tienes Skalling, actualiza desde cada proyecto
 con `/skalling-update` y abre una sesión nueva al terminar.
 
 ```bash
-VERSION=v0.19.0
+VERSION=v0.19.1
 git clone --branch "$VERSION" --depth 1 https://github.com/alexskalling/skalling-dev-team.git ~/skalling-dev-team
 bash ~/skalling-dev-team/install-global.sh
 ```
@@ -202,7 +202,7 @@ config locales, que reemplazan a los globales) y el paso 3.
 **Windows** (Git Bash o WSL2, no nativo; en CI solo tiene smoke test):
 
 ```powershell
-git clone --branch v0.19.0 --depth 1 https://github.com/alexskalling/skalling-dev-team.git $HOME\skalling-dev-team
+git clone --branch v0.19.1 --depth 1 https://github.com/alexskalling/skalling-dev-team.git $HOME\skalling-dev-team
 .\skalling-dev-team\install-global.ps1
 ```
 

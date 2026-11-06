@@ -2,6 +2,19 @@
 
 Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) y el proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.1] — 2026-11-06
+
+- Auditorías directas Alex → Luz; Jhon sólo contrasta afirmaciones concretas y
+  las correcciones analíticas vuelven a Luz, sin planificación ni entrega de código.
+- `start` exige `request_kind: "code"` explícito en OpenCode. Auditoría, investigación
+  y consulta declaradas no abren workflows ni escriben en su base.
+- El clasificador devuelve la naturaleza del pedido y el siguiente paso de auditoría.
+- Guard y writer reservan a Pau las escrituras de memoria del equipo. Pau guarda
+  únicamente hallazgos validados; documentar o persistir no bloquea la
+  respuesta. Historiales existentes se conservan, sin aprobaciones retroactivas.
+
+Detalles: [notas de 0.19.1](docs/releases/0.19.1.md).
+
 ## [0.19.0] — 2026-11-06
 
 - Compactación nativa de conversaciones grandes de agentes Skalling: cola segura,
