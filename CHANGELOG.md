@@ -13,6 +13,9 @@ Todos los cambios notables a Skalling se documentan acá. El formato sigue [Keep
 - Skills más breves con guías extensas disponibles bajo demanda; el instalador
   actualiza skills administradas aunque la versión agregue archivos de referencia.
 - Migración 068 actualiza sólo la marca de versión. Instalación conserva modelos.
+- Prompts sin duplicación de protocolos por rol, dentro de 72 KB conjuntos.
+- Correcciones de sincronización en Windows, retirada de permisos y detección de
+  capacidades seguras de Node; pruebas de distribución independientes del runtime local.
 
 Detalles y límites: [notas de 0.19.0](docs/releases/0.19.0.md).
 

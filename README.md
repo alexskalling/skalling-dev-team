@@ -2,7 +2,7 @@
 
 Skalling es un equipo de **8 agentes de IA** que trabajan juntos adentro de [OpenCode](https://opencode.ai). Cada agente tiene un rol específico y siguen un ciclo ordenado para construir software bien hecho.
 
-**Versión actual: 0.19.0** — disponible en el checkout local; publicación pendiente.
+**Versión actual: [0.19.0](https://github.com/alexskalling/skalling-dev-team/releases/tag/v0.19.0)**.
 
 La versión 0.19.0 añade compactación nativa acotada de conversaciones grandes,
 conservando el workflow en TeamDB, y un carril declarativo sin preparación TDD ni
@@ -169,12 +169,11 @@ Instalar **siempre un release publicado** (`vX.Y.Z`), nunca `main`. La lista est
 
 **1. Instalar (una vez por máquina)**
 
-El tag `v0.19.0` todavía está pendiente de publicación. Hasta entonces, desde
-el checkout local actualizado usa `bash install-global.sh`; los ejemplos de
-clonación de abajo requieren que ese tag ya se haya publicado.
+Usa el release `v0.19.0`. Si ya tienes Skalling, actualiza desde cada proyecto
+con `/skalling-update` y abre una sesión nueva al terminar.
 
 ```bash
-VERSION=v0.19.0   # requiere publicar este tag; también puede instalarse desde el checkout local
+VERSION=v0.19.0
 git clone --branch "$VERSION" --depth 1 https://github.com/alexskalling/skalling-dev-team.git ~/skalling-dev-team
 bash ~/skalling-dev-team/install-global.sh
 ```
