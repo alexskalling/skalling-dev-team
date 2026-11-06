@@ -9,6 +9,7 @@
 # memoria fallaba con "not authorized"). La 048 lo corrige de forma idempotente.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+EXPECTED_VERSION="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' "$ROOT/VERSION" | head -1)"
 TMP="$(mktemp -d)"
 trap '[ -n "$TMP" ] && [ -d "$TMP" ] && rm -rf -- "$TMP"' EXIT
 fail() { echo "✗ $1" >&2; exit 1; }
@@ -38,7 +39,7 @@ SKALLING_RUNTIME_AGENT=pau bash "$ROOT/scripts/teamdb-memory.sh" --project "$TMP
   && fail "el estado viejo debería rechazar escrituras (si no, el test no reproduce el defecto)"
 
 SKALLING_ROOT="$ROOT" bash "$ROOT/scripts/teamdb-init.sh" "$TMP" >/dev/null 2>&1 || fail "teamdb-init no pudo actualizar"
-[ "$(sqlite3 "$DB" "SELECT value FROM schema_meta WHERE key='version'")" = "0.19.0" ] || fail "versión no actualizada"
+[ "$(sqlite3 "$DB" "SELECT value FROM schema_meta WHERE key='version'")" = "$EXPECTED_VERSION" ] || fail "versión no actualizada"
 for col in tokens_input tokens_output tokens_cache_read cost agents_used retries; do
   [ "$(sqlite3 "$DB" "SELECT count(*) FROM pragma_table_info('workflow_metrics') WHERE name='$col'")" = 1 ] || fail "falta $col"
 done
