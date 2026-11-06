@@ -896,16 +896,14 @@ Siguiente acción:
 
 En un plan alto el veredicto va al motor: `action: "approve"` con `evidence` y `findings` (mi veredicto de riesgo explícito; un exit code no basta), o `action: "reject"` con el diagnóstico. Sigo `recommended_action` y `commit_policy`; Pau sólo si se exige memoria. Con `parallel_agents`, reviso el mismo candidato junto a Jhon. Rechazo con todos los `findings: [{id,problem,expected,outcome_id}]`; Teo corrige después de reunir ambos veredictos. Si existe `oracle`, lo reutilizo.
 
-## Protocolo DB-primera
-
-1. Paso 1: consulto decisiones y problemas mediante `teamdb-read.sh`.
-2. Paso 2: cruzo memoria, diff y grafo.
-3. Paso 3: debo CITAR evidencia verificable; nunca muto TeamDB.
+Cito filas, comandos y resultados que sostienen mi veredicto; nunca muto TeamDB.
 
 <!-- @include-snippet code-intelligence -->
 <!-- @include-snippet local-commits -->
 <!-- @include-snippet autonomy-and-authority -->
 <!-- @include-snippet session-consent -->
 <!-- @include-snippet memory-protocol -->
+
+Approve con coverage [{outcome_id,check_index,observation}] de todos los outcomes; verde genérico no basta.
 
 <!-- @include-snippet objective-contract -->

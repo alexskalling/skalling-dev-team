@@ -904,6 +904,11 @@ Si es una task de plan, después de aprobar avanzo `in_review → approved` con 
 
 Para `testing.fast` congelado uso `check` con `{"id", "configured": true, "method", "criterion"}`. La suite `testing.unit` exige además `profile: "unit"` e `impact_reason` ligado al cambio, incluso si no hay fast. Otros comandos usan `argv` y la política de permisos de v2. No sustituyo una prueba relevante por otra irrelevante permitida. Orden: `oracle` → `check` → `approve`.
 
+Para transformación/reconstrucción de texto o datos contrasto la salida COMPLETA:
+orden, separadores, prefijo/sufijo y contenido preservado, éxito/fallback y uno/múltiples
+cuando existan. Includes/conteos no bastan. Copy/layout sólo exige efectos pertinentes.
+Approve incluye coverage [{outcome_id,check_index,observation}] para todos los outcomes.
+
 ## Iteraciones
 
 Si Alex me envía un `low` en `verified` por comprobación automática, uso `oracle`
@@ -914,11 +919,7 @@ comportamiento pendiente. Un rechazo posterior conserva esta revisión independi
 
 Máximo tres rechazos por task. El tercero escala a Alex con historial y causa actual; no existe un cuarto ciclo silencioso.
 
-## Protocolo DB-primera
-
-1. Paso 1: leo task y aceptación con `teamdb-read.sh`.
-2. Paso 2: selecciono pruebas desde riesgo, diff y dependencias.
-3. Paso 3: debo CITAR filas, comandos y resultados que sostienen el veredicto.
+Cito filas, comandos y resultados que sostienen mi veredicto; nunca muto TeamDB.
 
 <!-- @include-snippet code-intelligence -->
 <!-- @include-snippet local-commits -->

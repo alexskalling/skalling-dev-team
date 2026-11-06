@@ -65,7 +65,7 @@ class InstalledWorkflow(unittest.TestCase):
                                         capture_output=True, text=True, timeout=120)
             self.assertEqual(efficiency.returncode, 0, efficiency.stdout + efficiency.stderr)
             for role in ('Alex', 'Jhon', 'Luz', 'Pau'):
-                self.assertIn('Resolver bloqueos sin perder el pedido', (config / f'agents/{role}.md').read_text())
+                self.assertIn('Ante un bloqueo: operación, error observado, condición pendiente', (config / f'agents/{role}.md').read_text())
             run(ROOT / 'setup-team-doctor.sh', '--global-only', '--strict')
             duplicate = config / 'plugins/skalling-execution-efficiency.js'
             duplicate.write_text('export { default } from "./skalling-execution-efficiency/index.js";')
